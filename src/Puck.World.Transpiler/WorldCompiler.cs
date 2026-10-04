@@ -193,6 +193,7 @@ public static class WorldCompiler {
                 updateAssets: updateAssets,
                 vocabulary: vocabulary
             );
+
             return result with { Inputs = reads.Inputs };
         } finally {
             var basisPaths = basisReads.Inputs.Select(selector: static input => input.Path).ToHashSet(comparer: StringComparer.Ordinal);

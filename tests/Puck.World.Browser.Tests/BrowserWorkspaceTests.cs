@@ -328,7 +328,7 @@ public sealed class BrowserWorkspaceTests : IDisposable {
         }
         Assert.Equal(expected: 0L, actual: work.Read(kind: WorldBootWork.Compiles));
 
-        File.WriteAllText(path: path, contents: Unsaved);
+        File.WriteAllText(contents: Unsaved, path: path);
         var saved = WorldCompiledSource.From(compilation: WorldCompiler.CompileFile(path: path, cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.True(condition: new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: saved)

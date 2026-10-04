@@ -193,7 +193,7 @@ internal static class DeterminismRecorder {
         var catalog = CliWorldVocabulary.EnsureInstalled();
 
         if (
-            !TryReadDocument(document: out var document, sourceCompilation: out var sourceCompilation, error: out error, path: path) ||
+            !TryReadDocument(document: out var document, error: out error, path: path, sourceCompilation: out var sourceCompilation) ||
             !WorldSourceLoader.TryReadAuthored(
                 authored: out authored,
                 catalog: catalog,

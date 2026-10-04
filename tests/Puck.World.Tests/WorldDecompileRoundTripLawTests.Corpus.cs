@@ -44,7 +44,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
 
             if (Directory.Exists(path: gitDirectory)) {
                 foreach (var file in Directory.EnumerateFiles(path: gitDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-                    File.SetAttributes(path: file, fileAttributes: (File.GetAttributes(path: file) & ~FileAttributes.ReadOnly));
+                    File.SetAttributes(path: file, fileAttributes: File.GetAttributes(path: file) & ~FileAttributes.ReadOnly);
                 }
             }
         }

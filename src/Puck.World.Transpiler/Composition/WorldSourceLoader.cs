@@ -39,8 +39,8 @@ public static class WorldSourceLoader {
             document: document,
             json: out var json,
             path: path,
-            sourceCompilation: sourceCompilation,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         )) {
             return false;
         }
@@ -92,8 +92,8 @@ public static class WorldSourceLoader {
             document: document,
             json: out var json,
             path: path,
-            sourceCompilation: sourceCompilation,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         ) || !WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
             json: Encoding.UTF8.GetString(bytes: json),
@@ -139,8 +139,8 @@ public static class WorldSourceLoader {
             catalogFingerprint: catalogFingerprint,
             document: document,
             path: path,
-            sourceCompilation: sourceCompilation,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         ) && CompiledWorld.TryCompile(
             authored: authored,
             bytes: out compiledWorld,

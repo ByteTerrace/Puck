@@ -215,8 +215,8 @@ public static class WorldSourceDiagnostics {
             composed: out var composed,
             diagnostics: diagnostics,
             loweredJson: json,
-            sourceCompilation: sourceCompilation,
             machines: machines,
+            sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
         )) {

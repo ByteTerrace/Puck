@@ -104,8 +104,8 @@ public static class WorldSemanticValidator {
             diagnostics: diagnostics,
             loweredJson: loweredJson,
             machines: machines,
-            sourceMap: sourceMap,
             sourceCompilation: sourceCompilation,
+            sourceMap: sourceMap,
             sourcePath: sourcePath
         ) && ValidateWorld(
             catalogFingerprint: catalogFingerprint,
