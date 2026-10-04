@@ -53,7 +53,7 @@ public sealed partial class SdfWorldResidency {
 
 public sealed partial class SdfWorldTables {
     /// <summary>Gets the exact uploaded revisions that the conservative light camera consumes.</summary>
-    public SdfLightGeometry LightGeometry => new(Program: m_programRevision, Poses: m_indirectTransformRevision, Mesh: m_indirectMeshRevision, Decals: m_decalRevision, Bodies: m_indirectBodies);
+    public SdfLightGeometry LightGeometry => new(Program: m_programGeometryRevision, Poses: m_indirectTransformRevision, Mesh: m_indirectMeshRevision, Decals: m_decalRevision, Bodies: m_indirectBodies);
     /// <summary>Gets whether a carve bake can change the field without an uploaded revision.</summary>
     public bool LightGeometryMutable => AnyBrickBaking();
 }

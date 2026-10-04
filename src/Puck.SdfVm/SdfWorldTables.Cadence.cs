@@ -13,9 +13,8 @@ namespace Puck.SdfVm;
 // colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
 // members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
 // Whole-view coverage:
-//   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded screen-surface
-//                          table, invariant instance grid) and every kernel reload — bumped by UploadProgram and
-//                          InstallReload.
+//   - m_programRevision  : changed program words and every kernel reload. The geometry signature uses the separate
+//                          m_programGeometryRevision, which excludes only palette values with identical bindings.
 //   - the world values    : the bound screen count and the mesh draws' count.
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
@@ -259,7 +258,7 @@ public sealed partial class SdfWorldTables {
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
-        Span<ulong> geometryValues = [m_programRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount()];
+        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount()];
 
         geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
         geometry.Add(values: m_screenSurfaceRegion.Contents);
@@ -268,6 +267,7 @@ public sealed partial class SdfWorldTables {
 
         var lighting = Fnv1aHash.Create();
 
+        lighting.Add(value: m_programRevision);
         lighting.Add(value: m_decalRevision);
         lighting.Add(values: m_lightRegion.Contents);
         lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));

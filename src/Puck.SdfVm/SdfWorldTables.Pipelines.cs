@@ -167,6 +167,7 @@ public sealed partial class SdfWorldTables {
         m_screenEmission.Forget();
         // New kernels render new pixels: every view renders again.
         m_programRevision++;
+        m_programGeometryRevision++;
         ReconfigureWork();
 
         return reload.ChangedPipelines;

@@ -124,6 +124,12 @@ the distinction between static unbounded geometry and an unbounded dynamic
 dependency. Reuse `MarkGeometry` and its admitted/frozen queue instead of adding
 another invalidation schedule.
 
+Program upload classification compares exact packed geometry and material
+bindings outside the material-value table. Palette-value edits retain transport,
+proof and light-map identity but advance the pinned lighting source and Views
+signature. Reassignment, palette-size and topology changes remain geometry.
+Keep the old immutable palette while its published bank remains visible.
+
 `SdfIndirectParticipation` owns whole-instance casting and receiving. Keep its
 packed instance and mesh bits, frame body default, field queries and receiver
 application synchronized. Direct-shadow suppression is independent. Static

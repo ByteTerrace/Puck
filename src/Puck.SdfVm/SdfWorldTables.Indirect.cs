@@ -21,7 +21,8 @@ public sealed partial class SdfWorldTables {
     public SdfIndirectLayout? IndirectLayout => m_indirect?.Layout;
     /// <summary>Gets the buffer the indirect package publishes.</summary>
     public IGpuBuffer? IndirectBuffer => m_indirect?.Buffer;
-    /// <summary>Gets the current epoch, invalidated by every program upload.</summary>
+    /// <summary>Gets the current transport epoch, invalidated by changed geometry or material bindings and explicit reset.
+    /// Palette-value edits retain this epoch and start a new finite lighting solve.</summary>
     public uint IndirectEpoch => m_indirectEpoch;
     /// <summary>Gets the retiring caches still tracked for graph readers, excluding the active cache.</summary>
     public int RetiringIndirectCacheCount {

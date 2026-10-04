@@ -36,6 +36,7 @@ public sealed partial class SdfWorldTables {
         private SdfPassValues m_values;
         private SdfFrame? m_frame;
         private ulong m_sequence;
+        private ulong m_programRevision;
 
         public PinnedIndirectLighting(SdfWorldTables tables) {
             m_tables = tables;
@@ -73,7 +74,7 @@ public sealed partial class SdfWorldTables {
         }
 
         private bool MatchesScene(SdfFrame frame) {
-            if (m_frame is not { } held || m_geometry != m_tables.LightGeometry ||
+            if (m_frame is not { } held || m_geometry != m_tables.LightGeometry || m_programRevision != m_tables.m_programRevision ||
                 m_values.ScreenCount != m_tables.PassValues.ScreenCount || held.FarDistance != frame.FarDistance ||
                 held.DisableScreenLights != frame.DisableScreenLights || held.EnableShadowProxy != frame.EnableShadowProxy ||
                 held.IndirectSources != frame.IndirectSources ||
@@ -125,6 +126,7 @@ public sealed partial class SdfWorldTables {
                 Views = Array.AsReadOnly(frame.Views.ToArray()), MovedTransforms = null };
             m_values = m_tables.PassValues;
             m_geometry = m_tables.LightGeometry;
+            m_programRevision = m_tables.m_programRevision;
             AwaitingEnvironment = (frame.IndirectSources & (SdfIndirectSources.Sky | SdfIndirectSources.Screens)) != 0;
             m_environment = default;
             m_screens = default;

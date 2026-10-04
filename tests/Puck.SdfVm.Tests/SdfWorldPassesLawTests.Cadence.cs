@@ -37,6 +37,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("haze", false)]
     [InlineData("medium", false)]
     [InlineData("light-color", false)]
+    [InlineData("palette", false)]
     [InlineData("indirect-method", false)]
     [InlineData("geometry-only", false)]
     [InlineData("indirect-sources", false)]
@@ -47,6 +48,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("haze", true)]
     [InlineData("medium", true)]
     [InlineData("light-color", true)]
+    [InlineData("palette", true)]
     [InlineData("indirect-method", true)]
     [InlineData("geometry-only", true)]
     [InlineData("indirect-sources", true)]
@@ -78,6 +80,10 @@ public sealed partial class SdfWorldPassesLawTests {
             case "haze": frame.Sky.Atmosphere.HazeAmount = 0.2f; goto case "lighting";
             case "medium": frame.Sky.Atmosphere.MediumExtinction = 0.2f; goto case "lighting";
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
+            case "palette":
+                frame = frame with { Program = new SdfProgram(frame.Program.Instructions,
+                    [new SdfMaterial(new Vector3(.2f, .4f, .6f))]), ProgramChanged = true };
+                goto case "lighting";
             case "indirect-method":
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { IndirectMethod = SdfIndirectMethod.Screen } }] };
                 goto case "lighting";

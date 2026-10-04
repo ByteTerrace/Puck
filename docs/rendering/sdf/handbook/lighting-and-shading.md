@@ -234,6 +234,14 @@ and allocation bytes. It does not claim probe classes or proof results from thos
 counts: those are GPU records and require a fenced readback of the same
 allocation and epoch.
 
+Program uploads compare their packed field and binding words separately from
+the contiguous material-value table. Recolouring an existing material restarts
+the finite lighting solve while transport, receiver proofs, depth maps and
+geometry passes stand. The held solve retains its captured palette until a new
+complete publication replaces it. Changing a shape's material ID, palette size,
+instance flags or any field/layout word withdraws transport and its proofs;
+matching colour values do not make two material identities interchangeable.
+
 The cache's geometry-change entry point coalesces old and new casting bounds while
 an admitted batch finishes or admission is frozen. On resumption, the existing
 schedule withdraws every trace stratum in each affected placement brick and

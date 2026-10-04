@@ -6,13 +6,20 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     /// <summary>Re-uploads the scene program (the host's <c>ProgramChanged</c> path — e.g. a rebuilt overworld scene).
     /// Program and instance buffers grow on demand once the device is idle. Persistent images, baked bricks,
-    /// screen bindings and pipelines remain in place.</summary>
+    /// screen bindings and pipelines remain in place. Palette-value edits keep transport and geometry signatures;
+    /// material reassignment or any other field/layout change invalidates them.</summary>
     /// <param name="program">The scene program to upload.</param>
     /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>, or its
     /// dynamic-transform requirements exceed the host's reserved transform slots.</exception>
     public void UploadProgram(SdfProgram program) {
         ArgumentNullException.ThrowIfNull(program);
         program.ValidateIsa();
+        var geometryChanged = true;
+        var programChanged = true;
+        if (m_liveProgram is { } previous) {
+            geometryChanged = !SameProgramGeometry(previous, program);
+            programChanged = geometryChanged || !previous.Words.SequenceEqual(program.Words);
+        }
 
         if (program.RequiredDynamicTransformCapacity > m_dynamicTransformCapacity) {
             throw new ArgumentException(
@@ -57,7 +64,7 @@ public sealed partial class SdfWorldTables {
             offset: 0
         );
 
-        m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame;
+        if (geometryChanged) { m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame; }
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
         m_indirectPolicyProgram = null;
@@ -68,12 +75,13 @@ public sealed partial class SdfWorldTables {
             program: program,
             shapeType: SdfShapeType.ScreenSlab
         );
-        // CADENCE GATE: a new program (words, live mask width, kernel variant, reseeded screen-surface table, invariant
-        // instance grid) invalidates any prior frame's signature — bump the revision the signature folds in.
-        m_programRevision++;
-        ResetIndirect();
-        // A new program may give a dynamic slot another owner, so no slot keeps a previous pose across it.
-        m_seedDynamicHistory = true;
+        if (programChanged) { m_programRevision++; }
+        if (geometryChanged) {
+            m_programGeometryRevision++;
+            ResetIndirect();
+            // Changed instructions or bindings may give a dynamic slot another owner.
+            m_seedDynamicHistory = true;
+        }
         ReconfigureWork();
 
         // Stage 1 kernel-variant selection — a pure function of the uploaded program's instruction stream (see
@@ -83,5 +91,17 @@ public sealed partial class SdfWorldTables {
         var (viewsVariant, _) = SdfViewsKernelVariants.Select(program: program);
 
         m_viewsVariant = viewsVariant;
+    }
+
+    // Only material values are lighting-only. The exact prefix and suffix retain every instruction material ID,
+    // compiled-part binding, shape/instance flag, bound and auxiliary table; a reordered palette is not inferred.
+    private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) {
+        var before = previous.Words;
+        var after = current.Words;
+        if (before.Length != after.Length || previous.MaterialCount != current.MaterialCount ||
+            !previous.ScreenSurfaceWords.SequenceEqual(current.ScreenSurfaceWords)) { return false; }
+        var first = checked((int)after[SdfProgram.ProgramMaterialOffsetLane] * 4);
+        var end = checked(first + current.MaterialCount * SdfProgram.MaterialVectorsPerEntry * 4);
+        return before[..first].SequenceEqual(after[..first]) && before[end..].SequenceEqual(after[end..]);
     }
 }

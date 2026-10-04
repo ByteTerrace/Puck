@@ -252,6 +252,9 @@ per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
+An upload changing only existing material values keeps geometry passes and
+indirect transport. It advances lighting and the next immutable solve source;
+material IDs, palette size and field/layout changes still invalidate geometry.
 `SdfWorldResidency` builds its tables once its pipeline set is ready, captures
 its frame source's frame once a frame (`Prepare`), and owns device-loss
 recovery: `OnDeviceLost` releases its tables and forwards `NotifyDeviceLost` to

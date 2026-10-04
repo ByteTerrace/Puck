@@ -139,7 +139,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         m_copies.Dispose();
         Buffer.Dispose();
     }
-    /// <summary>Invalidates all slots on a program upload; no old cell or proof remains valid.</summary>
+    /// <summary>Invalidates all slots on a geometry/material-binding change or explicit reset; no old cell or proof remains valid.</summary>
     public void Reset(uint epoch) {
         CertificateRevision = checked(CertificateRevision + 1u);
         Epoch = epoch;

@@ -142,9 +142,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // a view showing one renders every frame (TablesSignature).
     private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates
-    // it: m_programRevision bumps on every UploadProgram (program words, live mask width, kernel variant, screen-surface
-    // reseed), m_decalRevision on every SetScreenDecal/ClearScreenDecal call that ACTUALLY changes the stored bytes.
+    // it: program revision covers every changed packed program; geometry revision excludes only palette values.
+    // Decal revision covers SetScreenDecal/ClearScreenDecal calls that actually change the stored bytes.
     private ulong m_programRevision;
+    private ulong m_programGeometryRevision;
     private bool m_rebuildInstanceGridPerFrame;
     private int m_requiredDynamicTransformCapacity;
     // The uploads submitted, which selects each upload's ring slot.
