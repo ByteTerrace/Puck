@@ -4,7 +4,8 @@ namespace Puck.SignedDistance;
 /// The work-counter detail rows the views, sky, composite and environment passes count into: the field
 /// runs' rows (<c>run0</c>, the lowest field run, then <c>run1</c> and <c>run2</c>, the upper ones), the composite's
 /// <c>atmosphere</c> row (<see cref="AtmosphereRow"/>), where it counts one evaluation for each atmosphere kind it
-/// evaluates at a pixel, the view's <c>indirect</c> diagnostic row (<see cref="IndirectRow"/>), then one row a layer label,
+/// evaluates at a pixel, the view's <c>indirect</c> diagnostic row (<see cref="IndirectRow"/>), its bounded incoming
+/// <c>indirect-near</c> row (<see cref="IndirectNearRow"/>), then one row a layer label,
 /// in the order labels are first packed. A layer's record names its row (<see cref="SdfSkyLayer.Detail"/>). The
 /// rows only grow, so a node's detail identities never move while its graph lives: a label a sky stops drawing keeps its
 /// row and counts zero. Every distinct label keeps its own row for the composition's lifetime; buffer slots grow after
@@ -40,7 +41,7 @@ public sealed class SdfSkyDetails {
     private string[] m_labels;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSkyDetails"/> class holding the fixed rows alone: the
-    /// runs', atmosphere's and indirect diagnostics'.</summary>
+    /// runs', atmosphere's, indirect diagnostics' and bounded incoming Near work's.</summary>
     public SdfSkyDetails() {
         m_labels = [.. Enumerable.Range(count: Runs, start: 0).Select(selector: static run => RunLabel(run: run)), Atmosphere, Indirect, IndirectNear];
 

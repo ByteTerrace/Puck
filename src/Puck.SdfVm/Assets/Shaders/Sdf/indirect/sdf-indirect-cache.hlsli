@@ -156,6 +156,8 @@ bool sdfIndirectReuseProof(uint proof, uint key, uint frame, float3 position, fl
 float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
     float3 direction = indirectDirections[ray].xyz;
     uint symmetry = sdfIndirectHash(lattice, level) % 48u;
+    sdfIndirectLoads++;
+    sdfIndirectHashes++;
     if ((symmetry & 1u) != 0u) { direction.x = -direction.x; }
     if ((symmetry & 2u) != 0u) { direction.y = -direction.y; }
     if ((symmetry & 4u) != 0u) { direction.z = -direction.z; }
@@ -271,6 +273,7 @@ bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoi
 // beyond the handoff. Rank those endpoints as seen from the handoff, while an exit ranks by direction alone.
 int sdfIndirectContinuationRay(float3 position, float3 direction, int3 lattice, uint level, uint index, float3 origin) {
     uint state = indirectTraceStates[index];
+    sdfIndirectLoads++;
     uint rays = sdfIndirectRaysPerProbe(passGroup.indirectTier);
     int best = -1;
     float bestCosine = -2.0;

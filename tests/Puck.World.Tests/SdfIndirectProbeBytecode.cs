@@ -12,6 +12,7 @@ internal static class SdfIndirectProbeBytecode {
 
         "sdf-indirect-light-proof.comp" => ((3 * 1024) * 1024),
         "sdf-indirect-participation.comp" => ((3 * 1024) * 1024),
+        "sdf-indirect-near-proof.comp" => ((8 * 1024) * 1024),
         _ => throw new ArgumentOutOfRangeException(nameof(kernel), kernel, "Not an indirect probe kernel."),
     };
     public static string PathOf(string kernel, string extension) => Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets/Shaders", path3: (kernel + extension));
