@@ -19,7 +19,7 @@ namespace Puck.World.Tests;
 [Collection(AllocationCollection.Name)]
 public sealed class WorldEditorBuildModeLawTests : IDisposable {
     private const float FloorTop = 1.25f;
-    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json";
+    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck";
 
     private static readonly GridOverlayState SurfaceGrid = (GridOverlayState.Hidden with {
         Flags = GridOverlayFlags.World | GridOverlayFlags.Surface,
@@ -134,7 +134,7 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
             }),
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck"
         ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();
@@ -195,7 +195,7 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
         var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck"
         ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();

@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// origin plus <c>cellSize · (Q − R/2, 0, R·√3/2)</c> (so +X is the direction-0 neighbour and <c>cellSize</c> is the
 /// centre-to-centre spacing), and cell index <c>i</c> is <see cref="HexagonalIndex"/>'s ring order. The tiles are
 /// checked against that formula computed HERE from <see cref="HexagonalIndex"/> itself, never against a second copy of
-/// the generated positions. Loads <c>Fixtures/minimal-hexlines-host.world.json</c>, a MINIMAL host (standard.basis
+/// the generated positions. Loads <c>Fixtures/minimal-hexlines-host.puck</c>, a MINIMAL host (standard.basis
 /// plus the substrate sections the garden itself authors) that imports the fragment and restates <c>hexTable</c> at
 /// <c>[20, -0.5, -12]</c> — a different position than the garden's own <c>[-16, -0.5, 5]</c>; the host restates the
 /// topology's origin beside it, since a Hex topology cannot yet anchor through a placement's <c>board</c> facet the
@@ -200,7 +200,7 @@ public sealed class HexLinesModuleImportLawTests {
         z: ((CellSize * cell.R) * (MathF.Sqrt(x: 3f) / 2f))
     ));
     private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
-    private static WorldDefinition LoadMinimalHost() => AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.world.json");
+    private static WorldDefinition LoadMinimalHost() => AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.puck");
     private static WorldPlacement Placement(WorldDefinition definition, string id) {
         var placement = definition.Placements.SingleOrDefault(predicate: p => string.Equals(
             a: p.Id,

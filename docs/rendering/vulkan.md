@@ -636,7 +636,7 @@ staging and acceleration-structure buffers are created inside paths that also
 record device commands, so only their usage constants are checked. It creates
 no real instance or device. The backend itself is verified by running the engine on
 Vulkan and by `puck parity`, which boots the authored parity world
-(`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives
+(`tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
 each of the world's scheduled captures three verdicts: its content gate, its
 exact `stateHash`, and per-tile pixels under the contract versioned beside the
 world:

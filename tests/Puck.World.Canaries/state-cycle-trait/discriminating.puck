@@ -1,0 +1,28 @@
+schema: "puck.world.definition.v1"
+documentId: "state-cycle-trait-canary"
+
+simulation {
+  rateHz: 240
+}
+
+state {
+  world {
+    slot spin = 0
+
+    slot spinPhased = 7
+
+    slot spinTurns = 0.0
+
+    slot spinCos = 0.0
+
+    slot orbit = 5
+
+    slot orbitX = 5.0
+
+    slot dial = 0
+
+    slot dialNode = 5
+
+    slot dialRing = 5
+  }
+}

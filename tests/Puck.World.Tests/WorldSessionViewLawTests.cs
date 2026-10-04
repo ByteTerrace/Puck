@@ -20,7 +20,7 @@ namespace Puck.World.Tests;
 /// </summary>
 [Collection(AllocationCollection.Name)]
 public sealed class WorldSessionViewLawTests {
-    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.world.json";
+    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.puck";
 
     // The frame a session view of a destination renders, composed as WorldScreenBinder.RegisterSessionView composes it.
     private static SdfFrame SessionFrame(WorldDefinition definition) {

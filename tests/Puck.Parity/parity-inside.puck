@@ -1,0 +1,139 @@
+schema: "puck.world.definition.v1"
+documentId: "parity-inside"
+
+host {
+  presentation: offscreen
+  backend: auto
+  width: 640
+  height: 480
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 0
+  exitAfterSeconds: 0
+  genlock: null
+  listen: null
+}
+
+simulation {
+  rateHz: 240
+}
+
+generation {
+  worldSeed: 424242
+}
+
+collision {
+  requirements [SmoothUnionContact]
+  contactSkin: 0.02
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  gradientProbe: 0
+}
+
+prototypes {
+  prototype "innerSphere" {
+    document {
+      schema: "puck.creation.v1"
+      name: "innerSphere"
+      palette [
+        {
+          color: "#4A6FA5"
+        }
+      ]
+      shape Sphere "shell" {
+        position [0, 0, 0]
+        scale [4, 4, 4]
+        material: 0
+      }
+    }
+  }
+}
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 8
+    authoringHeadroomScreens: 4
+    candidateCap: 16
+    candidateRadius: 32
+    derivedFaceScreens: 4
+    maxPlacementScale: 5
+    minPlacementScale: 0.2
+    previewDeadlineFrames: 12
+  }
+
+  placement "innerSphere" {
+    prototype: "innerSphere"
+    position [0, 0, 0]
+    solid
+  }
+}
+
+captures {
+  rows [
+    {
+      station: inside
+      ticks [10]
+      palette [
+        {
+          material: 0
+          color: "#4A6FA5"
+        }
+        {
+          material: 1
+          color: "#000000"
+        }
+      ]
+    }
+  ]
+}
+
+cameras [
+  {
+    name: "inside-cam"
+    anchor: null
+    renderWidth: 640
+    renderHeight: 480
+    rig {
+      name: "inside-cam"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 0]))
+        lookAt(subject: worldPoint(point: [1, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+]
+
+views {
+  layout "inside" {
+    seatCount: 0
+    slots [
+      {
+        x: 0
+        y: 0
+        width: 1
+        height: 1
+        camera: "inside-cam"
+      }
+    ]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+
+  seatControl {
+    yawReference: World
+    minPitch: -0.35
+    maxPitch: 1.2
+  }
+
+  seatRig "unusedSeatRig" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, yaw: 0, pitch: 0.3)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

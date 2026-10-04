@@ -1,5 +1,5 @@
 {
-  "workload": "tests/Puck.Counters/counters.world.json",
+  "workload": "tests/Puck.Counters/counters.puck",
   "script": "tests/Puck.Counters/counters.script.txt",
   "width": 1920,
   "height": 1080,

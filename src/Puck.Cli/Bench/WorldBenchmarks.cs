@@ -13,7 +13,7 @@ namespace Puck.Cli.Bench;
 // and Klondike-deal rows are far past what an iteration-based BenchmarkDotNet job could amortize honestly — this
 // lane is a plain stopwatch harness instead: build once, measure the steady state, print one row per number.
 internal static class WorldBenchmarks {
-    private const string KlondikeFixtureRelativePath = "src/Puck.Cli/Bench/klondike.fixture.world.json";
+    private const string KlondikeFixtureRelativePath = "src/Puck.Cli/Bench/klondike.fixture.puck";
     private const int SampleTicks = 120;
     private const string ShippedWorldRelativePath = "src/Puck.World/Assets/worlds/puck.world.json";
     // Same window HandleTickPathLawTests uses: warm past JIT/first-tick transients, then sample enough ticks that
@@ -25,9 +25,22 @@ internal static class WorldBenchmarks {
             path1: root,
             path2: KlondikeFixtureRelativePath
         );
-        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
+        var catalog = CliWorldVocabulary.EnsureInstalled();
 
-        using var bench = WorldBenchServer.Boot(definition: definition);
+        if (!WorldDefinitionLoader.TryLoadFile(
+            path: path,
+            definition: out var loaded,
+            reason: out var reason,
+            neighbours: new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? string.Empty)),
+            catalog: catalog,
+            catalogFingerprint: catalog.CompositionFingerprint
+        )) {
+            throw new InvalidOperationException(message: $"could not load the klondike fixture at {path}: {reason}");
+        }
+
+        var definition = loaded!;
+
+        using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition, documentPath: path);
 
         var server = bench.Server;
         var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));

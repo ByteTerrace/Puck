@@ -12,7 +12,7 @@
   ],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/editor-compare/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/editor-compare/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -459,7 +459,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/editor-compare/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/editor-compare/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

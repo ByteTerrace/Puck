@@ -7,7 +7,7 @@ namespace Puck.Cli.Affected;
 /// <summary>
 /// The documents a canary reaches through its manifest, read with the documents' own readers over one
 /// <see cref="IAffectedTree"/>, the working tree or the tree a revision recorded, and never the file system: a world
-/// document reaches every layer it composes (<see cref="WorldDefinitionFileSource.TryDescribeComposition"/>) and, from its
+/// document, or the <c>.puck</c> source it lowers from, reaches every layer it composes (<see cref="WorldDefinitionFileSource.TryDescribeComposition"/>) and, from its
 /// composed and parsed document (<see cref="WorldDefinitionFileSource.TryParseDocument"/>, unvalidated), the neighbour
 /// worlds its adjacencies name and the graph documents its <c>views.graphs</c> rows name, each resolved as the host
 /// resolves it (<see cref="WorldDocumentPaths.TryResolve"/>), its basis and imports through the tree's own document
@@ -70,7 +70,7 @@ internal static class AffectedDocuments {
     }
     /// <summary>Every file a document reaches in a tree, itself included.</summary>
     /// <param name="tree">The tree every document and source is read from.</param>
-    /// <param name="path">A world or graph document, repository-relative.</param>
+    /// <param name="path">A world document, a world's <c>.puck</c> source or a graph document, repository-relative.</param>
     /// <param name="packageFiles">The files of the post-process package an id names (<see cref="AffectedShaders.FilesOf"/>),
     /// which a world reaches through each <c>views.post</c> row, or <see langword="null"/> to reach no package.</param>
     /// <returns>The reached files the tree holds, repository-relative.</returns>
@@ -104,16 +104,24 @@ internal static class AffectedDocuments {
 
                 continue;
             }
-            if (
-                !file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldSuffix) ||
-                (tree.ReadText(path: file) is not { } text)
-            ) {
+            var full = tree.Full(path: file);
+            var documents = tree.Documents;
+            byte[] content;
+
+            if (WorldDocumentName.IsSourceFile(path: file)) {
+                // A .puck root reads as the document it lowers to, through the tree's own document source: the working
+                // tree's is the composer the CLI installs, and a revision's, which holds no files to compile, refuses it,
+                // so a source recorded there reaches only itself.
+                if (!documents.TryRead(content: out var lowered, name: WorldDocumentName.OfSourceFile(path: full), reason: out _, referrerName: full, resolvedName: out _) || (lowered is null)) {
+                    continue;
+                }
+
+                content = lowered;
+            } else if (file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldSuffix) && (tree.ReadText(path: file) is { } text)) {
+                content = Encoding.UTF8.GetBytes(s: text);
+            } else {
                 continue;
             }
-
-            var full = tree.Full(path: file);
-            var content = Encoding.UTF8.GetBytes(s: text);
-            var documents = tree.Documents;
 
             if (WorldDefinitionFileSource.TryDescribeComposition(content: content, documents: documents, layers: out var layers, path: full, reason: out _)) {
                 foreach (var layer in layers) {
@@ -176,7 +184,7 @@ internal static class AffectedDocuments {
         var memo = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal);
 
         foreach (var canary in canaries) {
-            foreach (var root in canary.Files.Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldSuffix) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: GraphSuffix)))) {
+            foreach (var root in canary.Files.Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldSuffix) || WorldDocumentName.IsSourceFile(path: file) || file.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: GraphSuffix)))) {
                 if (!memo.TryGetValue(key: root, value: out var reached)) {
                     reached = Reach(packageFiles: packageFiles, path: root, tree: tree);
                     memo[root] = reached;

@@ -14,7 +14,7 @@ public sealed class WorldEditorReloadRetentionLawTests {
     [Fact]
     public void WatchCommandSubmitsAndSettlesTheOrdinaryReload() {
         using var files = new TemporaryDirectory();
-        var host = files.Own(owner: WorldBootHarness.Compose(files, WorldHostPresentation.None, "tests/Puck.World.Canaries/editor-grid/fixture.world.json").Build());
+        var host = files.Own(owner: WorldBootHarness.Compose(files, WorldHostPresentation.None, "tests/Puck.World.Canaries/editor-grid/fixture.puck").Build());
 
         Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var server = host.Services.GetRequiredService<WorldServer>();
@@ -46,7 +46,7 @@ public sealed class WorldEditorReloadRetentionLawTests {
     [Fact]
     public void ReloadRetainsSeatStateAndClearsRemovedSelections() {
         using var files = new TemporaryDirectory();
-        var host = files.Own(owner: WorldBootHarness.Compose(files, WorldHostPresentation.None, "tests/Puck.World.Canaries/editor-grid/fixture.world.json").Build());
+        var host = files.Own(owner: WorldBootHarness.Compose(files, WorldHostPresentation.None, "tests/Puck.World.Canaries/editor-grid/fixture.puck").Build());
 
         Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var server = host.Services.GetRequiredService<WorldServer>();

@@ -200,7 +200,7 @@ names the GC mode. The World registers the server's `state.arena`,
 `state.rules` and `state.search` sources; the arena and search sit behind
 forwarders that carry a retired instance's totals across a definition rebuild,
 so their readings never go down. `puck counters` boots
-`tests/Puck.Counters/counters.world.json` offscreen once per backend through
+`tests/Puck.Counters/counters.puck` offscreen once per backend through
 the leg machinery it shares with `puck parity`, writes a
 `puck.counters.report.v1` report whose schema `puck schema` generates, and exits
 1 naming the kind, pass and node of any deterministic count or pass state the
@@ -5103,7 +5103,7 @@ layering check shown failing once on a deliberate upward include; `puck search
 Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
-(`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
+(`tests/Puck.Counters/counters.puck`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. P15-1
@@ -5117,7 +5117,7 @@ The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
-floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.world.json`
+floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.puck`
 presents offscreen with its one camera at that extent, and the floor tier is the
 world's own `low` preset (shadows off, ambient occlusion off, render scale
 `half`), which `tests/Puck.Counters/counters.script.txt` selects with
@@ -7785,6 +7785,43 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       tainted view is withheld as a screen's is; a far planet's instance
       renders only its angular rect; a world authoring one infinity view past
       the cap is refused by name, and one at the cap boots.
+    - Landed beneath the vocabulary: the neutral record the kinds and shapes
+      lower to (`InfinityViewSpec`), the frame an instance renders for a viewer
+      (`InfinityViewFit`: the anchor, the viewer's turn, the cone's bounding
+      rectangle as an off-axis frustum, the extent at the dressed scale), the demand
+      (`InfinityViewDemand`, published as `WorldViewDemand.Sky` and `SkySeen`, which
+      the graph host turns into a footprint), the plan (`WorldInfinityViewPlan`:
+      nesting to the graph's depth with the fallback beyond it, a cap of
+      `MaxViews` instances), the instance names (`WorldViewNames.Sky`,
+      `NestedSky`), the scene (`WorldInfinityViewScene`, and far geometry as a
+      `WorldSessionSceneEmitter` holding only named prototypes), each with CPU laws.
+      Landed on P18-8's record: the `view` layer kind (`SdfSkyView`, one GPU kind for
+      both document arms, with `sky/kinds/view.hlsli` and its `Kinds` entry), which
+      samples the instance image at the tangent the pixel's direction has on the
+      viewer's basis inside the rectangle the fit chose (`InfinityViewSampling`, the
+      CPU reference, held by `InfinityViewSamplingLawTests`), counts a shown texel
+      in its layer's detail row whether it reads the image or draws its fallback
+      colour, and is camera-only; the `view` and `far` document arms of
+      `render.sky.layers` (`WorldRenderSkyLayer.View`, `Far`, written
+      `view(name:, destination:, …)` and `far(name:, prototypes:, …)`) with their
+      validator refusals by name (an unnamed, unaimed or unbounded view, a band mask,
+      a cone of a quarter turn or more, lighting visibility, a duplicate name, a
+      prototype the world lacks) and the cap of `SdfSky.MaxInfinityViews` views
+      a world, refused at validation; their resolution to the GPU kind
+      (`WorldEnvironmentResolve`) and to the `InfinityViewSpec`s the host renders
+      (`WorldInfinityViewSpecs`, which carries a layer's sky-frame cone into the
+      viewer's frame); and the console echo.
+      Still open: the frame's fit written into the layer each frame (the viewer's
+      basis, the rectangle and the screen the instance's image arrives on, through
+      `InfinityViewSampling.Describe`) and the binder's routing of that image,
+      which are the binder's screen sources for the instances (`ISdfScreenSources`
+      entries past the declared screens) and its reading back of the shown-texel
+      counts into `InfinityViewDemand`; the binder owning a `WorldInfinityViews`,
+      registering the scenes and applying `WorldInfinityViewPlan`; the document
+      edit refusal at a live edit; `world.budget` reporting
+      `WorldInfinityViewPlan.Describe`; the `view` and `far` body shapes (no body
+      vocabulary exists to bind them to); the `sky-portal` canary, the ceilings and
+      the GPU legs. The `panel` kind belongs to P18-9.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the

@@ -7,7 +7,7 @@
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/jump-trophy/host.world.json",
+    "world": "tests/Puck.World.Canaries/jump-trophy/host.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -21,7 +21,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/jump-trophy/host.world.json",
+    "world": "tests/Puck.World.Canaries/jump-trophy/host.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

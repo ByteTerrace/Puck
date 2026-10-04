@@ -1,0 +1,143 @@
+schema: "puck.world.definition.v1"
+
+captures {
+  rows [
+    {
+      instance: "world"
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      station: sky
+      ticks [60, 69, 90]
+    }
+  ]
+}
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 64
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 64
+}
+
+placements {
+  placement "haze" {
+    prototype: "haze"
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "haze" {
+    document {
+      name: "haze"
+      schema: "puck.creation.v1"
+      shapes []
+      volumes [
+        {
+          coverage: 0.6
+          extinction: 0.15
+          halfExtent [20, 20, 20]
+          intensity: 1
+          kind: "cloud"
+          position [0, 0, 0]
+          pulseAmplitude: 1
+          pulseFrequency: 1
+          ramp [
+            {
+              color: "#6080C0"
+              density: 0
+            }
+            {
+              color: "#FFFFFF"
+              density: 1
+            }
+          ]
+          rotation [0, 0, 0, 1]
+          seed: 7
+          softness: 0.2
+          speed: 0
+          steps: 16
+          width: 2
+        }
+      ]
+    }
+  }
+}
+
+render {
+  sky {
+    layers [
+      gradient(stops: [
+        {
+          color: "#1B2230"
+          elevation: -1
+        }
+        {
+          color: "#3F6FA8"
+          elevation: 1
+        }
+      ]
+      )
+      stars(brightness: 4, density: 12, seed: 3, twinkle: {
+        depth: 1
+        rate: 1
+        share: 1
+      }
+      )
+      clouds(coverage: 0.5, scale: 0.5, seed: 5, spin: 6.2831853)
+    ]
+  }
+}
+
+timeline {
+  clocks [
+    {
+      name: "second"
+      periodSeconds: 1
+    }
+  ]
+}
+
+views {
+  layout "world" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0.25
+  }
+
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+
+  seatRig "world" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 1.4)
+    ]
+  }
+}

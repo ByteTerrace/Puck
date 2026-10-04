@@ -117,6 +117,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.layers[][panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
+| `render.sky.layers[][view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.layers[][view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
+| `render.sky.layers[][far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.layers[][far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.clock` | Clock | Names | Read | `WorldRenderSky.Clock` |
 | `render.sky.keys[].layers{*}.opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}.transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
@@ -175,6 +183,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
+| `render.sky.keys[].layers{*}[view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.keys[].layers{*}[view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
+| `render.sky.keys[].layers{*}[far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.keys[].layers{*}[far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
 | `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
@@ -2675,6 +2691,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][noise].name` | `WorldRenderSkyLayer.Noise.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][pattern].name` | `WorldRenderSkyLayer.Pattern.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][panorama].name` | `WorldRenderSkyLayer.Panorama.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
@@ -2684,6 +2702,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[noise].name` | `WorldRenderSkyLayer.Noise.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[pattern].name` | `WorldRenderSkyLayer.Pattern.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[panorama].name` | `WorldRenderSkyLayer.Panorama.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |

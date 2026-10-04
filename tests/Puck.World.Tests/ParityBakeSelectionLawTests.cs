@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// nothing in the parity world's contract is re-recorded for it.
 /// </summary>
 public sealed class ParityBakeSelectionLawTests {
-    // The vocabulary station's pose, as parity.world.json authors it: anchor, look-at point and field of view, filmed at
+    // The vocabulary station's pose, as parity.puck authors it: anchor, look-at point and field of view, filmed at
     // 640x480.
     private static readonly Vector3 Eye = new(x: 604f, y: 9f, z: -26f);
     private static readonly Vector3 Target = new(x: 604f, y: 2f, z: 0f);
@@ -27,7 +27,7 @@ public sealed class ParityBakeSelectionLawTests {
 
     [Fact]
     public void EveryBakedPlacementOfTheVocabularyStationDrawsItsMesh() {
-        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.Parity/parity.world.json");
+        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.Parity/parity.puck");
         using var schedule = new WorldBakeSchedule(store: new WorldBakeStore());
         var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(value: 5));
 

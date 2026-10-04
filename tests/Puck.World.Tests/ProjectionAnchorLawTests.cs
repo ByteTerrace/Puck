@@ -137,7 +137,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
     }
 
     [InlineData("src/Puck.World/Assets/worlds/moth-courtyard.puck")]
-    [InlineData("tests/Puck.Parity/parity.world.json")]
+    [InlineData("tests/Puck.Parity/parity.puck")]
     [Theory]
     public void A_presentation_recipient_of_a_shipped_sky_keyed_on_a_state_clock_presents_it_as_the_authority(string path) {
         var world = AuthoredGameFixtures.Load(relativePath: path);

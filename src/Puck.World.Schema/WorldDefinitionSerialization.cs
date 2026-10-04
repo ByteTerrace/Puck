@@ -169,6 +169,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldRenderSkyLayer.Noise), TypeInfoPropertyName = "WorldRenderSkyLayerNoise")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Pattern), TypeInfoPropertyName = "WorldRenderSkyLayerPattern")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Panorama), TypeInfoPropertyName = "WorldRenderSkyLayerPanorama")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.View), TypeInfoPropertyName = "WorldRenderSkyLayerView")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Far), TypeInfoPropertyName = "WorldRenderSkyLayerFar")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]

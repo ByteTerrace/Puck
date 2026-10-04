@@ -30,7 +30,7 @@ public sealed class CreationBakeLawTests {
         ],
         """;
     // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
-    private const string PinnedProduct = "sha256-64/f9b309f61548e07f";
+    private const string PinnedProduct = "sha256-64/b3113c2b360522f1";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -389,7 +389,7 @@ public sealed class CreationBakeLawTests {
             );
         }
 
-        var path = directory.PathOf(name: "parity.world.json");
+        var path = directory.PathOf(name: "parity.puck");
 
         _ = CompileWithPack(path: path);
 

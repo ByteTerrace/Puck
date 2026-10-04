@@ -15,7 +15,7 @@
     "solid.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pane-outline/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pane-outline/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -206,7 +206,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pane-outline/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pane-outline/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

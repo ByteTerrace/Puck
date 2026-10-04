@@ -7,7 +7,7 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/view-screens/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/view-screens/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -53,7 +53,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/view-screens/two-cameras.world.json",
+    "world": "tests/Puck.World.Canaries/view-screens/two-cameras.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

@@ -13,7 +13,7 @@
     "convert-inverted.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-edit/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-edit/fixture.puck",
     "script": "broken-then-corrected.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -56,7 +56,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-edit/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-edit/fixture.puck",
     "script": "broken-twice.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

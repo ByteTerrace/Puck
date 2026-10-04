@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 public sealed class WorldLayoutTransitionScaleLawTests : IDisposable {
     private const uint Display = 64;
     private const float Step = 0.1f;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-transition-scale-");
 

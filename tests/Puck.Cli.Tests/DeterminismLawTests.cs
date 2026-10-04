@@ -25,7 +25,7 @@ public sealed class DeterminismLawTests {
 
         return Path.Combine(
             path1: root,
-            path2: "tests/Puck.World.Canaries/records-pools/fixture.world.json"
+            path2: "tests/Puck.World.Canaries/records-pools/fixture.puck"
         );
     }
     private static DeterminismManifest ShippedManifest() {

@@ -13,8 +13,12 @@ namespace Puck.World.Transpiler.Decompiler;
 public static partial class WorldDecompiler {
     // Whether every row in a `placements` section is one the `placement "id" { }` grammar can carry. A row with no
     // `id` is a basis-merge directive, not a placement; the whole section then prints through the generic value path.
+    // A section without rows is carried too: its absent list stays absent.
     private static bool CanSugarPlacements(JsonObject placements) {
-        if (placements["rows"] is not JsonArray rows) {
+        if (!placements.TryGetPropertyValue(jsonNode: out var rowsNode, propertyName: "rows")) {
+            return true;
+        }
+        if (rowsNode is not JsonArray rows) {
             return false;
         }
         foreach (var item in rows) {
@@ -66,6 +70,16 @@ public static partial class WorldDecompiler {
         }
 
         if (placements["rows"] is JsonArray rows) {
+            // An authored empty list replaces the imported rows where an absent one keeps them, so it prints as a property.
+            if (rows.Count == 0) {
+                EmitField(
+                    indentLevel: (indentLevel + 1),
+                    key: "rows",
+                    sb: sb,
+                    value: rows
+                );
+                wroteAny = true;
+            }
             foreach (var row in rows) {
                 if (row is not JsonObject rowObj) {
                     continue;

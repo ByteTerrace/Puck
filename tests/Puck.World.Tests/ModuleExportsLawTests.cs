@@ -198,10 +198,10 @@ public sealed class ModuleExportsLawTests {
     [Fact]
     public void APlacementBoardFacetBindsOnlyAnExportedOccupancyRow() {
         var fixtures = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures");
-        var host = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(
+        var host = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Puck.Testing.ShippedWorldDocuments.Read(path: Path.Combine(
             path1: fixtures,
-            path2: "minimal-hexlines-host.world.json"
-        )))!);
+            path2: "minimal-hexlines-host.puck"
+        ))))!);
 
         host[propertyName: "basis"] = Path.GetFullPath(path: Path.Combine(
             path1: fixtures,

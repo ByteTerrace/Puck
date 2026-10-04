@@ -9,7 +9,7 @@ public sealed class PaddleballContactLawTests {
     [InlineData(0.5f)]
     [Theory]
     public void ShippedBallEstablishesContactFromItsAuthoredSpawn(float height) {
-        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json");
+        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck");
 
         definition = definition with {
             PlacementRowsRaw = [.. definition.Placements.Select(selector: row => ((row.Id == "paddleballBall")

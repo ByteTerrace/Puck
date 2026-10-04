@@ -5,11 +5,11 @@
   "requirements": [],
   "timeoutSeconds": 60,
   "fixtures": [
-    "corner.world.json"
+    "corner.puck"
   ],
-  "binding": "The rim-drop island over a corner document that validates as the seam's counterpart and refuses its own boot (it seats no one), so every handoff across the flat seam at y=80 is refused and the seam reads state=CLOSED. WorldAdjacencyUnavailable.Closed clamps a body one raw unit inside a boundary it walks through; at a pitched boundary the body keeps its pose and its velocity, because a clamp there pins a falling body in mid-air at the plane with nothing under it. The positive leg walks the body off the deck, narrates the refusal, and reads the body back far below the plane, still airborne and falling under the island's own authority (home stays the island's spawn). A clamped body is re-clamped every few ticks as gravity carries it back across the deadband, so it reads somewhere in y=79.x for as long as the run lasts; no such read appears. The discriminating leg boots island-solo.world.json, the same island with no seam, and runs the same script: no refusal is narrated at all.",
+  "binding": "The rim-drop island over a corner document that validates as the seam's counterpart and refuses its own boot (it seats no one), so every handoff across the flat seam at y=80 is refused and the seam reads state=CLOSED. WorldAdjacencyUnavailable.Closed clamps a body one raw unit inside a boundary it walks through; at a pitched boundary the body keeps its pose and its velocity, because a clamp there pins a falling body in mid-air at the plane with nothing under it. The positive leg walks the body off the deck, narrates the refusal, and reads the body back far below the plane, still airborne and falling under the island's own authority (home stays the island's spawn). A clamped body is re-clamped every few ticks as gravity carries it back across the deadband, so it reads somewhere in y=79.x for as long as the run lasts; no such read appears. The discriminating leg boots island-solo.puck, the same island with no seam, and runs the same script: no refusal is narrated at all.",
   "positive": {
-    "world": "tests/Puck.World.Canaries/rim-refused/island.world.json",
+    "world": "tests/Puck.World.Canaries/rim-refused/island.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -87,7 +87,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/rim-refused/island-solo.world.json",
+    "world": "tests/Puck.World.Canaries/rim-refused/island-solo.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

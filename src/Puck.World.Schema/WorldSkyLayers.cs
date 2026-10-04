@@ -22,6 +22,7 @@ public static class WorldSkyLayers {
             WorldRenderSkyLayer.Noise => SdfSkyNoise.Kind,
             WorldRenderSkyLayer.Pattern => SdfSkyPattern.Kind,
             WorldRenderSkyLayer.Panorama => SdfSkyPanorama.Kind,
+            WorldRenderSkyLayer.View or WorldRenderSkyLayer.Far => SdfSkyView.Kind,
             _ => null,
         };
     }
@@ -32,6 +33,7 @@ public static class WorldSkyLayers {
     public static SdfSkyLayerClass ClassOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
         SdfSkyLayerKind.Stars => SdfSkyStars.Class,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Class,
+        SdfSkyLayerKind.View => SdfSkyView.Class,
         _ => SdfSkyLayerClass.Field,
     };
     /// <summary>Returns how a layer composes: its authored blend, or its kind's, <see cref="SdfSkyBlend.Add"/> for stars, a
@@ -83,11 +85,11 @@ public static class WorldSkyLayers {
         _ => SdfSkyTier.Low,
     };
     /// <summary>Returns the kind name a layer's rows are labelled with when it has no name: <c>gradient</c>, <c>disc</c>,
-    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c> or <c>panorama</c>.</summary>
+    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c>, <c>panorama</c>, <c>view</c> or <c>far</c>.</summary>
     /// <param name="layer">The layer.</param>
     /// <returns>The name, or <see langword="null"/> for fog.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
-    public static string? KindNameOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
+    public static string? KindNameOf(WorldRenderSkyLayer layer) => ((layer is WorldRenderSkyLayer.Far) ? "far" : KindOf(layer: layer) switch {
         SdfSkyLayerKind.Gradient => SdfSkyGradient.Name,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Name,
         SdfSkyLayerKind.Stars => SdfSkyStars.Name,
@@ -96,8 +98,9 @@ public static class WorldSkyLayers {
         SdfSkyLayerKind.Noise => SdfSkyNoise.Name,
         SdfSkyLayerKind.Pattern => SdfSkyPattern.Name,
         SdfSkyLayerKind.Panorama => SdfSkyPanorama.Name,
+        SdfSkyLayerKind.View => SdfSkyView.Name,
         _ => null,
-    };
+    });
     /// <summary>Returns the labels each layer of a stack counts its work under: its name, or its kind's name, with
     /// <c>#2</c>, <c>#3</c> and so on after the second and later unnamed layers of one kind.</summary>
     /// <param name="layers">The stack, lowest first.</param>

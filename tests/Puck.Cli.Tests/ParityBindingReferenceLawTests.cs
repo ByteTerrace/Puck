@@ -18,16 +18,18 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     private const string StateHash = "0123456789abcdef";
     private const string Station = "binding";
     private const ulong Tick = 1205;
-    private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    private const string WorldPath = "tests/Puck.Parity/parity.puck";
 
     private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-reference-");
 
-    private static (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
+    // The checked-in contract names the emitted parity.world.json, which the tree compile writes beside it, so the law loads a
+    // copy whose reference names the emitted document it writes into its own directory.
+    private (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
         Assert.True(
             condition: ParityManifestLoader.TryLoadContract(
                 contract: out var contract,
                 error: out var error,
-                path: RepositoryPaths.Resolve(relativePath: ContractPath)
+                path: WriteContract(edit: static _ => { })
             ),
             userMessage: error
         );
@@ -38,6 +40,23 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
         return (contract, Assert.IsType<ParityBindingReference>(@object: resolved.Reference));
     }
+    // The parity world is authored as a .puck source; the tree compile emits parity.world.json from it, and the reference
+    // reads that document, so the law writes the emitted document into its own directory once.
+    private string EmittedWorld() {
+        var path = Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "parity.world.json"
+        );
+
+        if (!File.Exists(path: path)) {
+            File.WriteAllBytes(
+                bytes: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: WorldPath)),
+                path: path
+            );
+        }
+
+        return path;
+    }
     private string WriteContract(Action<JsonNode> edit) {
         var contract = JsonNode.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: ContractPath)))!;
 
@@ -47,7 +66,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         foreach (var station in contract["stations"]!.AsObject()) {
             if (station.Value!["reference"] is { } reference) {
                 reference["graph"] = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/binding.graph.json");
-                reference["world"] = RepositoryPaths.Resolve(relativePath: WorldPath);
+                reference["world"] = EmittedWorld();
             }
         }
 
@@ -133,7 +152,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             )
         );
     private string WriteWorld(Action<JsonNode> edit) {
-        var world = JsonNode.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: WorldPath)))!;
+        var world = JsonNode.Parse(utf8Json: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: WorldPath)))!;
 
         edit(obj: world);
 
@@ -278,7 +297,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
                 error: out var error,
                 reconstructionTick: out var reconstructionTick,
                 waitTick: out var waitTick,
-                worldPath: RepositoryPaths.Resolve(relativePath: WorldPath)
+                worldPath: EmittedWorld()
             ),
             userMessage: error
         );

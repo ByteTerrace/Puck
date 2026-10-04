@@ -196,9 +196,7 @@ public static partial class WorldDecompiler {
             root.TryGetPropertyValue(
             jsonNode: out var docIdNode,
             propertyName: "documentId"
-        ) &&
-            (docIdNode is not null)
-        ) {
+        )) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"documentId: {FormatValue(
@@ -217,7 +215,8 @@ public static partial class WorldDecompiler {
             propertyName: "imports"
         ) &&
             (importsNode is JsonArray importsArr) &&
-            (importsArr.Count > 0)
+            (importsArr.Count > 0) &&
+            !HoldsNull(levels: 1, node: importsArr)
         ) {
             if (hasHeaders) {
                 sb.AppendLine();
@@ -261,7 +260,8 @@ public static partial class WorldDecompiler {
             propertyName: "exports"
         ) &&
             (exportsNode is JsonObject exportsObj) &&
-            (exportsObj.Count > 0)
+            (exportsObj.Count > 0) &&
+            !HoldsNull(levels: 1, node: exportsObj)
         ) {
             if (hasHeaders) {
                 sb.AppendLine();
@@ -302,6 +302,25 @@ public static partial class WorldDecompiler {
             hasHeaders = true;
         }
 
+        // An imports list or exports object the document holds empty replaces what a basis brings, so it prints as the
+        // field it is where no statement would carry it.
+        foreach (var (rootKey, rootValue) in root) {
+            if ((string.Equals(a: rootKey, b: "imports", comparisonType: StringComparison.Ordinal) && (rootValue is null or JsonArray { Count: 0 })) ||
+                (string.Equals(a: rootKey, b: "exports", comparisonType: StringComparison.Ordinal) && (rootValue is null or JsonObject { Count: 0 }))) {
+                if (hasHeaders) {
+                    sb.AppendLine();
+                }
+
+                EmitField(
+                    indentLevel: 0,
+                    key: rootKey,
+                    sb: sb,
+                    value: rootValue
+                );
+                hasHeaders = true;
+            }
+        }
+
         // 4. Sections & Blocks
         var knownRootKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
             "schema", "basis", "documentId", "imports", "exports",
@@ -338,7 +357,9 @@ public static partial class WorldDecompiler {
         }
 
         foreach (var (key, value) in root) {
-            if (knownRootKeys.Contains(item: key)) {
+            if (knownRootKeys.Contains(item: key) && !(
+                (key is "imports" or "exports") && (value is not null) && HoldsNull(node: new JsonObject { [key] = value.DeepClone() }, levels: 2)
+            )) {
                 continue;
             }
             if (sugaredGroups && string.Equals(
@@ -378,6 +399,18 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
                     $"{PuckPrinter.PrintPropertyName(level: 0, name: key)}: null"
+                );
+                continue;
+            }
+
+            // A list the document holds empty prints as the field it is: no section's statements would carry it, and
+            // dropping it would change what the document composes with.
+            if (value is JsonArray { Count: 0 }) {
+                EmitField(
+                    indentLevel: 0,
+                    key: key,
+                    sb: sb,
+                    value: value
                 );
                 continue;
             }
@@ -463,7 +496,7 @@ public static partial class WorldDecompiler {
     // or sugar requirement does not hold prints as an ordinary field instead, which is the fallback the row's own
     // description names.
     private static bool TryDecompileAddons(StringBuilder sb, JsonNode? value) {
-        if (value is not JsonArray addons) {
+        if ((value is not JsonArray addons) || HoldsNull(levels: 1, node: addons)) {
             return false;
         }
         DecompileAddonsBlock(
@@ -516,6 +549,7 @@ public static partial class WorldDecompiler {
     private static bool TryDecompilePlacements(StringBuilder sb, JsonNode? value) {
         if (
             (value is not JsonObject placements) ||
+            HoldsNull(levels: 2, node: placements) ||
             !CanSugarPlacements(placements: placements)
         ) {
             return false;
@@ -654,8 +688,50 @@ public static partial class WorldDecompiler {
 
         return true;
     }
+    // Whether a node holds an explicit null in a member within `levels` containers (arrays do not count as a level). A
+    // construct prints the members it names, so a null where it has no spelling for one would be dropped; the section
+    // prints as the field it is instead, which keeps it.
+    private static bool HoldsNull(JsonNode? node, int levels) {
+        switch (node) {
+            case JsonObject holder:
+                foreach (var (_, member) in holder) {
+                    if ((member is null) || ((levels > 1) && HoldsNull(levels: (levels - 1), node: member))) {
+                        return true;
+                    }
+                }
+
+                return false;
+            case JsonArray items:
+                foreach (var item in items) {
+                    if (HoldsNull(levels: levels, node: item)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            default:
+                return false;
+        }
+    }
+    // The nulls the views block has no spelling for: a section held null, a row without its name, and the seat rig's own
+    // name, version and operations. Any other member prints as a property of its block, null included.
+    private static bool HoldsUnprintedNull(JsonObject views) {
+        if (HoldsNull(levels: 1, node: views)) {
+            return true;
+        }
+        foreach (var key in ((ReadOnlySpan<string>)["graphs", "layouts", "post"])) {
+            if ((views[key] is JsonArray rows) && rows.OfType<JsonObject>().Any(predicate: static row => (row.ContainsKey(propertyName: "name") && (row["name"] is null)))) {
+                return true;
+            }
+        }
+        if ((views["graphs"] is JsonArray graphs) && graphs.OfType<JsonObject>().Any(predicate: static row => (row.ContainsKey(propertyName: "parameters") && (row["parameters"] is null)))) {
+            return true;
+        }
+
+        return ((views["seatRig"] is JsonObject rig) && ((rig.ContainsKey(propertyName: "name") && (rig["name"] is null)) || (rig.ContainsKey(propertyName: "version") && (rig["version"] is null)) || (rig.ContainsKey(propertyName: "operations") && (rig["operations"] is null))));
+    }
     private static bool TryDecompileViews(StringBuilder sb, JsonNode? value) {
-        if (value is not JsonObject views) {
+        if ((value is not JsonObject views) || HoldsUnprintedNull(views: views)) {
             return false;
         }
         DecompileViewsBlock(
@@ -714,6 +790,12 @@ public static partial class WorldDecompiler {
         ) &&
             (layoutsNode is JsonArray layoutsArr)
         ) {
+            first = EmitEmptyViewsList(
+                first: first,
+                list: layoutsArr,
+                name: "layouts",
+                sb: sb
+            );
             foreach (var layoutItem in layoutsArr) {
                 if (layoutItem is JsonObject layoutObj) {
                     if (!first) {
@@ -806,6 +888,12 @@ public static partial class WorldDecompiler {
                 continue;
             }
 
+            first = EmitEmptyViewsList(
+                first: first,
+                list: rows,
+                name: rowsKey,
+                sb: sb
+            );
             foreach (var row in rows) {
                 if (row is JsonObject rowObj) {
                     if (!first) {
@@ -855,6 +943,24 @@ public static partial class WorldDecompiler {
         }
 
         sb.AppendLine(value: "}");
+    }
+    // A present empty list prints as its own property: it replaces the imported rows where an absent one keeps them, and
+    // no row would carry it. Returns the block's `first` flag after it.
+    private static bool EmitEmptyViewsList(bool first, JsonArray list, string name, StringBuilder sb) {
+        if (list.Count != 0) {
+            return first;
+        }
+        if (!first) {
+            sb.AppendLine();
+        }
+        EmitField(
+            indentLevel: 1,
+            key: name,
+            sb: sb,
+            value: list
+        );
+
+        return false;
     }
     private static void DecompileSeatRigBlock(StringBuilder sb, string? name, JsonObject srObj, int indentLevel) {
         var indent = new string(
@@ -1169,6 +1275,30 @@ public static partial class WorldDecompiler {
             }
         }
     }
+    // An optional minus sign, digits, and an optional fraction: no exponent, which the number grammar spells differently.
+    private static bool IsPlainDecimal(string text) {
+        var index = (text.StartsWith(value: '-') ? 1 : 0);
+        var digits = 0;
+
+        while ((index < text.Length) && char.IsAsciiDigit(c: text[index])) {
+            ++index;
+            ++digits;
+        }
+        if ((digits == 0) || (index == text.Length)) {
+            return (digits > 0);
+        }
+        if (text[index++] != '.') {
+            return false;
+        }
+
+        digits = 0;
+        while ((index < text.Length) && char.IsAsciiDigit(c: text[index])) {
+            ++index;
+            ++digits;
+        }
+
+        return ((digits > 0) && (index == text.Length));
+    }
     private static string FormatValue(JsonNode? node, int indentLevel, Type? context = null) {
         if (node is null) {
             return "null";
@@ -1180,6 +1310,15 @@ public static partial class WorldDecompiler {
                     ? "true"
                     : "false"
                 );
+            }
+            // A number prints in the spelling the document holds it in when that is a plain decimal: `0.0` and `0` lower to
+            // different values where a member is untyped, so the point is part of what the document says.
+            if (val.GetValueKind() == System.Text.Json.JsonValueKind.Number) {
+                var spelled = val.ToJsonString();
+
+                if (IsPlainDecimal(text: spelled)) {
+                    return spelled;
+                }
             }
             if (val.TryGetValue<long>(value: out var l)) {
                 return l.ToString(provider: CultureInfo.InvariantCulture);

@@ -307,7 +307,11 @@ registered in the generated kind table the kernels switch on, so adding one
 touches no pass. The stack is cut into **runs** without reordering it: a maximal
 sequence of consecutive **field** layers (gradient, clouds, aurora, noise,
 pattern, panorama) is one field run, and the **point** layers between them
-(stars, a body's disc) are evaluated one by one. Every blend is affine in the
+(stars, a body's disc, an infinity view) are evaluated one by one. An infinity view (`view`, another
+world, and `far`, only named prototypes of this one) is a second `sdf.world` instance whose image the layer samples
+at the tangent each pixel's direction has on the viewer's basis, inside the rectangle of the camera plane the layer's
+cone covers; before the instance has an image the layer draws its fallback colour, and either way a pixel counts a
+shown texel in the layer's detail row, which demands the instance's next frame. Every blend is affine in the
 color beneath it, so a field run is summarized exactly as one per-channel scale
 and offset, and the runs compose as the stack does (`SdfSkyRuns`, held by
 `SkyRunCompositionLawTests`). Each layer carries its own opacity, mask (an

@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/standard"
+
+import "placements-section-module" as module
+
+placements {
+  policy {
+    authoringHeadroomScreens: 0
+    authoringHeadroomPlacements: 0
+    minPlacementScale: 1
+    maxPlacementScale: 1
+    candidateRadius: 1
+    candidateCap: 1
+    previewDeadlineFrames: 1
+    derivedFaceScreens: 1
+  }
+}

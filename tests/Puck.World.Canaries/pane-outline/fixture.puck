@@ -1,0 +1,73 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/standard"
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: windowed
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+render {
+  tonemap: Filmic
+}
+
+views {
+  layout "pane" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 1
+        instance: "pane"
+        width: 0.5
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+
+  seatRig "pipeline" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 0.001)
+    ]
+  }
+
+  graph "pane" {
+    camera: null
+    source: "solid.hlsl"
+    timeScale: 1
+  }
+}
+
+hud {
+  defaults {
+    enabled: true
+    cursor {
+      hoverRadius: 100
+      sizePx: 3
+      role: Accent
+      visible: null
+    }
+  }
+  panels []
+}

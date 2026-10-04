@@ -1,0 +1,68 @@
+schema: "puck.world.definition.v1"
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 256
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+views {
+  layout "pipeline" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 1
+        instance: "ink"
+        width: 0.5
+        x: 0
+        y: 0
+      }
+      {
+        camera: null
+        height: 1
+        instance: "tint"
+        width: 0.5
+        x: 0.5
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0.25
+  }
+
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+
+  seatRig "pipeline" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 0.001)
+    ]
+  }
+
+  graph "ink" {
+    camera: null
+    source: "../../../src/Puck.World/Assets/pipelines/ink.graph.json"
+    timeScale: 0
+  }
+
+  graph "tint" {
+    camera: null
+    source: "../pipeline-package/tint.graph.json"
+  }
+}

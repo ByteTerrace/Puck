@@ -748,6 +748,16 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 }
+            case WorldRenderSkyLayer.View view: {
+                    RefuseStructure(errors: errors, path: path, stated: ((view.Destination is not null) || (view.Anchor is not null) || (view.Turn is not null) || (view.Scale is not null) || (view.Refresh is not null) || (view.FarDistance is not null) || (view.Shadows is not null) || (view.AmbientOcclusion is not null) || (view.Fallback is not null)));
+
+                    break;
+                }
+            case WorldRenderSkyLayer.Far far: {
+                    RefuseStructure(errors: errors, path: path, stated: ((far.Prototypes is not null) || (far.Anchor is not null) || (far.Turn is not null) || (far.Scale is not null) || (far.Refresh is not null) || (far.FarDistance is not null) || (far.Shadows is not null) || (far.AmbientOcclusion is not null) || (far.Fallback is not null)));
+
+                    break;
+                }
         }
     }
     // A count, a seed, a kind, a name, a slot or a frame is the shape of what the keys move, so no key states one.

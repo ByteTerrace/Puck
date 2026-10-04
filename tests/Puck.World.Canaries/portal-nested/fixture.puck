@@ -1,0 +1,209 @@
+schema: "puck.world.definition.v1"
+documentId: "portal-nested"
+
+bodies {
+  capacity: 1
+  localSeats: 1
+  networkPlayers: 0
+  seatSpawns [
+    "viewer"
+  ]
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "traverse"
+    operations [ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, SnapYawToPlanarIntent, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+cameras []
+
+channels [
+  {
+    name: "forward"
+    role: MoveAdvance
+    shape: Bipolar
+  }
+  {
+    name: "strafe"
+    role: MoveStrafe
+    shape: Bipolar
+  }
+  {
+    name: "turn"
+    role: Turn
+    shape: Bipolar
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+defaultSeatKit: "stander"
+
+destinations [
+  {
+    durability: persisted
+    name: "middle"
+    reference: "middle"
+    scope: global
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "traverse"
+      collider: sphere(radius: 0.5)
+      motion {
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "air"
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "stander"
+    }
+  ]
+}
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "door" {
+    prototype: "door"
+    faceSources [
+      {
+        face: "glass"
+        portal {
+          arrival: "mapped"
+          counterpart: "arch/glass"
+          destination: "middle"
+        }
+        source: session(destination: "middle", projection: window, resolution: [144, 120])
+      }
+    ]
+    position [0, 1.5, 0]
+    yawDegrees: 180deg
+  }
+}
+
+prototypes {
+  prototype "door" {
+    document {
+      behavior {
+        faces [
+          {
+            defaultSource: null
+            name: "glass"
+            shapeId: 0
+          }
+        ]
+      }
+      name: "door"
+      palette [
+        {
+          color: "#DDE8EA"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "panel" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.2, 1, 0.05]
+      }
+    }
+  }
+}
+
+references [
+  {
+    document: "middle"
+    name: "middle"
+  }
+]
+
+simulation {
+  rateHz: 30
+}
+
+spawnPoints [
+  {
+    id: "viewer"
+    position [0, 0, 9]
+    yawDegrees: 0
+  }
+]
+
+views {
+  layout "doorway" {
+    seatCount: 0
+    slots [
+      {
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "doorway-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 3, pitch: 0, pivotOffset: [0, 1.6, 0], yaw: 3.1415927)
+      lookAt(subject: worldPoint(point: [0, 1.5, 0]))
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

@@ -45,7 +45,7 @@
     "tint.graph.json"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/interface-echo/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/interface-echo/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -134,7 +134,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/interface-echo/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/interface-echo/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

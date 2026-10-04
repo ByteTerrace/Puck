@@ -688,6 +688,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, noise: noise, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror), tier: tier, visibility: visibility),
             _ => -1,
         };
 
@@ -979,6 +981,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanoramaIntensity, mirror: mirror, scalar: panorama.Intensity, site: site),
         Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
         Screen = (panorama.Screen ?? -1),
+    };
+    // An infinity view layer's static parameters: its fallback colour and whether its image alpha is coverage. The viewer's
+    // basis, the rectangle and the screen the instance's image arrives on belong to a frame, which the view's fit supplies
+    // (InfinityViewSampling.Describe); until then the layer's empty rectangle draws nothing.
+    private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage) => new() {
+        Coverage = (coverage ? 1u : 0u),
+        Fallback = Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror),
     };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var count = Math.Min(

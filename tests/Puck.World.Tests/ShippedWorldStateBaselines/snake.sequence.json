@@ -3,7 +3,7 @@
   "world": "games/snake.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

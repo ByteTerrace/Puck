@@ -47,13 +47,13 @@ internal static class StartupBenchmarks {
                 Path.Combine(path1: root, path2: "src/Puck.World/Assets/worlds/games/reversi.puck"),
                 // Most game documents are importable modules, not standalone worlds. Their complete test hosts
                 // supply the required seats, motion programs, basis, and bindings without rewriting the module.
-                .. Directory.GetFiles(path: Path.Combine(path1: root, path2: "tests/Puck.World.Tests/Fixtures"), searchPattern: "*-host.world.json").Order(comparer: StringComparer.Ordinal),
+                .. Directory.GetFiles(path: Path.Combine(path1: root, path2: "tests/Puck.World.Tests/Fixtures"), searchPattern: "*-host.puck").Order(comparer: StringComparer.Ordinal),
                 Path.Combine(path1: root, path2: "worlds/parlor/chess.puck"),
                 Path.Combine(path1: root, path2: "worlds/parlor/chinese-checkers.puck"),
                 Path.Combine(path1: root, path2: "worlds/parlor/hearts.puck"),
-                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/jump-trophy/host.world.json"),
-                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/kart-lap/host.world.json"),
-                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/dive-medium/fixture.world.json"),
+                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/jump-trophy/host.puck"),
+                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/kart-lap/host.puck"),
+                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/dive-medium/fixture.puck"),
             ];
         }
         worlds = worlds.Select(selector: Path.GetFullPath).ToArray();

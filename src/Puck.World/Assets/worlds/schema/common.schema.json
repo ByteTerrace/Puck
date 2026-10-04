@@ -1861,6 +1861,254 @@
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerPanorama"
     },
+    "WorldRenderSkyLayerView": {
+      "description": "Another world, seen at infinity: a second sdf.world instance (sky$\u003Cname\u003E) rendering the destination\u0027s session from a fixed anchor in it, turned with the viewer\u0027s camera and never translated by it. It renders only while the viewer\u0027s previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.",
+      "properties": {
+        "$type": {
+          "const": "view"
+        },
+        "name": {
+          "description": "The layer\u0027s name, required: the instance is sky$name and its counted rows carry the name, so it is one part free of $ and ~, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "destination": {
+          "description": "The destination world, by the name a session screen\u0027s destination takes. Required.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.",
+          "default": null
+        },
+        "turn": {
+          "description": "The rotation about up that carries the viewer\u0027s frame into the destination\u0027s, in degrees. Absent is none: the destination\u0027s axes are the viewer\u0027s.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scale": {
+          "description": "The instance\u0027s render scale against the viewer\u0027s pixel density, in (0, 1]; below the high sky tier it renders at half of it. Absent is one half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "refresh": {
+          "description": "It renders at most once every this many frames, at least one. Absent is two.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "farDistance": {
+          "description": "The depth its march ends at, in world units. Absent is 1000.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "Whether the instance is dressed with the key light\u0027s soft shadow. Absent is off.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ambientOcclusion": {
+          "description": "Whether the instance is dressed with ambient occlusion. Absent is off.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour drawn where the view cannot render, before its first image and past the nesting depth or the cap. Absent is black.",
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerView"
+    },
+    "WorldRenderSkyLayerFar": {
+      "description": "Far geometry: the same mechanism as View over a residency that holds only the named prototypes of this world, a planet or a ring of monoliths or a city on the horizon, rendered by the one sdf.world engine sized to its angular bound, so its cost scales with the pixels it covers and is counted under its own instance. Its image alpha is its coverage: the rest of the sky shows around it.",
+      "properties": {
+        "$type": {
+          "const": "far"
+        },
+        "name": {
+          "description": "The layer\u0027s name, required, as View\u0027s.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "prototypes": {
+          "description": "The prototypes the residency holds, by their ids in prototypes. Required, at least one.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the camera sits at, in this world. Absent is its origin.",
+          "default": null
+        },
+        "turn": {
+          "description": "The rotation about up applied to the viewer\u0027s frame, in degrees. Absent is none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scale": {
+          "description": "As Scale.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "refresh": {
+          "description": "As Refresh.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "farDistance": {
+          "description": "The depth its march ends at, in world units. Absent is 1000.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "As Shadows.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ambientOcclusion": {
+          "description": "As AmbientOcclusion.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "As Fallback.",
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerFar"
+    },
     "WorldRenderSkyLayer": {
       "description": "One sky layer. The $type string is the JSON discriminator. Every layer but fog also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.",
       "type": [
@@ -1897,6 +2145,12 @@
         },
         {
           "$ref": "#/$defs/WorldRenderSkyLayerPanorama"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerView"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerFar"
         }
       ],
       "title": "WorldRenderSkyLayer"

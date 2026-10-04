@@ -28,6 +28,8 @@ public static class WorldViewNames {
     /// <summary>The part between a level's name and a camera's name in a camera view of a world shown through a
     /// screen.</summary>
     public const string CameraPart = "camera";
+    /// <summary>The first part of an infinity view's instance name, and the part between a level and the layer it shows.</summary>
+    public const string SkyPart = "sky";
     /// <summary>The first part of a source instance's name.</summary>
     public const string SourceHead = "source";
     /// <summary>The first part of the name under which a world seats are presented in names the sessions its screens
@@ -40,6 +42,31 @@ public static class WorldViewNames {
     public static string Session(int screen) => GeneratedName.Join(
         SessionHead,
         screen.ToString(provider: CultureInfo.InvariantCulture)
+    );
+    /// <summary>Returns the instance name of an infinity view the viewer's own sky shows: <c>sky$&lt;layer&gt;</c>, the
+    /// layer's or body's name under <see cref="SkyPart"/>.</summary>
+    /// <param name="layer">The layer's or body's name, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>sky$&lt;layer&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="layer"/> is empty or carries the joiner.</exception>
+    public static string Sky(string layer) => GeneratedName.Join(
+        SkyPart,
+        layer
+    );
+    /// <summary>Returns the instance name of an infinity view the sky of a world another view renders shows: the view's
+    /// name, <see cref="SkyPart"/> and the layer, so every level of nesting names its views from the level above, and the
+    /// same layer seen at two depths is two views.</summary>
+    /// <param name="view">The name of the view whose world's sky shows the layer: a session's, a routed world's head or
+    /// another infinity view's.</param>
+    /// <param name="layer">The layer's or body's name, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>&lt;view&gt;$sky$&lt;layer&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="view"/> is empty, or <paramref name="layer"/> is empty or
+    /// carries the joiner.</exception>
+    public static string NestedSky(string view, string layer) => GeneratedName.Append(
+        name: GeneratedName.Append(
+            name: view,
+            part: SkyPart
+        ),
+        part: layer
     );
     /// <summary>Returns the view name of a session a screen shows inside the world another view renders: the view's name
     /// joined with the screen's index, so every level of nesting names its views from the level above, and the same

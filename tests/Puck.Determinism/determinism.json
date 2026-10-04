@@ -3,7 +3,7 @@
     "scenarios": [
         {
             "name": "body-dynamics",
-            "world": "../Puck.World.Canaries/body-dynamics/fixture.world.json",
+            "world": "../Puck.World.Canaries/body-dynamics/fixture.puck",
             "ticks": 240,
             "seats": [0],
             "intents": [
@@ -15,7 +15,7 @@
         },
         {
             "name": "traveller-kit",
-            "world": "../Puck.World.Canaries/traveller-kit/fixture.world.json",
+            "world": "../Puck.World.Canaries/traveller-kit/fixture.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [
@@ -28,7 +28,7 @@
         },
         {
             "name": "records-pools",
-            "world": "../Puck.World.Canaries/records-pools/fixture.world.json",
+            "world": "../Puck.World.Canaries/records-pools/fixture.puck",
             "ticks": 60,
             "seats": [],
             "intents": [],
@@ -39,7 +39,7 @@
         },
         {
             "name": "tabletop-state",
-            "world": "../Puck.World.Canaries/tabletop-state/fixture.world.json",
+            "world": "../Puck.World.Canaries/tabletop-state/fixture.puck",
             "ticks": 60,
             "seats": [],
             "intents": [],
@@ -50,7 +50,7 @@
         },
         {
             "name": "flow-conservation",
-            "world": "../Puck.World.Canaries/flow-conservation-live/fixture.world.json",
+            "world": "../Puck.World.Canaries/flow-conservation-live/fixture.puck",
             "ticks": 240,
             "seats": [],
             "intents": [],
@@ -59,7 +59,7 @@
         },
         {
             "name": "kart-lap",
-            "world": "../Puck.World.Canaries/kart-lap/host.world.json",
+            "world": "../Puck.World.Canaries/kart-lap/host.puck",
             "ticks": 90,
             "seats": [0],
             "intents": [
@@ -70,7 +70,7 @@
         },
         {
             "name": "billiards",
-            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.world.json",
+            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [],
@@ -79,7 +79,7 @@
         },
         {
             "name": "navigation",
-            "world": "../Puck.World.Canaries/dive-medium/fixture.world.json",
+            "world": "../Puck.World.Canaries/dive-medium/fixture.puck",
             "ticks": 40,
             "seats": [0],
             "intents": [],
@@ -137,7 +137,7 @@
         },
         {
             "name": "interactions",
-            "world": "../Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json",
+            "world": "../Puck.World.Tests/Fixtures/minimal-paddleball-host.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [],

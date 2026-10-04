@@ -767,13 +767,15 @@ base, so passing both is refused.
   shaders it declares and every file they include, each resolved as the host
   resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or post-process packages need the host's resolvers still reaches
-  them.
+  them. A world authored as a `.puck` source is read as the document it lowers
+  to, so a canary whose manifest names the source reaches what the document
+  does.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
   chooses no canary when the document named by its stem compiles to the same
   value at the base and in the working tree. Both sides use the world's document
-  reader, with the base's shipped assets extracted from git. Object member order
-  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  reader, with the base's `src/Puck.World/Assets` exported from git. Object
+  member order and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
   array order and every member's value do. A JSON-to-source replacement judges
   both paths. The owner's suites, catalog check and changed test blocks still
   run, and neither path is listed as `unmapped` or unplaced `deleted`.
@@ -830,7 +832,13 @@ base, so passing both is refused.
   tree: each canary's worlds and graph documents are read as the base recorded
   them, through the same readers, so a deleted pass source that a base graph
   document declared, or an asset a base world named, chooses the canaries whose
-  documents reached it there. The canaries are today's, since only a canary
+  documents reached it there. A base `.puck` source composes through an export
+  of the base revision's document trees (`src/Puck.World/Assets`,
+  `tests/Puck.World.Canaries`, `tests/Puck.World.Verdicts` and `worlds`, written
+  by `git archive` to a temporary directory when the first document is read and
+  deleted when the selection ends), because the composer reads files. A git run
+  the export needs that fails, or does not finish within two minutes, refuses
+  the selection by name. The canaries are today's, since only a canary
   that exists now can run. One none of these places is listed as `deleted`, and
   its project's suites still run. Nothing reads a deleted file from disk.
 
@@ -1804,7 +1812,7 @@ law rather than by a directory sweep.
 
 ## `puck parity`—cross-backend parity over the authored parity world
 
-`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+`puck parity` boots `tests/Puck.Parity/parity.puck` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
@@ -1917,7 +1925,7 @@ puck counters --report <file> [--check | --record] [--ceilings <file>]
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/counters.world.json` once per backend
+The run boots `tests/Puck.Counters/counters.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
@@ -2559,7 +2567,7 @@ separate evidence, and unresolved rows remain unmodeled.
 
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `puck.world.json` and a checked-in Klondike fixture document
-(`Bench/klondike.fixture.world.json`, spliced the way
+(`Bench/klondike.fixture.puck`, spliced the way
 `tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
@@ -3060,6 +3068,17 @@ source that emits them, with `--output` naming it: each world becomes a module a
 generated in both worlds it joins. A document declaring a generated name that nothing
 prints back is refused by that name, so the verb never writes a source the compiler
 refuses.
+
+The source composes to the document it came from: a list or object the document holds
+empty prints as `rows []` or the like, because composition replaces a list that is
+present and keeps the layers beneath one that is absent, and a member held `null`
+prints as `null`: a bare `null` holds nothing in every member, a name or key member
+included, so a row or key actually named null is written `$"null"`. A number prints in the spelling the document holds it in (`0.0` stays
+`0.0`), and a member a construct defaults (a transfer's `insertFirst: false`) is left
+to the construct's default, which composes to the same definition. The world-document round-trip law
+(`WorldDecompileRoundTripLawTests`) holds every JSON world document in the repository,
+and every empty list and object and every `null` member the generated schema declares,
+to this.
 
 `embed` resolves all authored `embed(...)` text expressions and vector table literals in a
 `.puck` file or directory into committed `.embeddings.json` lock files. Pass `--check` in CI to verify

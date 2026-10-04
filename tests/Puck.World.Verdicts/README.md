@@ -19,7 +19,7 @@ puck test tests/Puck.World.Verdicts/phase-advance.world.json --keep out
 puck test tests/Puck.World.Verdicts/sources/seat-writes-a-cell.puck
 ```
 
-Every `.world.json` world here is a basis delta over the local `phase-fixture.world.json`. The
+Every `.world.json` world here is a basis delta over the local `phase-fixture.puck`. The
 fixture contains only the ordered zones and phase rows needed to exercise
 command scheduling, so this CLI suite has no dependency on authored game
 content.

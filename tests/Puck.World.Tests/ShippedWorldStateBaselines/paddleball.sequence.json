@@ -3,7 +3,7 @@
   "world": "games/paddleball.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

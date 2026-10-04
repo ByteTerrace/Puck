@@ -42,7 +42,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.Counters/counters.world.json",
+            world: "tests/Puck.Counters/counters.puck",
             edit: definition => {
                 var camera = definition.Views.Layouts[0].Slots[0].Camera;
 
@@ -85,7 +85,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.Counters/counters.world.json",
+            world: "tests/Puck.Counters/counters.puck",
             edit: definition => definition with {
                 ViewsRaw = definition.Views with {
                     Graphs = [new WorldViewGraph(
@@ -174,7 +174,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck",
             edit: definition => definition with { ViewsRaw = definition.Views with { Layouts = layouts } }).Build();
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();
@@ -218,7 +218,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.Counters/counters.world.json",
+            world: "tests/Puck.Counters/counters.puck",
             edit: definition => definition with {
                 ViewsRaw = definition.Views with {
                     Layouts = [Layout(camera: definition.Views.Layouts[0].Slots[0].Camera, name: "split", width: 0.75f)],
@@ -260,7 +260,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.Counters/counters.world.json",
+            world: "tests/Puck.Counters/counters.puck",
             edit: definition => {
                 var camera = definition.Views.Layouts[0].Slots[0].Camera;
 

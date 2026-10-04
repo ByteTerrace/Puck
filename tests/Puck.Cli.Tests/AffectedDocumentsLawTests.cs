@@ -98,10 +98,11 @@ public sealed class AffectedDocumentsLawTests {
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Sources/image-source.hlsli"], expected: "source-conversion");
 
         // The same reach read from a revision's tree through git rather than the disk: the committed documents of two
-        // real canaries reach the same pass sources.
+        // real canaries reach the same pass sources, a world authored as .puck included (the revision exports once and composes it).
+        using var head = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: "HEAD", root: repositoryRoot);
         var recorded = AffectedDocuments.ReachedBy(
             canaries: [.. canaries.Where(predicate: static canary => (canary.Id is "resample-reconstruction" or "pipeline-ink"))],
-            tree: new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot)
+            tree: head
         );
 
         Assert.Contains(collection: recorded["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
@@ -122,5 +123,47 @@ public sealed class AffectedDocumentsLawTests {
             ),
             expected: ["src/Puck.Platform.Windows/Win32D3D11CameraFrameConverter.cs"]
         );
+    }
+
+    /// <summary>A module authored only as a <c>.puck</c> source (no <c>.world.json</c> beside it) is a layer the importing
+    /// world composes from, so a world authored as a source reaches it, in the working tree and in a revision.</summary>
+    private static void WriteModuleTree(string root) {
+        var modules = Directory.CreateDirectory(path: Path.Combine(path1: root, path2: "mods"));
+
+        File.Copy(
+            destFileName: Path.Combine(path1: modules.FullName, path2: "ttt.puck"),
+            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck")
+        );
+        File.WriteAllText(
+            contents: "schema: \"puck.world.definition.v1\"\n\nimport \"mods/ttt\" as a\n",
+            path: Path.Combine(path1: root, path2: "host.puck")
+        );
+    }
+
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedThroughTheImportThatNamesIt() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-module-");
+
+        WriteModuleTree(root: scratch.RootPath);
+
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: new AffectedWorkingTree(root: scratch.RootPath));
+
+        Assert.Contains(collection: reached, expected: "host.puck");
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
+    }
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedFromTheRevisionThatRecordedIt() {
+        using var checkout = new GitScratchCheckout();
+
+        WriteModuleTree(root: checkout.Root);
+        _ = checkout.Commit(message: "the tree");
+
+        // The working tree no longer holds the files: only the revision does, and it composes them from an export.
+        File.Delete(path: Path.Combine(path1: checkout.Root, path2: "mods", path3: "ttt.puck"));
+
+        using var revision = new AffectedRevisionTree(documentTrees: ["host.puck", "mods"], revision: "HEAD", root: checkout.Root);
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: revision);
+
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
     }
 }

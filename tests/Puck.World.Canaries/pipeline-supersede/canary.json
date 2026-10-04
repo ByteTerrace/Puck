@@ -11,7 +11,7 @@
     "convert-halved.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-supersede/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-supersede/fixture.puck",
     "script": "latest-wins.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -45,7 +45,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-supersede/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-supersede/fixture.puck",
     "script": "reversed.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

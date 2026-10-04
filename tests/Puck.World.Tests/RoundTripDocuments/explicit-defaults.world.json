@@ -1,0 +1,32 @@
+{
+  "schema": "puck.world.definition.v1",
+  "documentId": null,
+  "placements": {
+    "rows": []
+  },
+  "rules": [
+    {
+      "name": "deal",
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "from": "deck",
+            "to": "hand",
+            "selector": "First",
+            "count": 1,
+            "key": null,
+            "insertFirst": false,
+            "draw": null
+          }
+        }
+      ]
+    }
+  ],
+  "views": {
+    "graphs": [],
+    "layouts": [],
+    "post": []
+  }
+}

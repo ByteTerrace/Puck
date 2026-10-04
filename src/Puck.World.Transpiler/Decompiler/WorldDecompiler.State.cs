@@ -61,12 +61,14 @@ public static partial class WorldDecompiler {
         );
         var first = true;
 
-        if ((spaces is not null) && (spaces.Count > 0)) {
+        var spacesSugar = ((spaces is { Count: > 0 }) && !HoldsNull(levels: 1, node: spaces));
+
+        if (spacesSugar) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"{indent}    spaces {{"
             );
-            foreach (var spaceNode in spaces) {
+            foreach (var spaceNode in spaces!) {
                 if (spaceNode is JsonObject spaceObj) {
                     var spaceName = (spaceObj["name"]?.ToString() ?? "default");
                     var model = (spaceObj["model"]?.ToString() ?? "");
@@ -95,7 +97,21 @@ public static partial class WorldDecompiler {
         }
 
         foreach (var (k, v) in state) {
-            if (string.Equals(a: k, b: "spaces", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            // A list the section holds empty prints as the field it is, where no declaration would carry it.
+            if (v is JsonArray { Count: 0 }) {
+                if (!first) {
+                    sb.AppendLine();
+                }
+                first = false;
+                EmitField(
+                    indentLevel: (indentLevel + 1),
+                    key: k,
+                    sb: sb,
+                    value: v
+                );
+                continue;
+            }
+            if (spacesSugar && string.Equals(a: k, b: "spaces", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 continue;
             }
 
@@ -335,20 +351,21 @@ public static partial class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}pairPool {(pool["name"]?.ToString() ?? "PairPool")} record {(pool["record"]?.ToString() ?? "Record")} left {(pool["leftPool"]?.ToString() ?? "left")} right {(pool["rightPool"]?.ToString() ?? "right")} maxLive {(pool["maxLive"]?.ToString() ?? "1")} directed {(pool["directed"]?.ToString() ?? "true")} allowSelf {(pool["allowSelf"]?.ToString() ?? "false")}");
         }
     }
-    private static bool PoolsHaveSugar(JsonArray pools) => pools.All(predicate: node =>
+    private static bool PoolsHaveSugar(JsonArray pools) => (!HoldsNull(levels: 1, node: pools) && pools.All(predicate: node =>
         ((node is JsonObject pool) && !pool.ContainsKey(propertyName: "snapshot") &&
         pool.All(predicate: pair => (pair.Key is "name" or "record" or "capacity" or "initial")) &&
-        ((pool["initial"] is not JsonArray initial) || initial.Select(selector: (seed, index) =>
-            ((seed is JsonObject seedObject) && (seedObject["slot"]?.GetValue<int>() == index))).All(predicate: value => value))));
-    private static bool RecordsHaveSugar(JsonArray records) => records.All(predicate: node =>
+        // The sugar spells a pool's seeds, and a pool seeding nothing spells none: an authored empty list stays on the generic path.
+        ((pool["initial"] is not JsonArray initial) || ((initial.Count > 0) && initial.Select(selector: (seed, index) =>
+            ((seed is JsonObject seedObject) && (seedObject["slot"]?.GetValue<int>() == index))).All(predicate: value => value))))));
+    private static bool RecordsHaveSugar(JsonArray records) => (!HoldsNull(levels: 2, node: records) && records.All(predicate: node =>
         ((node is JsonObject record) &&
         record.All(predicate: pair => (pair.Key is "name" or "fields")) &&
         (record["fields"] is JsonArray fields) &&
         fields.All(predicate: fieldNode => ((fieldNode is JsonObject field) && field.All(predicate: pair =>
             (pair.Key is "name" or "kind" or "enum" or "min" or "max" or "overflow" or "space" or "advance" or "default")) &&
-            ((field["advance"] is null) || ((field["advance"] is JsonObject advance) && CanSugarAdvance(advance: advance)))))));
-    private static bool PairPoolsHaveSugar(JsonArray pools) => pools.All(predicate: node =>
-        ((node is JsonObject pool) && pool.All(predicate: pair => (pair.Key is "name" or "record" or "leftPool" or "rightPool" or "maxLive" or "directed" or "allowSelf"))));
+            ((field["advance"] is null) || ((field["advance"] is JsonObject advance) && CanSugarAdvance(advance: advance))))))));
+    private static bool PairPoolsHaveSugar(JsonArray pools) => (!HoldsNull(levels: 1, node: pools) && pools.All(predicate: node =>
+        ((node is JsonObject pool) && pool.All(predicate: pair => (pair.Key is "name" or "record" or "leftPool" or "rightPool" or "maxLive" or "directed" or "allowSelf")))));
     // A value an enum field holds prints as the member it names.
     private static string FormatCellValue(JsonNode? node, string? enumName = null, EnumSpellings? enums = null) {
         if ((node is not JsonObject tagged) || (tagged["kind"] is not JsonValue kindNode) || (tagged["value"] is not { } value)) {

@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -157,7 +157,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

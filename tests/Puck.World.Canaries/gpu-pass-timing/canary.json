@@ -12,7 +12,7 @@
   ],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -154,7 +154,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

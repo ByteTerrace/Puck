@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -495,7 +495,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

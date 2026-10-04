@@ -462,7 +462,7 @@ legal baseline. Acceptance commits its bookkeeping in one transaction. See the
 [chess authoring notes](../Puck.World/README.md#the-world-as-data) for promotion,
 castling rights, duplicate occupancy, and diagnostic limitations.
 
-The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
 exercise movement, pile order, ray flips, phase progression, and replay through
 the real headless application. The [control script](../../tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)
@@ -818,7 +818,7 @@ Every reserved channel is a row of the rewrite's channel table, which carries
 its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
 the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
-two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
+two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck`),
 and an entry with no `as` composes its names unchanged.
 
 **Exports: a module's names are private by default.** A module document may
@@ -1829,6 +1829,15 @@ A refusal about an imported or basis document names it by file name (`WorldDocum
 and a storage failure by its kind, never by the host's directory or an exception message
 that quotes one; `TryLoadFileForAdmission` takes a `displayName` for a host (the owned-world
 catalog) that must call the root document by something other than its path.
+
+A document path names a document, not a file format: a `<name>.world.json` path whose
+`<name>.puck` source stands beside it reads as the document that source lowers to
+through the local document source (`WorldDefinitionFileSource.TryReadDocumentFile`, the
+source winning over a document file beside it as it does for every name). Every door
+that takes a document by name or path (a neighbour, a crossing's or a session screen's
+destination, `WorldFileNeighbourResolver`) reads through it, so a world authored as a
+source resolves exactly as the document it compiles to, and keeps the `.world.json`
+name as its identity.
 A release publishes a definition undrawn, since draws are instance state:
 `WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
 drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the

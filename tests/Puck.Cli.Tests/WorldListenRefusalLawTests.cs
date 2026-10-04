@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class WorldListenRefusalLawTests {
-    private const string World = "phase-fixture.world.json";
+    private const string World = "phase-fixture.puck";
 
     // Law: a World booted onto a listen endpoint another socket already holds ends the way every environment that
     // cannot run the boot does — one "[world.host: unsupported: quic listener <endpoint> unavailable: …]" line and the

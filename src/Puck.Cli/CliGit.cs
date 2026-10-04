@@ -13,13 +13,17 @@ internal static class CliGit {
     /// <param name="arguments">The git arguments that follow <c>-C</c>.</param>
     /// <param name="cancellationToken">Cancels the run and kills git.</param>
     /// <param name="input">Text to feed to git, or null to inherit standard input.</param>
+    /// <param name="timeout">The bound on the run, after which git's process tree is killed and the result is
+    /// <see cref="ChildProcessResult.TimedOut"/>; <see langword="null"/> leaves <paramref name="cancellationToken"/> as
+    /// the only bound.</param>
     /// <returns>The exit code and both captured streams; a nonzero exit is an answer, not a failure.</returns>
-    public static Task<ChildProcessResult> RunAsync(string repository, IEnumerable<string> arguments, CancellationToken cancellationToken = default, string? input = null) =>
+    public static Task<ChildProcessResult> RunAsync(string repository, IEnumerable<string> arguments, CancellationToken cancellationToken = default, string? input = null, TimeSpan? timeout = null) =>
         ChildProcess.RunAsync(
             arguments: ["-C", repository, .. arguments],
             cancellationToken: cancellationToken,
             input: input,
-            fileName: "git"
+            fileName: "git",
+            timeout: timeout
         );
     /// <summary>Runs git against <paramref name="repository"/>, waiting synchronously, and returns its exit code and
     /// both streams raw.</summary>

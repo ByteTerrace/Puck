@@ -690,47 +690,20 @@ public static partial class WorldDefinitionFileSource {
         contentHash = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
-        if (!File.Exists(path: path)) {
-            reason = $"no file at {shown}";
+        if (!TryReadDocumentFile(
+            content: out var read,
+            countsFileRead: true,
+            documents: documents,
+            path: path,
+            reason: out var readReason,
+            shown: shown
+        )) {
+            reason = readReason;
 
             return false;
         }
 
-        byte[] bytes;
-
-        if (WorldDocumentName.IsSourceFile(path: path)) {
-            // A supplied source owns how a .puck root reads — it lowers to its document, named by the path without
-            // its suffix — so the pin below covers the document that source produces, not the file's raw bytes. Any
-            // other root is the file the caller named, read as it stands.
-            if (!TryReadDocument(
-                source: (documents ?? LocalDocuments),
-                content: out var read,
-                name: WorldDocumentName.OfSourceFile(path: Path.GetFullPath(path: path)),
-                reason: out var readReason,
-                referrerName: path,
-                resolvedName: out _
-            )) {
-                reason = $"cannot read {shown}: {readReason.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            bytes = read!;
-        } else {
-            // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
-            // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
-            // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
-            // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
-            try {
-                bytes = File.ReadAllBytes(path: path);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read {shown}: {WorldDocumentLabel.Failure(exception: exception)}";
-
-                return false;
-            }
-
-            WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
-        }
+        var bytes = read!;
 
         string json;
 
@@ -1392,10 +1365,19 @@ public static partial class WorldDefinitionFileSource {
         tree = null;
 
         try {
-            var bytes = (content ?? File.ReadAllBytes(path: path));
+            var bytes = content;
+
+            if ((bytes is null) && !TryReadDocumentFile(
+                content: out bytes,
+                documents: documents,
+                path: path,
+                reason: out reason
+            )) {
+                return false;
+            }
 
             return TryComposeDocumentTreeCore(
-                bytes: bytes,
+                bytes: bytes!,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
                 source: (documents ?? LocalDocuments),

@@ -399,12 +399,18 @@ public static partial class WorldDocumentEmitter {
             capacity = 1;
         }
 
-        return new JsonObject {
+        var pool = new JsonObject {
             ["name"] = declaration.Name,
             ["record"] = declaration.RecordName,
             ["capacity"] = capacity,
-            ["initial"] = seeds,
         };
+
+        // A pool that seeds nothing carries no list, so a row restating it composes with the imported pool's seeds.
+        if (seeds.Count > 0) {
+            pool["initial"] = seeds;
+        }
+
+        return pool;
     }
 
     private static JsonObject TaggedCellValue(string kind, JsonNode value) {
