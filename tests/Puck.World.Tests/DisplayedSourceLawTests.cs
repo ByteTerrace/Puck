@@ -24,6 +24,7 @@ namespace Puck.World.Tests;
 /// Headless, a pipeline node has no rendered instance to pause and the views are not configured, so the pipeline pause
 /// and the camera-view retarget are not reached here.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class DisplayedSourceLawTests {
     private const string World = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
 

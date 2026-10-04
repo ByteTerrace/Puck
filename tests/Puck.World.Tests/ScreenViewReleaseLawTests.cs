@@ -17,6 +17,7 @@ namespace Puck.World.Tests;
 /// behind. The uploaded-sources fixture boots headless with its views configured over a device-free pipeline catalog,
 /// and a camera service that reports a camera present so the camera verb binds.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class ScreenViewReleaseLawTests {
     private const string World = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
 
