@@ -3,7 +3,6 @@ using Puck.Abstractions.Counting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
-using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
 
