@@ -82,10 +82,10 @@ public sealed partial class SdfIndirectGatherLawTests {
         }
     }
     private static GatherCase[] Cases() => [
-        new("the outer spacing remains gathered", Sphere(slot: 0, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
-        new("an instance just outside the reach remains visible", Sphere(slot: 1, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
-        new("an occluder after the reach remains visible", Sphere(slot: 2, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
-        new("a clear ray exhausts the full interval", Sphere(slot: 3, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10),
+        new("the outer spacing remains gathered", Sphere(radius: 0.2f, slot: 0), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
+        new("an instance just outside the reach remains visible", Sphere(radius: 0.2f, slot: 1), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
+        new("an occluder after the reach remains visible", Sphere(radius: 0.2f, slot: 2), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
+        new("a clear ray exhausts the full interval", Sphere(radius: 0.2f, slot: 3), Vector3.Zero, Vector3.UnitX, 4, 10),
         new("a subtractive composition keeps its operand", Carved(), Vector3.Zero, Vector3.UnitX, 4, 10, 3.25f),
         new("a smooth composition keeps its halo", Smooth(), Vector3.Zero, Vector3.UnitX, 4, 10),
         new("a wallpaper fold preserves cleared intervals", Wallpaper(), new Vector3(x: 6.9f, y: 0, z: 0), -Vector3.UnitX, 1, 5),
@@ -103,6 +103,7 @@ public sealed partial class SdfIndirectGatherLawTests {
         }
         return builder;
     }
+
     // The sphere cases' centers, one dynamic slot each, so each sphere compiles to a part program the masked march can
     // trace independently; a statically translated instance compiles no part and keeps the full field.
     private static readonly Vector3[] SphereCenters = [new(x: 3.6f, y: 0, z: 0), new(x: 4.25f, y: 0, z: 0), new(x: 7, y: 0, z: 0), new(x: 3, y: 2, z: 0)];

@@ -28,7 +28,7 @@ float4 gatherProbeIntervals(float3 origin, float3 direction, float reach, float 
         float advance = sdfIndirectAdvance(clearance, traveled, reach, farDistance, mask);
         if (advance <= 0.0) { break; }
         if (masked && traveled + advance > reach + 0.000001) { result.y += 1.0; }
-        [unroll]
+        [loop]
         for (uint sample = 1u; sample < 16u; sample++) {
             float at = traveled + advance * ((float)sample / 16.0);
             float full = mapDistance(origin + direction * at);

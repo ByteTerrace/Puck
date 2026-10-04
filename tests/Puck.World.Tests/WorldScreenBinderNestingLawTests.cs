@@ -14,6 +14,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Laws over the composed binder's nested feed lifetime, without configuring a renderer or opening a device.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldScreenBinderNestingLawTests {
     private const int Screen = WorldPrototypeFacets.DerivedFaceBase;
     private const string World = "tests/Puck.World.Canaries/portal-nested/fixture.world.json";

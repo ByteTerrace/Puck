@@ -23,6 +23,10 @@ public sealed partial class SdfWorldTables {
     public IGpuBuffer? IndirectBuffer => m_indirect?.Buffer;
     /// <summary>Gets the current epoch, invalidated by every program upload.</summary>
     public uint IndirectEpoch => m_indirectEpoch;
+    /// <summary>Gets the retiring caches still tracked for graph readers, excluding the active cache.</summary>
+    public int RetiringIndirectCacheCount {
+        get { lock (m_indirectGate) { return m_retiredIndirect.Count; } }
+    }
     /// <summary>Gets the active and retiring caches' allocations, including their region rings.</summary>
     public GpuMemoryBytes IndirectBytes {
         get {
@@ -38,6 +42,7 @@ public sealed partial class SdfWorldTables {
     }
     internal void SetIndirect(SdfIndirectTier tier, float farDistance, WorkCounterSet work) {
         lock (m_indirectGate) {
+            m_retiredIndirect.RemoveAll(match: static cache => cache.IsDisposed);
             if (((m_indirect?.Layout.Tier ?? SdfIndirectTier.Off) == tier) && ((m_indirect is null) || (m_indirect.FarDistance == farDistance))) { return; }
             var previous = m_indirect;
 
@@ -46,8 +51,8 @@ public sealed partial class SdfWorldTables {
             m_indirectClear = (m_indirect is not null);
             m_deviceContext.TryWaitIdle();
             if (previous is not null) {
-                m_retiredIndirect.Add(item: previous);
                 previous.Dispose();
+                if (!previous.IsDisposed) { m_retiredIndirect.Add(item: previous); }
             }
         }
     }

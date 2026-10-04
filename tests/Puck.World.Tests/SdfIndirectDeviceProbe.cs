@@ -20,7 +20,7 @@ internal static class SdfIndirectDeviceProbe {
         var description = new GpuComputePipelineDescription(Bindings: [], Layout: new GpuPipelineLayoutDescription(groups: [world, pass], pushesIndex: true, stages: GpuShaderStage.Compute),
             Name: kernel, PushConstantBinding: null);
         using var module = services.ShaderModuleFactory.Create(
-            bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (kernel + extension))),
+            bytecode: SdfIndirectProbeBytecode.Read(extension: extension, kernel: kernel),
             stage: GpuShaderStage.Compute
         );
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
@@ -31,7 +31,7 @@ internal static class SdfIndirectDeviceProbe {
         var cacheWords = new uint[128];
         using var cache = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: cacheWords.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         // Three rows per dynamic slot (position, orientation, lanes); slot zero is the identity unless the caller supplies a table.
-        Vector4[] slots = (transforms ?? [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero]);
+        var slots = (transforms ?? [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero]);
         using var transformTable = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: slots.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
         var pool = services.Bindings.CreatePool(

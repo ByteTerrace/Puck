@@ -15,9 +15,8 @@ public sealed partial class SdfIndirectViewsLawTests {
 
     private static string CodeOf(string path) => File.ReadAllText(path: Path.Combine(path1: Root, path2: path));
     private static IEnumerable<string> SourcesIn(string directory) => Directory.EnumerateFiles(path: Path.Combine(path1: Root, path2: directory), searchPattern: "*.hlsli")
-        .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '\\', oldChar: '/'))
+        .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
         .Order(comparer: StringComparer.Ordinal);
-
     // Each indirect function's body, from its signature to the closing brace at the start of a line.
     private static Dictionary<string, string> Functions(IEnumerable<string> paths) {
         var functions = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
@@ -51,7 +50,7 @@ public sealed partial class SdfIndirectViewsLawTests {
         var evaluators = Evaluators(functions: functions);
 
         // The derivation reaches the trace's evaluating entry points, so an empty set never passes the law vacuously.
-        Assert.Superset(expectedSubset: new HashSet<string>(collection: ["sdfIndirectMarch", "sdfIndirectSegment", "sdfIndirectLaunch", "sdfIndirectProve"]), actual: evaluators);
+        Assert.Superset(new HashSet<string>(collection: ["sdfIndirectMarch", "sdfIndirectSegment", "sdfIndirectLaunch", "sdfIndirectProve"]), evaluators);
         var read = Functions(paths: ["indirect/sdf-indirect-read.hlsli"]);
         var views = SourcesIn(directory: "debug").Select(selector: CodeOf).Concat(second: read.Values);
         var violations = views.SelectMany(selector: code => evaluators.Where(predicate: evaluator => Calls(body: code, name: evaluator))).Distinct().Order(comparer: StringComparer.Ordinal);

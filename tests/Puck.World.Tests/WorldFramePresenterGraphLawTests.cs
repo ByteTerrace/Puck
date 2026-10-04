@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// publishes the screens and declares the reads they make, so a screen retargeted to another camera's view reads that view
 /// on the frame of the change.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const float Delta = (StepTicks / 50400f);
     private const uint Display = 64;

@@ -14,6 +14,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldInspectorLawTests {
     [Fact]
     public void RealInspectorCommandAndPanelShareOneTextWithoutCreatingADevice() {

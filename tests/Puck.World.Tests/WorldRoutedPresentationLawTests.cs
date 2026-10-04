@@ -23,6 +23,7 @@ namespace Puck.World.Tests;
 /// destination's <see cref="WorldRoutedScene"/>, emits exactly the program the destination's delivered definition
 /// composes through the session emitter, not the boot world's, and frames it with the seat's own camera.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed partial class WorldRoutedPresentationLawTests {
     private const string Away = "north";
     private const string Home = "boot";

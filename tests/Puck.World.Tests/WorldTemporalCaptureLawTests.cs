@@ -10,6 +10,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldTemporalCaptureLawTests {
     [Fact]
     public void AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing() {
