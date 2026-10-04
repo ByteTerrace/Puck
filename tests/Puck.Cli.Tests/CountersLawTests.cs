@@ -18,7 +18,7 @@ namespace Puck.Cli.Tests;
 /// agrees, exit 1 naming the kind, pass and node of each difference, pacing never compared, an allocation reading
 /// compared only as zero or not zero, and exit 2 for a file that is not a report.
 /// </summary>
-public sealed class CountersLawTests {
+public sealed partial class CountersLawTests {
     private const string Reading = """
         {"sources":[{"name":"state.arena","counts":{"state.arena.visits":12}}],
          "gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},

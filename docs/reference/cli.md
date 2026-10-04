@@ -960,11 +960,14 @@ against the merge base of `HEAD` and `--merge-base` (default
 25. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
 26. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
 27. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-28. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.ceilings.json`
-    in ordinal order, using its recorded `workload` path. Each runs
-    `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
-    `<name>.script.txt` supplies `--script` when present; otherwise the script
-    recorded in the ceilings supplies it, or the verb's default when absent.
+28. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
+    `tests/Puck.Counters` in ordinal order, using their actual `workload` and
+    `script` paths. A declared `.batch.json` association routes its complete
+    measured observation set once through `puck counters --batch <manifest> --check`;
+    ambiguous associations or missing declared ceilings refuse. Other ledgers
+    run `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
+    `<name>.script.txt` supplies `--script` when present; otherwise the recorded
+    script supplies it, or the verb's default when absent.
 29. `docs citations`: `puck docs citations`, only with `--gpu`.
 30. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
@@ -1970,6 +1973,8 @@ puck counters [--world <file>] [--script <file>] [--output <file>] [--check | --
                                            run the workload on both backends and write the report
 puck counters --report <file> [--check | --record] [--ceilings <file>]
                                            judge or record a saved report
+puck counters --batch <manifest> [--output <directory>] [--check | --record]
+                                           collect ordered observations once per group/backend
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -1985,7 +1990,7 @@ at the same tick however long their engines took to build. The
 runner closes the script with `wire.errors` and `quit` and requires every
 command accepted.
 
-`--world` and `--script` select another authored JSON workload and its console
+`--world` and `--script` select another authored `.puck` or JSON workload and its console
 script. Both paths are recorded in the report and must match its ceilings.
 The [Nexus and courtyard workloads](../../tests/Puck.Counters/README.md) inherit
 the real overworld hub and Moth courtyard. They use `counters.script.txt`, the
@@ -2052,6 +2057,49 @@ and pacing counts are ignored. A count or pass one side lacks, a pass state that
 moved, or a class that moved is a difference. It prints one line per
 difference, naming the backend, class, kind, pass and node. When the reports ran
 different sources, a note on standard error says so.
+
+### Named counter batches
+
+`--batch` reads a `puck.counters.batch.v1` manifest with `world` and ordered
+`groups`. Each group names a `prelude` script and ordered `observations`; each
+observation names its `name`, `method` (`cache`, `screen` or `cone`), `script`,
+`report` and `ceilings`. Input and ceiling paths are relative to the manifest.
+Report paths are relative to the output directory, must stay within it and
+cannot overwrite inputs, group transcript directories, the retained World build
+log or the reserved provenance products. Names use filesystem identity where
+they name stored evidence. Names, scripts,
+report paths and ceiling paths are distinct. Unknown manifest fields refuse.
+
+The collector launches Vulkan then Direct3D 12 for each group, serially, with
+that prelude followed by its observation scripts in the same World session.
+Each script selects its declared method, pauses simulation through one
+`world.wait indirect <seconds>`, resumes, advances `world.wait 120` and ends
+with its only `world.counters --json` read. The indirect wait requires a newer
+produced frame and the actual current shared-cache source fence; it does not
+promise admission of every view's receiver. Keeping simulation paused through
+warm-up preserves fixed input ticks for the existing backend comparisons.
+The complete resolve, boot and collection phase has a fifteen-minute cap.
+
+Every observation produces an ordinary paired `puck.counters.report.v1` report;
+`observations/` also retains each backend's actual single-reading product.
+`batch.observations.json` records the manifest hash, revision, group, method,
+ordinal, input release tick, workload, prelude and script paths and hashes,
+and exact stdout and completion-verdict transcript lines. The run directory
+stays available because those transcripts are part of the evidence. Each
+ordinary report keeps its observation's script identity; the sidecar retains
+the prelude and earlier observations that preceded it in the shared session.
+Readings retain the counter source's scope: GPU work is each node's newest
+completed submission, while cumulative host counters include the prelude and
+earlier observations. The collector does not subtract readings or turn them
+into costs for an isolated 120-tick interval.
+
+Missing, extra, malformed, refused or mismatched observations fail collection.
+All reports must agree under the existing backend rules before `--record`
+can write any measured ceilings. `--check` reads each observation's declared
+ceilings. `--batch` refuses beside `--world`, `--script`, `--report` or
+`--ceilings`. The [indirect comparison workload](../../tests/Puck.Counters/indirect-comparison/README.md)
+uses two tier groups to collect sixty actual backend observations in four
+serial boots, yielding thirty paired reports.
 
 ### Counted-cost ceilings
 

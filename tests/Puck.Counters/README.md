@@ -1,18 +1,23 @@
 # Render work counters
 
+The [indirect comparison batch](indirect-comparison/README.md) collects named
+method/input observations in four serial boots, retaining ordinary paired
+reports and their exact shared-session provenance. Gate discovery routes its
+recorded workload/script associations through the batch once.
+
 These workloads feed [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector),
 which runs the same offscreen world on Vulkan and Direct3D 12 and records the
 work each render pass performs. The measurements count work, not elapsed time.
 
 | Workload | Scene | Script | Ceilings |
 |---|---|---|---|
-| `counters.world.json` | Two blocks and their caps | `counters.script.txt` | `counters.ceilings.json` |
+| `counters.puck` | Two blocks and their caps | `counters.script.txt` | `counters.ceilings.json` |
 | `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` | `nexus.ceilings.json` |
 | `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` | `courtyard.ceilings.json` |
-| `sky-still.world.json` | An unchanging sky | `sky.script.txt` | `sky-still.ceilings.json` |
-| `sky-drift.world.json` | Moving clouds | `sky.script.txt` | `sky-drift.ceilings.json` |
-| `sky-twinkle.world.json` | Twinkling stars | `sky.script.txt` | `sky-twinkle.ceilings.json` |
-| `sky-cycle.world.json` | A changing sky cycle | `sky.script.txt` | `sky-cycle.ceilings.json` |
+| `sky-still.puck` | An unchanging sky | `sky.script.txt` | `sky-still.ceilings.json` |
+| `sky-drift.puck` | Moving clouds | `sky.script.txt` | `sky-drift.ceilings.json` |
+| `sky-twinkle.puck` | Twinkling stars | `sky.script.txt` | `sky-twinkle.ceilings.json` |
+| `sky-cycle.puck` | A changing sky cycle | `sky.script.txt` | `sky-cycle.ceilings.json` |
 
 The dense workloads inherit their scenes' geometry and behavior. Each fixes
 one camera at `(0, 2.5, 7)`, looking at `(0, 0.8, 0)`, with a vertical field of
@@ -170,9 +175,9 @@ When counted passes or shape work change, record each affected device in the
 existing workload ledgers:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/counters.world.json --script tests/Puck.Counters/counters.script.txt --ceilings tests/Puck.Counters/counters.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-still.world.json --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-still.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-drift.world.json --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-drift.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-twinkle.world.json --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-twinkle.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-cycle.world.json --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-cycle.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/counters.puck --script tests/Puck.Counters/counters.script.txt --ceilings tests/Puck.Counters/counters.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-still.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-still.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-drift.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-drift.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-twinkle.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-twinkle.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-cycle.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-cycle.ceilings.json --record
 ```

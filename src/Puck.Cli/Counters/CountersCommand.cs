@@ -16,8 +16,9 @@ namespace Puck.Cli.Counters;
 /// shader toolchain, the GC mode, and every count tagged with its class. The deterministic counts and the passes'
 /// states must agree across the two backends; <c>--check</c> holds the counts to the counted-cost ceilings and
 /// <c>--record</c> writes them (<see cref="CountersCeilings"/>). <c>puck counters compare</c> holds two reports to each
-/// other.</summary>
-internal static class CountersCommand {
+/// other. <c>--batch</c> reads ordered named observations through one boot per group/backend, retaining the same report
+/// format and each actual transcript, script and completion identity.</summary>
+internal static partial class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/counters.script.txt";
     /// <summary>The workload's world document, repository-relative.</summary>
@@ -468,6 +469,9 @@ internal static class CountersCommand {
     }
 
     public static Command Create() {
+        var batchOption = new Option<string>(name: "--batch") {
+            Description = "An ordered counters batch manifest: one serial boot per group and backend, paired reports per observation, bounded to fifteen minutes including build resolution.",
+        };
         var outputOption = CliOptions.Output(description: "Where the report is written; the run's scratch directory when omitted.");
         var checkOption = CliOptions.Check(description: $"Also hold the report to the counted-cost ceilings ({CountersCeilings.CeilingsPath}) and fail naming each count over its ceiling or breaking its required zero.");
         var recordOption = new Option<bool>(name: "--record") {
@@ -488,7 +492,7 @@ internal static class CountersCommand {
         var command = new Command(
             description: "Collect the counters workload's work counts offscreen once per backend, check the two agree, and hold them to their ceilings.",
             name: Verb
-        ) { outputOption, checkOption, recordOption, ceilingsOption, worldOption, scriptOption, reportOption };
+        ) { outputOption, checkOption, recordOption, ceilingsOption, worldOption, scriptOption, reportOption, batchOption };
 
         command.Detail(detail: $"""
             Boots {WorldPath} offscreen once per backend (vulkan, then directx; no window
@@ -537,6 +541,15 @@ internal static class CountersCommand {
             --report <file> judges or records a saved report instead of running the workload, so it boots
             nothing; --world, --script and --output select a run and refuse beside it.
 
+            --batch <manifest> runs each ordered group once on Vulkan then DirectX, keeping its cache alive
+            between observations. Each observation names its actual script, comparison method, report and ceilings.
+            --output names the batch product directory; otherwise its retained run directory holds the products.
+            --world, --script, --report and --ceilings refuse beside --batch. Every observation must produce exactly
+            one JSON counters answer after its method echo, paused current-source indirect fence and resumed
+            120-tick input wait. The entire phase, build resolution
+            included, is bounded to fifteen minutes. Products retain the actual script hash, ordinal, release tick and
+            transcript line; incomplete or refused legs cannot create paired reports or ceilings.
+
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 
             Exit codes: 0 the backends agree and every count holds its ceiling, 1 a deterministic count or
@@ -545,7 +558,16 @@ internal static class CountersCommand {
             or a saved report that is not a report, included).
             """);
         command.Subcommands.Add(item: CreateCompare());
-        command.SetAction(action: parseResult => Run(
+        command.SetAction(action: parseResult => parseResult.GetValue(option: batchOption) is { } batch
+            ? RunBatch(
+                manifestPath: batch,
+                output: parseResult.GetValue(option: outputOption),
+                check: parseResult.GetValue(option: checkOption),
+                record: parseResult.GetValue(option: recordOption),
+                conflicts: [parseResult.GetValue(option: ceilingsOption), parseResult.GetValue(option: worldOption),
+                    parseResult.GetValue(option: scriptOption), parseResult.GetValue(option: reportOption)]
+            )
+            : Run(
             ceilingsPath: parseResult.GetValue(option: ceilingsOption),
             check: parseResult.GetValue(option: checkOption),
             output: parseResult.GetValue(option: outputOption),

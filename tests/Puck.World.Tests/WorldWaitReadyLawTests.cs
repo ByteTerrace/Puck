@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// capture has landed, and a host that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
 /// run a real engine.
 /// </summary>
-public sealed class WorldWaitReadyLawTests {
+public sealed partial class WorldWaitReadyLawTests {
     // Resolves every invocation to the fixture's one row, as the desktop's boot console authority does.
     private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
         public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
@@ -48,14 +48,15 @@ public sealed class WorldWaitReadyLawTests {
         }
     }
 
-    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness, IWorldBakeReadiness? bakes = null) {
+    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness, IWorldBakeReadiness? bakes = null, IWorldIndirectReadiness? indirect = null) {
         var answered = new List<(string Line, CommandResult Result)>();
         var source = new TextCommandSource(registry: new CommandRegistry(modules: [
             new WorldWaitCommandModule(
                 authority: new FixedAuthority(instance: row.Instance),
                 gates: new FixedGate(gate: new WorldConsoleWaitGate()),
                 readiness: readiness,
-                bakes: bakes
+                bakes: bakes,
+                indirect: indirect
             ),
             new ProbeModule(),
         ]));

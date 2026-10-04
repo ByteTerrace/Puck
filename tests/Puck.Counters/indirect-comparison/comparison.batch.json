@@ -1,0 +1,228 @@
+{
+  "schema": "puck.counters.batch.v1",
+  "world": "fixture.puck",
+  "groups": [
+    {
+      "name": "medium",
+      "prelude": "medium-batch-prelude.script.txt",
+      "observations": [
+        {
+          "name": "medium-cache-cadence",
+          "method": "cache",
+          "script": "medium-cache-cadence.batch.script.txt",
+          "report": "medium-cache-cadence.batch.report.json",
+          "ceilings": "medium-cache-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "medium-screen-cadence",
+          "method": "screen",
+          "script": "medium-screen-cadence.batch.script.txt",
+          "report": "medium-screen-cadence.batch.report.json",
+          "ceilings": "medium-screen-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cone-cadence",
+          "method": "cone",
+          "script": "medium-cone-cadence.batch.script.txt",
+          "report": "medium-cone-cadence.batch.report.json",
+          "ceilings": "medium-cone-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cache-day",
+          "method": "cache",
+          "script": "medium-cache-day.batch.script.txt",
+          "report": "medium-cache-day.batch.report.json",
+          "ceilings": "medium-cache-day.batch.ceilings.json"
+        },
+        {
+          "name": "medium-screen-day",
+          "method": "screen",
+          "script": "medium-screen-day.batch.script.txt",
+          "report": "medium-screen-day.batch.report.json",
+          "ceilings": "medium-screen-day.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cone-day",
+          "method": "cone",
+          "script": "medium-cone-day.batch.script.txt",
+          "report": "medium-cone-day.batch.report.json",
+          "ceilings": "medium-cone-day.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cache-orbit",
+          "method": "cache",
+          "script": "medium-cache-orbit.batch.script.txt",
+          "report": "medium-cache-orbit.batch.report.json",
+          "ceilings": "medium-cache-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "medium-screen-orbit",
+          "method": "screen",
+          "script": "medium-screen-orbit.batch.script.txt",
+          "report": "medium-screen-orbit.batch.report.json",
+          "ceilings": "medium-screen-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cone-orbit",
+          "method": "cone",
+          "script": "medium-cone-orbit.batch.script.txt",
+          "report": "medium-cone-orbit.batch.report.json",
+          "ceilings": "medium-cone-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cache-pan",
+          "method": "cache",
+          "script": "medium-cache-pan.batch.script.txt",
+          "report": "medium-cache-pan.batch.report.json",
+          "ceilings": "medium-cache-pan.batch.ceilings.json"
+        },
+        {
+          "name": "medium-screen-pan",
+          "method": "screen",
+          "script": "medium-screen-pan.batch.script.txt",
+          "report": "medium-screen-pan.batch.report.json",
+          "ceilings": "medium-screen-pan.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cone-pan",
+          "method": "cone",
+          "script": "medium-cone-pan.batch.script.txt",
+          "report": "medium-cone-pan.batch.report.json",
+          "ceilings": "medium-cone-pan.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cache-cut",
+          "method": "cache",
+          "script": "medium-cache-cut.batch.script.txt",
+          "report": "medium-cache-cut.batch.report.json",
+          "ceilings": "medium-cache-cut.batch.ceilings.json"
+        },
+        {
+          "name": "medium-screen-cut",
+          "method": "screen",
+          "script": "medium-screen-cut.batch.script.txt",
+          "report": "medium-screen-cut.batch.report.json",
+          "ceilings": "medium-screen-cut.batch.ceilings.json"
+        },
+        {
+          "name": "medium-cone-cut",
+          "method": "cone",
+          "script": "medium-cone-cut.batch.script.txt",
+          "report": "medium-cone-cut.batch.report.json",
+          "ceilings": "medium-cone-cut.batch.ceilings.json"
+        }
+      ]
+    },
+    {
+      "name": "high",
+      "prelude": "high-batch-prelude.script.txt",
+      "observations": [
+        {
+          "name": "high-cache-cadence",
+          "method": "cache",
+          "script": "high-cache-cadence.batch.script.txt",
+          "report": "high-cache-cadence.batch.report.json",
+          "ceilings": "high-cache-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "high-screen-cadence",
+          "method": "screen",
+          "script": "high-screen-cadence.batch.script.txt",
+          "report": "high-screen-cadence.batch.report.json",
+          "ceilings": "high-screen-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "high-cone-cadence",
+          "method": "cone",
+          "script": "high-cone-cadence.batch.script.txt",
+          "report": "high-cone-cadence.batch.report.json",
+          "ceilings": "high-cone-cadence.batch.ceilings.json"
+        },
+        {
+          "name": "high-cache-day",
+          "method": "cache",
+          "script": "high-cache-day.batch.script.txt",
+          "report": "high-cache-day.batch.report.json",
+          "ceilings": "high-cache-day.batch.ceilings.json"
+        },
+        {
+          "name": "high-screen-day",
+          "method": "screen",
+          "script": "high-screen-day.batch.script.txt",
+          "report": "high-screen-day.batch.report.json",
+          "ceilings": "high-screen-day.batch.ceilings.json"
+        },
+        {
+          "name": "high-cone-day",
+          "method": "cone",
+          "script": "high-cone-day.batch.script.txt",
+          "report": "high-cone-day.batch.report.json",
+          "ceilings": "high-cone-day.batch.ceilings.json"
+        },
+        {
+          "name": "high-cache-orbit",
+          "method": "cache",
+          "script": "high-cache-orbit.batch.script.txt",
+          "report": "high-cache-orbit.batch.report.json",
+          "ceilings": "high-cache-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "high-screen-orbit",
+          "method": "screen",
+          "script": "high-screen-orbit.batch.script.txt",
+          "report": "high-screen-orbit.batch.report.json",
+          "ceilings": "high-screen-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "high-cone-orbit",
+          "method": "cone",
+          "script": "high-cone-orbit.batch.script.txt",
+          "report": "high-cone-orbit.batch.report.json",
+          "ceilings": "high-cone-orbit.batch.ceilings.json"
+        },
+        {
+          "name": "high-cache-pan",
+          "method": "cache",
+          "script": "high-cache-pan.batch.script.txt",
+          "report": "high-cache-pan.batch.report.json",
+          "ceilings": "high-cache-pan.batch.ceilings.json"
+        },
+        {
+          "name": "high-screen-pan",
+          "method": "screen",
+          "script": "high-screen-pan.batch.script.txt",
+          "report": "high-screen-pan.batch.report.json",
+          "ceilings": "high-screen-pan.batch.ceilings.json"
+        },
+        {
+          "name": "high-cone-pan",
+          "method": "cone",
+          "script": "high-cone-pan.batch.script.txt",
+          "report": "high-cone-pan.batch.report.json",
+          "ceilings": "high-cone-pan.batch.ceilings.json"
+        },
+        {
+          "name": "high-cache-cut",
+          "method": "cache",
+          "script": "high-cache-cut.batch.script.txt",
+          "report": "high-cache-cut.batch.report.json",
+          "ceilings": "high-cache-cut.batch.ceilings.json"
+        },
+        {
+          "name": "high-screen-cut",
+          "method": "screen",
+          "script": "high-screen-cut.batch.script.txt",
+          "report": "high-screen-cut.batch.report.json",
+          "ceilings": "high-screen-cut.batch.ceilings.json"
+        },
+        {
+          "name": "high-cone-cut",
+          "method": "cone",
+          "script": "high-cone-cut.batch.script.txt",
+          "report": "high-cone-cut.batch.report.json",
+          "ceilings": "high-cone-cut.batch.ceilings.json"
+        }
+      ]
+    }
+  ]
+}

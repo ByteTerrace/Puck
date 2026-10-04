@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Puck.Cli.Affected;
 using Puck.Cli.Baselines;
+using Puck.Cli.Counters;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Gate;
 
@@ -70,20 +72,51 @@ internal static class GatePlan {
         const string CeilingsSuffix = ".ceilings.json";
         var directory = Path.Combine(path1: repositoryRoot, path2: DirectoryName);
 
-        if (!Directory.Exists(path: directory)) { yield break; }
-        foreach (var ledger in Directory.EnumerateFiles(path: directory, searchPattern: ("*" + CeilingsSuffix)).Order(comparer: StringComparer.Ordinal)) {
+        if (!Directory.Exists(path: directory)) { return []; }
+        var batches = Directory.EnumerateFiles(directory, "*.batch.json", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal).Select(path => (Path: path,
+                Batch: CountersBatchInput.Read(path, Path.GetDirectoryName(path)!))).ToArray();
+        var emitted = new HashSet<string>(PuckPaths.Comparer);
+        var steps = new List<GateStep>();
+        foreach (var ledger in Directory.EnumerateFiles(path: directory, searchPattern: ("*" + CeilingsSuffix), searchOption: SearchOption.AllDirectories).Order(comparer: StringComparer.Ordinal)) {
             var name = Path.GetFileName(path: ledger)[..^CeilingsSuffix.Length];
-            var stem = ((DirectoryName + "/") + name);
-            var ceilings = (stem + CeilingsSuffix);
+            var ceilings = CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: ledger);
+            var stem = ceilings[..^CeilingsSuffix.Length];
             using var document = JsonDocument.Parse(File.ReadAllText(path: ledger));
             var world = (document.RootElement.GetProperty(propertyName: "workload").GetString()
                 ?? throw new InvalidDataException(message: $"Recorded counters ledger '{ceilings}' has no workload path."));
+            var recordedScript = document.RootElement.TryGetProperty("script", out var recorded) ? recorded.GetString() : null;
+            var matches = recordedScript is null ? [] : batches.Where(batch =>
+                PuckPaths.Comparer.Equals(batch.Batch.WorldPath, PuckPaths.Normalize(Path.GetFullPath(world, repositoryRoot)))
+                && batch.Batch.Groups.SelectMany(group => group.Observations).Any(observation =>
+                    PuckPaths.Comparer.Equals(observation.ScriptPath, PuckPaths.Normalize(Path.GetFullPath(recordedScript, repositoryRoot))))).ToArray();
+            if (matches.Length > 1) { throw new InvalidDataException($"Recorded counters ledger '{ceilings}' belongs to more than one batch manifest."); }
+            if (matches.Length == 1) {
+                var association = matches[0];
+                var observations = association.Batch.Groups.SelectMany(group => group.Observations).ToArray();
+                var owner = observations.Single(observation => PuckPaths.Comparer.Equals(observation.ScriptPath,
+                    PuckPaths.Normalize(Path.GetFullPath(recordedScript!, repositoryRoot))));
+                if (!PuckPaths.Comparer.Equals(owner.CeilingsPath, PuckPaths.Normalize(Path.GetFullPath(ledger)))) {
+                    throw new InvalidDataException($"Recorded counters ledger '{ceilings}' is outside its batch observation's declared ceilings path.");
+                }
+                if (observations.Any(observation => !File.Exists(observation.CeilingsPath))) {
+                    throw new InvalidDataException($"Recorded counters batch '{association.Path}' has an observation with no ceilings; record its actual paired products before qualification.");
+                }
+                if (emitted.Add(association.Path)) {
+                    steps.Add(step with {
+                        Name = step.Name + " batch " + CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: association.Path),
+                        Kind = GateStepKind.Puck,
+                        Arguments = ["counters", "--batch", CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: association.Path), "--check"],
+                    });
+                }
+                continue;
+            }
             var script = (stem + ".script.txt");
             // Some recorded workloads share a script; the ceilings own that script identity.
             if (!File.Exists(path: Path.Combine(path1: repositoryRoot, path2: script))) {
-                script = (document.RootElement.TryGetProperty(propertyName: "script", value: out var recorded) ? recorded.GetString() : null);
+                script = recordedScript;
             }
-            yield return step with {
+            steps.Add(step with {
                 Name = ((step.Name + " ") + name),
                 Kind = GateStepKind.Puck,
                 Arguments = [.. step.Arguments.Select(selector: argument => argument switch {
@@ -91,8 +124,9 @@ internal static class GatePlan {
                     "<ceilings>" => ceilings,
                     _ => argument,
                 }), .. ((script is null) ? (string[])[] : ["--script", script])],
-            };
+            });
         }
+        return steps;
     }
     /// <summary>Expands the plan into the steps one run takes, in order.</summary>
     /// <param name="repositoryRoot">The checkout the run gates.</param>

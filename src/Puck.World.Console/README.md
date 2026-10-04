@@ -47,7 +47,10 @@ authored/mutated through the same ordinary state doors any other row uses),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver`—the row's own
 gate, since a host running several rows has one gate per row and a singleton
-would always arm whichever row it was constructed against), and `replay.*`
+would always arm whichever row it was constructed against). Its indirect form
+uses `IWorldIndirectReadiness` and a newer produced frame to retain every active
+shared cache's current-source fence identity, independently of view receiver
+admission. `replay.*`
 (`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
 `WorldReplayCommandModule.Inspect.cs`—record/stop/cancel/
 drive/fork/verify/inspect/list/status; a client-local control surface over the

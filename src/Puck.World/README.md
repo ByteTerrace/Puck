@@ -867,7 +867,13 @@ Facts a script needs:
   `[captures: settled at tick T]` on standard error. A script that takes one
   capture after another waits on it between them, since `world.screenshot`
   refuses while a capture is still pending and frames can trail ticks on a busy
-  machine.
+  machine. `world.wait indirect <seconds>` instead waits for a frame produced
+  after arming and every active shared indirect cache's actual current-source
+  completion fence. Its settled stderr verdict retains each residency's
+  allocation, epoch, generation, publication stamp and source sequence. This
+  proves shared-cache convergence, not every view's receiver admission. It
+  refuses without an active indirect cache; a deadline reports not-settled.
+  Pause simulation through that warm-up, then resume before a fixed tick wait.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The

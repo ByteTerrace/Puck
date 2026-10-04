@@ -22,7 +22,7 @@ namespace Puck.World;
 /// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
 /// between a placement's field and its bake.
 /// </summary>
-public sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
+public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);

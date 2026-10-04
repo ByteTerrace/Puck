@@ -1191,6 +1191,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
         services.AddSingleton<WorldSeatViewports>();
@@ -1556,6 +1557,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
 

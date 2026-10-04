@@ -18,7 +18,7 @@ namespace Puck.Cli.Counters;
 /// <see cref="WorkClass.Pacing"/> under <see cref="SubmissionKind"/> and <see cref="RevisionKind"/>, since which
 /// submission a read lands on depends on when it ran.
 /// </summary>
-internal static class CountersReading {
+internal static partial class CountersReading {
     /// <summary>The name a node's submission identity is recorded under.</summary>
     public const string SubmissionKind = "gpu.sample.submission";
     /// <summary>The name a node's revision identity is recorded under.</summary>

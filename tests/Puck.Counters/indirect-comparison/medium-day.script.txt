@@ -3,11 +3,14 @@
 world.cadence on
 world.quality medium
 world.indirect medium
+world.indirect-method cache
 world.rate pause
 world.wait ready 180
 world.rate resume
 # Warm the same stationary cache before changing this leg's one input class.
-world.wait 600
+world.rate pause
+world.wait indirect 180
+world.rate resume
 world.state.cell.set dayRunning $value 1
 world.wait 120
 world.counters --json

@@ -6,51 +6,62 @@ views, two named shadow-capable directional lights, native scale and temporal
 reconstruction. The second view stays fixed while the first exercises one
 input class. No alternate shader or model lives in this data directory.
 
-| Input class | Medium script | High script |
-|---|---|---|
-| Completed cadence | `medium-cadence.script.txt` | `high-cadence.script.txt` |
-| Changing daylight | `medium-day.script.txt` | `high-day.script.txt` |
-| Orbiting camera | `medium-orbit.script.txt` | `high-orbit.script.txt` |
-| Fixed-origin pan | `medium-pan.script.txt` | `high-pan.script.txt` |
-| Camera cut into the sealed room | `medium-cut.script.txt` | `high-cut.script.txt` |
+`comparison.batch.json` declares medium and high groups. Each group runs five
+input classes—completed cadence, changing daylight, orbit, fixed-origin pan
+and a cut into the sealed room—through the existing `cache`, `screen` and
+`cone` session selections. The method changes while the same cache remains
+installed. Each observation restores the stationary authored inputs, pauses
+simulation and waits for the actual current shared-cache geometry/lighting
+source fence. It then resumes, applies its input and advances 120 ticks before
+its one `world.counters --json` read. A newer produced frame is required after
+arming the fence wait; submitted flags or guessed warm ticks cannot satisfy it.
+The fence proves shared-cache convergence, not each view's receiver admission.
 
-Every script selects its tier explicitly, waits for engine readiness, warms the
-same stationary scene for 600 ticks, changes its one input class and advances
-120 ticks before the single `world.counters --json` read. Day and orbit change
-their existing state-driven clock or camera binding each tick. The pan keeps
-the initial orbit camera's origin; the cut changes origin and framing together.
-Read every instance and detail row in the report, including both views, both
-light slots, histories, cache updates, apply work and unresolved work.
-
-Run one leg with the current private CLI, serially under the GPU grant:
+Run with the current private CLI, serially under the GPU grant:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/indirect-comparison/fixture.puck --script tests/Puck.Counters/indirect-comparison/high-pan.script.txt --output <reports>/indirect-high-pan.json
+dotnet <cli-copy>/Puck.Cli.dll counters --batch tests/Puck.Counters/indirect-comparison/comparison.batch.json --output <reports>/indirect-comparison
 ```
 
-Apply the same world and script to each production comparison implementation:
-the cache, screen-space indirect light over its probe fallback, and cone
-occlusion with one diffuse bounce. The latter two mechanisms are not implemented
-by these data files. Their actual supported selection and counted bounds must
-come from the renderer owner before alternate scripts are authored.
+The two tier groups launch Vulkan then Direct3D 12 each: four serial World
+boots collect sixty backend observations and write thirty ordinary paired
+reports. Every report retains its real fixture and observation script path.
+The sidecar retains the manifest, prelude and script hashes, prior-observation
+ordinal, method, tick and exact stdout/completion-verdict transcript lines.
+These report identities belong to this shared-session batch; they are not
+borrowed from the standalone controls. The complete collection phase has a
+fifteen-minute cap and retains diagnostic transcripts on refusal.
 
-Only measured reports may create ceilings. For example, after the actual current
-RTX 4070 run succeeds and every required count is present:
+Each reading preserves the existing counters' scope. GPU work describes each
+node's newest completed submission; cumulative host counters include warm-up
+and earlier observations in that tier's session. These raw values are not
+subtracted into independent 120-tick costs, so comparisons keep the recorded
+prelude and observation order as part of their input context.
+
+Read every instance and detail row, including both views, both light slots,
+histories, cache updates, apply work, unresolved work and allocated bytes.
+Missing or extra readings, a malformed response, any rejected command, an
+unsettled source fence or backend mismatch refuses qualification. Only measured
+passing paired reports may create the declared `.batch.ceilings.json` files:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/indirect-high-pan.json --ceilings tests/Puck.Counters/indirect-comparison/high-pan.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --batch tests/Puck.Counters/indirect-comparison/comparison.batch.json --output <reports>/indirect-comparison --record
+dotnet <cli-copy>/Puck.Cli.dll counters --batch tests/Puck.Counters/indirect-comparison/comparison.batch.json --output <reports>/indirect-check --check
 ```
 
-That ledger retains the real fixture and script identity; no placeholder ceilings
-are checked in. Repeat the measured recording for the other input classes and
-tiers. The parent [counter guide](../README.md) owns backend/device scope and
-offline comparison rules.
+Once all declared observation ceilings exist, `puck gate --gpu` routes their
+actual workload/script associations through this manifest once. Ambiguous
+manifest associations and incomplete measured sets refuse. The parent
+[counter guide](../README.md) owns backend/device scope and offline comparisons.
 
-These sources are not yet compiled or qualified. The G5 body receive/cast policy
-is still required before this workload can claim medium receiving and high
-casting: an unrendered local-seat body is not evidence. The production counter
-surface must also account for every cache, view, light map, traversal/constant
-ring and history byte. Capacity estimates in a plan do not satisfy that record.
-Both comparison mechanisms, all actual RTX 4070 rows, chosen tier defaults and
-their passing checks remain owed. Only RTX 2060 hardware qualification may remain
-as device debt after the local comparison closes.
+The ten `medium-<input>.script.txt` and `high-<input>.script.txt` files remain
+standalone fresh-session cache controls. They explicitly select `cache`, use
+the same paused fenced warm-up and keep their own script/report/ceilings
+identities. They do not substitute for screen/cone or the shared-session batch.
+
+The authored batch and its current-source wait remain unqualified. Actual
+RTX 4070 rows, chosen tier defaults, the G5 body receive/cast policy and passing
+checks remain owed. The production counter surface must account for every
+cache, view, light map, traversal/constant ring and history byte; capacity
+estimates do not satisfy that record. Only RTX 2060 hardware qualification may
+remain as device debt after the local comparison closes.
