@@ -51,7 +51,7 @@ internal sealed partial class WorldScreenBinder {
             }
             foreach (var (name, consumer) in root.Consumers.ToArray()) {
                 var alive = consumer.Target switch {
-                    WorldFramePresenter presenter => ReferenceEquals(presenter, Presenter),
+                    WorldFramePresenter retainedPresenter => ReferenceEquals(retainedPresenter, Presenter),
                     WorldRoutedScene scene => Presenter?.Presents(scene) == true,
                     SessionFeed feed => m_feeds.Contains(feed),
                     InfinityEntry entry => entry.Root.Entries.Values.Contains(entry),
