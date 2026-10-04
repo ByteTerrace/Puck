@@ -37,14 +37,16 @@ internal sealed class AffectedRevisionExport : IDisposable {
     public string Root { get; }
 
     private static string Git(string repository, string revision, TimeSpan bound, params string[] arguments) {
-        var run = CliGit.RunAsync(
-            arguments: arguments,
-            input: string.Empty,
-            repository: repository,
-            timeout: bound
-        ).GetAwaiter().GetResult();
+        Puck.Hosting.ChildProcessResult run;
 
-        if (run.TimedOut) {
+        try {
+            run = CliGit.RunAsync(
+                arguments: arguments,
+                input: string.Empty,
+                repository: repository,
+                timeout: bound
+            ).GetAwaiter().GetResult();
+        } catch (TimeoutException) {
             throw new AffectedRevisionExportRefusedException(message: $"the export of {revision} is refused: git {arguments[0]} did not finish within {bound.TotalSeconds.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} s.");
         }
 
