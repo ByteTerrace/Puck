@@ -215,6 +215,12 @@ public sealed partial class RenderGraphRuntime {
     }
     // Decides the frame's completion from the root's standing.
     private void Complete() {
+        // A capture waiting here has not reached a node's readback. A refused dependency cannot become current by
+        // composing another frame, so report its refusal instead of keeping the capture's host clock held.
+        if ((m_capture.PendingPath is not null) && m_staleRefused[m_captureInstance] &&
+            (m_stale[m_captureInstance] is { } refusal)) {
+            m_capture.Refuse(error: new InvalidOperationException(message: refusal));
+        }
         if (m_stale[m_root] is { } reason) {
             Render = (m_staleRefused[m_root]
                 ? FrameRender.Refused(reason: reason)

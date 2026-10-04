@@ -108,8 +108,11 @@ instance can overwrite.
 
 **How the code holds it.** `ShaderPipelineRenderNode.CaptureIfPending` reads the
 node's own last surface, which the node's retirement rule (§1) holds. The
-runtime forwards a capture to a node only when the node is ready and the
-instance read no stand-in or tainted input. A capture waits while a preview
+runtime forwards a capture to a node only when the node is ready, the
+instance read no stand-in or tainted input, and each same-frame input is current
+under the completion rules (§4). An input still rebuilding holds the request;
+a permanently refused input fails it by name. Paused and other deliberately
+standing completed inputs remain eligible. A capture waits while a preview
 builds, while the root has not yet presented at the requested extent
 (`ShownAtItsExtent`), and while its readback encoder (`SurfaceEncoder`) builds. Both
 rendered hosts hold their clock at an armed, unserved capture, and the scheduler
@@ -122,6 +125,7 @@ nothing captures its input version in that version's layout.
 `WorldPipelineResizedWaitLawTests`
 (`AResizedWaitHoldsUntilTheGraphAtTheNewExtentInstallsPausedOrRunning`),
 `RenderGraphRuntimeLawTests.RootCapture`,
+`RenderGraphRuntimeLawTests.CompletionCapture`,
 `RenderGraphRuntimeLawTests.UnboundReads`
 (`ACaptureWaitsForAScheduledUnboundScreenReadToHaveAnOutput`),
 `RenderGraphRuntimeLawTests.Alias`

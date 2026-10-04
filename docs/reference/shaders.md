@@ -730,8 +730,11 @@ tables, so a view renders nothing before then.
 A capture armed on the runtime reads the root instance's output, and one armed
 through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
 instance's node serves it on a frame the instance renders with every image
-input it shows bound to a completed output, never a stand-in, and an external
-producer serves it from the next frame it produces. Until then
+input it shows bound to an output current for the scheduled frame, never a stand-in
+or a held image from an input still rebuilding. Deliberately standing inputs, such
+as a paused view, remain current. A permanently refused input fails the pending
+capture with its reason. An external producer serves a capture from the next frame
+it produces, under the same requirement for its inputs. Until then
 `UnservedCaptureReasonOf` names why. The root may be the world's own instance,
 when nothing is drawn over its output. Each instance counts its own passes.
 

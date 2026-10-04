@@ -5,13 +5,13 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// A capture armed for the first frame a seat presents after its route moves: the frame a crossing shows first.
+/// A capture armed for the first completed frame a seat presents after its route moves.
 /// <c>world.screenshot &lt;path&gt; crossing [player]</c> arms it with the seat's route as it stands; every presented
 /// frame, inside the window in which <see cref="WorldContinuum"/> pins the routes the frame is dressed with, asks
 /// whether that seat's pinned route has a later epoch, and on the first visible frame it does, requests its capture from
 /// the render root before any of its views record. The request waits here rather than on the render root, so an
-/// ordinary <c>world.screenshot</c> may be armed and land meanwhile. A request the root cannot serve in its crossing
-/// frame is withdrawn before the next frame.
+/// ordinary <c>world.screenshot</c> may be armed and land meanwhile. A destination still building retains the request
+/// until its first completed frame; a refusal or another route change withdraws it before a different arrival can serve it.
 /// </summary>
 /// <param name="continuum">The seat routes the presented frames are dressed with.</param>
 /// <param name="routes">The published routes, safe to read from the console thread when arming.</param>
@@ -21,7 +21,7 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
     private readonly Lock m_gate = new();
 
     private Armed? m_armed;
-    private FrameCaptureRequest? m_presenting;
+    private Armed? m_presenting;
     private bool m_disposed;
 
     /// <summary>Gets the path of the capture waiting for its seat's crossing, or <see langword="null"/>.</summary>
@@ -33,7 +33,7 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
         }
     }
 
-    /// <summary>Arms a capture of the first frame the seat presents after its route moves.</summary>
+    /// <summary>Arms a capture of the first completed frame the seat presents after its route moves.</summary>
     /// <param name="request">The capture request.</param>
     /// <param name="slot">The seat's slot.</param>
     /// <param name="reason">Why the capture could not be armed, or empty.</param>
@@ -49,6 +49,11 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
             }
             if (m_armed is { Request.Completion.IsCompleted: false } armed) {
                 reason = $"a crossing capture of {armed.Request.Path} is still waiting for seat {(armed.Slot + 1)} to cross";
+
+                return false;
+            }
+            if (m_presenting is { Request.Completion.IsCompleted: false } presenting) {
+                reason = $"a crossing capture of {presenting.Request.Path} is still waiting for seat {(presenting.Slot + 1)} to render its arrival";
 
                 return false;
             }
@@ -69,10 +74,24 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
     /// <param name="previousFrame">Whether the preceding attempt completed, still awaits renderable inputs, or was refused.</param>
     public void Present(FrameRender previousFrame) {
         lock (m_gate) {
-            // The root serves readback within ProduceFrame. A request still pending at the next presentation missed
-            // its crossing frame; withdrawing it prevents a rebuild or an unavailable input from capturing a later route.
-            _ = m_presenting?.TryFail(error: new InvalidOperationException(message: "the first crossing frame did not serve the capture"));
-            m_presenting = null;
+            if (m_presenting is { } presenting) {
+                if (!presenting.Request.Completion.IsCompleted) {
+                    var sameArrival = (viewports.Seat(slot: presenting.Slot).Present &&
+                        (continuum.Route(slot: presenting.Slot).Epoch == presenting.Route.Epoch));
+
+                    // A held attempt has no completed destination image yet. Keep that exact request armed, but never
+                    // let a later route or a hidden seat turn it into a capture of a different arrival.
+                    if (sameArrival && (previousFrame.Completion == FrameCompletion.NotYetRenderable)) {
+                        return;
+                    }
+                    var reason = (!sameArrival
+                        ? "the seat left its crossing route before the capture rendered"
+                        : (previousFrame.Reason ?? "the first crossing frame did not serve the capture"));
+
+                    _ = presenting.Request.TryFail(error: new InvalidOperationException(message: reason));
+                }
+                m_presenting = null;
+            }
 
             if (m_armed is not { } armed) {
                 return;
@@ -99,7 +118,7 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
                 }
 
                 render.RequestCapture(request: armed.Request);
-                m_presenting = armed.Request;
+                m_presenting = armed with { Route = continuum.Route(slot: armed.Slot) };
                 Console.Error.WriteLine(value: $"[capture] crossing: seat {(armed.Slot + 1)} presents its new route on this frame -> {armed.Request.Path}");
             } catch (InvalidOperationException error) {
                 _ = armed.Request.TryFail(error: error);
@@ -112,11 +131,11 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
             m_disposed = true;
             _ = m_armed?.Request.TryFail(error: new ObjectDisposedException(objectName: nameof(WorldCrossingCapture), message: "the presentation ended before the seat crossed"));
             m_armed = null;
-            _ = m_presenting?.TryFail(error: new ObjectDisposedException(objectName: nameof(WorldCrossingCapture), message: "the crossing frame did not serve the capture before presentation ended"));
+            _ = m_presenting?.Request.TryFail(error: new ObjectDisposedException(objectName: nameof(WorldCrossingCapture), message: "the crossing frame did not serve the capture before presentation ended"));
             m_presenting = null;
         }
     }
 
-    // The armed capture, the seat it waits for, and the route it waits for the seat to leave.
+    // The request, its seat, and the route it waits to leave or finish presenting.
     private sealed record Armed(FrameCaptureRequest Request, WorldAuthorityRoute Route, int Slot);
 }
