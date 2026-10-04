@@ -14,6 +14,11 @@ host {
 simulation {
   rateHz: 30
 }
+state {
+  world {
+    slot cameraPose = 0
+  }
+}
 cameras [{
     name: "cache-cam"
     anchor: null
@@ -23,7 +28,54 @@ cameras [{
       name: "cache-cam"
       version: "puck.camera.program.v1"
       operations [
+        selectProgram(cases: [
+          { program: "cache-base", value: 0 }
+          { program: "cache-pan", value: 1 }
+          { program: "cache-translated", value: 2 }
+        ], default: "cache-base", key: "state.cameraPose")
+      ]
+    }
+  }
+  {
+    name: "cache-base"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-base"
+      version: "puck.camera.program.v1"
+      operations [
         anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+  {
+    name: "cache-pan"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-pan"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0.3, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+  {
+    name: "cache-translated"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-translated"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [96, 2.5, 7]))
         lookAt(subject: worldPoint(point: [0, 0.8, 0]))
         fieldOfView(fieldOfViewRadians: 0.9)
       ]

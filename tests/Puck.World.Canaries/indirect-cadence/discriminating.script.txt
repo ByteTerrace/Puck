@@ -8,7 +8,7 @@ world.wait 600
 world.counters sdf.indirect
 world.wait 30
 world.counters sdf.indirect
-world.row.set cameras cache-cam rig.operations[0].subject.point [96,2.5,7]
+world.state.cell.set cameraPose $value 2
 world.wait 30
 world.counters sdf.indirect
 world.indirect off

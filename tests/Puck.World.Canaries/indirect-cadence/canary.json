@@ -1,7 +1,7 @@
 {
   "id": "indirect-cadence",
   "title": "A residency traces demand once and a pan with no new bricks schedules no rays",
-  "binding": "The offscreen fixture starts with indirect off and reads zero scheduled rays. Medium then schedules rays until the cache is traced. Its cumulative scheduled-ray total stands across later frames and a camera rotation whose origin stays fixed, so it introduces no brick demand. Turning indirect off retires the cache while preserving the counter total. The discriminating leg moves the camera origin into new bricks instead of rotating it, requiring additional scheduled rays. A schedule that retraces existing camera demand fails the completed-cache or pan relation. GPU execution and that schedule mutation are required on each backend.",
+  "binding": "The offscreen fixture starts with indirect off and reads zero scheduled rays. Medium then schedules rays until the cache is traced. Its cumulative scheduled-ray total stands across later frames and a camera rotation whose origin stays fixed, so it introduces no brick demand. Both camera moves select an authored framing program through live Int state, preserving the document and SDF program identity. Turning indirect off retires the cache while preserving the counter total. The discriminating leg moves the camera origin into new bricks instead of rotating it, requiring additional scheduled rays. A schedule that retraces existing camera demand fails the completed-cache or pan relation. GPU execution and that schedule mutation are required on each backend.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -66,7 +66,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.state.cell.set",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -299,7 +299,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.state.cell.set",
         "occurrence": 1,
         "outcome": "accepted"
       },
