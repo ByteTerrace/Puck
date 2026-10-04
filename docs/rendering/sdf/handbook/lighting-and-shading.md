@@ -234,6 +234,15 @@ and allocation bytes. It does not claim probe classes or proof results from thos
 counts: those are GPU records and require a fenced readback of the same
 allocation and epoch.
 
+The cache's geometry-change entry point coalesces old and new casting bounds while
+an admitted batch finishes or admission is frozen. On resumption, the existing
+schedule withdraws every trace stratum in each affected placement brick and
+invalidates neighboring cell partitions. A validity bit in the existing brick
+record keeps an old partition unavailable until the ordered classification pass
+replaces it; placement lookup can still find the neighboring probes it needs.
+The change also withdraws the lighting publication and receiver certificates.
+This transport operation does not require replacing the cache allocation.
+
 ## Finite indirect lighting sweeps
 
 The residency's `shade` pass follows placement, partition and transport over the

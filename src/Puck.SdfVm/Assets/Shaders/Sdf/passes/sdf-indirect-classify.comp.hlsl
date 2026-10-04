@@ -13,7 +13,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     sdfProgramLayout = sdfLoadProgramLayout();
     uint slot = indirectUpdates[group.x + (placing ? 0u : passGroup.indirectPlaceCount)].x;
     int4 brick = indirectBricks[slot];
-    uint level = (uint)brick.w;
+    uint level = (uint)brick.w & SdfIndirectBrickLevelMask;
     float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
     int3 lattice = brick.xyz * 4 + int3(lane & 3u, (lane >> 2u) & 3u, lane >> 4u);
     uint index = slot * SdfIndirectProbesPerBrick + lane;

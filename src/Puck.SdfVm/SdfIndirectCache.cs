@@ -98,7 +98,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
-    public bool IsComplete => (m_schedule.IsComplete && (m_pending is null));
+    public bool IsComplete => (m_schedule.IsComplete && (m_pending is null) && (m_changedGeometry is null));
     /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
     /// <param name="level">The running level index.</param>
     /// <returns>The box used by the residency's light camera.</returns>
@@ -148,6 +148,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         m_schedule = NewSchedule();
         m_pending = null;
         m_receiverAdmission = false;
+        m_changedGeometry = null;
         m_slots.Clear();
         m_placed.Clear();
         Array.Clear(array: m_traceStates);
@@ -164,6 +165,8 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
         if ((m_pending is not null) || Frozen) { return; }
+        if (m_changedGeometry is not null && m_shade is not null) { return; }
+        ApplyGeometryChanges();
         m_pending = m_schedule.Frame(inputs: inputs);
         if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Placed.Count != 0 ||
             m_pending.Classified.Count != 0 || m_pending.Traces.Count != 0) {
@@ -183,7 +186,10 @@ public sealed partial class SdfIndirectCache : IDisposable {
         ClearBricks();
         m_placed.UnionWith(other: m_pending.Placed);
         foreach (var (key, slot) in m_slots) {
-            if (m_placed.Contains(item: key)) { Write(m_bricks, slot, key.X, key.Y, key.Z, key.Level); }
+            if (m_placed.Contains(item: key)) {
+                var state = key.Level | (m_schedule.IsClassified(key) ? SdfIndirectLayout.BrickClassified : 0);
+                Write(m_bricks, slot, key.X, key.Y, key.Z, state);
+            }
         }
         Regions[0].Write(bytes: m_bricks, offset: 0);
         var row = 0;

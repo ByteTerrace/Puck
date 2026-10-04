@@ -20,10 +20,10 @@ public sealed partial class SdfWorldPasses {
         return scope;
     }
 
-    internal void CompletedReceivers(string instance, SdfIndirectReceiverScope scope, uint deferred) {
-        if (m_entries.TryGetValue(instance, out var entry) && entry.ReceiverScope == scope) {
-            entry.ReceiversPending = deferred != 0u;
-        }
+    internal void CompletedReceivers(string instance, SdfIndirectReceiverScope scope, SdfIndirectLightingCompletion lighting, uint deferred) {
+        if (!m_entries.TryGetValue(instance, out var entry)) { return; }
+        entry.View?.Residency.Tables?.Indirect?.CompleteLightingReadback(lighting);
+        if (entry.ReceiverScope == scope) { entry.ReceiversPending = deferred != 0u; }
     }
 
     private static bool ReceiversPending(Entry entry) => entry.ReceiversPending &&

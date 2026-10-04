@@ -60,7 +60,7 @@ public sealed partial class SdfIndirectCache {
 
     /// <summary>Retains the next bounded shade batch until submission. A frozen cache admits no new batch.</summary>
     public void PlanLighting() {
-        if (m_shade is not null || Frozen || m_solve is null) { return; }
+        if (m_shade is not null || Frozen || m_solve is null || m_changedGeometry is not null) { return; }
         m_shade = m_solve.Plan();
         if (m_shade is not { } batch) { return; }
         for (var row = 0; row < batch.Probes.Count; row++) {

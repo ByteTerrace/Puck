@@ -88,6 +88,7 @@ bool sdfIndirectIrradianceAt(float3 surfacePoint, float3 launched, float3 normal
     int3 cell = int3(floor(scaled));
     float3 fraction = frac(scaled);
     irradiance = (SdfIndirectSources)0;
+    if (!sdfIndirectCellCurrent(sdfIndirectProbeIndex(cell, level))) { return false; }
     float total = 0.0;
 #ifdef SDF_VIEWS_PASS
     if (sdfIndirectPickActive) { sdfIndirectPickClearCorners(); }

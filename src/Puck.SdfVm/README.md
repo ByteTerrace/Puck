@@ -598,7 +598,8 @@ travels with the request. SDF identity names a program instance ordinal plus one
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
 L.x, separate from its instance's conservative bound slot. L.y carries the certified
 indirect receiver approach, and anonymous lanes read the existing transform row. The record
-remains 64 bytes. Nothing in this picker enters simulation input or grants edit
+has a 64-byte surface prefix and a 32-byte retained indirect receiver certificate,
+for 96 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
 authority.
 
 With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
@@ -611,6 +612,15 @@ and corner weights are the actual shader results; classifications come from the
 copied probe states. No CPU schedule count stands for a GPU classification.
 The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`
 accounts for the actual lazy readback rings until their recorder retires.
+
+`SdfWorldResidency.IsIndirectReady` describes the current desired shared cache.
+Transport and the finite lighting solve must be submitted, the pinned source
+must match the latest packed frame, and an existing view's deferred-word
+readback fence must complete that exact allocation, epoch, publication and
+source sequence. A stale completed sweep cannot release a wait after a light
+edit or reset. This reuses the four-byte receiver readback and adds no GPU
+allocation. Per-view receiver certificates keep their separate topology scope;
+shared-cache readiness does not claim that every view has admitted every receiver.
 
 ## Documentation
 

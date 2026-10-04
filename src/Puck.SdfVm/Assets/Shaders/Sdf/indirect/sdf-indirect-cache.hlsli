@@ -41,11 +41,17 @@ int sdfIndirectProbeIndex(int3 lattice, uint level) {
     [loop] for (uint slot = 0u; slot < capacity; slot++) {
         int4 entry = indirectBricks[slot];
         sdfIndirectLoads++;
-        if (entry.w == (int)level && all(entry.xyz == brick)) {
+        if ((entry.w & (int)SdfIndirectBrickLevelMask) == (int)level && all(entry.xyz == brick)) {
             return (int)(slot * SdfIndirectProbesPerBrick) + local.x + local.y * 4 + local.z * 16;
         }
     }
     return -1;
+}
+
+bool sdfIndirectCellCurrent(int index) {
+    if (index < 0) { return false; }
+    sdfIndirectLoads++;
+    return (indirectBricks[(uint)index / SdfIndirectProbesPerBrick].w & (int)SdfIndirectBrickClassified) != 0;
 }
 
 SdfIndirectPlacement sdfIndirectReadProbe(int index) {
@@ -170,7 +176,7 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
     float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
     int3 cell = int3(floor(position / spacing));
     int index = sdfIndirectProbeIndex(cell, level);
-    if (index < 0) { return 0u; }
+    if (!sdfIndirectCellCurrent(index)) { return 0u; }
     uint cellAddress = sdfIndirectCellWordOffset(passGroup.indirectTier) + (uint)index * SdfIndirectCellWords;
     uint components = sdfIndirectLoad(cellAddress);
     if (components == 0xffffffffu) { return 0u; }

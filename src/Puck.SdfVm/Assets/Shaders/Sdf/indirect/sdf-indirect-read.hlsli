@@ -20,7 +20,7 @@ float3 sdfIndirectDebugProbes(float3 origin, float3 direction, float maximum, fl
         int4 entry = indirectBricks[brick];
         samples++;
         if (entry.w < 0) { continue; }
-        float spacing = sdfIndirectSpacing(passGroup.indirectTier, (uint)entry.w);
+        float spacing = sdfIndirectSpacing(passGroup.indirectTier, (uint)entry.w & SdfIndirectBrickLevelMask);
         float radius = spacing * 0.06;
         float3 center = (float3(entry.xyz) * 4.0 + 1.5) * spacing;
         float3 toCenter = center - origin;
@@ -57,7 +57,7 @@ float3 sdfIndirectDebugCells(float3 surface) {
         float3 scaled = surface / spacing;
         int3 cell = int3(floor(scaled));
         int index = sdfIndirectProbeIndex(cell, level);
-        if (index < 0) { continue; }
+        if (!sdfIndirectCellCurrent(index)) { continue; }
         uint components = sdfIndirectLoad(sdfIndirectCellWordOffset(passGroup.indirectTier) + (uint)index * SdfIndirectCellWords);
         if (components == 0xffffffffu) { continue; }
         uint3 upper = uint3(frac(scaled) >= 0.5);

@@ -13,6 +13,52 @@ public sealed class SdfIndirectCacheLawTests {
         Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: 0.1)], WorldMin: Double3.Zero, WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1));
 
     [Fact]
+    public void GeometryWaitsForThawAndAnAdmittedBatchThenWithdrawsEveryOldStratum() {
+        using var rig = new Rig();
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        rig.Cache.BeginLighting();
+        for (var batch = 0; batch < 6; batch++) { rig.Cache.PlanLighting(); rig.Cache.SubmittedLighting(); }
+        var publication = rig.Cache.PublishedStamp;
+        Assert.NotEqual(0u, publication);
+        var revision = rig.Cache.CertificateRevision;
+        var records = rig.Cache.Regions[0].Contents.ToArray();
+        foreach (var brick in rig.Cache.Snapshot().Bricks) {
+            var state = BinaryPrimitives.ReadInt32LittleEndian(records.AsSpan(brick.Slot * 16 + 12));
+            Assert.Equal(brick.Key.Level, state & SdfIndirectLayout.BrickLevelMask);
+            Assert.NotEqual(0, state & SdfIndirectLayout.BrickClassified);
+        }
+        rig.Cache.Frozen = true;
+        var before = new IrradianceSphere(Double3.Zero, 0.1);
+        var after = new IrradianceSphere(new(0.1, 0, 0), 0.1);
+        rig.Cache.MarkGeometry(before, after);
+        rig.Cache.Plan(Inputs);
+        Assert.False(rig.Cache.NeedsPublish);
+        Assert.Equal(publication, rig.Cache.PublishedStamp);
+        Assert.Equal(revision, rig.Cache.CertificateRevision);
+        Assert.Equal(records, rig.Cache.Regions[0].Contents.ToArray());
+        rig.Cache.Frozen = false;
+        rig.Cache.Plan(Inputs);
+        Assert.True(rig.Cache.PlaceCount > 0);
+        Assert.Equal(0u, rig.Cache.PublishedStamp);
+        Assert.True(rig.Cache.CertificateRevision > revision);
+        Assert.All(rig.Cache.Regions[3].Contents.ToArray(), value => Assert.Equal(0, value));
+        var admitted = rig.Cache.Regions[1].Contents.ToArray();
+        revision = rig.Cache.CertificateRevision;
+        rig.Cache.MarkGeometry(after, before);
+        rig.Cache.Plan(Inputs);
+        Assert.Equal(admitted, rig.Cache.Regions[1].Contents.ToArray());
+        Assert.Equal(revision, rig.Cache.CertificateRevision);
+        rig.Cache.Submitted();
+        rig.Cache.Plan(Inputs);
+        Assert.True(rig.Cache.PlaceCount > 0);
+        Assert.True(rig.Cache.CertificateRevision > revision);
+        Assert.All(rig.Cache.Regions[3].Contents.ToArray(), value => Assert.Equal(0, value));
+        var firstTrace = (rig.Cache.PlaceCount + rig.Cache.ClassifyCount) * 16;
+        Assert.Equal((int)IrradianceUpdateReason.Geometry,
+            BinaryPrimitives.ReadInt32LittleEndian(rig.Cache.Regions[1].Contents[(firstTrace + 12)..]));
+    }
+
+    [Fact]
     public void ReceiverCertificatesFollowTransportButSurviveLightingAndAllowanceOnlySubmissions() {
         using var rig = new Rig();
         var before = rig.Cache.CertificateRevision;

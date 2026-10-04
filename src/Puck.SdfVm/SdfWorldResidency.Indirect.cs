@@ -20,6 +20,15 @@ public sealed partial class SdfWorldResidency {
     public bool IndirectFrozen { get; set; }
     /// <summary>Gets whether an explicit cache reset is waiting for the next frame this residency can render.</summary>
     public bool IndirectResetPending => Volatile.Read(ref m_indirectResetRequested) != 0;
+    /// <summary>Gets whether the latest desired, packed frame's shared indirect cache has finished transport and its
+    /// finite lighting solve, and an existing view readback fence has completed that exact allocation, epoch,
+    /// publication and captured source. An older completed source never satisfies a newer desired frame.</summary>
+    /// <remarks>Read on the render/console owner thread after frame preparation. This starts no work and allocates
+    /// no readback. It describes the shared cache, not every view's receiver-certificate admission; an absent or off
+    /// cache, pending reset, or frame waiting for packing is not ready.</remarks>
+    public bool IsIndirectReady => !IndirectResetPending && m_packed && m_renders && m_pendingFrame is null &&
+        !m_programPending && m_frame is { } frame && ReferenceEquals(frame, m_packedFrame) &&
+        m_tables?.Indirect is { } cache && cache.Layout.Tier == IndirectTier && cache.IsReadyFor(frame);
     /// <summary>Queues a presentation-cache reset for the next renderable frame. It changes no authoritative world
     /// state; while frozen it withdraws old lighting without admitting replacement updates.</summary>
     public void RequestIndirectReset() => Interlocked.Exchange(ref m_indirectResetRequested, 1);

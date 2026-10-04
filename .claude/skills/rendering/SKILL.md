@@ -90,6 +90,14 @@ completion without making unchanged Primary read the cache. Frozen views admit n
 new proof. Preserve outer field-mask and secondary-body policy while querying
 the full field from a nested lighting helper.
 
+Shared-cache waits use `SdfWorldResidency.IsIndirectReady`: the latest packed
+desired source must match the pinned solve, transport and lighting must be
+complete, and the existing receiver-readback fence must complete that exact
+allocation, epoch, publication and source sequence. Submitted completeness alone
+is insufficient. This is independent of per-view receiver admission and reuses
+its four-byte readback; do not add a second readiness ring or invalidate
+receiver certificates for a lighting-only edit.
+
 Indirect inspection extends the existing surface picker. Its 272-byte GPU
 record and full probe-state census share the visibility submission's fence and
 retain that request's allocation, epoch, published source and final receiver

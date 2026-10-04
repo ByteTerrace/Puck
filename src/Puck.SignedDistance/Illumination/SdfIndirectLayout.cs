@@ -15,6 +15,10 @@ public enum SdfIndirectTier {
 public sealed class SdfIndirectLayout {
     /// <summary>The probes and cells a brick owns.</summary>
     public const int ProbesPerBrick = 64;
+    /// <summary>The level bits in a live brick record's final word; minus one still marks an absent brick.</summary>
+    public const int BrickLevelMask = 255;
+    /// <summary>A brick's cell partitions are admitted and precede every reader in the ordered submission.</summary>
+    public const int BrickClassified = 256;
     /// <summary>A probe's position and class, traced-stratum and epoch word.</summary>
     public const int ProbeWords = 4;
     /// <summary>A cell's corner components, octahedral plane normal and plane offset.</summary>

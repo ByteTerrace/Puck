@@ -156,7 +156,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (string.Equals(a: m_part, b: SdfWorldPackage.Parts.Views, comparisonType: StringComparison.Ordinal)) {
                 m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
-                m_pick.ReceiversCompleted = (scope, deferred) => m_owner.CompletedReceivers(m_context.Instance, scope, deferred);
+                m_pick.ReceiversCompleted = (scope, lighting, deferred) => m_owner.CompletedReceivers(m_context.Instance, scope, lighting, deferred);
             }
 
             return;
