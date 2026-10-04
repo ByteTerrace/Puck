@@ -80,6 +80,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 BinaryPrimitives.WriteSingleLittleEndian(bytes[240..], 1f);
                 BinaryPrimitives.WriteSingleLittleEndian(bytes[260..], 2f);
                 BinaryPrimitives.WriteUInt32LittleEndian(bytes[204..], 2u);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes[220..], (uint)(SdfIndirectSources.Direct | SdfIndirectSources.Sky));
             } else if (bytes.Length == 262144) {
                 foreach (var brick in captured.Bricks) {
                     for (var probe = 0; probe < 64; probe++) {
@@ -102,6 +103,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Same(lighting, result.LightingSource);
         Assert.Equal(SdfIndirectPickStatus.Resolved, result.Status);
         Assert.Equal(SdfIndirectMethod.Cone, result.Method);
+        Assert.Equal(SdfIndirectSources.Direct | SdfIndirectSources.Sky, result.SourcesEnabled);
         Assert.Equal(new Vector3(7, 0, 0), result.Position);
         Assert.Equal(0.125f, result.Clearance);
         Assert.Equal(new[] { 0.25f, 0.75f, 0, 0, 0, 0, 0, 0 }, result.Corners.Select(static corner => corner.Weight));

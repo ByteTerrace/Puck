@@ -70,4 +70,8 @@ public sealed record SdfIndirectPick(SdfIndirectPickStatus Status, SdfIndirectTi
     /// <summary>Gets the selected presentation algorithm. Corners describe its cache fallback; Sources describes
     /// the actual result after any alternative replacement.</summary>
     public SdfIndirectMethod Method { get; init; }
+    /// <summary>Gets the source categories enabled by the rendered receiver, independently of the earlier solve's
+    /// source mask. A CPU reference preserves that solve's recursive transport, then masks its final categories
+    /// with this captured receiver selection.</summary>
+    public SdfIndirectSources SourcesEnabled { get; init; }
 }
