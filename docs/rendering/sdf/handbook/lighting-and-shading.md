@@ -259,6 +259,12 @@ describes the complete generation readers still see during a later solve.
 Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable
 light and sky tables for a CPU reference without consulting a newer live frame.
 The cache snapshot reports admitted shade probes and submitted whole sweeps.
+`CompletedSweeps` follows the active solve; `PublishedSweeps` follows the visible
+bank and retains its previous depth until a whole new sweep replaces it.
+The shared `sdfIndirectDiffuse` fold evaluates explicit lights in their table
+order and applies the hit material's albedo, metallic exclusion and `bleed` once.
+It returns direct, emission and screen contributions plus reflected-light
+attenuation; feedback and sky sampling remain the caller's separate operations.
 Primary traversal publishes a receiver approach in the existing visibility
 record. It keeps a positive complete-field sample whose clear ball joins the
 accepted sample, at most half the finest spacing away. The packed retreat and

@@ -2,33 +2,15 @@
 // visits coarser levels before finer readers; only a complete submitted sweep becomes visible to view receivers.
 #ifndef SDF_INDIRECT_SHADE_HLSLI
 #define SDF_INDIRECT_SHADE_HLSLI
-#include "sdf-indirect-irradiance.hlsli"
-#include "sdf-indirect-light.hlsli"
-#include "../shade/sdf-material.hlsli"
-#include "../frame/sdf-levers.hlsli"
-#include "../shade/sdf-light.hlsli"
+#include "sdf-indirect-diffuse.hlsli"
 
 // 256 rays * (five float3 sources, one direction and one terminal) = 19,456 bytes, beside the VM's gather mask.
 groupshared SdfIndirectSources sdfIndirectShaded[SdfIndirectMaximumRaysPerProbe];
 groupshared float3 sdfIndirectShadedDirections[SdfIndirectMaximumRaysPerProbe];
 groupshared uint sdfIndirectShadedKinds[SdfIndirectMaximumRaysPerProbe];
 
-float sdfIndirectShadeVisibility(int light, float3 surfacePoint, float3 normal) {
-    if (light < 0) { return 1.0; }
-    SdfLight record = sdfLights[(uint)light];
-    if (record.Kind != SDF_LIGHT_DIRECTIONAL) { return 1.0; }
-    bool fallback;
-    uint region;
-    uint before = sdfIndirectEvaluations;
-    float visibility = sdfIndirectLightVisibility((uint)light, surfacePoint, normal, record.Direction, fallback, region);
-    puckCountIndirect(fallback ? 6u : 5u, 0u, 1u, fallback ? 1u : 0u);
-    puckCountDetail(6u, sdfIndirectEvaluations - before, 0u, 0u, 0u, 0u);
-    return visibility;
-}
-
 SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, uint4 hit, uint readGeneration,
     uint readPublication, float feedbackGain) {
-    SdfIndirectSources result = (SdfIndirectSources)0;
     SdfShadeSurface surface = (SdfShadeSurface)0;
     surface.position = surfacePoint;
     surface.normal = sdfIndirectUnpackNormal(hit.y);
@@ -38,26 +20,14 @@ SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, ui
     surface.shadowVisibility = 1.0;
     surface.incomingVisibility = 1.0;
     [loop] for (uint slot = 0u; slot < passGroup.shadowSlotCount; slot++) {
-        surface.shadowVisibility[slot] = sdfIndirectShadeVisibility(passGroup.shadowSlots[slot], surfacePoint, surface.normal);
+        surface.shadowVisibility[slot] = sdfIndirectDiffuseVisibility(passGroup.shadowSlots[slot], surfacePoint, surface.normal);
     }
     [loop] for (uint fade = 0u; fade < min(passGroup.shadowFadeCount, (uint)SDF_SHADOW_FADE_SLOTS); fade++) {
-        surface.incomingVisibility[fade] = sdfIndirectShadeVisibility(sdfShadowHandoffs[fade].Incoming, surfacePoint, surface.normal);
+        surface.incomingVisibility[fade] = sdfIndirectDiffuseVisibility(sdfShadowHandoffs[fade].Incoming, surfacePoint, surface.normal);
     }
-    float3 direct = 0.0;
-    float3 screens = 0.0;
-    float attenuation = 1.0;
-    [loop] for (uint lightIndex = 0u; lightIndex < sdfLightCount(); lightIndex++) {
-        SdfLightSource light;
-        if (!sdfLightAt(lightIndex, light)) { continue; }
-        SdfLightResponse response = sdfLightResponse(light, surface);
-        if (light.kind == SdfLightScreen) { screens += response.diffuse * light.bounce; }
-        else { direct += response.diffuse * light.bounce; }
-        attenuation *= response.attenuation;
-    }
+    float attenuation;
+    SdfIndirectSources result = sdfIndirectDiffuse(surface, attenuation);
     float3 reflected = surface.material.albedo * (1.0 - surface.material.metal) * surface.material.bleed;
-    result.values[SdfIndirectSourceDirect] = reflected * direct * attenuation;
-    result.values[SdfIndirectSourceScreens] = reflected * screens * attenuation;
-    result.values[SdfIndirectSourceEmission] = surface.material.albedo * surface.material.emissive * surface.material.bleed;
     if (feedbackGain > 0.0 && readPublication != 0u) {
         uint level = (hit.w >> SdfIndirectProofLevelShift) & 3u;
         uint mask = (hit.w >> SdfIndirectProofMaskShift) & 255u;
