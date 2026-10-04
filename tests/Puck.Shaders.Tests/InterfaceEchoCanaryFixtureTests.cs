@@ -64,6 +64,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
 
     private static ShaderInterfaceGroupLayout[] Blocks(ShaderInterfaceLayout layout) =>
         [.. layout.Groups.Where(predicate: static group => (group.BlockMembers.Count != 0))];
+
     /// <summary>Each echo's frame and pass blocks are its targets' blocks: the same groups in the same sets and sizes,
     /// and the same members at the same offsets, types and lengths under the same names in order.</summary>
     [MemberData(memberName: nameof(TargetNames))]
@@ -143,7 +144,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         var changed = Assert.Single(collection: Enumerable.Range(start: 1, count: (positive.Length - 1))
             .Where(predicate: index => (positive[index] != perturbed[index])));
 
-        Assert.StartsWith(expectedStartString: $"    echo[uint2({members.Length - 1}, 0)] = ", actualString: positive[changed]);
+        Assert.StartsWith(expectedStartString: $"    echo[uint2({(members.Length - 1)}, 0)] = ", actualString: positive[changed]);
         const string literal = @"0x([0-9A-F]{8})u";
         var before = Regex.Matches(input: positive[changed], pattern: literal).Select(selector: static match =>
             uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
@@ -151,7 +152,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
             uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
         var last = members[^1];
 
-        Assert.Equal(expected: (0x40000000u | (((last.Member.Offset / 4) + 2u) << 12) | (last.Set << 8) | 0xA5u), actual: after[0]);
+        Assert.Equal(expected: 0x40000000u | (((last.Member.Offset / 4) + 2u) << 12) | (last.Set << 8) | 0xA5u, actual: after[0]);
         Assert.NotEqual(expected: before[0], actual: after[0]);
         Assert.Equal(expected: before.Skip(count: 1), actual: after.Skip(count: 1));
         Assert.Equal(expected: Regex.Replace(input: positive[changed], pattern: literal, replacement: "sentinel"),
