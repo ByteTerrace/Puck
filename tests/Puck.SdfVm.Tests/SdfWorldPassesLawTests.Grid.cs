@@ -92,7 +92,7 @@ public sealed partial class SdfWorldPassesLawTests {
     }
 
     private static SdfTestView GridView(UploadModelGpu gpu, SdfWorldPipelineCatalog pipelines, Func<SdfFrame> capture, SdfKernelSet? kernels = null) =>
-        new(device: gpu, extent: Extent, pipelines: pipelines,
+        new(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: capture), height: Extent,
                 kernels: (kernels ?? SdfTestPipelines.Kernels()), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
     private static FrameContext GridContext(UploadModelGpu gpu) => new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
