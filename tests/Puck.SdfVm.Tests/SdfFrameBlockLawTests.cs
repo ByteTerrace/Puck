@@ -12,6 +12,16 @@ namespace Puck.SdfVm.Tests;
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
     [Fact]
+    public void ComparisonBoundsEmitTypedShaderConstantsWithoutAnotherPolicyTable() {
+        var generated = SdfIndirectHlsl.Generate();
+        Assert.Contains("static const uint SdfIndirectAlternativeRays = 4u;", generated, StringComparison.Ordinal);
+        Assert.Contains("static const uint SdfIndirectAlternativeScreenSteps = 12u;", generated, StringComparison.Ordinal);
+        Assert.Contains("static const uint SdfIndirectAlternativeConeSteps = 24u;", generated, StringComparison.Ordinal);
+        Assert.Contains("static const uint SdfIndirectAlternativePhases = 4u;", generated, StringComparison.Ordinal);
+        Assert.Contains("static const float SdfIndirectAlternativeReach = 4;", generated, StringComparison.Ordinal);
+        Assert.Contains("static const float SdfIndirectAlternativeConeSlope = 0.25;", generated, StringComparison.Ordinal);
+    }
+    [Fact]
     public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
         var block = new byte[SdfFrameBlock.SizeBytes];
         var frame = Frame() with { IndirectSources = SdfIndirectSources.Sky | SdfIndirectSources.Screens };

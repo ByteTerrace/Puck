@@ -23,6 +23,14 @@ public static class SdfIndirectHlsl {
         foreach (var field in typeof(SdfIndirectLightLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
             text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectLight{field.Name} = {field.GetRawConstantValue()}u;\n");
         }
+        foreach (var field in typeof(SdfIndirectComparisonLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
+            var value = field.GetRawConstantValue();
+            if (field.FieldType == typeof(float)) {
+                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectAlternative{field.Name} = {(float)value!:R};\n");
+            } else {
+                text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectAlternative{field.Name} = {value}u;\n");
+            }
+        }
         Enum<SdfIndirectTier>(prefix: "SdfIndirectTier");
         Enum<SdfIndirectSources>(prefix: "SdfIndirectSources");
         Enum<SdfIndirectMethod>(prefix: "SdfIndirectMethod");

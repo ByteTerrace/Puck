@@ -311,8 +311,19 @@ The counted comparison has a per-view SdfIndirectMethod selector: the ordinary
 cache, current screen-space visibility, or one-bounce field cones. Its pass value
 belongs to the lighting signature, so changing the method re-renders shading and
 its consumers without changing geometry or shadow ownership. Quality restrictions
-retain the consuming view's method. The alternative kernels and measured comparison
-remain open work in the rendering plan.
+retain the consuming view's method. The alternatives interleave four render-pixel
+parity classes through the existing temporal phase, with four equal-weight
+stratified cosine samples. Screen-space rays take at most twelve projection
+samples in this consumer's current visibility slice; missing, offscreen and
+unsupported witnesses keep the cache fallback. Cones take at most twenty-four
+full-field evaluations over four world units, including their surface gradient
+and sign witness. Existing directional shadow fallbacks retain their separately
+counted bounds. A certified secondary hit uses the shared explicit diffuse source
+fold; its result replaces a sample rather than adding another bounce. A local
+clear interval cannot declare a sky exit, and a hit's unproved sky hemisphere
+retains the cache sky contribution. Both methods return independent categories
+before the receiver's material response. Their device laws and measured
+comparison remain open qualification work in the rendering plan.
 
 ## Ambient occlusion: three taps into the ambient fill
 
