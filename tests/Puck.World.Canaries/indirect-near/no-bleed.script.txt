@@ -1,0 +1,9 @@
+# no-bleed.puck changes only the source material's bleed tint.
+world.cadence on
+world.quality high
+world.indirect high
+world.wait ready 180
+world.wait 600
+world.screenshot {run}/near-no-bleed.png
+world.wait captures 30
+world.counters gpu

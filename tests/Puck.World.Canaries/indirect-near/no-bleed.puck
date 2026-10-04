@@ -1,0 +1,13 @@
+schema: "puck.world.definition.v1"
+basis: "scenes"
+documentId: "indirect-near-no-bleed"
+prototypes {
+  prototype "near-study" {
+    document {
+      palette [
+        { color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+        { color: "#FF0000", roughness: 1, specular: 0, fill: "#000000", bleed: "#000000", receive: 0 }
+      ]
+    }
+  }
+}

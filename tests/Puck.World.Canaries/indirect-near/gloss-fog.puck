@@ -1,0 +1,14 @@
+schema: "puck.world.definition.v1"
+basis: "scenes"
+documentId: "indirect-near-gloss-fog"
+render { atmosphere { fog { density: 0.2 } } }
+prototypes {
+  prototype "near-study" {
+    document {
+      palette [
+        { color: "#FFFFFF", roughness: 0.02, specular: 1, coat: 1, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+        { color: "#FF0000", roughness: 0.02, specular: 1, coat: 1, fill: "#000000", bleed: "#FFFFFF", receive: 0 }
+      ]
+    }
+  }
+}

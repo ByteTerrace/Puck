@@ -1,0 +1,9 @@
+# A tier control, not an independent near-field switch: medium also changes the cache layout.
+world.cadence on
+world.quality medium
+world.indirect medium
+world.wait ready 180
+world.wait 600
+world.screenshot {run}/near-medium.png
+world.wait captures 30
+world.counters gpu

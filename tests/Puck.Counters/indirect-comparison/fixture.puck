@@ -1,0 +1,129 @@
+schema: "puck.world.definition.v1"
+basis: "../../Puck.World.Canaries/indirect-near/scenes"
+documentId: "indirect-comparison"
+
+host { width: 1920, height: 1080 }
+state {
+  world {
+    slot cameraPose = 0
+    slot orbitYaw = 0.0
+    slot orbitRunning = 0
+    slot dayPhase = 0.25
+    slot dayRunning = 0
+  }
+}
+timeline { clocks [{ name: "comparison-day", state: dayPhase }] }
+rule "advance-day" {
+  when dayRunning == 1
+  mode: Level
+  dayPhase += 0.001
+}
+rule "advance-orbit" {
+  when orbitRunning == 1
+  mode: Level
+  orbitYaw += 0.005
+}
+render {
+  lighting {
+    lights [
+      directional(name: "source-key", direction: {
+        clock: comparison-day
+        keys [
+          { at: 0, value: [-1, 0.2, 0] }
+          { at: 0.5, value: [-0.3, 0.8, -0.5] }
+        ]
+      }, color: "#FFE4BB", weight: 1, shadow: always, bounce: 1)
+      directional(name: "fill-key", direction: [0.6, 0.8, 0.3], color: "#BBDDFF", weight: 0.5, shadow: always, bounce: 1)
+    ]
+  }
+}
+cameras [
+  {
+    name: "workload-camera"
+    anchor: null
+    renderWidth: 960
+    renderHeight: 1080
+    rig {
+      name: "workload-camera"
+      version: "puck.camera.program.v1"
+      operations [selectProgram(cases: [
+        { program: "orbit-camera", value: 0 }
+        { program: "pan-camera", value: 1 }
+        { program: "cut-camera", value: 2 }
+      ], default: "orbit-camera", key: "state.cameraPose")]
+    }
+  }
+  {
+    name: "orbit-camera"
+    anchor: null
+    renderWidth: 960
+    renderHeight: 1080
+    rig {
+      name: "orbit-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 0]))
+        orbit(distance: 0.8, pitch: 0.65, yaw: "state.orbitYaw")
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "pan-camera"
+    anchor: null
+    renderWidth: 960
+    renderHeight: 1080
+    rig {
+      name: "pan-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 0]))
+        orbit(distance: 0.8, pitch: 0.65, yaw: "state.orbitYaw")
+        lookAt(subject: worldPoint(point: [0.12, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "cut-camera"
+    anchor: null
+    renderWidth: 960
+    renderHeight: 1080
+    rig {
+      name: "cut-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [8, 0.6, 0.3]))
+        lookAt(subject: worldPoint(point: [8, 0.4, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "observer-camera"
+    anchor: null
+    renderWidth: 960
+    renderHeight: 1080
+    rig {
+      name: "observer-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [-0.4, 0.45, 0.6]))
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+views {
+  layout "study" {
+    seatCount: 0
+    slots [
+      { camera: "workload-camera", x: 0, y: 0, width: 0.5, height: 1 }
+      { camera: "observer-camera", x: 0.5, y: 0, width: 0.5, height: 1 }
+    ]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}
