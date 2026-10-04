@@ -43,6 +43,7 @@ public sealed partial class WorldRenderSettings {
     private float m_shadowReach;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
+    private bool m_shadowAmortize;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
 
@@ -64,6 +65,7 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
+        ShadowAmortize = defaults.ShadowAmortize;
         SkyQuality = defaults.SkyQuality;
         DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
@@ -154,6 +156,9 @@ public sealed partial class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>Whether secondary stable shadow slots reuse valid history when reconstruction is on. The
+    /// <c>world.shadow-amortize</c> session lever changes it without rebuilding the graph.</summary>
+    public bool ShadowAmortize { get => m_shadowAmortize; set { m_shadowAmortize = value; m_revision++; } }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
     /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>

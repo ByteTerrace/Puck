@@ -9,6 +9,26 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void CadenceOwnerNameAloneRunsShadowAndItsConsumers(bool temporal) {
+        var lights = SdfLights.Default();
+
+        lights.ShadowSlots.SetOwner(owner: "original", slot: 0);
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal, amortize: true, lights: lights);
+
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        rig.Lights.ShadowSlots.SetOwner(owner: "replacement", slot: 0);
+        rig.Produce();
+        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views,
+            .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite]),
+            actual: Executed(work: CadenceWork(rig: rig)));
+        Assert.Empty(collection: rig.StateConflicts);
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+    }
     [InlineData("drift", false)]
     [InlineData("twinkle", false)]
     [InlineData("fog-color", false)]

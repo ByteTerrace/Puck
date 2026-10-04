@@ -178,8 +178,8 @@ internal static partial class CanaryManifestLoader {
             );
         }
 
-        if (runSchedule && ((authorities.Count != 0) || (authorityWorldPath is not null) || (relaunch is not null))) {
-            throw new CanaryManifestRefusal(message: $"{context} runSchedule requires one process without authorities, authorityWorld or relaunch.");
+        if (runSchedule && ((authorities.Count != 0) || (authorityWorldPath is not null))) {
+            throw new CanaryManifestRefusal(message: $"{context} runSchedule requires one process without authorities or authorityWorld.");
         }
 
         return new CanaryLeg(

@@ -3,6 +3,19 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
+    /// <summary>The render-grid K history and receiver validation words read by the shadow stage.</summary>
+    public const string ShadowHistory = "shadowHistory";
+    /// <summary>The current render-grid K history written by the shadow stage.</summary>
+    public const string ShadowHistoryWritten = "shadowHistoryRW";
+    /// <summary>The secondary shadow amortization switch in the pass block.</summary>
+    public const string ShadowAmortize = "shadowAmortize";
+    /// <summary>The stable slots whose names or handoffs invalidate history.</summary>
+    public const string ShadowOwnershipReject = "shadowOwnershipReject";
+    /// <summary>The stable slots whose penumbra anchors invalidate history.</summary>
+    public const string ShadowLightReject = "shadowLightReject";
+    /// <summary>The words per history pixel: packed K, receiver identity, full ray distance, sample index and
+    /// rejection reactivity. The views pass transfers reactivity into temporal color reconstruction.</summary>
+    public const uint ShadowHistoryWords = 5;
     /// <summary>The incoming handoff visibilities, sampled by shading.</summary>
     public const string IncomingVisibility = "incomingVisibility";
     /// <summary>The incoming handoff visibilities, written by the shadow stage.</summary>

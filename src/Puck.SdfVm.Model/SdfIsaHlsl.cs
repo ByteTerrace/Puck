@@ -101,6 +101,8 @@ public static class SdfIsaHlsl {
         var declarations = new Declarations();
 
         declarations.Members<SdfOp>(prefix: "SDF_OP");
+        declarations.Members<SdfShadowDecision>(prefix: "SDF_SHADOW_DECISION");
+        declarations.Count(name: "SDF_SHADOW_HISTORY_WORDS", value: ((int)SdfWorldPackage.ShadowHistoryWords));
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
         declarations.Members<SdfLift>(prefix: "SDF_LIFT");

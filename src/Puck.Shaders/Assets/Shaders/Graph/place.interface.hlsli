@@ -50,7 +50,7 @@ struct PlacePass {
 // sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 22u;
+static const uint PuckWorkRowWords = 24u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -58,6 +58,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkShadowPixelsWord = 22u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -98,13 +99,20 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
     puckAddWork((row + PuckWorkSkyHashesWord), hashes);
     puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
 }
-// The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
+// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
 void puckCountShadow(uint slot, uint steps) {
-    uint waveSteps = WaveActiveSum(steps);
-
-    if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
+    if (slot < PuckWorkShadowSlots) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
     }
+}
+// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
+// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
+void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+    puckAddWork(row + PuckWorkStepsWord, steps);
+    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

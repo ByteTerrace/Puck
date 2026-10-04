@@ -11,6 +11,18 @@ namespace Puck.Shaders.Tests;
 /// engine's compute passes and mesh pass, and the placement pass.
 /// </summary>
 public sealed class ShaderWorkCountersLawTests {
+    [Fact]
+    public void ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence() {
+        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
+        var start = generated.IndexOf(comparisonType: StringComparison.Ordinal, value: "void puckCountShadow(");
+        var end = generated.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: start, value: "void puckCountShadowDecision(");
+        var shadow = generated[start..end];
+
+        Assert.DoesNotContain(actualString: shadow, expectedSubstring: "Wave");
+        Assert.Contains(actualString: shadow, expectedSubstring: "if (slot < PuckWorkShadowSlots)");
+        Assert.Contains(actualString: shadow, expectedSubstring: "PuckWorkShadowWord + (slot * 2u)), steps);");
+    }
+
     private static ShaderInterface Interface(params ShaderInterfaceMember[] members) => new(
         members: [
             ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "gain", type: ShaderValueType.Float),
@@ -40,8 +52,9 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: $"RWStructuredBuffer<uint> {ShaderWorkCounters.Buffer}");
         Assert.Contains(actualString: generated, expectedSubstring: $"uint {ShaderWorkCounters.Row};");
         Assert.Equal(
-            actual: GpuWork.KernelKinds.ToArray(),
-            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, .. GpuWork.ShadowSteps]
+            actual: GpuWork.KernelKinds.ToArray().Select(selector: kind => kind.Name),
+            expected: ["gpu.march.steps", "gpu.texels.written", "gpu.sky.evaluations", "gpu.sky.hashes", "gpu.sky.texture-loads",
+                .. GpuWork.ShadowSteps.ToArray().Select(selector: kind => kind.Name), "gpu.shadow.pixels"]
         );
     }
     [Fact]
@@ -73,7 +86,7 @@ public sealed class ShaderWorkCountersLawTests {
     public void NamedRowsUseEveryKernelColumnAndTheSameAtomicCarryAsPlainRows() {
         var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
 
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 22u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 24u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
         Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);");

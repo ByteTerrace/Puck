@@ -1,0 +1,5 @@
+world.cadence off
+world.wait ready 600
+world.wait 90
+world.counters gpu
+world.wait 120

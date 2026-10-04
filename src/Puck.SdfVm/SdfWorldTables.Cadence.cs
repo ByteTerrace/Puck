@@ -21,6 +21,7 @@ namespace Puck.SdfVm;
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
 //                          render extent, which the scheduler renders a view again for when it moves.
 //   - m_lightRegion, m_skyRegion, m_skyLayerRegion : the lights, sky gains, layer stack and its clock bakes.
+//   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
@@ -85,6 +86,7 @@ public sealed partial class SdfWorldTables {
         var shadow = Fnv1aHash.Create();
 
         shadow.Add(value: m_shadowSignature);
+        AddShadowOwners(hash: ref shadow, slots: frame.Lights.ShadowSlots);
         AddMembers(block: block, hash: ref shadow, members: ShadowValues);
         ClearMembers(block: block, members: ShadowValues);
         ClearMembers(block: block, members: LightingValues);
@@ -205,9 +207,25 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: tables);
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(values: block);
+        AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;
     }
+
+    private static void AddShadowOwners(ref Fnv1aHash hash, SdfShadowSlots slots) {
+        Span<int> ownerLength = stackalloc int[1];
+
+        for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
+            var owner = slots.Owner(slot: slot);
+
+            ownerLength[0] = (owner?.Length ?? -1);
+            hash.Add(values: MemoryMarshal.AsBytes(span: ownerLength));
+            if (owner is not null) {
+                hash.Add(values: MemoryMarshal.AsBytes(span: owner.AsSpan()));
+            }
+        }
+    }
+
     /// <summary>Folds everything every view reads of the tables besides its pass block into the tables' signature, once
     /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {

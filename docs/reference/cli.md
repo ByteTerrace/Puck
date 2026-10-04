@@ -1256,7 +1256,10 @@ walk the same crossing a second time with reconstruction off.
 A single-process leg can set `runSchedule: true` to arm the world document's
 existing command schedule. The runner passes `--schedule-dir {run}/schedule`,
 which retains the submission manifest and state exports with the capture
-evidence. This is opt-in and takes no companion authority, relaunch or stub
+evidence. A relaunch arms its document's schedule under `{run}/schedule-relaunch`.
+It may name a
+repository-relative `sourceWorld` fixture instead of a saved `world`; the two
+are mutually exclusive. This is opt-in and takes no companion authority or stub
 boot. Scheduled mutations submitted at tick N apply during N+1; a capture
 authored at N+1 is armed after that step and before its first render.
 

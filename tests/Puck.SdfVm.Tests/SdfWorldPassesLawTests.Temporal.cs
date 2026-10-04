@@ -179,7 +179,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Parts.Composite}", actualString: plan.Passes[^1].Name);
         var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
-        Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
+        Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.ShadowHistory}"]);
         Assert.Contains(collection: resolve.Accesses, filter: static access => access.PreviousFrame);
         Assert.True(condition: rig.Temporal());
         // Every render advances the sequence with no capture converging.
@@ -390,11 +390,13 @@ public sealed partial class SdfWorldPassesLawTests {
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Action<SdfSky>? sky = null) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, bool amortize = false, Action<SdfSky>? sky = null) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
-            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
+            if (lights is not null) { frame = frame with { Lights = lights }; }
+
+            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { ShadowAmortize = amortize, Temporal = temporal }, RenderScale = renderScale }] };
 
             frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
             sky?.Invoke(obj: frame.Sky);
@@ -440,7 +442,45 @@ public sealed partial class SdfWorldPassesLawTests {
         public bool Filling {
             set => m_feed!.Filling = value;
         }
+        public Puck.SignedDistance.SdfLights Lights => m_sourceFrame.Lights;
         public SdfWorldPasses Passes { get; }
+        public bool ShadowAmortize {
+            set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { Quality = m_sourceFrame.Views[0].Quality with { ShadowAmortize = value } }] };
+        }
+
+        public uint ShadowValue(string member) {
+            m_gpu.SetBinds = [];
+            Produce();
+            var set = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == 3u)).Select(selector: static bind => bind.Set).Distinct().ToArray()[^5];
+
+            m_gpu.SetBinds = null;
+            return BitConverter.ToUInt32(m_gpu.Memory(bufferHandle: m_gpu.BufferAt(binding: 0, set: set)), Offset(member: member));
+        }
+
+        public bool ShadowsEnabled {
+            set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { Quality = m_sourceFrame.Views[0].Quality with { DisableSoftShadows = !value } }] };
+        }
+
+        public (nint Read, nint Write, nint ViewsRead) ShadowPorts() {
+            m_gpu.SetBinds = [];
+            Produce();
+            var sets = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == 3u)).Select(selector: static bind => bind.Set).Distinct().ToArray();
+
+            m_gpu.SetBinds = null;
+            uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.WorldParameters.Layout, member: member);
+            nint HistoryBuffer(nint set, string member) {
+                try {
+                    return m_gpu.BufferAt(set, Binding(member: member));
+                } catch (KeyNotFoundException) {
+                    Assert.Fail(message: $"Shadow history port '{member}' is bound to its writer-ordered buffer.");
+                    return 0;
+                }
+            }
+            return (HistoryBuffer(sets[^5], SdfWorldPackage.ShadowHistory),
+                HistoryBuffer(sets[^5], SdfWorldPackage.ShadowHistoryWritten),
+                HistoryBuffer(sets[^4], SdfWorldPackage.ShadowHistory));
+        }
+
         public float RenderGrid {
             set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { ResolvedRenderScale = value }] };
         }

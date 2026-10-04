@@ -8779,6 +8779,10 @@ export type WorldQualityPreset = {
    */
   temporal?: boolean;
   /**
+   * Whether secondary shadows reuse valid K history (world.shadow-amortize).
+   */
+  shadowAmortize?: boolean;
+  /**
    * Whether the preset moves each view's render extent with the load (world.render-scale auto).
    */
   dynamicResolution?: boolean;
@@ -8976,6 +8980,10 @@ export type WorldRenderDefaults = {
    * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
    */
   temporal?: boolean;
+  /**
+   * Whether secondary shadows boot reusing valid K history (world.shadow-amortize).
+   */
+  shadowAmortize?: boolean;
   /**
    * Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.
    */

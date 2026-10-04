@@ -67,7 +67,12 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
             }
         }
-        Assert.DoesNotContain(collection: sample.Details.ToArray(), filter: detail => (detail.Pass == sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}")));
+        // The shadow pass reports its decision rows, into which it counts each secondary pixel (P18-13).
+        var shadowPass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}");
+
+        foreach (var label in SdfShadowDecisions.Labels) {
+            Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: shadowPass), collection: sample.Details.ToArray());
+        }
 
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 

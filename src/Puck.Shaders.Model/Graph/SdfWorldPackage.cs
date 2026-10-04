@@ -308,6 +308,9 @@ public static partial class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
+        Value(name: ShadowAmortize, type: ShaderValueType.Uint),
+        Value(name: ShadowOwnershipReject, type: ShaderValueType.Uint),
+        Value(name: ShadowLightReject, type: ShaderValueType.Uint),
         Value(name: Temporal, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
@@ -399,6 +402,8 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
+        Read(element: ShaderValueType.Uint, name: ShadowHistory),
+        Written(element: ShaderValueType.Uint, name: ShadowHistoryWritten),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,

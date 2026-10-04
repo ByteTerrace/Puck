@@ -10,6 +10,14 @@ public static partial class GpuWork {
 
     internal const int ShadowStepsFirstColumn = 21;
 
+    /// <summary>The position of the secondary-shadow pixel count in the kernel row.</summary>
+    public const int ShadowPixelsKind = (ShadowStepsFirstKind + ShadowSlotCount);
+
+    internal const int ShadowPixelsColumn = (ShadowStepsFirstColumn + ShadowSlotCount);
+
+    /// <summary>Secondary lit shadow pixels classified once each into the shadow pass's decision detail rows.</summary>
+    public static WorkKind ShadowPixels { get; } = new(name: "gpu.shadow.pixels", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+
     private static readonly WorkKind[] ShadowStepKinds = [
         new(name: "gpu.shadow.slot0.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic),
         new(name: "gpu.shadow.slot1.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic),

@@ -1156,8 +1156,10 @@ These are one-line cautions; the owning pages hold the derivations.
   for a fragment stage, `puckCountDetail` (a per-invocation add to one of the
   pass's named detail rows, which the sky, composite and sky-environment kernels
   call for each layer's evaluations, hashes and texture loads) and
-  `puckCountShadow` (a wave sum of one shadow slot's march steps, which the
-  shadow stage calls for each slot it marches), laid out from
+  `puckCountShadow` (an invocation's shadow slot march steps, which the
+  shadow stage calls for each slot it marches), and `puckCountShadowDecision`
+  (one secondary lit pixel plus its march and slot steps in its rejection or
+  reprojection row), laid out from
   `GpuKernelCounters`' constants. Every other generated include, a document
   pass's among them, declares the same functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
@@ -1177,7 +1179,7 @@ These are one-line cautions; the owning pages hold the derivations.
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
   its pass as the kinds in `GpuWork.KernelKinds`: march steps, texels written,
   sky evaluations, hashes and texture loads, and the six `gpu.shadow.slot0.steps`
-  through `gpu.shadow.slot5.steps` columns, once the submission
+  through `gpu.shadow.slot5.steps` columns, then `gpu.shadow.pixels`, once the submission
   completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
@@ -1185,7 +1187,11 @@ These are one-line cautions; the owning pages hold the derivations.
   binds the buffer at `workCounters` and writes the row into the pass
   block (`workCounterRow`, and `workCounterRowDetail` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
-  every lane that did work. A shadow uses `puckCountDetail` for its slot, and sky
+  every lane that did work. A shadow uses `puckCountShadow` for plain slot work or
+  `puckCountShadowDecision` for its secondary outcome, excluding that outcome's
+  steps from the plain pass accumulator so the ledger counts them once. Slot
+  counting uses per-invocation atomics because a divergent march does not
+  guarantee subgroup reconvergence on Vulkan. Sky
   layers count evaluations, hashes and field-run loads at their own operations.
   A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
@@ -1457,6 +1463,27 @@ call supplies 1, preserving its unscaled fallback. During a handoff its outgoing
 light's occlusion deficit scales by `1 - progress` and its incoming light's by
 `progress`; radiance never crossfades and two visibilities are never blended
 together.
+
+`world.shadow-amortize` enables secondary K history only in a temporal view.
+Slot zero and incoming slots march fully. Other stable slots march the parity
+class selected by the jitter index and reuse the remaining pixels only after
+owner, light-motion, gathered-occluder and receiver validation. Exact owner
+names travel with `SdfShadowSlots`; `SdfShadowHistory` commits names and retained
+penumbra anchors only after the shadow writer submits. A name-only change also
+changes the cadence signature. Fading slots reject through their first
+nonfading rebuild; light directions stay within one eighth of their anchor's
+penumbra angle, bounding any retained pair to one quarter. Gather motion checks
+all three dynamic rows and both the current and previous bounds; flat fallbacks
+and unmasked world segments conservatively scan the whole table.
+`SdfWorldPackage.TemporalFragment` owns the writer-ordered render-grid history:
+five words per pixel, packed K, identity, depth, writer sample and rejection
+reactivity. The sample stamp rejects skipped or stale writers, and receiver
+validation shares color history's five-percent depth rule. Rejection raises
+color reactivity. History writes count all five words; off writes none. The
+`interleaved`, `ownership`, `light-motion`, `occluder-motion`, `receiver` and
+`reprojected` detail rows partition secondary lit pixels and their march steps.
+Run `temporal-shadows` on both backends and qualify its receiver-only red leg
+and floor-device ceilings before claiming its images or savings verified.
 
 `incomingVisibility` is policy-sized retained graph storage: R8 at
 F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.

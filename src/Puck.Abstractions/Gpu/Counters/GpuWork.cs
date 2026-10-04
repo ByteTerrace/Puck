@@ -42,7 +42,7 @@ public static partial class GpuWork {
     internal const int SkyEvaluationsColumn = 18;
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
-    internal const int EnvironmentProjectionsColumn = (ShadowStepsFirstColumn + ShadowSlotCount);
+    internal const int EnvironmentProjectionsColumn = (ShadowPixelsColumn + 1);
     internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
     internal const int SubmissionColumnCount = (EnvironmentProjectionsColumn + 3);
@@ -147,7 +147,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -170,6 +170,7 @@ public static partial class GpuWork {
             kinds[EnvironmentProjectionsColumn] = EnvironmentProjections;
             kinds[EnvironmentProjectionTexelsColumn] = EnvironmentProjectionTexels;
             kinds[EnvironmentSkippedColumn] = EnvironmentSkipped;
+            kinds[ShadowPixelsColumn] = ShadowPixels;
             kinds[DispatchesColumn] = Dispatches;
             kinds[IndirectDispatchesColumn] = IndirectDispatches;
             kinds[DrawsColumn] = Draws;

@@ -285,6 +285,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.FarBound,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
+            WorldSessionLevers.ShadowAmortize,
             WorldSessionLevers.ShadowMarch,
             WorldSessionLevers.ShadowMask,
             WorldSessionLevers.ShadowSlots,

@@ -6428,9 +6428,10 @@ packaging, and compiled worlds in the runtime and delivery programme.
 - **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
   pack the lights, sky block and open layer table into three
   World-group regions. Their HLSL structures are generated from the C#
-  records. Active shadow handoff controls occupy a fourth region. The 512-byte
+  records. Active shadow handoff controls occupy a fourth region. The 528-byte
   pass block holds the light count, `shadowSlots` int4, configured stable
-  count, active fade count and curvature shading; the sky and light records are read only by the
+  count, active fade count, curvature shading and P18-13's amortization switch
+  and two rejection masks; the sky and light records are read only by the
   kernels that use them.
 - **The sky once, where it is seen.** `sky/sdf-sky.hlsli` holds the stars,
   the clouds and the gradient, grouped into the runs they compose in, over the
@@ -7836,7 +7837,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       a held clock that advances the state row); the inspector's sky text
       equals `world.lighting`'s echo.
     - Counted-cost gate: a held clock renders nothing new after one frame.
-13. **P18-13, temporal amortization of secondary shadows.** After P15-5.
+13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
+    GPU qualification and floor-device ceiling recordings remain owed.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
       reprojects the rest from a history of the K row. A receiver's identity
@@ -7847,7 +7849,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
         light name now. The history stores each slot's owner, and a slot
         reassigned or fading marches all its pixels until its history is rebuilt.
       - **Light motion:** the slot's light direction has turned since the
-        history's tick by more than a stated fraction of its penumbra angle.
+        history's tick by more than one quarter of its penumbra angle. Each
+        slot retains an anchor until a full rebuild; every accepted direction
+        stays within one eighth of the angle from that anchor, so any pair of
+        retained samples stays within one quarter. Penumbra edits also reject.
       - **Occluder motion:** the group's gathered occluder set (the shadow
         gather's per-group list) holds a dynamic-transform slot whose row
         differs between P15-3's previous dynamic-transform table and the
@@ -7855,21 +7860,57 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
         can touch.
       - **Receiver:** P15's identity and depth test fails.
 
-      The first slot marches every pixel. `world.shadow-amortize` is a session
-      lever with a preset row.
+      The first slot marches every pixel. Incoming fade slots do too, and a
+      stable fading slot rejects history through its first nonfading rebuild.
+      `world.shadow-amortize` is a session lever with a preset row: off at low,
+      on at medium and high, effective only with temporal reconstruction.
+      The jitter sample index selects one of four parity classes of render
+      pixels. Rejection precedes this selection, so a changed owner reprojects
+      zero pixels, including pixels scheduled to march anyway.
+
+      The temporal fragment keeps a writer-ordered render-grid buffer of five
+      words per pixel: packed K, receiver identity, full ray distance, the
+      writer's sample index and rejection reactivity. Its bytes enter the
+      graph's memory accounting; native and spatial fragments have none.
+      Skipped shadow writers cannot reuse another camera's history: a sample
+      stamp validates the pixel against the preceding render. Each view keeps
+      four owner names and penumbra anchors, committed only when its shadow
+      writer submits. The gather checks all three dynamic rows by their bits
+      and tests both current and previous bounds, including a suppressed or
+      departed occluder. Flat and camera-mask fallbacks conservatively test
+      the whole dynamic table, as do unmasked world segments. First and incoming slots
+      skip these motion checks. Rejected shadows
+      raise the existing color-history reactivity so reconstruction cannot
+      keep the old shadow. With the lever off, K history writes and decision
+      pixels are zero; low has no shadow history allocation or work.
     - Touches: `surface/sdf-shadow.hlsli`, `surface/sdf-shadow-gather.hlsli`
-      (the moved-occluder test), `SdfWorldPackage.Fragment` (the K history and
-      its owners), `frame/sdf-reprojection.hlsli`, `quality.puck`.
-    - Done when: a `temporal-shadows` canary's converged binary-star scene is
-      within a stated tolerance of the unamortized one; a body moving through a
-      still receiver's shadow, a light turning on its orbit, and a slot changing
-      hands each show no trail past the frame the rule rejects them on (red leg:
-      with only the receiver test, the moving occluder's old shadow lingers);
-      a law counts each rejection reason.
+      (the moved-occluder test), `SdfWorldPackage.TemporalFragment` (the K
+      history), `SdfShadowHistory` (its owners), `frame/sdf-reprojection.hlsli`,
+      `quality.puck`.
+    - Checks: a `temporal-shadows` canary's converged binary-star scene is
+      within two mean eight-bit codes of the unamortized one over its receiver
+      strip; a body moving through a still receiver's shadow, a light turning
+      on its orbit, and a slot changing
+      hands each show no trail past the frame the rule rejects them on. Its
+      unamortized reference uses the world presentation view in a second boot:
+      seat views share the amortization lever, and camera-view producers disable
+      shadows. The manifest's pixel discriminator delays transitions past the
+      subject captures. A separate shader mutation keeps only receiver rejection;
+      its GPU red leg must show the moving occluder's old shadow lingering.
+      laws hold the four rejection reasons, counted pixel and per-slot march
+      detail rows, name identity through a reorder, slow light drift, handoffs,
+      successful-submission metadata, the off-switch and the render-grid
+      allocation. GPU image and counted-cost qualification remain owed.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
       of the unamortized row plus its rejections, counted by reason and
       re-recorded lower; zero reprojected pixels on a frame where a slot
       changes hands.
+      `gpu.shadow.pixels` partitions secondary lit pixels into `interleaved`,
+      `ownership`, `light-motion`, `occluder-motion`, `receiver` and
+      `reprojected` detail rows. Each row carries its march steps and slot-step
+      columns too; their sums and the plain remainder reconcile to the pass.
+      K history writes count five stored words per active pixel, only with
+      amortization on and more than one stable slot. There is no new dispatch.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
@@ -7905,9 +7946,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 - **Bounded media.** A moving volume changes the visual signature, so sky and
   composite render on frames whose presented tick moves it. Its integration
   stays outside the lit image and temporal history.
-- **Pass-block size and binding.** The pass block is 512 bytes, including the
-  light count, the shadow slot table, the stable and active fade counts and the
-  curvature shading, and the lights and sky tables are referenced only by the
+- **Pass-block size and binding.** The pass block is 528 bytes, including the
+  light count, the shadow slot table, the stable and active fade counts, the
+  curvature shading and P18-13's amortization switch and rejection masks, and the lights and sky tables are referenced only by the
   kernels that read them. Every
   region uploads only the words that changed, so the tables carry no upload
   cost beyond their changes.

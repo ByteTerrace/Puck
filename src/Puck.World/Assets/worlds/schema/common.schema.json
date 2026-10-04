@@ -57,6 +57,10 @@
           "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
           "type": "boolean"
         },
+        "shadowAmortize": {
+          "description": "Whether secondary shadows reuse valid K history (world.shadow-amortize).",
+          "type": "boolean"
+        },
         "dynamicResolution": {
           "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
           "type": "boolean"

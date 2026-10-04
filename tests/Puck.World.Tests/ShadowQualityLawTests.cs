@@ -163,5 +163,6 @@ public sealed class ShadowQualityLawTests {
         Assert.Equal(expected: 0, actual: preset.Value.ShadowFadeSlots);
         Assert.Equal(expected: 0u, actual: preset.Value.ShadowFadeTicks);
         Assert.Equal(expected: WorldShadowOverflow.Instant, actual: preset.Value.ShadowOverflow);
+        Assert.Equal(expected: (tier != QualityTier.Low), actual: preset.Value.ShadowAmortize);
     }
 }

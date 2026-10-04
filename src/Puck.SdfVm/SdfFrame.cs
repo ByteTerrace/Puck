@@ -86,6 +86,9 @@ public readonly record struct SdfViewQuality {
     /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
     /// barriers. The default asks for none.</summary>
     public bool Temporal { get; init; }
+    /// <summary>Gets whether secondary stable shadow slots reuse valid history between quarter-grid marches.
+    /// Requires temporal reconstruction; slot zero and handoffs always march.</summary>
+    public bool ShadowAmortize { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
     /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
@@ -104,6 +107,7 @@ public readonly record struct SdfViewQuality {
         UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
         Temporal = (Temporal && other.Temporal),
+        ShadowAmortize = (ShadowAmortize && other.ShadowAmortize),
     };
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
