@@ -57,8 +57,8 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
         foreach (var (name, sky, evaluations) in new (string Name, SdfSky Sky, long Evaluations)[] {
             ("default", new SdfSky(), SdfSkyEnvironment.Texels),
             ("four stops", FourStops(), SdfSkyEnvironment.Texels),
-            ("tilted cone", tilted, SdfSkyEnvironment.Texels + tintDirections),
-            ("panels", Panels(), 3L * SdfSkyEnvironment.Texels),
+            ("tilted cone", tilted, (SdfSkyEnvironment.Texels + tintDirections)),
+            ("panels", Panels(), (3L * SdfSkyEnvironment.Texels)),
             ("stars", Lit(parameters: new SdfSkyStars { Brightness = 2f, Density = 16f }), upperHemisphere),
             ("clouds", Lit(parameters: new SdfSkyClouds { Coverage = .6f }), upperHemisphere),
             ("aurora", Lit(parameters: aurora), auroraDirections),
