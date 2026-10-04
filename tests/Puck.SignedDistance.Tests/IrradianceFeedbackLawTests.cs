@@ -48,6 +48,31 @@ public sealed class IrradianceFeedbackLawTests {
             Assert.Equal(expected: expected, actual: split.Irradiance(normal: normal, surface: point)!.Value);
         }
     }
+    [Fact]
+    public void OnlySubmittedWholeSweepsPublishAndFinerReadersWaitForTheirCoarserWriters() {
+        var fine = new[] { new IrradianceProbeKey(0, 0, 0, 0), new IrradianceProbeKey(0, 1, 0, 0) };
+        var coarse = new[] { new IrradianceProbeKey(1, 0, 0, 0), new IrradianceProbeKey(1, 1, 0, 0) };
+        var schedule = new IrradianceSolveSchedule([fine, coarse], bounces: 2, probeBudget: 1);
+        var actual = new List<(int Sweep, int Level, int Write)>();
+        for (var sweep = 0; sweep <= 2; sweep++) {
+            for (var index = 0; index < 4; index++) {
+                var batch = Assert.IsType<IrradianceSolveBatch>(schedule.Plan());
+                Assert.Same(batch, schedule.Plan());
+                Assert.Single(batch.Probes);
+                Assert.Equal(sweep, schedule.CompletedSweeps);
+                Assert.Equal(sweep == 0 ? -1 : ((sweep - 1) & 1), schedule.PublishedGeneration);
+                Assert.Equal(index == 3, batch.CompletesSweep);
+                actual.Add((batch.Sweep, batch.Level, batch.WriteGeneration));
+                schedule.Submitted();
+            }
+        }
+        Assert.Equal(new[] { (0, 1, 0), (0, 1, 0), (0, 0, 0), (0, 0, 0),
+            (1, 1, 1), (1, 1, 1), (1, 0, 1), (1, 0, 1), (2, 1, 0), (2, 1, 0), (2, 0, 0), (2, 0, 0) }, actual);
+        Assert.True(schedule.IsComplete);
+        Assert.Null(schedule.Plan());
+        schedule.Submitted();
+        Assert.Equal(3, schedule.CompletedSweeps);
+    }
 
     private static IrradianceCacheModel Furnace(double albedo) {
         var model = new IrradianceCacheModel(

@@ -2842,23 +2842,25 @@ slots, never K alone.
 
 | Resource | Bytes |
 |---|---|
-| `room` probes: 12,288 × (128 hits × 8 + two generations of 8×8 irradiance texels × 4 + a 12-byte cell record + 16 bytes of state) | 19,218,432 |
-| `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 4, because `room` continues into it) | 10,600,448 |
+| `room` probes: 12,288 × (128 hits × 16 + two generations of 8×8 irradiance texels × 4 + a 12-byte cell record + 16 bytes of state + two publication words) | 31,899,648 |
+| `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 4, because `room` continues into it) | 14,827,520 |
 | Light-view maps: 2 slots × 2 regions × 512² × 4 | 4,194,304 |
 | Light view's depth-only fragment: the 64-byte visibility record, 16-byte mesh target and 4-byte depth at 512² | 22,020,096 |
 | Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
-| Receiver-proof hash: 131,072 entries × 24 bytes (anchor, clearance, mask, key) | 3,145,728 |
+| Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
 | Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
-| **Total** | **≤ 61,276,160** |
+| **Total before qualification** | **≤ 78,708,736** |
 
-A hit's feedback proof (an 8-bit mask and its level) lives in the hit record's
-16 state bits; the view's launch lives in the visibility record's reserved L
-words, so neither adds bytes. At `high` the probes carry 256 rays: the `near`
-level's 16,384 at 2,588 bytes and the `room` and `world` levels' 16,384 at 4,636
-(with ray radiance, since `near` continues into `room` and `room` into `world`),
-118,358,016 bytes; three slots' maps add 6,291,456, the proof hash at 262,144
-entries 6,291,456, and the fragment and small tables 24,117,248, at most
-155,058,176 bytes in all.
+A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
+height in the terminal word; the view's launch uses the visibility record's
+reserved L word. Each irradiance generation also stamps its probes, so a reused
+brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
+probe and the same full identities require 193,069,056 cache bytes, including
+proofs, both irradiance generations and the coarser levels' ray radiance. Three
+slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
+total to 223,477,760 bytes. Held fading owners add their explicitly counted map
+regions. The tables and constant rings must satisfy the recorded bounds; these
+are allocation counts, not a claim that the tier has passed hardware qualification.
 
 G2's traced cache uses a 16-byte hit record: full float distance, an octahedral
 normal word, the full material identity and a terminal/proof/launch word. The
@@ -2866,13 +2868,14 @@ launch uses a twenty-bit fraction of spacing, rounded toward the hit; the proof
 is issued at the point reconstructed from that fraction and the stored normal.
 Its successful
 proof entries also carry a publication sequence, 28 bytes each. The current raw
-cache therefore owns 37,683,200 bytes at `medium` and 142,475,264 at `high`, plus
-the region rings, counters and descriptors that `world.budget` reports. G2
-allocates no irradiance generations, ray radiance or light-view maps. The
-complete-solve estimates above depend on an eight-byte hit encoding; that encoding
-is not implemented. G4 must resolve that storage gap before claiming the complete
-solve's memory ceiling. Truncating a material identity or weakening the hit's
-absolute distance acceptance is not a storage solution.
+geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
+G4's declared layout retains those records and reserves both lighting generations
+and their stamps, giving 50,397,184 bytes at `medium` and 193,069,056 at `high`,
+plus the region rings, counters and descriptors that `world.budget` reports.
+Lighting uses nonnegative R11G11B10 words; no material identity or hit distance is
+compressed. The earlier eight-byte hit estimate cannot preserve the accepted
+geometry contract and is replaced by these actual layout counts. G4's solve and
+apply remain open until their GPU implementation and named qualification pass.
 
 *Field evaluations at `medium`, every pass, against today's ambient occlusion
 (about 2,100,000 a frame whenever `ambient` runs):*

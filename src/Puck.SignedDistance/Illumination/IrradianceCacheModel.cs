@@ -171,30 +171,17 @@ public sealed class IrradianceCacheModel {
 
         m_published = -1;
 
-        for (var sweep = 0; (sweep <= bounces); sweep++) {
-            var write = sweep & 1;
-            var order = new List<Probe>();
-
-            for (var level = (m_levels.Count - 1); (level >= 0); level--) {
-                var probes = ProbesOf(level: level).Where(predicate: static probe => (probe.Hits is not null)).ToList();
-
-                if (reverseOrder) {
-                    probes.Reverse();
-                }
-
-                order.AddRange(collection: probes);
-            }
-
-            var step = ((probesPerStep > 0) ? probesPerStep : Math.Max(val1: 1, val2: order.Count));
-
-            for (var start = 0; (start < order.Count); start += step) {
-                foreach (var probe in order.Skip(count: start).Take(count: step)) {
-                    ShadeProbe(feedback: (sweep > 0), probe: probe, write: write);
-                }
-            }
-
-            m_published = write;
-            SweepsPublished++;
+        var levels = new IReadOnlyList<IrradianceProbeKey>[m_levels.Count];
+        for (var level = 0; level < levels.Length; level++) {
+            var keys = ProbesOf(level: level).Where(predicate: static probe => (probe.Hits is not null)).Select(static probe => probe.Key).ToArray();
+            if (reverseOrder) { Array.Reverse(keys); }
+            levels[level] = keys;
+        }
+        var schedule = new IrradianceSolveSchedule(levels, bounces, probesPerStep > 0 ? probesPerStep : int.MaxValue);
+        while (schedule.Plan() is { } batch) {
+            foreach (var key in batch.Probes) { ShadeProbe(feedback: batch.Sweep > 0, probe: m_probes[key], write: batch.WriteGeneration); }
+            schedule.Submitted();
+            if (batch.CompletesSweep) { m_published = schedule.PublishedGeneration; SweepsPublished++; }
         }
     }
     /// <summary>Returns the normalized irradiance a receiver reads from the published generation: from the finest level
