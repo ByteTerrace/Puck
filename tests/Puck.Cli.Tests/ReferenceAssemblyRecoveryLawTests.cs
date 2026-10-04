@@ -104,6 +104,38 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
         }
     }
 
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [Theory]
+    public void ARecoveryNeedsWorkCountsFromEveryBuildAttempt(int missingReport) {
+        using var directory = new TemporaryDirectory(prefix: "puck-ref-counts-law-");
+        var reference = directory.PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
+        File.WriteAllBytes(bytes: new byte[128], path: reference);
+        var logs = directory.PathOf(name: "logs");
+        var attempts = 0;
+        var result = new DotnetLawRunner(buildRunner: (_, _) => {
+            ++attempts;
+            if (attempts != missingReport) {
+                File.WriteAllText(Path.Combine(path1: logs, path2: "build.counts"), "1\n2\n3\n");
+            }
+            return (attempts == 1)
+                ? Result(exit: 1, text: $"CSC : error CS0009: Metadata file '{reference}' could not be opened -- invalid image.")
+                : Result(exit: 0, text: "Build succeeded.");
+        }).Build(tree: directory.RootPath, project: "Application.csproj", logDirectory: logs,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected: 2, actual: attempts);
+        Assert.Equal(expected: (missingReport == 0), actual: result.Succeeded);
+        if (missingReport == 0) {
+            Assert.Equal(expected: new LawBuildCounts(Compiled: 2, UpToDate: 4, Targets: 6), actual: result.Counts);
+            Assert.Empty(collection: result.Errors);
+        } else {
+            Assert.Contains(actualString: Assert.Single(collection: result.Errors), expectedSubstring: "no valid work-count report");
+        }
+    }
+
     private static bool Run(bool proofRunner, string tree, string logs, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult> runner) {
         if (proofRunner) {
             return new DotnetLawRunner(buildRunner: runner).Build(tree: tree, project: "Application.csproj", logDirectory: logs,

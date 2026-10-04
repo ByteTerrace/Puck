@@ -2,7 +2,7 @@ namespace Puck.Cli.Laws;
 
 /// <summary>Builds a law's project with <c>dotnet build</c> and runs the law with <c>dotnet test</c>, reading the
 /// outcome from the run's TRX report rather than its console text. Build servers are disabled so no compiler or MSBuild
-/// node outlives the proof holding a file in its tree.</summary>
+/// node outlives the proof holding a file in its tree. Every build attempt must report its work counts.</summary>
 internal sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? buildRunner = null) : ILawRunner {
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 60);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(minutes: 30);
@@ -19,6 +19,7 @@ internal sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliP
         var countsPath = Path.Combine(path1: logDirectory, path2: "build.counts");
 
         LawBuildCounts? counts = null;
+        var countsComplete = true;
         var build = CliReferenceAssemblyRecovery.Run(tree: tree,
             log: Path.Combine(path1: logDirectory, path2: "reference-recovery.build.log"), timeout: BuildTimeout, build: remaining => {
                 File.Delete(path: countsPath);
@@ -28,6 +29,7 @@ internal sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliP
                     timeout: remaining, workingDirectory: tree));
                 var attempt = LawBuildLogger.Read(path: countsPath);
 
+                countsComplete &= (attempt is not null);
                 counts = ((attempt is { } value) ? new LawBuildCounts(
                     Compiled: (counts.GetValueOrDefault().Compiled + value.Compiled),
                     Targets: (counts.GetValueOrDefault().Targets + value.Targets),
@@ -39,7 +41,7 @@ internal sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliP
             !build.TimedOut &&
             (build.ExitCode == 0)
         ) {
-            return ((counts is { } counted)
+            return ((countsComplete && (counts is { } counted))
                 ? new LawBuild(Counts: counted, Errors: [], Succeeded: true)
                 : new LawBuild(Errors: ["the build produced no valid work-count report, so its execution cannot be judged."], Succeeded: false));
         }

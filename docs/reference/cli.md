@@ -1154,7 +1154,8 @@ diagnosed `obj/.../ref` or `refint` directories inside their build tree, and
 retry once within the original build deadline. Outside paths, links and
 assemblies with readable managed metadata refuse recovery. A retry that fails
 remains a failed build, and no test runs against it. Proof work counts include
-both attempts.
+both attempts; a missing or malformed report from either attempt refuses the
+proof even when its retry builds successfully.
 
 Cancellation kills and waits for the active child process before cleanup.
 The persistent clone survives success, refusal, exceptions and cancellation;
