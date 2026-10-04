@@ -7,6 +7,7 @@
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
 #include "../indirect/sdf-indirect-read.hlsli"
+#include "../indirect/sdf-indirect-light.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
 // in the material-id debug view.
@@ -227,6 +228,16 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
         case DebugViewModeIndirectCells: {
             if (s.hit) {
                 viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t);
+            }
+            break;
+        }
+        case DebugViewModeIndirectLight: {
+            if (s.hit && passGroup.shadowSlotCount > 0u && passGroup.shadowSlots.x >= 0) {
+                uint lightIndex = (uint)passGroup.shadowSlots.x;
+                uint region;
+                float visible;
+                bool fallback = !sdfIndirectLightLookup(lightIndex, p.rayOrigin + p.rayDirection * s.t, s.normal, visible, region);
+                viewColor = fallback ? float3(visible, 0.0, 0.75) : float3(0.0, visible, 0.25 + 0.25 * (region % 2u));
             }
             break;
         }

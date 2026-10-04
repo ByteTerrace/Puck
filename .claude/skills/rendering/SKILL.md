@@ -39,6 +39,18 @@ Before adding a mechanism, find the existing one (`AGENTS.md` rule 8): ask the
 code with `puck references`, `puck declarations`, or `puck search -M 0` via the
 `symbol-analysis` and `content-search` skills.
 
+The indirect light camera is scoped by the pass block's `lightMap` selector.
+`IrradianceLightProjection` owns its finite orthographic geometry; the viewport,
+tile-cylinder mask/beam, primary ray origins and mesh projection must change
+together. `SdfIndirectLightLayout` owns map capacity and metadata shape, emitted by
+`SdfIndirectHlsl`; regenerate through the existing shader generator, including the
+world/mesh interfaces and interface-echo fixtures. `SdfIndirectLightViews` owns
+exact owner/generation validity and one-region admission. Keep the shared G1/G3
+rod fixture, two-texel widening and radius-zero discriminator when changing this
+path, and count traversal scratch and constant rings beside the depth bank in
+`SdfPassPlanLawTests`. The [light-view contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view)
+owns the geometry support limits.
+
 ## Changing the instruction set
 
 An op, shape, or blend earns a new switch case only when it cannot be composed

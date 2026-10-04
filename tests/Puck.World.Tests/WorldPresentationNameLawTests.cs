@@ -246,7 +246,10 @@ public sealed class WorldPresentationNameLawTests {
             expectedRegexPattern: "^[0-9a-f]{16}$"
         );
 
-        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, source])) {
+        var light = WorldViewNames.IndirectLight(cache: "world$indirect");
+        Assert.Equal(expected: new[] { "world", "indirect", "indirect-light" }, actual: light.Split(separator: GeneratedName.Joiner));
+
+        foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, source, light])) {
             Assert.True(condition: GeneratedName.IsGenerated(name: name), userMessage: name);
             Assert.False(condition: GeneratedName.TryValidateAuthored(
                 name: name,

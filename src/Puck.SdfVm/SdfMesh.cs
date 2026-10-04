@@ -151,6 +151,10 @@ public sealed record SdfMesh {
 /// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
 /// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
+    /// <summary>Gets whether this draw is a bake of geometry the same frame also carries in its SDF at the same pose.
+    /// Only that emitting seam can certify the conservative field sweep; an independent triangle mesh cannot acquire
+    /// this certificate from its bounds or identity. The light camera falls back when any draw is uncertified.</summary>
+    public bool FieldBacked { get; init; }
     /// <summary>Gets the draw's level of detail when it is one of a baked placement's two representations, the mesh or the
     /// impostor (<see cref="SdfMeshLod"/>): a view records the draw of the pair its projected size selects. Null for a draw
     /// every view records.</summary>

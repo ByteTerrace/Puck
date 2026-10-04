@@ -183,7 +183,7 @@ public sealed partial class SdfWorldTables {
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // Resolve joins on demand through BuildResolve; BuildOrder filters the rest by reachable fade capacity.
-        internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace)))];
+        internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.LightPrimary or SdfKernel.LightDepth)))];
 
         private static PipelineSpec Spec(SdfKernel kernel) =>
             new(

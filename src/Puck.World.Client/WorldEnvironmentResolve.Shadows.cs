@@ -80,6 +80,9 @@ public sealed partial class WorldEnvironmentResolve {
                 if (handoff.Incoming.LightIndex >= 0) { selected[handoff.Incoming.LightIndex] = true; }
             }
             gpuSlots.SetHandoffs(handoffs: controls[..readout.FadeCount]);
+            for (var index = 0; (index < readout.FadeCount); index++) {
+                gpuSlots.SetIncomingOwner(channel: index, owner: m_shadowHandoffs[index].Incoming.Name);
+            }
             for (var index = 0; (index < readout.QueuedCount); index++) {
                 var queued = m_shadowQueued[index];
 

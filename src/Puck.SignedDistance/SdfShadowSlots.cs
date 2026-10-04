@@ -9,6 +9,7 @@ public sealed class SdfShadowSlots {
 
     private readonly int[] m_slots = [-1, -1, -1, -1];
     private readonly string?[] m_owners = new string?[MaxSlots];
+    private readonly string?[] m_incomingOwners = new string?[MaxFadeSlots];
     private readonly SdfShadowHandoff[] m_handoffs = new SdfShadowHandoff[MaxFadeSlots];
 
     /// <summary>Gets the configured stable-slot capacity K.</summary>
@@ -29,6 +30,18 @@ public sealed class SdfShadowSlots {
     /// <param name="slot">The stable slot.</param>
     /// <returns>The owner name. Unnamed slots cannot reuse shadow history.</returns>
     public string? Owner(int slot) => m_owners[slot];
+    /// <summary>Returns an incoming channel's exact light name, or null when its identity was not supplied.</summary>
+    /// <param name="channel">The incoming channel.</param>
+    /// <returns>The owner name; an unnamed channel cannot reuse a light depth map.</returns>
+    public string? IncomingOwner(int channel) => m_incomingOwners[channel];
+    /// <summary>Publishes a handoff's incoming identity independently of the mutable light-table index.</summary>
+    /// <param name="channel">An active incoming channel.</param>
+    /// <param name="owner">The exact light name, or null for an unnamed light.</param>
+    public void SetIncomingOwner(int channel, string? owner) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: channel);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: channel, other: FadeCount);
+        m_incomingOwners[channel] = owner;
+    }
     /// <summary>Sets the stable name independently of its current light-table index.</summary>
     /// <param name="slot">The configured stable slot.</param>
     /// <param name="owner">The exact light name, or null for an unnamed frame light.</param>
@@ -51,6 +64,7 @@ public sealed class SdfShadowSlots {
         FadeCount = 0;
         Array.Fill(array: m_slots, value: -1);
         Array.Clear(array: m_owners);
+        Array.Clear(array: m_incomingOwners);
         Array.Clear(array: m_handoffs);
     }
     /// <summary>Assigns the light that owns a stable slot without compacting vacant slots.</summary>
@@ -79,6 +93,7 @@ public sealed class SdfShadowSlots {
         }
         handoffs.CopyTo(destination: m_handoffs);
         m_handoffs.AsSpan(start: handoffs.Length).Clear();
+        Array.Clear(array: m_incomingOwners);
         FadeCount = handoffs.Length;
     }
     /// <summary>Copies the policy, stable owners and active controls without sharing mutable storage.</summary>
@@ -88,6 +103,7 @@ public sealed class SdfShadowSlots {
         ArgumentNullException.ThrowIfNull(argument: source);
         source.m_slots.CopyTo(array: m_slots, index: 0);
         source.m_owners.CopyTo(array: m_owners, index: 0);
+        source.m_incomingOwners.CopyTo(array: m_incomingOwners, index: 0);
         source.m_handoffs.CopyTo(array: m_handoffs, index: 0);
         SlotCount = source.SlotCount;
         FadeCapacity = source.FadeCapacity;

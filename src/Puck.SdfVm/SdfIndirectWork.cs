@@ -11,8 +11,10 @@ public static class SdfIndirectWork {
     public static WorkKind Rays { get; } = Kind(name: "indirect.rays.scheduled", unit: "rays");
     /// <summary>The scheduled probe stratum total.</summary>
     public static WorkKind Probes { get; } = Kind(name: "indirect.probes.scheduled", unit: "probes");
+    /// <summary>The conservative depth regions successfully submitted by the residency's light camera.</summary>
+    public static WorkKind LightRegions { get; } = Kind(name: "indirect.light.regions", unit: "regions");
     /// <summary>The complete vocabulary, including reserved zero source and receiver rows.</summary>
-    public static WorkKind[] Kinds { get; } = [Rays, Probes,
+    public static WorkKind[] Kinds { get; } = [Rays, Probes, LightRegions,
         .. new[] { "demand", "geometry", "light", "shadow", "screen", "converge" }.Select(selector: reason => Kind(name: $"indirect.probes.scheduled.{reason}", unit: "probes")),
         .. new[] { "near", "room", "world" }.SelectMany(selector: level => new[] { "allocated", "evicted", "refused" }.Select(selector: action => Kind(name: $"indirect.bricks.{action}.{level}", unit: "bricks"))),
         Kind(name: "indirect.sweeps.completed", unit: "sweeps"), Kind(name: "indirect.sweeps.restarted", unit: "sweeps"),

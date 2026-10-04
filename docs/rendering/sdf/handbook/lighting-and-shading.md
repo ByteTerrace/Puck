@@ -169,6 +169,48 @@ cone with margin. `SdfLights.MaxPenumbraSlope` keeps the chord below one.
 For dense scenes, performance work must accelerate the shadow march itself;
 changing the occluder mask would make the clearance proof unsound.
 
+## The indirect cache's depth-only light view
+
+Each indirect residency has one light camera. It visits the finest and coarsest
+allocated brick regions for each held and incoming directional light, publishing
+at most one 512² region per frame. A region stores a 32-bit ray distance per texel;
+infinity means empty and NaN means unresolved. The host retains exact light-owner
+names, table-allocation identity and geometry revisions. Only a submitted depth
+writer makes a region valid. Unchanged regions schedule no camera work, and light
+motion accumulates against the retained direction using the direct shadow path's
+one-eighth-penumbra refresh rule.
+
+The orthographic camera starts just outside the finite caster volume. Its rays
+run parallel to the light, with zero directional divergence. Each pixel has its
+own nearby plane origin; shrinking the penumbra never moves a virtual eye farther
+away or increases floating-point cancellation. The primary marcher sweeps the
+texel's half-diagonal using the existing certified indirect field walk. The tile
+mask and beam enclose the tile's parallel columns plus that sweep radius. This
+preserves thin casters while the slope-scaled comparison bias prevents a receiver
+from shadowing itself. Positive penumbra remains an authoring requirement.
+
+The fragment contains instance culling, beam culling, dispatch arguments, mesh,
+primary traversal and depth publication. It omits tape evaluation, surface,
+ambient, shadow, material lighting, sky and color reconstruction. Its allocation
+includes visibility and mesh scratch, tile bounds and masks, argument buffers,
+the retained depth bank and the frame/pass constant rings. The bank costs one MiB
+per region; traversal scratch is additional and shared by the one camera.
+
+A baked mesh carries a CPU-side certificate only when its emitter retains the
+same SDF at the same pose. Raster depth can bound a search but cannot certify a
+subtexel caster. The light camera uses full baked meshes and the retained field;
+point-sampled impostor cards do not replace either. An independent mesh has no
+such certificate, so it disables the finite map. The SDF fallback does not
+establish visibility through independent mesh-only geometry; that geometry is
+outside the light-view qualification.
+
+Invalid regions, out-of-volume samples and unresolved texels require a bounded
+per-hit SDF ray. The `indirect-light` diagnostic displays valid lit/shadowed regions
+and marks unavailable maps magenta. Applying these maps to indirect radiance is
+part of the cache solve. The CPU and device laws share the existing subtexel-rod
+fixture, no-false-light condition and two-texel widening bound; the rendering plan
+tracks the outstanding device qualification.
+
 ## Ambient occlusion: three taps into the ambient fill
 
 Puck's AO is the classic normal-ladder technique: from the hit, step fixed

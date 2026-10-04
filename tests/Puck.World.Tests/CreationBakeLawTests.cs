@@ -308,6 +308,9 @@ public sealed class CreationBakeLawTests {
         var draw = ready.Draws[0];
         var card = ready.Draws[1];
 
+        Assert.True(condition: draw.FieldBacked);
+        Assert.True(condition: card.FieldBacked);
+
         Assert.False(condition: draw.Lod!.Value.Far);
         Assert.Null(@object: draw.Impostor);
         Assert.True(condition: card.Lod!.Value.Far);

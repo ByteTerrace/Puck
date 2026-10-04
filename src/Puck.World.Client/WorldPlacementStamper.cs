@@ -155,7 +155,7 @@ public static class WorldPlacementStamper {
     // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws. Its
     // identity is its scope, its placement and its order among the placement's draws, which a rebuild that keeps the
     // placement keeps, so an edited placement's draw reads its edit as motion.
-    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws, string? scope, string placement, int firstMesh, SdfMeshLod? lod = null, SdfMeshImpostor? impostor = null) {
+    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws, string? scope, string placement, int firstMesh, bool fieldBacked, SdfMeshLod? lod = null, SdfMeshImpostor? impostor = null) {
         if ((mesh is null) || (meshDraws is null)) {
             return;
         }
@@ -173,6 +173,7 @@ public static class WorldPlacementStamper {
             rotation: rotation,
             scale: scale
         ) with {
+            FieldBacked = fieldBacked,
             Impostor = impostor,
             Lod = lod,
         });
@@ -341,6 +342,7 @@ public static class WorldPlacementStamper {
                 volumes: volumes
             );
             AppendMeshDraw(
+                fieldBacked: false,
                 firstMesh: firstMesh,
                 material: meshMaterial,
                 mesh: mesh,
@@ -353,6 +355,7 @@ public static class WorldPlacementStamper {
                 scope: meshScope
             );
             AppendMeshDraw(
+                fieldBacked: true,
                 firstMesh: firstMesh,
                 lod: ((baked?.Impostor is { } nearImpostor)
                     ? SdfMeshLod.ForImpostor(far: false, impostor: nearImpostor)
@@ -368,6 +371,7 @@ public static class WorldPlacementStamper {
                 scope: meshScope
             );
             AppendMeshDraw(
+                fieldBacked: true,
                 firstMesh: firstMesh,
                 impostor: baked?.Impostor,
                 lod: ((baked?.Impostor is { } farImpostor)

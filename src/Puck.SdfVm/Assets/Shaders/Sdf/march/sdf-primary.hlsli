@@ -457,6 +457,9 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
 }
 
 #ifdef SDF_PRIMARY_PASS
+#ifdef SDF_LIGHT_VIEW
+#include "../indirect/sdf-indirect-march.hlsli"
+#endif
 // The primary stage: marches the pixel's camera ray against the field, bounded by the nearest of the far distance, the
 // tile's far bound and the mesh the mesh pass drew there, and stores the record's V, C and L rows for every active pixel,
 // misses included. The slice, mask and overshoot debug views march nothing here: the slice evaluates the field on a plane,
@@ -488,6 +491,23 @@ void sdfPrimaryStage(SdfPixel p) {
     float marchBound = min(p.farDistance, (meshHit.covered ? min(p.farBound, meshHit.t) : p.farBound));
 
     if ((p.marchStart >= 0.0) && (p.marchStart < marchBound) && (p.viewMode != DebugViewModeSlice) && (p.viewMode != DebugViewModeMask) && (p.viewMode != DebugViewModeOvershoot)) {
+#ifdef SDF_LIGHT_VIEW
+        // Beam entry is already inflated by the swept texel. Resolve against the full field: a local tape's
+        // point samples do not certify a sphere. An unresolved sweep must never publish an empty, lit column.
+        sdfTapeActive = false;
+        sdfSecondaryMarchActive = true;
+        sdfShadowParticipationActive = true;
+        uint budget = SdfIndirectLightMarchSteps;
+        SdfIndirectRay primary = sdfIndirectMarch(p.rayOrigin + p.rayDirection * p.marchStart, p.rayDirection,
+            0.0, marchBound - p.marchStart, SDF_INSTANCE_MASK_ALL, passGroup.lightSweepRadius, budget);
+        sdfShadowParticipationActive = false;
+        sdfSecondaryMarchActive = false;
+        traveled = primary.kind == SdfIndirectKindUnresolved ? asfloat(0x7fc00000u) : p.marchStart + primary.distance;
+        hitSurface = primary.kind == SdfIndirectKindHit;
+        material = (int)primary.material;
+        marchStep = (int)(SdfIndirectLightMarchSteps - budget);
+        terminalHitThreshold = passGroup.lightSweepRadius;
+#else
         SdfPrimaryMarch primary = sdfTracePrimary(p.rayOrigin, p.rayDirection, p.marchStart, p.firstExit, p.secondEntry,
             marchBound, p.farDistance, p.instanceMaskBase, p.pixelFootprint);
         traveled = primary.traveled;
@@ -501,21 +521,30 @@ void sdfPrimaryStage(SdfPixel p) {
         materialBlendOther = primary.blendOther;
         marchStep = (int)primary.steps;
         hitSurface = primary.found;
+#endif
     }
 
     // At equal depth the mesh wins: the SDF surface is kept only when it is strictly nearer. A mesh pixel carries its draw
     // and triangle, no SDF frame or seam blend, and a coverage threshold of one, so the silhouette blend reads it as solid.
     bool meshPixel = (meshHit.covered && !(hitSurface && (traveled < meshHit.t)));
+#ifdef SDF_LIGHT_VIEW
+    // Raster depth is a useful search bound, but a point sample cannot certify the swept pixel column. Only the
+    // retained SDF can publish a hit; a bake stopping that search before a certificate leaves this texel unresolved.
+    if (meshHit.covered && !hitSurface) { traveled = asfloat(0x7fc00000u); }
+    meshPixel = false;
+#endif
 
     if (meshPixel) {
         hitSurface = true;
         traveled = meshHit.t;
+#ifndef SDF_LIGHT_VIEW
         material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
         // The visibility record owns the winning material for picking and shading alike. A card's two geometric
         // triangles carry no palette entry; its unfiltered material plane supplies that entry at the traced hit.
         if (sdfMeshIsImpostor(meshHit.draw)) {
             material += sdfImpostorSurfaceAt(meshHit.draw, p.rayOrigin, p.rayDirection, traveled, p.pixelFootprint).material;
         }
+#endif
         hitInstanceIndex = -1;
         hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
         materialBlendWeight = 0.0;

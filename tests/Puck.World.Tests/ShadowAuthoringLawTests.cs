@@ -6,6 +6,17 @@ namespace Puck.World.Tests;
 
 /// <summary>The document load boundary owns shadow identities, policy bounds, and handoff progress refusals.</summary>
 public sealed class ShadowAuthoringLawTests {
+    [Fact]
+    public void ZeroDirectionalAngularRadiusRefusesWhileAPositivePenumbraLoads() {
+        var document = Fixtures.BuildDocument() with {
+            RenderRaw = new WorldRenderDefaults(Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Name: "sun", Shadow: WorldShadowMode.Always)])),
+        };
+        Accepts(document: document);
+        var json = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: document))!;
+        json["render"]!["lighting"]!["lights"]![0]!["angularRadius"] = 0;
+        Assert.False(condition: WorldDefinitionLoader.TryLoad(utf8: Encoding.UTF8.GetBytes(s: json.ToJsonString()), sourceName: "light-view.world.json", definition: out _, reason: out var reason));
+        Assert.Contains(expectedSubstring: "angularRadius", actualString: reason, comparisonType: StringComparison.Ordinal);
+    }
     private static WorldQualityPreset Policy(int slots = 1, int fades = 1, uint ticks = 8,
         WorldShadowOverflow overflow = WorldShadowOverflow.Instant) => new(
             Shadows: ShadowTier.High, AmbientOcclusion: false, RenderScale: 1f,

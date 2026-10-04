@@ -58,6 +58,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // The per-invocation program-layout cache (field/sdf-layout.hlsli) — this kernel's cone march calls mapMasked once per
     // step, so the decode must happen exactly once here, before the first call below.
     sdfProgramLayout = sdfLoadProgramLayout();
+    sdfShadowParticipationActive = passGroup.lightMap != 0u;
+    sdfSecondaryMarchActive = passGroup.lightMap != 0u;
 
     // The view's render extent (worldViewDims — the same integers Stage 1 and the instance cull read), so tile coverage
     // tracks the pixels the view renders: tiles past it hold no rendered rays and stay TileEmpty. The last tile's
@@ -90,7 +92,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // as (2 * right.w) / rectDims.y (sdf-world-views.comp), computed here from the identical regionSizePx (rectDims).
         // The F1 far-bound tail proves its clearance against this footprint-inflated threshold — the load-bearing
         // correctness fact (a bare-ConeEpsilon far bound would be anti-conservative wrt the fine march's footprint hits).
-        float footprint = ((2.0 * view.right.w) / max(regionSizePx.y, 1.0));
+        float footprint = passGroup.lightMap != 0u ? 0.0 : ((2.0 * view.right.w) / max(regionSizePx.y, 1.0));
 
         // March the TILE-MASKED field: the instance-cull pass already wrote this tile's mask (the pass order), so the
         // march enumerates only the instances overlapping this tile's cone — bit-exact per the function's contract note.
@@ -117,7 +119,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Each part is refitted once per viewport, even when it has more instances than screen tiles. This work
     // reads only program/pose/camera data, so it needs no synchronization with other beam invocations.
-    if (sdfCanTracePartsIndependently()) {
+    if (passGroup.lightMap == 0u && sdfCanTracePartsIndependently()) {
         uint tileCount = passGroup.tileGrid.x * passGroup.tileGrid.y;
         [loop]
         for (uint instance = id.y * passGroup.tileGrid.x + id.x;

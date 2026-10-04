@@ -93,6 +93,21 @@ public sealed class SdfIndirectCache : IDisposable {
     public bool NeedsPublish => (m_pending is not null);
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
     public bool IsComplete => (m_schedule.IsComplete && (m_pending is null));
+    /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
+    /// <param name="level">The running level index.</param>
+    /// <returns>The box used by the residency's light camera.</returns>
+    public SdfLightRegion? AllocatedRegion(int level) {
+        SdfLightRegion? result = null;
+        foreach (var key in m_slots.Keys) {
+            if (key.Level != level) { continue; }
+            IrradianceLattice.BrickBox(brick: key, level: Layout.Levels[level], min: out var min, max: out var max);
+            result = ((result is { } previous) ? new SdfLightRegion(
+                Min: new Double3(X: Math.Min(val1: min.X, val2: previous.Min.X), Y: Math.Min(val1: min.Y, val2: previous.Min.Y), Z: Math.Min(val1: min.Z, val2: previous.Min.Z)),
+                Max: new Double3(X: Math.Max(val1: max.X, val2: previous.Max.X), Y: Math.Max(val1: max.Y, val2: previous.Max.Y), Z: Math.Max(val1: max.Z, val2: previous.Max.Z)))
+                : new SdfLightRegion(Min: min, Max: max));
+        }
+        return result;
+    }
     /// <summary>Gets every GPU byte, including region rings and shadows.</summary>
     public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: Buffer.SizeBytes, HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes));
 

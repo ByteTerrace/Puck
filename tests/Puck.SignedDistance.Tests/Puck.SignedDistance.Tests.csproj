@@ -18,5 +18,6 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
+        <Compile Include="../Shared/IrradianceLightFixture.cs" Link="IrradianceLightFixture.cs" />
     </ItemGroup>
 </Project>

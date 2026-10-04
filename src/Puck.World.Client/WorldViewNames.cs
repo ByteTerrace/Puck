@@ -21,6 +21,10 @@ namespace Puck.World.Client;
 /// <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
 /// name the view belongs to and the seat last because it is the qualifier that varies.</summary>
 public static class WorldViewNames {
+    /// <summary>Returns the one depth-camera name belonging to a residency's indirect producer.</summary>
+    /// <param name="cache">The producer's complete generated name.</param>
+    /// <returns>The name with its final light-camera part.</returns>
+    public static string IndirectLight(string cache) => GeneratedName.Append(name: cache, part: "indirect-light");
     /// <summary>The first part of a session screen's view name.</summary>
     public const string SessionHead = "session";
     /// <summary>The part between a camera's name and the seat number in a seat-relative camera's view name.</summary>

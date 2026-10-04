@@ -48,6 +48,11 @@ MeshVertex VSMain(uint vertexId : SV_VertexID) {
         worldSurfaceNearDistance(view),
         w
     );
+    if (passGroup.lightMap != 0u) {
+        // Finite reversed-Z orthographic projection, matching the parallel primary rays and their local depth.
+        output.position = float4(scaleX * dot(relative, view.right.xyz), scaleY * dot(relative, view.up.xyz),
+            (worldFarDistance(view) - w) / (worldFarDistance(view) - worldSurfaceNearDistance(view)), 1.0);
+    }
     output.world = world;
     output.triangleIndex = (vertexId / 3u);
 

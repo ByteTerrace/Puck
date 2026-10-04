@@ -42,12 +42,8 @@ public sealed class SdfShadowHistory {
 
             if ((index < 0) || (index >= lights.Count)) { continue; }
             var light = lights[index];
-            var direction = SdfLights.UnitDirection(direction: light.Direction);
-            var angle = (Math.Atan(d: Math.Min(val1: light.Param, val2: m_penumbrae[slot])) / 8.0);
-            var delta = (direction - m_directions[slot]);
-            var chord = (2.0 * Math.Sin(a: (angle / 2.0)));
-
-            if ((light.Param != m_penumbrae[slot]) || (Vector3.Dot(vector1: delta, vector2: delta) > (chord * chord))) {
+            if (SdfLightMotion.Changed(direction: light.Direction, penumbra: light.Param,
+                anchorDirection: m_directions[slot], anchorPenumbra: m_penumbrae[slot])) {
                 rejected |= (1u << slot);
             }
         }

@@ -21,6 +21,7 @@ public sealed partial class WorldViewGraphHost {
     private void ResetIndirect() {
         foreach (var pair in m_indirectResidencies) {
             Indirect?.Unregister(name: pair.Key);
+            Pickers?.UnregisterLightView(name: WorldViewNames.IndirectLight(cache: pair.Key));
             IndirectResidencyChanged?.Invoke(pair.Value, false);
         }
         m_indirectResidencies.Clear();
@@ -60,10 +61,12 @@ public sealed partial class WorldViewGraphHost {
         foreach (var pair in m_indirectResidencies) {
             if (desired.TryGetValue(key: pair.Key, value: out var next) && ReferenceEquals(objA: next, objB: pair.Value)) { continue; }
             Indirect.Unregister(name: pair.Key);
+            Pickers.UnregisterLightView(name: WorldViewNames.IndirectLight(cache: pair.Key));
             IndirectResidencyChanged?.Invoke(pair.Value, false);
         }
         foreach (var pair in desired) {
             Indirect.Register(name: pair.Key, residency: pair.Value);
+            Pickers.RegisterLightView(name: WorldViewNames.IndirectLight(cache: pair.Key), residency: pair.Value);
             if (!m_indirectResidencies.TryGetValue(key: pair.Key, value: out var previous) || !ReferenceEquals(objA: previous, objB: pair.Value)) {
                 IndirectResidencyChanged?.Invoke(pair.Value, true);
             }
@@ -77,9 +80,9 @@ public sealed partial class WorldViewGraphHost {
         m_lastIndirectTier = tier;
     }
 }
-/// <summary>The buffer edges that join each view to its residency's one indirect-cache instance.</summary>
+/// <summary>The buffer edges joining each view to its residency's cache and conservative light camera.</summary>
 public static class WorldIndirectGraph {
-    /// <summary>Adds one producer for each distinct cache and one buffer edge for each enabled view.</summary>
+    /// <summary>Adds a cache and depth-bank producer per residency, with both buffer edges for each enabled view.</summary>
     /// <param name="set">The composed views and image sources.</param>
     /// <param name="cacheByView">Enabled view names mapped to their residency's cache name.</param>
     /// <returns>The set with its cache producers and dependencies.</returns>
@@ -87,10 +90,14 @@ public static class WorldIndirectGraph {
     public static RenderGraphInstanceSet Append(RenderGraphInstanceSet set, IReadOnlyDictionary<string, string> cacheByView) {
         if (cacheByView.Count == 0) { return set; }
         var instances = set.Instances.Select(selector: instance => (cacheByView.TryGetValue(key: instance.Name, value: out var cache)
-            ? instance with { Reads = [.. instance.Reads, new(Producer: cache, Kind: ShaderPipelineResourceKind.Buffer)] }
+            ? instance with { Reads = [.. instance.Reads, new(Producer: cache, Kind: ShaderPipelineResourceKind.Buffer), new(Producer: WorldViewNames.IndirectLight(cache: cache), Kind: ShaderPipelineResourceKind.Buffer)] }
             : instance)).ToList();
 
         foreach (var cache in cacheByView.Values.Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)) {
+            instances.Add(item: new(Name: WorldViewNames.IndirectLight(cache: cache), Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 0).Passes.Count, Reads: [],
+                Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
+                OutputExtent = new RenderGraphPixelExtent(Width: SdfIndirectLightLayout.Resolution, Height: SdfIndirectLightLayout.Resolution),
+            });
             instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 3, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.Indirect));
         }

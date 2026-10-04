@@ -10,7 +10,7 @@
 // read it through.
 struct ViewportData {
     float4 position;    // xyz = world position, w = zero
-    float4 right;       // xyz = right basis,   w = tan(fov / 2)
+    float4 right;       // xyz = right basis, w = tan(fov / 2), or world half-width for the scoped light camera
     float4 up;          // xyz = up basis,      w = aspect ratio
     float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
     // xy = the view's RENDER extent in pixels, which is the size of the output image its dispatch set writes: the host
@@ -41,6 +41,7 @@ ViewportData worldView() {
 // the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
 // branch not taken needs to prove byte-identity against a build without it at all.
 float3 cameraRayDirection(ViewportData view, float2 localUv) {
+    if (passGroup.lightMap != 0u) { return view.forward.xyz; }
     float2 ndc = ((localUv * 2.0) - 1.0);
 
     ndc.y = -ndc.y;
@@ -63,6 +64,14 @@ float3 cameraRayDirection(ViewportData view, float2 localUv) {
     }
 
     return normalize(direction);
+}
+
+// Only the residency light camera is orthographic. Its nearby plane avoids the subtraction of a distant virtual
+// eye from world-space geometry; ordinary cameras retain their exact eye and ray arithmetic.
+float3 cameraRayOrigin(ViewportData view, float2 localUv) {
+    if (passGroup.lightMap == 0u) { return view.position.xyz; }
+    float2 plane = (localUv * 2.0 - 1.0) * float2(view.up.w, -1.0) * view.right.w;
+    return view.position.xyz + view.right.xyz * plane.x + view.up.xyz * plane.y;
 }
 
 // The view camera's own near distance (CameraSnapshot.Near): the forward distance of the plane its image begins on,

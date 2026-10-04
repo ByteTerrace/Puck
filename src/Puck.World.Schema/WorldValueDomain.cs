@@ -29,10 +29,12 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 public static class WorldValueFields {
     /// <summary>A directional light's weight.</summary>
     public static WorldValueField DirectionalWeight { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Weight), WorldValueDomain.NonNegative);
-    /// <summary>A directional light's angular radius, in radians, up to the widest penumbra the lights table carries.</summary>
+    /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.
+    /// The light-view contract requires a positive penumbra even though its parallel projection has zero divergence.</summary>
     public static WorldValueField DirectionalAngularRadius { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.AngularRadius), new WorldValueDomain(
         Maximum: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
-        Minimum: 0f
+        Minimum: 0f,
+        MinimumOpen: true
     ));
     /// <summary>The sky's ambient gain.</summary>
     public static WorldValueField EnvironmentAmbient { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Ambient), WorldValueDomain.NonNegative);

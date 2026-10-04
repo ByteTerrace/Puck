@@ -3,7 +3,7 @@
 // The debug-view-mode wire contract: the pass block's debugMode carries the mode index into DebugViewModes.Names
 // (src/Puck.SdfVm/DebugViewModes.cs — the list's ORDER is the wire value; KEEP IN SYNC, including the switch below).
 // Mode 0 / >= DebugViewModeCount render final shading.
-static const int DebugViewModeCount = 16;
+static const int DebugViewModeCount = 17;
 static const int DebugViewModeNormals = 2;
 // Mode 7 (slice) is special-cased in TWO other places: the primary stage skips the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
@@ -33,5 +33,6 @@ static const int DebugViewModeMotion = 12;
 static const int DebugViewModeSkyCost = 13;
 static const int DebugViewModeIndirectProbes = 14;
 static const int DebugViewModeIndirectCells = 15;
+static const int DebugViewModeIndirectLight = 16;
 
 #endif

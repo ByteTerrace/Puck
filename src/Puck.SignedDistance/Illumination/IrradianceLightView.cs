@@ -6,8 +6,8 @@ namespace Puck.SignedDistance.Illumination;
 /// swept toward the region travelled before it touched a surface. Because the sphere covers the texel's whole column,
 /// every occluder that crosses the column is recorded however thin, so a receiver an occluder shadows from farther than
 /// the comparison's bias is never read lit; the price is that shadows widen by up to a texel. The GPU's view is a
-/// perspective camera placed far along the light whose march accepts within the same radius of each pixel's ray; its
-/// rays diverge by less than half the light's penumbra, which this orthographic grid does not model.
+/// orthographic camera whose march accepts within the same radius of each parallel pixel ray. The projection overload
+/// derives its finite volume from the residency; the explicit-plane overload isolates the sweep's column bound.
 /// </summary>
 public sealed class IrradianceLightView {
     private readonly Double3 m_origin;
@@ -17,6 +17,39 @@ public sealed class IrradianceLightView {
     private readonly int m_resolution;
     private readonly double m_distance;
     private readonly double[] m_depth;
+    private readonly IrradianceLightProjection? m_projection;
+
+    /// <summary>Renders a bounded light camera through the same certified field sweep as the explicit-plane reference.</summary>
+    /// <param name="field">The field containing all potential casters.</param>
+    /// <param name="projection">The bounded light camera.</param>
+    /// <param name="sweepRadius">A negative value selects the projection's conservative texel radius; zero is a point-ray discriminator.</param>
+    public IrradianceLightView(IrradianceField field, IrradianceLightProjection projection, double sweepRadius = -1.0) {
+        ArgumentNullException.ThrowIfNull(argument: field);
+        m_projection = projection;
+        m_origin = projection.Origin;
+        m_right = projection.Right;
+        m_up = projection.Up;
+        m_toward = projection.TowardLight;
+        m_resolution = projection.Resolution;
+        m_distance = (projection.Far * 0.5);
+        TexelSize = (2.0 * projection.HalfWidth / projection.Resolution);
+        SweepRadius = ((sweepRadius >= 0.0) ? sweepRadius : projection.SweepRadius);
+        m_depth = new double[checked(m_resolution * m_resolution)];
+        for (var row = 0; (row < m_resolution); row++) {
+            for (var column = 0; (column < m_resolution); column++) {
+                var direction = -projection.TowardLight;
+                var start = projection.Near;
+                var sweep = field.Sweep(origin: (projection.OriginAt(column: column, row: row) + (direction * start)), direction: direction,
+                    radius: SweepRadius, maxDistance: Math.Max(val1: 0.0, val2: (projection.Far - start)));
+                m_depth[((row * m_resolution) + column)] = sweep.Kind switch {
+                    IrradianceRayKind.Miss => double.PositiveInfinity,
+                    IrradianceRayKind.Hit => (start + sweep.Distance),
+                    _ => double.NaN,
+                };
+                if (sweep.Kind == IrradianceRayKind.Unresolved) { Unresolved++; }
+            }
+        }
+    }
 
     /// <summary>Initializes a new instance of the <see cref="IrradianceLightView"/> class and renders it.</summary>
     /// <param name="field">The field.</param>
@@ -71,6 +104,8 @@ public sealed class IrradianceLightView {
     public double SweepRadius { get; }
     /// <summary>Gets the count of texels whose sweep could not finish; their receivers require a shadow ray.</summary>
     public int Unresolved { get; private set; }
+    /// <summary>Gets the row-major distances along each texel's ray: infinity is empty and NaN is unresolved.</summary>
+    public ReadOnlySpan<double> Depths => m_depth;
 
     /// <summary>Returns whether a receiver sees the light, by its texel's depth and a bias of
     /// <c>r (1 + sin θ) / cos θ</c> plus a small constant, with r the swept sphere's radius and θ the angle between the
@@ -93,11 +128,14 @@ public sealed class IrradianceLightView {
         var column = ((int)Math.Floor(d: ((Double3.Dot(a: offset, b: m_right) / TexelSize) + half)));
         var row = ((int)Math.Floor(d: ((Double3.Dot(a: offset, b: m_up) / TexelSize) + half)));
 
-        if ((column < 0) || (row < 0) || (column >= m_resolution) || (row >= m_resolution)) {
+        if ((m_projection is null) && ((column < 0) || (row < 0) || (column >= m_resolution) || (row >= m_resolution))) {
             return null;
         }
 
         var travel = -Double3.Dot(a: offset, b: m_toward);
+        if ((m_projection is { } projection) && !projection.Project(point: point, column: out column, row: out row, travel: out travel)) {
+            return null;
+        }
         var depth = m_depth[((row * m_resolution) + column)];
 
         if ((travel < 0.0) || (travel > (2.0 * m_distance)) || double.IsNaN(d: depth)) {

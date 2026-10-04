@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -18,6 +19,9 @@ public static class SdfIndirectHlsl {
 
         foreach (var field in typeof(SdfIndirectLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
             text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirect{field.Name} = {field.GetRawConstantValue()}u;\n");
+        }
+        foreach (var field in typeof(SdfIndirectLightLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
+            text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectLight{field.Name} = {field.GetRawConstantValue()}u;\n");
         }
         Enum<SdfIndirectTier>(prefix: "SdfIndirectTier");
         Enum<IrradianceProbeClass>(prefix: "SdfIndirectClass");

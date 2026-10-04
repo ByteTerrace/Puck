@@ -14,5 +14,7 @@ float4 PSMain(MeshVertex input) : SV_Target0 {
 
     puckCountFragmentWork(0u, 1u);
 
-    return float4(length((input.world - view.position.xyz)), float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
+    float3 offset = input.world - view.position.xyz;
+    float depth = passGroup.lightMap != 0u ? dot(offset, view.forward.xyz) : length(offset);
+    return float4(depth, float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
 }

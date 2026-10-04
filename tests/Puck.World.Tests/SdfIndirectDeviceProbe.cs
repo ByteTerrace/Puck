@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 
 internal static class SdfIndirectDeviceProbe {
     public static Vector4[] Run(GpuDeviceServices services, string extension, string kernel, int resultRows,
-        IReadOnlyList<SdfProgram> programs, Vector4[] rows, Vector4[]? transforms = null) {
+        IReadOnlyList<SdfProgram> programs, Vector4[] rows, Vector4[]? transforms = null, uint cacheWords = 128) {
         var world = new GpuGroupLayoutDescription(ordinal: 1, bindings: [
             new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ReadOnlyBuffer),
             new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer),
@@ -28,9 +28,9 @@ internal static class SdfIndirectDeviceProbe {
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        // The shader writes this cache: its 128 words need device-local storage, cleared before the first dispatch.
+        // The shader writes this cache; it needs device-local storage, cleared before the first dispatch.
         // A host-visible upload buffer cannot supply Direct3D's unordered-access view.
-        using var cache = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (128U * sizeof(uint)), usage: GpuBufferUsage.Storage);
+        using var cache = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (cacheWords * sizeof(uint)), usage: GpuBufferUsage.Storage);
         // Three rows per dynamic slot (position, orientation, lanes); slot zero is the identity unless the caller supplies a table.
         var slots = (transforms ?? [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero]);
         using var transformTable = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: slots.AsSpan()), name: default, usage: GpuBufferUsage.Storage);

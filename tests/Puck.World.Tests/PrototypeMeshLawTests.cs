@@ -242,6 +242,8 @@ public sealed class PrototypeMeshLawTests {
         var draws = Draws(definition: With(mesh: Quad()));
         var draw = Assert.Single(collection: draws);
 
+        Assert.False(condition: draw.FieldBacked);
+
         Assert.Equal(expected: 2, actual: draw.Mesh.TriangleCount);
         Assert.Equal(expected: new Vector3(x: -1f, y: 0f, z: 0f), actual: draw.Mesh.Positions.Span[1]);
 

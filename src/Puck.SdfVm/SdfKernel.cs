@@ -4,6 +4,10 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfKernelSet.StemOf"/>), pipeline, build order and loaded bytecode (<see cref="SdfKernelSet"/>) derive
 /// from.</summary>
 public enum SdfKernel {
+    /// <summary>Conservative swept primary traversal for a residency light camera.</summary>
+    LightPrimary,
+    /// <summary>Publication of one light camera region into the retained depth bank.</summary>
+    LightDepth,
     /// <summary>Residency probe placement and cell partitioning.</summary>
     IndirectClassify,
     /// <summary>Residency transport records and visibility proofs.</summary>

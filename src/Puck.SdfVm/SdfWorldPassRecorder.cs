@@ -42,6 +42,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.IndirectCache,
+        SdfWorldPackage.IndirectLightDepth,
+        SdfWorldPackage.IndirectLightDepthWritten,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -253,6 +255,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // - the shadow part a view whose soft shadows are off or a frame that has no shadow slots, when views reads nothing
     //   of the record's shadow row.
     public bool Skips(in FrameContext context) {
+        if (m_view.LightView) {
+            Follow();
+            m_owner.Begin(residency: m_view.Residency);
+            m_view.Residency.PlanLightView(context: in context);
+            if (m_view.Residency.IndirectLightViews.Pending < 0) { return true; }
+        }
         var mesh = IsMesh;
         var ambient = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Ambient, comparisonType: StringComparison.Ordinal);
         var shadow = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Shadow, comparisonType: StringComparison.Ordinal);
@@ -287,6 +295,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public ulong? Signature(in FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
     public void Submitted() {
+        if (m_part == SdfWorldPackage.LightDepth) { m_view.Residency.SubmitLightView(); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
         if (m_part == SdfWorldPackage.Parts.Shadow) {
             m_shadowHistory.Submitted(lights: m_shadowFrames[m_shadowRecordingSlot], rebuilt: m_shadowRebuilt[m_shadowRecordingSlot]);
@@ -300,7 +309,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Begin(residency: residency);
 
         var tables = residency.Submit(context: recording.Context);
-        var frame = residency.Frame!;
+        var frame = (m_view.LightView ? residency.LightFrame() : residency.Frame!);
         var view = Math.Min(
             val1: m_view.View,
             val2: (frame.Views.Count - 1)
@@ -308,15 +317,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var width = recording.Width;
         var height = recording.Height;
 
-        residency.RequestExtent(
-            height: recording.FrameHeight,
-            width: recording.FrameWidth
-        );
+        if (!m_view.LightView) { residency.RequestExtent(height: recording.FrameHeight, width: recording.FrameWidth); }
         SdfFrameBlock.Write(
             block: recording.PassBlock,
             frame: frame,
             height: height,
-            tables: tables.PassValues,
+            tables: (m_view.LightView ? tables.PassValues with { DebugMode = 0 } : tables.PassValues),
             view: view,
             width: width
         );
@@ -327,6 +333,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
+        SdfFrameBlock.WriteLightViews(block: recording.PassBlock,
+            views: ((residency.IndirectTier == SdfIndirectTier.Off) ? null : residency.IndirectLightViews), depthCamera: m_view.LightView);
+        if (m_view.LightView) {
+            SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: default, historyFrames: 0, temporal: false);
+            SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: default, valid: false);
+        }
         if (m_part == SdfWorldPackage.Parts.Shadow) {
             var enabled = (m_temporal && frame.Views[view].Quality.ShadowAmortize && (tables.PassValues.DebugMode == 0));
             var ownership = m_shadowHistory.Ownership(lights: frame.Lights);
@@ -441,7 +453,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Beam => tables.Pipeline(kernel: SdfKernel.Beam),
             SdfWorldPackage.Parts.Tape => tables.Pipeline(kernel: SdfKernel.Tape),
             SdfWorldPackage.Parts.CullArgs => tables.Pipeline(kernel: SdfKernel.CullArgs),
-            SdfWorldPackage.Parts.Primary => tables.Pipeline(kernel: SdfKernel.Primary),
+            SdfWorldPackage.Parts.Primary => tables.Pipeline(kernel: (m_view.LightView ? SdfKernel.LightPrimary : SdfKernel.Primary)),
+            SdfWorldPackage.LightDepth => tables.Pipeline(kernel: SdfKernel.LightDepth),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
             SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)),
@@ -499,6 +512,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var (x, y) = m_part switch {
             SdfWorldPackage.Parts.Mask => (((tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge), ((tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge)),
             SdfWorldPackage.Parts.Beam or SdfWorldPackage.Parts.Tape => (tileGridX, tileGridY),
+            SdfWorldPackage.LightDepth => (((recording.Width + 7u) / 8u), ((recording.Height + 7u) / 8u)),
             _ => (1u, 1u),
         };
 
@@ -544,7 +558,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_recorded = new bool[((int)count)];
         }
 
-        m_lod.Select(
+        if (m_view.LightView) {
+            // A point-sampled impostor cannot certify a swept shadow column. The retained field supplies its geometry;
+            // full baked meshes may shorten that field search without becoming a visibility certificate themselves.
+            for (var index = 0; (index < count); index++) { m_recorded[index] = (draws[index].Impostor is null); }
+        } else { m_lod.Select(
             cameraForward: camera.Forward,
             cameraPosition: camera.Position,
             draws: draws,
@@ -554,7 +572,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 tanHalfFieldOfView: camera.TanHalfFieldOfView
             ),
             recorded: m_recorded
-        );
+        ); }
         tables.WriteMeshTables(
             set: set,
             slot: tables.CurrentSlot
@@ -813,6 +831,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.IndirectCache => SdfWorldPackage.IndirectCache,
+        SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapes,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
@@ -822,6 +841,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
+        SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasksWritten,
         SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapesWritten,

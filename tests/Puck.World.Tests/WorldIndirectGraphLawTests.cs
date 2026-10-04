@@ -27,19 +27,21 @@ public sealed class WorldIndirectGraphLawTests {
             ["remote"] = "indirect:remote",
         });
 
-        Assert.Equal(5, enabled.Instances.Count);
+        Assert.Equal(7, enabled.Instances.Count);
         Assert.All(enabled.Instances.Take(count: 3), instance => {
-            var edge = Assert.Single(collection: instance.Reads);
-
+            Assert.Equal(expected: 2, actual: instance.Reads.Count);
+            foreach (var edge in instance.Reads) {
             Assert.Equal(ShaderPipelineResourceKind.Buffer, edge.Kind);
             Assert.False(condition: edge.PreviousFrame);
             var producer = enabled.Instances.Single(predicate: item => (item.Name == edge.Producer));
 
             Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
-            Assert.Equal("indirect", producer.ExternalPackage);
+            Assert.Contains(expected: producer.ExternalPackage, collection: new[] { RenderGraphPackageCatalog.Indirect, RenderGraphPackageCatalog.SdfWorld });
             Assert.True(condition: (enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: producer)) <
                 enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: instance))));
+            }
         });
+        Assert.Equal(expected: 2, actual: enabled.Instances.Skip(count: 3).Count(predicate: instance => (instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld)));
     }
     [Fact]
     public void SessionTierAppliesAllThreeValuesAndRefusesUnknownOrdinals() {
@@ -60,8 +62,10 @@ public sealed class WorldIndirectGraphLawTests {
     public void IndirectDebugNamesReachTheirShaderModeIndices() {
         Assert.True(condition: DebugViewModes.TryParse(mode: out var probes, name: "indirect-probes"));
         Assert.True(condition: DebugViewModes.TryParse(mode: out var cells, name: "indirect-cells"));
+        Assert.True(condition: DebugViewModes.TryParse(mode: out var light, name: "indirect-light"));
         Assert.Equal(actual: probes, expected: 14);
         Assert.Equal(actual: cells, expected: 15);
+        Assert.Equal(actual: light, expected: 16);
     }
 
     private sealed class Audio : IWorldAudioLever {

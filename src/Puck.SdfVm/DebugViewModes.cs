@@ -26,6 +26,7 @@ public static class DebugViewModes {
         "sky-cost",
         "indirect-probes",
         "indirect-cells",
+        "indirect-light",
     ];
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");

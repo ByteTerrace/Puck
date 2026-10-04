@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.SignedDistance.Illumination;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -39,7 +40,7 @@ public sealed class IrradianceBoundLawTests(ITestOutputHelper output) {
 
                 if (exact && !lit) {
                     // A widened shadow lies within two texels of the exact shadow, found analytically over the disc.
-                    Assert.True(condition: NearShadow(point: point, radius: (2.0 * texel), sun: sun), userMessage: $"shadowed far from any edge at ({x}, {z})");
+                    Assert.True(condition: IrradianceLightFixture.NearShadow(point: point, radius: (2.0 * texel), sun: sun), userMessage: $"shadowed far from any edge at ({x}, {z})");
                     widened++;
                 }
             }
@@ -233,51 +234,6 @@ public sealed class IrradianceBoundLawTests(ITestOutputHelper output) {
         Assert.True(condition: (Math.Abs(value: (estimate - 0.5)) <= (share + 0.03)), userMessage: $"{estimate} against the analytic floor answer, share {share}");
     }
 
-    // Whether any floor point within a disc of the radius lies in the casters' exact shadow, by ray-box slab tests
-    // against the scene's two casters on a 0.01 grid.
-    private static bool NearShadow(Double3 point, double radius, Double3 sun) {
-        for (var dx = -radius; (dx <= radius); dx += 0.01) {
-            for (var dz = -radius; (dz <= radius); dz += 0.01) {
-                if (((dx * dx) + (dz * dz)) > (radius * radius)) {
-                    continue;
-                }
-
-                var sample = (point + new Double3(X: dx, Y: 0.0, Z: dz));
-
-                if (Crosses(center: new Double3(X: -1.0, Y: 1.2, Z: -1.0), half: new Double3(X: 0.6, Y: 0.05, Z: 0.6), origin: sample, direction: sun) ||
-                    Crosses(center: new Double3(X: 0.0, Y: 0.8, Z: 2.0), half: new Double3(X: 1.5, Y: 0.01, Z: 0.01), origin: sample, direction: sun)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-    private static bool Crosses(Double3 center, Double3 half, Double3 origin, Double3 direction) {
-        var near = 0.0;
-        var far = double.MaxValue;
-        double[] o = [(origin.X - center.X), (origin.Y - center.Y), (origin.Z - center.Z)];
-        double[] d = [direction.X, direction.Y, direction.Z];
-        double[] h = [half.X, half.Y, half.Z];
-
-        for (var axis = 0; (axis < 3); axis++) {
-            if (Math.Abs(value: d[axis]) < 1.0e-12) {
-                if (Math.Abs(value: o[axis]) > h[axis]) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            var a = ((-h[axis] - o[axis]) / d[axis]);
-            var b = ((h[axis] - o[axis]) / d[axis]);
-
-            near = Math.Max(val1: near, val2: Math.Min(val1: a, val2: b));
-            far = Math.Min(val1: far, val2: Math.Max(val1: a, val2: b));
-        }
-
-        return (near <= far);
-    }
     // A dark hall of the given inner radius under an emissive plate (material 1), with a small dark ball at its middle.
     private static (IrradianceField Field, IrradianceSurfaces Surfaces) PlateHall(double hall) {
         var builder = new SdfProgramBuilder();
@@ -325,19 +281,5 @@ public sealed class IrradianceBoundLawTests(ITestOutputHelper output) {
         field.SegmentClear(from: (point + (Up * 0.004)), to: (point + (sun * 10.0)));
     // A floor slab whose top is y = 0, a box caster at height 1.2, and a rod 0.02 thick, far thinner than a 0.1 texel,
     // across the X axis at height 0.8 and z = 2.
-    private static IrradianceField LightViewScene() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.Translate(offset: new Vector3(x: 0f, y: -0.1f, z: 0f));
-        _ = builder.Box(halfExtents: new Vector3(x: 6f, y: 0.1f, z: 6f), material: material, round: 0f);
-        _ = builder.ResetPoint();
-        _ = builder.Translate(offset: new Vector3(x: -1f, y: 1.2f, z: -1f));
-        _ = builder.Box(halfExtents: new Vector3(x: 0.6f, y: 0.05f, z: 0.6f), material: material, round: 0f);
-        _ = builder.ResetPoint();
-        _ = builder.Translate(offset: new Vector3(x: 0f, y: 0.8f, z: 2f));
-        _ = builder.Box(halfExtents: new Vector3(x: 1.5f, y: 0.01f, z: 0.01f), material: material, round: 0f);
-
-        return new IrradianceField(program: builder.Build());
-    }
+    private static IrradianceField LightViewScene() => new(program: IrradianceLightFixture.Program());
 }

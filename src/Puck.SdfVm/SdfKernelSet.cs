@@ -76,6 +76,8 @@ public sealed class SdfKernelSet {
     /// <returns>The stem, such as <c>sdf-world-primary</c>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.LightPrimary => "sdf-light-primary",
+        SdfKernel.LightDepth => "sdf-light-depth",
         SdfKernel.IndirectClassify => "sdf-indirect-classify",
         SdfKernel.IndirectTrace => "sdf-indirect-trace",
         SdfKernel.Beam => "sdf-beam",

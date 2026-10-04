@@ -1,0 +1,69 @@
+using System.Numerics;
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
+using Puck.Shaders;
+using Puck.SignedDistance;
+using Puck.Testing;
+using Xunit;
+
+namespace Puck.SdfVm.Tests;
+
+public sealed partial class SdfWorldPassesLawTests {
+    [Fact]
+    public void TheResidencyLightCameraPublishesAtNativeExtentAndStandsAfterItsRegionsFinish() {
+        var gpu = new FakeGpuDevice();
+        var pipelines = SdfTestPipelines.Cache();
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 2);
+        builder.Sphere(material: material, radius: 1);
+        builder.EndInstance();
+        var lights = SdfLights.Default();
+        lights.ShadowSlots.SetOwner(slot: 0, owner: "sun");
+        var frame = Frame() with { Program = builder.Build(), Lights = lights, IndirectTier = SdfIndirectTier.Medium, FarDistance = 12 };
+        frame = frame with { Views = [frame.Views[0] with { RenderScale = 0.25f, Quality = new SdfViewQuality { Temporal = true } }] };
+        using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: () => frame),
+            height: Extent, width: Extent, name: "world", kernels: SdfTestPipelines.Kernels(), pipelines: pipelines);
+        var views = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
+        const string Light = "world.indirect-light";
+        views.RegisterLightView(name: Light, residency: residency);
+        var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
+        packages.Register(factory: views, package: RenderGraphPackageCatalog.SdfWorld);
+        var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
+            StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
+        residency.ProduceFirstFrame(context: context);
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: [new RenderGraphInstance(Name: Light,
+            Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 2).Passes.Count,
+            Reads: [], Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
+            OutputExtent = new RenderGraphPixelExtent(Width: 512, Height: 512),
+        }], set: out var set, refusal: out var setRefusal), userMessage: setRefusal?.Message);
+        Assert.True(condition: RenderGraphRuntime.TryCreate(deviceContext: gpu, graphs: new RenderGraphRuntimeGraph?[1],
+            hostsOnDirectX: false, packages: packages, pipelines: pipelines.Pipelines, root: Light, set: set,
+            runtime: out var runtime, refusal: out var refusal), userMessage: refusal?.Message);
+        using var graph = runtime;
+        var number = 0L;
+        void Produce() {
+            var scheduled = new RenderGraphFrame(DisplayHeight: ((int)Extent), DisplayWidth: ((int)Extent), DisplayHertz: 60,
+                Footprints: [], Index: number, Tick: number++, Roots: [new RenderGraphRoot(Height: 1, Width: 1, Instance: Light)]);
+            _ = graph.ProduceFrame(context: context, frame: scheduled);
+        }
+        TestLiveness.Within(frames: 16, step: () => {
+            Produce();
+            return (residency.IndirectLightViews.Publications == 2);
+        }, building: () => graph.Node(instance: 0).IsBuildingCandidate, reason: () => graph.Render.Reason);
+        Assert.Equal(expected: (512u, 512u), actual: views.RenderExtentOf(instance: Light)!.FrameAt(width: 32, height: 32));
+        Assert.Equal(expected: 1.0, actual: views.RenderExtentOf(instance: Light)!.Grid);
+        Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var before));
+        Assert.Equal(expected: 2L, actual: before);
+        for (var index = 0; (index < 4); index++) { Produce(); }
+        Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var after));
+        Assert.Equal(expected: before, actual: after);
+        Assert.All(collection: Enumerable.Range(start: 0, count: 2), action: index => Assert.True(condition: residency.IndirectLightViews.Snapshot(index: index).Valid));
+        frame = frame with { MeshDraws = [new SdfMeshDraw(Mesh: SdfMeshCard.Mesh, ObjectToWorld: Matrix4x4.Identity, Material: 0, Identity: "independent-triangle")] };
+        Produce();
+        Assert.All(collection: Enumerable.Range(start: 0, count: 2), action: index => Assert.Null(@object: residency.IndirectLightViews.Snapshot(index: index).Projection));
+        Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out after));
+        Assert.Equal(expected: before, actual: after);
+    }
+}

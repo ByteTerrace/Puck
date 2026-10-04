@@ -80,6 +80,11 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
+The indirect residency also owns a depth-only orthographic light-camera fragment
+with retained maps, one region published per frame and no work for unchanged
+regions. Its visibility contract and geometry limits are described in
+[the light-view section](../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view).
+
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))

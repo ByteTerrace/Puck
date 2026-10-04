@@ -20,7 +20,7 @@ public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskW
 /// kernels read each value by name through <c>isa/sdf-world.interface.hlsli</c>. The lights and the sky are no part of
 /// it: the tables write them into their own regions (<see cref="SdfLights.Pack"/>, <see cref="SdfSky.Pack"/>).
 /// </summary>
-public static class SdfFrameBlock {
+public static partial class SdfFrameBlock {
     private static readonly ShaderPipelineParameterLayout Layout = SdfWorldInterfaces.WorldParameters;
     private static readonly int AspectRatio = Offset(member: SdfWorldPackage.AspectRatio);
     private static readonly int CurvatureCavity = Offset(member: SdfWorldPackage.CurvatureCavity);
@@ -173,6 +173,7 @@ public static class SdfFrameBlock {
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
         WriteShadowHistory(block: block, enabled: false, lightMotion: 0, ownership: 0);
         WritePreviousView(block: block, valid: false, view: default);
+        WriteLightViews(block: block, views: null, depthCamera: false);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;

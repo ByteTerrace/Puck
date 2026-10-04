@@ -81,8 +81,8 @@ static bool sdfAmbientMaskActive = false;
 // Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). shade/sdf-light-stage.hlsli
 // flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
-// False everywhere else (including the beam/instance-cull kernels, which define SDF_DYNAMIC_TRANSFORMS but never set it),
-// so the camera/AO/coverage enumerations are unchanged and a default-casts frame is byte-identical.
+// The conservative light camera also sets it for its beam and sphere sweep. Ordinary camera/AO/coverage enumerations
+// leave it false, so their participation is unchanged and a default-casts frame is byte-identical.
 static bool sdfShadowParticipationActive = false;
 #endif
 

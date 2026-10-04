@@ -74,13 +74,14 @@ void writeInstanceMaskSummary(uint maskBase, uint maskWordCount) {
 // so the center's HOME cell lies in that slab's cell range and the instance is found. An instance reached from several
 // slabs sets its bit more than once — idempotent (OR). So every flat-set bit is set here; and since only cell/always
 // members are tested by the identical rule, no extra bit is set: the grid mask equals the flat mask.
-void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, uint maskBase, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
-    SdfGridQuery query = sdfGridCone(rayOrigin, centerDirection, chord, inverseAperture, 0.0, 1.0e20);
+void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, uint maskBase, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture, float radius) {
+    SdfGridQuery query = sdfGridCone(rayOrigin, centerDirection, chord, inverseAperture, radius, 1.0e20);
     SdfGridWalk walk = sdfGridWalkBegin(grid, query, 0u, 1u);
     uint index;
     [loop]
     while (sdfGridWalkNext(grid, query, walk, index)) {
-        if (sdfGridQueryContains(query, sdfInstanceBoundAt(instanceOffset, index)) && !sdfInstanceCameraHidden(instanceOffset, index)) {
+        if (sdfGridQueryContains(query, sdfInstanceBoundAt(instanceOffset, index)) &&
+            (passGroup.lightMap != 0u || !sdfInstanceCameraHidden(instanceOffset, index))) {
             sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
         }
     }
@@ -139,13 +140,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfInstanceMasksRW[maskBase + word] = 0u;
         }
 
-        collectInstanceGridMask(grid, instanceOffset, maskBase, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+        collectInstanceGridMask(grid, instanceOffset, maskBase, cone.origin, cone.centerDirection, cone.chord, cone.inverseAperture, cone.radius + passGroup.lightSweepRadius);
     } else {
         // FLAT fallback (a degenerate grid — zero binnable or a single cell — or a grid-suppressed program): the
         // pre-grid path, testing every instance per mask word. Byte-identical to the grid path's mask by construction.
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            sdfInstanceMasksRW[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+            sdfInstanceMasksRW[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, cone.origin, cone.centerDirection, cone.chord, cone.inverseAperture, cone.radius + passGroup.lightSweepRadius);
         }
     }
 

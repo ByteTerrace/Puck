@@ -2435,10 +2435,10 @@ so it records nothing and holds no memory. Its parts:
   `sdf.world` camera view per residency cycles through every held and fading
   shadow slot and two regions each (the bounds of the finest running level's
   allocated bricks, and of the coarsest level's), one region a frame. Its camera
-  is placed along the light at a distance D, so its rays diverge by at most
-  `atan(R / Zmin)` (R the region's transverse radius, Zmin its nearest depth),
-  held under half the light's penumbra; its near and far bounds cover every
-  caster between the light and the region. Its march accepts any surface
+  uses a nearby finite orthographic plane, so its parallel rays have zero
+  divergence from the light, within half its positive penumbra. Its near and
+  far bounds cover every caster between the light and the region without a
+  distant float camera origin. Its march accepts any surface
   within a texel's half-diagonal of a pixel's ray, so a caster thinner than a
   texel is still recorded, and it writes each pixel's distance as 32 bits into
   one map per slot and region, stamped with the light's and the geometry's
@@ -3058,8 +3058,12 @@ re-record explained in the same change.
      cadence, parity and measured counter ceilings require the GPU verification
      run. Their presence in the tree is not evidence that those checks pass.
 3. **G3, the light view.** After G2.
+   - Source state: the residency schedule, finite orthographic camera,
+     depth-only graph, map metadata, resource accounting and CPU/device laws
+     are implemented. Generated declarations, positive and withholding laws,
+     actual device visibility and counted runtime qualification remain owed.
    - Delivers: the one depth-only camera view per residency cycling its held
-     and fading slots' two regions, its distance D from the penumbra, its
+     and fading slots' two regions, its zero-divergence orthographic rays, its
      caster-volume near and far bounds, its march accepting within a texel's
      half-diagonal, its 32-bit distance maps with their light and geometry
      generations, its refresh on P18-13's rule, the hits' slope-scaled lookup,

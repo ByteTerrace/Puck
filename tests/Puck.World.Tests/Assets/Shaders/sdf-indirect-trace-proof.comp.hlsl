@@ -28,7 +28,7 @@ void CSMain(uint lane : SV_GroupIndex) {
     [unroll] for (uint row = 0u; row < 12u; row++) { traceResults[uint2(index, row)] = 0.0; }
     if (mode == 0u) {
         uint budget = 64u;
-        SdfIndirectRay ray = sdfIndirectMarch(position.xyz, vector.xyz, position.w, vector.w, mask, budget);
+        SdfIndirectRay ray = sdfIndirectMarch(position.xyz, vector.xyz, position.w, vector.w, mask, 0.0, budget);
         traceResults[uint2(index, 0u)] = float4((float)ray.kind, ray.distance, (float)ray.material, (float)budget);
         traceResults[uint2(index, 1u)] = float4(ray.normal, 0.0);
         uint4 packed = sdfIndirectPackRay(ray, 165u, 1u);

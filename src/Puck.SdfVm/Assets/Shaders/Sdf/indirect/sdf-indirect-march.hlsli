@@ -12,8 +12,10 @@ struct SdfIndirectRay {
 
 // Acceptance is absolute and certified by a sign bracket, never by the conservative distance alone.
 // A rounded advance may land just inside a surface; its witness points outward. An inside origin stays unresolved.
-// Normal and bracket queries consume the same whole-ray allowance, including continuation segments.
-SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, float farDistance, uint mask, inout uint budget) {
+// Normal and bracket queries consume the same whole-ray allowance, including continuation segments. Radius zero
+// is the cache's point ray; a light-camera texel subtracts its conservative sphere radius from every clear advance
+// and extends the sign witness by that radius, without replacing the certificate by a small distance alone.
+SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, float farDistance, uint mask, float sweepRadius, inout uint budget) {
     SdfIndirectRay result = (SdfIndirectRay)0;
     result.kind = SdfIndirectKindUnresolved;
     bool gradientUsed = false;
@@ -25,20 +27,20 @@ SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, fl
         float3 position = origin + direction * result.distance;
         uint activeMask = sdfIndirectMasked(result.distance, reach, mask) ? mask : SDF_INSTANCE_MASK_ALL;
         SdfHit sample = sdfIndirectSample(position, activeMask);
-        float clearance = sdfMapBallClearance(sample.distance);
+        float clearance = sdfMapBallClearance(sample.distance) - sweepRadius;
         if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
-        if (abs(sample.distance) <= SdfIndirectSurfaceEpsilon) {
+        if (abs(sample.distance) <= sweepRadius + SdfIndirectSurfaceEpsilon) {
             if (activeMask != SDF_INSTANCE_MASK_ALL) {
                 if (budget == 0u) { return result; }
                 budget--;
                 sample = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
-                clearance = sdfMapBallClearance(sample.distance);
+                clearance = sdfMapBallClearance(sample.distance) - sweepRadius;
                 if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
             }
             if (!gradientUsed && budget > 0u) { budget--; normal = sdfIndirectGradient(position); gradientUsed = true; }
             if (dot(normal, normal) > 0.0 && budget > 0u) {
                 budget--;
-                float witnessOffset = sample.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
+                float witnessOffset = (sample.distance < 0.0 ? 1.0 : -1.0) * (sweepRadius + SdfIndirectSurfaceEpsilon);
                 SdfHit witness = sdfIndirectSample(position + normal * witnessOffset, SDF_INSTANCE_MASK_ALL);
                 if (isfinite(witness.distance) && (sample.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0)) {
                     result.kind = SdfIndirectKindHit;
@@ -48,7 +50,7 @@ SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, fl
                 }
             }
         }
-        if (result.distance >= farDistance && sample.distance > 0.0) { result.kind = SdfIndirectKindExit; return result; }
+        if (result.distance >= farDistance && sample.distance > sweepRadius) { result.kind = SdfIndirectKindExit; return result; }
         float advance = sdfIndirectAdvance(clearance, result.distance, reach, farDistance, mask);
         if (advance <= 0.0) { return result; }
         bool strictlyClearEnd = clearance > farDistance - result.distance;

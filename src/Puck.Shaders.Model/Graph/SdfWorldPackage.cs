@@ -296,6 +296,10 @@ public static partial class SdfWorldPackage {
     /// and shadow slot table, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
     /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
+        Value(name: LightSweepRadius, type: ShaderValueType.Float),
+        Value(name: LightMap, type: ShaderValueType.Uint),
+        Value(name: LightMapCount, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows), name: LightMaps, type: ShaderValueType.Float4),
         Value(name: IndirectTier, type: ShaderValueType.Uint),
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
@@ -397,6 +401,8 @@ public static partial class SdfWorldPackage {
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
+        Read(element: ShaderValueType.Float, name: IndirectLightDepth),
+        Written(element: ShaderValueType.Float, name: IndirectLightDepthWritten),
         Read(element: ShaderValueType.Uint, name: IndirectCache),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),

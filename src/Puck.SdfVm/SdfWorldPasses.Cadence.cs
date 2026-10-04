@@ -10,6 +10,10 @@ public sealed partial class SdfWorldPasses {
 
         if (entry.View is not { } view) { return null; }
         Begin(residency: view.Residency);
+        if (view.LightView) {
+            view.Residency.PlanLightView(context: in context);
+            return view.Residency.IndirectLightViews.Revision;
+        }
         var tables = view.Residency.Submit(context: in context);
         var frame = view.Residency.Frame!;
 
@@ -28,6 +32,9 @@ public sealed partial class SdfWorldPasses {
         hash.Add(value: tables.PassSignature(frame: frame, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1)), part: part));
         hash.Add(value: entry.Bindings);
         hash.Add(value: entry.SampleRevision);
+        if ((part == SdfWorldPackage.Parts.Views) && (LightViewName(residency: view.Residency) is not null)) {
+            hash.Add(value: view.Residency.IndirectLightViews.Revision);
+        }
         return hash.Value;
     }
 

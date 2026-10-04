@@ -32,7 +32,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             ? min(passGroup.farDistance, travel == 0.0 ? reach : travel + sdfIndirectSpacing(passGroup.indirectTier, level + 1u))
             : passGroup.farDistance;
         ray = sdfIndirectMarch(probe.position + direction * travel, direction, travel == 0.0 ? reach : 0.0,
-            segmentEnd - travel, travel == 0.0 ? gather : SDF_INSTANCE_MASK_ALL, budget);
+            segmentEnd - travel, travel == 0.0 ? gather : SDF_INSTANCE_MASK_ALL, 0.0, budget);
         ray.distance += travel;
         if (ray.kind != SdfIndirectKindExit || ray.distance >= passGroup.farDistance) { break; }
         travel = ray.distance;

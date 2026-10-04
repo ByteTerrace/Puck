@@ -82,8 +82,8 @@ void CSMain(uint lane : SV_GroupIndex) {
     uint mask = sdfIndirectGather(origin.xyz, origin.w, lane);
     if (lane == 0u) {
         uint maskedBudget = 64u, fullBudget = 64u;
-        SdfIndirectRay masked = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, mask, maskedBudget);
-        SdfIndirectRay full = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, SDF_INSTANCE_MASK_ALL, fullBudget);
+        SdfIndirectRay masked = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, mask, 0.0, maskedBudget);
+        SdfIndirectRay full = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, SDF_INSTANCE_MASK_ALL, 0.0, fullBudget);
         gatherResults[uint2(index, 0u)] = float4((float)masked.kind, masked.distance, (float)masked.material, (float)maskedBudget);
         gatherResults[uint2(index, 1u)] = float4((float)full.kind, full.distance, (float)full.material, (float)fullBudget);
         gatherResults[uint2(index, 2u)] = gatherProbeIntervals(origin.xyz, direction.xyz, origin.w, direction.w, mask);
