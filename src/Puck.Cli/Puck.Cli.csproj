@@ -84,4 +84,7 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <PropertyGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <DefineConstants>$(DefineConstants);PUCK_SCHEMA_BOOTSTRAP</DefineConstants>
+    </PropertyGroup>
 </Project>

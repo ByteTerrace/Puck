@@ -2918,8 +2918,20 @@ puck schema --check                  regenerate in memory and compare EVERY file
 puck schema --bundle [--output path] emit the single-file equivalent with every cross-file $ref
                                      resolved through named $defs (not a checked-in artifact),
                                      to the --output path if given, else stdout
+puck schema --bootstrap              build a private schema-only CLI from the current model,
+                                     then regenerate the same checked-in artifacts
 puck schema -h / --help              this text
 ```
+
+When a model rename leaves `WorldModelShape.generated.cs` referring to a removed
+member, run `schema --bootstrap` from an existing CLI copy. It builds the current
+source with `PuckSchemaBootstrap=true`, excluding only that generated table,
+using a private artifacts directory for the whole build closure. The temporary
+CLI accepts only `schema`; a model-table read refuses explicitly. It runs the
+existing reflection generator, with `--check`, `--bundle` and `--output` forwarded
+when supplied. A failed build or generation keeps its run directory and logs.
+Normal `obj` and `bin` outputs are untouched. After regeneration, rebuild normally
+and run `schema --check` from the newly built CLI.
 
 Written to `src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json` (root)
 and `src/Puck.World/Assets/worlds/schema/*.schema.json` (sections + common),

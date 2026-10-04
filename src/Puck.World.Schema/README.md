@@ -882,6 +882,13 @@ property access. `puck
 schema` writes it from the resolver's own description of the model and `puck
 schema --check` fails when the two disagree.
 
+If a model rename makes the checked-in getters uncompilable, an existing CLI
+copy can run `schema --bootstrap`. Its private build omits the generated table,
+accepts only the schema verb and refuses any table read; the existing reflective
+generator then writes the current shape. Rebuild normally afterwards. The
+[CLI reference](../../docs/reference/cli.md#puck-schemaworlddef-json-schema)
+owns the bootstrap options and failure logs.
+
 **Identity conventions.** Every row is addressed by a stable string id, with
 two exceptions: screens are position-addressed by index, and grant rows are
 keyed by their `(grantee, capability, subject)` triple, because a grant IS

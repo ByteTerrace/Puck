@@ -114,8 +114,11 @@ internal static class PuckRootCommand {
     /// <param name="clock">The CLI host's clock; <see cref="TimeProvider.System"/> for a real invocation.</param>
     /// <returns>The root command: its verbs in ordinal name order, its help naming the tool <see cref="CliHelp.ToolName"/>,
     /// and every action guarded by <see cref="CliExit.Guard"/>.</returns>
-    public static RootCommand Create(TimeProvider clock) {
-        Command[] verbs = [
+    public static RootCommand Create(TimeProvider clock) => Create(clock: clock, schemaBootstrap: SchemaBootstrap.IsBootstrap);
+
+    // A bootstrap binary cannot start a consumer of the deliberately absent model table.
+    internal static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
+        Command[] verbs = schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
@@ -161,7 +164,7 @@ internal static class PuckRootCommand {
             RefusalsCommand.Create(),
             RegistryCommand.Create(),
             ScanCommand.Create(),
-            SchemaCommand.Create(),
+            SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
             ShadersCommand.Create(),
             TestCommand.Create(),

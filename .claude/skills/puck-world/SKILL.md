@@ -323,6 +323,11 @@ model shape (`WorldModelShape.generated.cs`, the table `WorldCallArguments` and
 together; `puck schema --check` (run in-process by `LedgerDriftTests`) fails
 when any of them drifts, and none is ever hand-edited. Precise direction:
 [references/documents.md](references/documents.md).
+If a model rename leaves generated getters uncompilable, run the existing CLI's
+`schema --bootstrap`: it builds a schema-only CLI with private intermediates and
+an explicitly absent model table, then uses the same reflective generator.
+Rebuild normally afterwards and check with that build's CLI; never hand-edit the
+generated table to break the cycle. The CLI reference owns the flags and logs.
 
 **Mint names through `GeneratedName`.** A name the engine or compiler writes
 into a namespace an author also names — a row, a cell key, a rule, a group, a

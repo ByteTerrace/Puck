@@ -25,6 +25,13 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <!-- Only the schema generator's private build may omit stale getters after a model rename. -->
+    <PropertyGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <DefineConstants>$(DefineConstants);PUCK_SCHEMA_BOOTSTRAP</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <Compile Remove="WorldModelShape.generated.cs" />
+    </ItemGroup>
     <!-- The commit this assembly is built at, embedded as a manifest resource (WorldSchema.SourceRevision). A
          resource is not part of the reference assembly, so a new commit recompiles this project alone and its
          dependents only copy it; the file is rewritten only when the commit changes. Empty outside a git tree. -->
