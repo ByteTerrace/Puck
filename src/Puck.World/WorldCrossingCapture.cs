@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -65,7 +66,8 @@ public sealed class WorldCrossingCapture(WorldContinuum continuum, WorldSeatAuth
     }
     /// <summary>Requests the armed capture of this frame when the seat's route pinned for it is later than the one it
     /// was armed with. Called once a presented frame, while its routes are pinned and before its views record.</summary>
-    public void Present() {
+    /// <param name="previousFrame">Whether the preceding attempt completed, still awaits renderable inputs, or was refused.</param>
+    public void Present(FrameRender previousFrame) {
         lock (m_gate) {
             // The root serves readback within ProduceFrame. A request still pending at the next presentation missed
             // its crossing frame; withdrawing it prevents a rebuild or an unavailable input from capturing a later route.

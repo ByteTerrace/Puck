@@ -1,5 +1,6 @@
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.World.Client;
 using Xunit;
 
@@ -23,29 +24,29 @@ public sealed partial class WorldRoutedPresentationLawTests {
         PublishSeat(viewports: viewports);
         _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
         Assert.True(condition: await Task.Run(function: () => capture.TryArm(reason: out _, request: request, slot: 0)));
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         Assert.Null(@object: target.Request);
         continuum.EndFrame();
 
         continuum.BeginFrame();
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         Assert.Null(@object: target.Request);
         continuum.EndFrame();
 
         _ = routes.Publish(endpoint: boot, entity: boot.Mirror.Address(index: 0), slot: 0);
         continuum.BeginFrame();
         viewports.BeginFrame();
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         Assert.Null(@object: target.Request);
         PublishSeat(viewports: viewports);
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         Assert.Same(expected: request, actual: target.Request);
         Assert.Null(@object: capture.PendingPath);
         continuum.EndFrame();
 
         // An accepted request that the root did not serve in that frame must not turn into a capture of a later one.
         continuum.BeginFrame();
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         continuum.EndFrame();
         Assert.True(condition: request.Completion.IsCompleted);
         Assert.Contains(expectedSubstring: "first crossing frame", actualString: (await request.Completion).Error!.Message);
@@ -70,7 +71,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
         continuum.BeginFrame();
         PublishSeat(viewports: viewports);
-        capture.Present();
+        capture.Present(previousFrame: FrameRender.Rendered);
         continuum.EndFrame();
         Assert.True(condition: request.Completion.IsCompleted);
         Assert.Contains(expectedSubstring: "ordinary.png", actualString: (await request.Completion).Error!.Message);
