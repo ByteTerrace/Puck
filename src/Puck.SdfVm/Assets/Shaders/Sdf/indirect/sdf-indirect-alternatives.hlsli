@@ -163,7 +163,8 @@ SdfIndirectSources sdfIndirectAlternative(SdfPixel p, SdfSurfaceSample receiver,
     bool previousShadow = sdfShadowParticipationActive;
     sdfSecondaryMarchActive = true;
     sdfShadowParticipationActive = true;
-    [unroll] for (uint ray = 0u; ray < SdfIndirectAlternativeRays; ray++) {
+    // Keep one bounded ray body: each cone includes the complete field and directional-shadow helpers.
+    [loop] for (uint ray = 0u; ray < SdfIndirectAlternativeRays; ray++) {
         float3 direction = sdfIndirectAlternativeDirection(receiver.normal, ray, phase);
         SdfIndirectSources incoming;
         bool hitSurface = false;

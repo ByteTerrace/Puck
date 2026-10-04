@@ -71,7 +71,7 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
             sdfIndirectReceiverLaunch = retainedLaunch;
             sdfIndirectReceiverClearance = retainedClearance;
             sdfIndirectReceiverStatus = 3u;
-            return sdfIndirectAlternative(p, receiver, retainedLaunch, result);
+            return result;
         }
         return result;
     }
@@ -104,7 +104,6 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
         sdfIndirectReceiverClearance = clearance;
         sdfIndirectReceiverStatus = 3u;
         sdfIndirectStoreReceiverCertificate(record, level, mask, launched, clearance, true);
-        result = sdfIndirectAlternative(p, receiver, launched, result);
         return result;
     }
     if (sdfIndirectReceiverDeferred) {
@@ -122,10 +121,15 @@ SdfIndirectSources sdfIndirectApply(SdfPixel p, SdfSurfaceSample receiver, float
     uint beforeSteps = sdfWorkSteps;
     uint beforeQueries = sdfIndirectEvaluations;
     uint beforeLoads = sdfIndirectLoads;
-    sdfIndirectReceiverSources = sdfIndirectReceiver(p, receiver, surfacePoint, normal);
-    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-        if ((passGroup.indirectSources & (1u << source)) == 0u) { sdfIndirectReceiverSources.values[source] = 0.0; }
+    SdfIndirectSources cacheSources = sdfIndirectReceiver(p, receiver, surfacePoint, normal);
+    SdfIndirectSources selectedSources = cacheSources;
+    if (sdfIndirectReceiverStatus == 3u) {
+        selectedSources = sdfIndirectAlternative(p, receiver, sdfIndirectReceiverLaunch, cacheSources);
     }
+    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+        if ((passGroup.indirectSources & (1u << source)) == 0u) { selectedSources.values[source] = 0.0; }
+    }
+    sdfIndirectReceiverSources = selectedSources;
     uint steps = sdfWorkSteps - beforeSteps;
     sdfEvalCount += (float)(sdfIndirectEvaluations - beforeQueries);
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT, steps, 0u, 0u, 0u, 0u);
