@@ -945,27 +945,28 @@ against the merge base of `HEAD` and `--merge-base` (default
 10. `registry`: `puck registry --check`.
 11. `vocabulary`: `puck vocabulary --check`.
 12. `shaders generate`: `puck shaders generate --check`.
-13. `branding`: `puck branding --check`.
-14. `formats`: `puck formats --check`.
-15. `canary-ceilings`: `puck canary-ceilings --check`.
-16. `derivations`: `puck derivations --check`.
-17. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-18. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-19. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
-20. `baselines state`: `puck baselines state --check` when reached.
-21. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-22. `parity`: `puck parity` when selected, only with `--gpu`.
-23. `Puck.World.Tests`: device suite, only with `--gpu`.
-24. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-25. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-26. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-27. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.ceilings.json`
+13. `shaders interface echo`: `puck shaders interface --echo-fixtures --check tests/Puck.World.Canaries/interface-echo`.
+14. `branding`: `puck branding --check`.
+15. `formats`: `puck formats --check`.
+16. `canary-ceilings`: `puck canary-ceilings --check`.
+17. `derivations`: `puck derivations --check`.
+18. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+19. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+20. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+21. `baselines state`: `puck baselines state --check` when reached.
+22. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+23. `parity`: `puck parity` when selected, only with `--gpu`.
+24. `Puck.World.Tests`: device suite, only with `--gpu`.
+25. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+26. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+27. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+28. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.ceilings.json`
     in ordinal order, using its recorded `workload` path. Each runs
     `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the script
     recorded in the ceilings supplies it, or the verb's default when absent.
-28. `docs citations`: `puck docs citations`, only with `--gpu`.
-29. `affected record`: `puck affected --record`, only with `--gpu --record`
+29. `docs citations`: `puck docs citations`, only with `--gpu`.
+30. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -977,6 +978,10 @@ holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
 root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
+
+The interface-echo step checks the shipped fixture family's model-derived graphs,
+positive and perturbed shader sources, and capture extents together without
+writing files. It runs on the CPU and opens no graphics device.
 
 Each baseline declares its owning test project and the data globs its tests read
 outside that project's reach. The affected map selects the checks against the

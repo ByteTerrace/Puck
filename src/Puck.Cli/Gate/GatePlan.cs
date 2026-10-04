@@ -32,6 +32,7 @@ internal static class GatePlan {
         new("registry", GateStepKind.Puck, ["registry", "--check"]),
         new("vocabulary", GateStepKind.Puck, ["vocabulary", "--check"]),
         new("shaders generate", GateStepKind.Puck, ["shaders", "generate", "--check"]),
+        new("shaders interface echo", GateStepKind.Puck, ["shaders", "interface", "--echo-fixtures", "--check", "tests/Puck.World.Canaries/interface-echo"]),
         new("branding", GateStepKind.Puck, ["branding", "--check"]),
         new("formats", GateStepKind.Puck, ["formats", "--check"]),
         new("canary-ceilings", GateStepKind.Puck, ["canary-ceilings", "--check"]),

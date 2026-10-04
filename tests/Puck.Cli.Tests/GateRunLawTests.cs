@@ -198,6 +198,7 @@ public sealed partial class GateRunLawTests {
                 ["registry", "--check"],
                 ["vocabulary", "--check"],
                 ["shaders", "generate", "--check"],
+                ["shaders", "interface", "--echo-fixtures", "--check", "tests/Puck.World.Canaries/interface-echo"],
                 ["branding", "--check"],
                 ["formats", "--check"],
                 ["canary-ceilings", "--check"],
@@ -216,7 +217,7 @@ public sealed partial class GateRunLawTests {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 14);
+        Assert.Equal(actual: runner.Steps.Count, expected: 15);
         Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
         Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
