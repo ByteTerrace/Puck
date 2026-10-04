@@ -189,6 +189,94 @@
         "scale": 1,
         "id": "occluder",
         "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          -48,
+          0,
+          24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid--48-24",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          -48,
+          0,
+          48
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid--48-48",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          -24,
+          0,
+          24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid--24-24",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          -24,
+          0,
+          48
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid--24-48",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          24,
+          0,
+          24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid-24-24",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          24,
+          0,
+          48
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid-24-48",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          48,
+          0,
+          24
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid-48-24",
+        "prototypeId": "pillar"
+      },
+      {
+        "position": [
+          48,
+          0,
+          48
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "grid-48-48",
+        "prototypeId": "pillar"
       }
     ]
   },
@@ -283,6 +371,16 @@
       },
       {
         "principal": "seat1",
+        "tick": 112,
+        "command": "world.row.set placements occluder position [0,0,64]"
+      },
+      {
+        "principal": "seat1",
+        "tick": 122,
+        "command": "world.row.set placements occluder position [0,0,0]"
+      },
+      {
+        "principal": "seat1",
         "tick": 182,
         "command": "world.row.set render lighting.lights[1] {\"$type\":\"directional\",\"name\":\"replacement-sun\",\"shadow\":\"auto\",\"direction\":[0,0.8,0.6],\"color\":\"#BBDDFF\",\"weight\":0.7}"
       }
@@ -316,6 +414,32 @@
         "instance": "world",
         "ticks": [
           101
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "departure",
+        "instance": "world",
+        "ticks": [
+          111
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "return",
+        "instance": "world",
+        "ticks": [
+          121
         ]
       },
       {

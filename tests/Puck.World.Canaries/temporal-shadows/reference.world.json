@@ -41,6 +41,32 @@
             "color": "#CCCCCC"
           }
         ],
+        "station": "departure-reference",
+        "instance": "world",
+        "ticks": [
+          114
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "return-reference",
+        "instance": "world",
+        "ticks": [
+          124
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
         "station": "light-reference",
         "instance": "world",
         "ticks": [

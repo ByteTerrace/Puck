@@ -8038,11 +8038,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
         slot retains an anchor until a full rebuild; every accepted direction
         stays within one eighth of the angle from that anchor, so any pair of
         retained samples stays within one quarter. Penumbra edits also reject.
-      - **Occluder motion:** the group's gathered occluder set (the shadow
-        gather's per-group list) holds a dynamic-transform slot whose row
-        differs between P15-3's previous dynamic-transform table and the
-        current one, so a moving body re-marches every group whose shadow it
-        can touch.
+      - **Occluder motion:** a dynamic-transform row differs between P15-3's
+        previous table and the current one, and either placement's bound
+        intersects the group's shadow cone. The check includes bodies whose
+        current grid cell has left the gather, so a departed body rejects the
+        shadow it left behind.
       - **Receiver:** P15's identity and depth test fails.
 
       The first slot marches every pixel. Incoming fade slots do too, and a
@@ -8062,7 +8062,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       four owner names and penumbra anchors, committed only when its shadow
       writer submits. The gather checks all three dynamic rows by their bits
       and tests both current and previous bounds, including a suppressed or
-      departed occluder. Flat and camera-mask fallbacks conservatively test
+      departed occluder. Eligible secondary groups scan instance metadata
+      cooperatively before walking current cells; only moved dynamic bounds
+      reach cone tests, and the scan performs no field evaluations. This adds
+      linear metadata work per group and eligible slot. Flat and camera-mask fallbacks conservatively test
       the whole dynamic table, as do unmasked world segments. First and incoming slots
       skip these motion checks. Rejected shadows
       raise the existing color-history reactivity so reconstruction cannot
@@ -8080,7 +8083,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       unamortized reference uses the world presentation view in a second boot:
       seat views share the amortization lever, and camera-view producers disable
       shadows. The manifest's pixel discriminator delays transitions past the
-      subject captures. A separate shader mutation keeps only receiver rejection;
+      subject captures. Eight off-camera pillars exercise the live frame grid;
+      departure and return captures preserve the arrival, light and owner legs.
+      A CPU fixture law checks the departed body's actual packed cell is outside
+      the receiver query and its previous bound intersects the cone. Withholding
+      the independent motion scan is the departure-specific shader red leg.
+      A separate shader mutation keeps only receiver rejection;
       its GPU red leg must show the moving occluder's old shadow lingering.
       laws hold the four rejection reasons, counted pixel and per-slot march
       detail rows, name identity through a reorder, slow light drift, handoffs,

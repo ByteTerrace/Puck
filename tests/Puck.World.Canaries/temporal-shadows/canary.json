@@ -1,5 +1,5 @@
 {
-  "binding": "Both boots capture the world presentation view at full shadow quality through the same court-camera layout. All seat views share WorldFramePresenter settings, so shadowAmortize cannot stay off on a simultaneous reference seat while the subject is on. After the subject captures, a second scheduled boot loads the pristine reference fixture with shadowAmortize false. The reference inherits the scene and captures only reference stations; it uses no restricted camera-view producer. The converged two-sun court and each rejection-frame capture stay within two mean eight-bit codes of the unamortized reference over the fixed receiver strip. The pillar moves before tick 101, the keyed light finishes turning at tick 141, and ownership changes before tick 181; references at 104, 144 and 184 see the same settled state. Still secondary reprojected pixels must be nonzero. The pixel discriminator keeps amortization off and delays the transitions past subject captures, requiring zero reused pixels and differences above the same two-code bound at each transition. A separate withheld-fix shader mutation retaining only receiver rejection proves that stale occluder shadows fail the positive bound; it requires a GPU run. Receiver geometry and camera stay fixed.",
+  "binding": "Both boots capture the world presentation view at full shadow quality through the same court-camera layout. All seat views share WorldFramePresenter settings, so shadowAmortize cannot stay off on a simultaneous reference seat while the subject is on. After the subject captures, a second scheduled boot loads the pristine reference fixture with shadowAmortize false. The reference inherits the scene and captures only reference stations; it uses no restricted camera-view producer. The converged two-sun court and each rejection-frame capture stay within two mean eight-bit codes of the unamortized reference over the fixed receiver strip. The pillar moves before tick 101, the pillar departs every current-grid query cell before tick 111 and returns before tick 121, the keyed light finishes turning at tick 141, and ownership changes before tick 181; references at 104, 114, 124, 144 and 184 see the same settled state. Still secondary reprojected pixels must be nonzero. The pixel discriminator keeps amortization off and delays the transitions past subject captures, requiring zero reused pixels and differences above the same two-code bound at each transition. A separate withheld-fix shader mutation retaining only receiver rejection proves that stale occluder shadows fail the positive bound; it requires a GPU run. Eight off-camera pillars keep the live instance grid spatially spread. The CPU fixture law checks the actual packed grid excludes the departed pillar from every cell reachable by the receiver shadow query, while its previous bound intersects that cone. Withholding only the independent motion scan is the departure-specific shader discriminator. Receiver geometry and camera stay fixed.",
   "bootShape": "offscreen",
   "id": "temporal-shadows",
   "discriminating": {
@@ -116,6 +116,42 @@
         "reference": "state/captures/owner-reference~184.png",
         "capture": "state/captures/owner~181.png",
         "name": "owner-matches-unamortized",
+        "type": "imageDifference",
+        "holds": false,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/departure-reference~114.png",
+        "capture": "state/captures/departure~111.png",
+        "name": "departure-matches-unamortized",
+        "type": "imageDifference",
+        "holds": false,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/return-reference~124.png",
+        "capture": "state/captures/return~121.png",
+        "name": "return-matches-unamortized",
         "type": "imageDifference",
         "holds": false,
         "extent": [
@@ -288,6 +324,42 @@
           128
         ],
         "reference": "state/captures/owner-reference~184.png"
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/departure~111.png",
+        "name": "departure-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/departure-reference~114.png"
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/return~121.png",
+        "name": "return-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/return-reference~124.png"
       }
     ],
     "script": "capture.script.txt",

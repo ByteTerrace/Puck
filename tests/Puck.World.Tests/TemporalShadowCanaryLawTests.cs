@@ -3,7 +3,8 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-public sealed class TemporalShadowCanaryLawTests {
+[Collection(AllocationCollection.Name)]
+public sealed partial class TemporalShadowCanaryLawTests {
     [Fact]
     public void TheUnamortizedReferenceUsesTheWorldViewInItsOwnScheduledBoot() {
         var directory = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Canaries/temporal-shadows");
@@ -14,7 +15,7 @@ public sealed class TemporalShadowCanaryLawTests {
         Assert.False(condition: reference!.Render.ShadowAmortize);
         Assert.True(condition: reference.Render.Temporal);
         Assert.Equal(expected: 2, actual: reference.Render.ShadowLights);
-        Assert.Equal(expected: 4, actual: reference.Captures!.Rows.Count);
+        Assert.Equal(expected: 6, actual: reference.Captures!.Rows.Count);
         Assert.All(collection: reference.Captures.Rows, action: row => {
             Assert.Equal(expected: "world", actual: row.Instance);
             Assert.EndsWith(expectedEndString: "-reference", actualString: row.Station.ToString());
@@ -44,7 +45,7 @@ public sealed class TemporalShadowCanaryLawTests {
         using var json = JsonDocument.Parse(File.ReadAllBytes(path: path));
         var rows = json.RootElement.GetProperty(propertyName: "captures").GetProperty(propertyName: "rows").EnumerateArray().ToArray();
 
-        foreach (var station in new[] { "occluder", "light", "owner" }) {
+        foreach (var station in new[] { "occluder", "departure", "return", "light", "owner" }) {
             var row = rows.Single(predicate: row => (row.GetProperty(propertyName: "station").GetString() == station));
             // A converge capture starts at jitter index zero and would force a full receiver rejection, hiding a
             // broken motion rule. Transition captures must read the ordinary rejection frame instead.
@@ -55,9 +56,16 @@ public sealed class TemporalShadowCanaryLawTests {
 
         Assert.Contains(collection: placements, filter: static row => (row.GetProperty(propertyName: "id").GetString() == "receiver"));
         Assert.Contains(collection: placements, filter: static row => (row.GetProperty(propertyName: "id").GetString() == "occluder"));
+        Assert.Equal(expected: 8, actual: placements.Count(predicate: static row => row.GetProperty(propertyName: "id").GetString()!.StartsWith(value: "grid-", comparisonType: StringComparison.Ordinal)));
         var schedule = json.RootElement.GetProperty(propertyName: "schedule").GetProperty(propertyName: "rows").EnumerateArray().ToArray();
 
         Assert.Contains(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set placements occluder position"));
         Assert.DoesNotContain(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.Contains(comparisonType: StringComparison.Ordinal, value: "placements receiver"));
+        var delay = (amortize ? 0 : 2);
+
+        Assert.Contains(collection: schedule, filter: row => ((row.GetProperty(propertyName: "tick").GetInt32() == (110 + delay))
+            && (row.GetProperty(propertyName: "command").GetString() == "world.row.set placements occluder position [0,0,64]")));
+        Assert.Contains(collection: schedule, filter: row => ((row.GetProperty(propertyName: "tick").GetInt32() == (120 + delay))
+            && (row.GetProperty(propertyName: "command").GetString() == "world.row.set placements occluder position [0,0,0]")));
     }
 }
