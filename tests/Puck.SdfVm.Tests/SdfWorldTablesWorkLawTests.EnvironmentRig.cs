@@ -4,7 +4,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 

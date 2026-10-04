@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -40,7 +39,7 @@ public sealed partial class SdfWorldPassesLawTests {
         void Produce() {
             var scheduled = new RenderGraphFrame(DisplayHeight: (int)Extent, DisplayHertz: 60, DisplayWidth: (int)Extent,
                 Footprints: [], Index: frame, Roots: [new(Height: 1, Instance: "world", Width: 1)], Tick: frame++);
-            _ = graph.ProduceFrame(context, scheduled);
+            _ = graph.ProduceFrame(frame: scheduled, context: context);
         }
         TestLiveness.Within(frames: 64, step: () => {
             Produce();

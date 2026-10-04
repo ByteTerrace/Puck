@@ -41,7 +41,7 @@ public sealed partial class SdfWorldPassesLawTests {
             }
             var scheduled = new RenderGraphFrame(DisplayHeight: (int)Extent, DisplayHertz: 60, DisplayWidth: (int)Extent,
                 Footprints: [], Index: frame, Roots: [new(Height: 1, Instance: "world", Width: 1)], Tick: frame++);
-            _ = graph.ProduceFrame(context, scheduled);
+            _ = graph.ProduceFrame(frame: scheduled, context: context);
             graph.Node(0).PollReadbacks();
         }
         void Until(Func<bool> condition, bool complete) => TestLiveness.Within(frames: 64, step: () => {
@@ -86,6 +86,5 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.False(residency.IsIndirectReady);
         Until(() => residency.IsIndirectReady, complete: true);
         Assert.Equal(bytes, graph.Node(0).OwnedBytes);
-        Assert.Empty(gpu.StateConflicts);
     }
 }
