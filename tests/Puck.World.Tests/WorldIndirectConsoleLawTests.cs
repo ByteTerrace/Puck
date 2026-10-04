@@ -141,7 +141,7 @@ public sealed class WorldIndirectConsoleLawTests {
         var active = new GpuMemoryBytes(layout.ByteLength + 123, 456);
         var all = active + new GpuMemoryBytes(789, 321);
         var output = WorldIndirectDiagnosticText.DescribeMemory(layout, all, active, lightDepth: 1024, lightFragment: 4096);
-        foreach (var (field, value) in new[] { ("radiance", radiance), ("irradiance", irradiance), ("publication", publication),
+        foreach (var (field, value) in new[] { ("radiance", radiance), ("irradiance", irradiance), ("publication", publication), ("receiver-proofs", 8UL),
             ("regions-device", 123UL), ("regions-host", 456UL), ("retiring-device", 789UL), ("retiring-host", 321UL),
             ("light-view", 1024UL), ("light-fragment", 4096UL), ("total", all.DeviceLocal + all.HostVisible + 4096UL) }) {
             Assert.Contains(field + "=" + value.ToString(CultureInfo.InvariantCulture), output);

@@ -62,7 +62,8 @@ public static class WorldIndirectDiagnosticText {
     }
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
-    /// allocations. A fragment's total already includes its depth bank and regions; these are breakdowns, not additions.</summary>
+    /// allocations. Probe-publication stamps and receiver admission/completion words occupy separate slices. A fragment's
+    /// total already includes its depth bank and regions; these are breakdowns, not additions.</summary>
     /// <param name="layout">The active cache's word layout, or null when no active cache is allocated.</param>
     /// <param name="allCaches">The sum of unique active and retiring cache allocations.</param>
     /// <param name="activeCache">The active cache allocation, included in <paramref name="allCaches"/>.</param>
@@ -79,12 +80,13 @@ public static class WorldIndirectDiagnosticText {
         var proofs = (layout is null ? 0UL : Slice(layout.ProofWordOffset, layout.RadianceWordOffset));
         var radiance = (layout is null ? 0UL : Slice(layout.RadianceWordOffset, layout.IrradianceWordOffset));
         var irradiance = (layout is null ? 0UL : Slice(layout.IrradianceWordOffset, layout.PublicationWordOffset));
-        var publication = (layout is null ? 0UL : Slice(layout.PublicationWordOffset, layout.WordCount));
+        var publication = (layout is null ? 0UL : Slice(layout.PublicationWordOffset, layout.ReceiverProofWordOffset));
+        var receiverProofs = (layout is null ? 0UL : Slice(layout.ReceiverProofWordOffset, layout.WordCount));
         var regions = checked(activeCache.DeviceLocal - (layout?.ByteLength ?? 0UL));
         var retiringDevice = checked(allCaches.DeviceLocal - activeCache.DeviceLocal);
         var retiringHost = checked(allCaches.HostVisible - activeCache.HostVisible);
         var total = checked(allCaches.DeviceLocal + allCaches.HostVisible + lightFragment);
         return string.Create(CultureInfo.InvariantCulture,
-            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
+            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} receiver-proofs={receiverProofs} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
     }
 }
