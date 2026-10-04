@@ -1,4 +1,3 @@
-using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
@@ -37,7 +36,7 @@ public sealed partial class SdfIndirectCache {
     /// <exception cref="InvalidOperationException">Transport or a prior solve is incomplete, or admission is frozen.</exception>
     public void BeginLighting() {
         if (!CanBeginLighting) { throw new InvalidOperationException("An indirect solve starts only after transport completes and the previous solve finishes."); }
-        IReadOnlyList<IrradianceProbeKey>[] levels = new IReadOnlyList<IrradianceProbeKey>[Layout.Levels.Count];
+        var levels = new IReadOnlyList<IrradianceProbeKey>[Layout.Levels.Count];
         for (var level = 0; level < levels.Length; level++) {
             var probes = new List<IrradianceProbeKey>();
             foreach (var brick in m_slots.Keys.Where(key => key.Level == level).Order()) {

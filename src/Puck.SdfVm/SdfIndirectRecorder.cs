@@ -78,7 +78,7 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectUpdates, cache.Regions[IsShade ? 4 : 1].Buffer(slot: tables.CurrentSlot));
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectDirections, cache.Regions[2].Buffer(slot: tables.CurrentSlot));
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectTraceStates, cache.Regions[3].Buffer(slot: tables.CurrentSlot));
-        tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectLightDepth, IsShade && recording.Inputs.Count > 0 ? recording.Inputs[0].Buffer! : tables.DummyBuffer);
+        tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectLightDepth, IsShade && recording.Inputs.Length > 0 ? recording.Inputs[0].Buffer! : tables.DummyBuffer);
         m_work.Write(passSet: set, recording: recording);
         var pipeline = tables.Pipeline(kernel: Kernel);
 
