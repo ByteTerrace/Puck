@@ -55,6 +55,7 @@ public sealed partial class GateRunLawTests {
             var name = (((arguments[0] == "docs") || (arguments[0] == "shaders") || (arguments[0] == "baselines")) ? string.Join(separator: ' ', values: arguments.Take(count: 2)) : arguments[0]);
 
             if (arguments[0] == "canary") { name = "affected canaries"; }
+            if ((name == "shaders interface") && arguments.Contains(value: "--echo-fixtures")) { name += " echo"; }
 
             if (arguments.Contains(value: "--record")) { name += " record"; }
             if (arguments[0] == "counters") { name += (" " + Path.GetFileName(path: arguments[3])[..^".world.json".Length]); }
