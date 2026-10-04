@@ -570,7 +570,10 @@ The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads, inside the dispatch box: one where a screen
 covers the pixel, and, since the material model cannot tell steady emission from
 animated, the share of the pixel's color it emits after detail material
-selection, material layers and mesh-atlas sampling. Coverage stays in the color's
+selection, material layers and mesh-atlas sampling. For temporal secondary
+shadows, rejection caused by ownership, light motion or occluder motion sets
+reactivity to one independently of K reuse, and receiver rejection does so when
+K is reused. Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
 inside the lit color and the transport, as a property of each sample's surface.
