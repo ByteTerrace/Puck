@@ -68,14 +68,13 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: fault!);
         }
 
-        ReleaseSlotView(slot: slot);
         slot.DeclaredFault = null;
-        ShowLive(
-            index: index,
-            source: WorldImageProducerSettings.SourceOf(
+        Rebind(
+            live: WorldImageProducerSettings.SourceOf(
                 id: WorldImageProducerSettings.QrId,
                 settings: settings
-            )
+            ),
+            slot: slot
         );
 
         return (Ok: true, Message: $"screen {index} showing QR v{authoring.Version} {QrErrorCorrection.Letter(level: authoring.Level)} mask{authoring.Mask} {authoring.Width}x{authoring.Height} '{ElideForEcho(payload: authoring.Payload)}'");

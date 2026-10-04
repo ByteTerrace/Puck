@@ -74,7 +74,7 @@ internal static class WorldRenderRoot {
         // Configure the views now the frame source has probed the render envelope: each camera a screen shows and each
         // session screen registers a view the render graph renders through an engine sized to these worst-case
         // capacities, using the selected host's bytecode, at its declared extent over the display's.
-        binder.ConfigureViews(
+        sp.GetRequiredService<IWorldViewHost>().ConfigureViews(
             displayHeight: hostSettings.Height,
             displayWidth: hostSettings.Width,
             dynamicTransformCapacity: frameSource.DynamicTransformCapacity,

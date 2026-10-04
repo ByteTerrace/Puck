@@ -14,7 +14,7 @@
     "copy.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.puck",
     "script": "feedback.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -65,7 +65,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-feedback/wrong-history.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/wrong-history.puck",
     "script": "feedback.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

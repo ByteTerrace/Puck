@@ -168,6 +168,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldRenderSkyLayer.Pattern), TypeInfoPropertyName = "WorldRenderSkyLayerPattern")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Panel), TypeInfoPropertyName = "WorldRenderSkyLayerPanel")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Panorama), TypeInfoPropertyName = "WorldRenderSkyLayerPanorama")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.View), TypeInfoPropertyName = "WorldRenderSkyLayerView")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Far), TypeInfoPropertyName = "WorldRenderSkyLayerFar")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]
@@ -1060,7 +1062,7 @@ internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<Gr
         }
 
         value = default;
-        reason = "must be 'all', 'composition', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
+        reason = "must be 'all', 'composition', 'history', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
 
         return false;
     }
@@ -1227,14 +1229,14 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
     public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(
             reader: ref reader,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
+            options: Puck.World.Authoring.CreationJsonContext.Document.Options
         );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.World.Authoring.CreationDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
-            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
+            options: Puck.World.Authoring.CreationJsonContext.Document.Options
         );
 }
 

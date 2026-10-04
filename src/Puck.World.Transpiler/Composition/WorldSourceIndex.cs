@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Text;
 using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Lowering;
 

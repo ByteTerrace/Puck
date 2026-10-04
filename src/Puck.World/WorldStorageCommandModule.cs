@@ -158,7 +158,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "storage.pull",
-            description: "Pulls one owned world (storage.pull <world-id>) or every local/tracked/cloud-discovered one (no argument) from the per-user cloud container, validating each through the boot loader's gate before adopting it. A whole-catalog pull also lists the cloud puck/worlds/ namespace and adopts any id it does not already know; a cloud object whose name no owned-world id can address refuses by name instead of being silently skipped (Immediate, up to 15s per blob — a basis chain multiplies this).",
+            description: "Pulls one owned world (storage.pull <world-id>) or every local/tracked/cloud-discovered one (no argument) from the per-user cloud container, validating each through the boot loader's gate before adopting it. A whole-catalog pull also lists the cloud puck/worlds/ namespace and adopts any id it does not already know; a cloud object whose name no owned-world id can address refuses by name instead of being silently skipped. A pulled copy replaces the owned identity in place, so every seat bound to it follows; while a tape records, every adoption refuses by name (PullWhileRecording), because a tape never carries an owned document (Immediate, up to 15s per blob — a basis chain multiplies this).",
             handler: (_, args) => ((args.Count > 1)
             ? CommandResult.Error(output: "[storage.pull: expected at most one argument (a world id)]")
             : Run(

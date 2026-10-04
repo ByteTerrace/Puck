@@ -8,7 +8,7 @@ namespace Puck.Cli {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldArtifactKey.Schema</c>, declared in <c>src/Puck.Cli/WorldArtifactKey.cs</c>.</summary>
-        public const string WorldArtifactKeySchema = "6b245d8afcd28e61";
+        public const string WorldArtifactKeySchema = "f6ae54aa0a05f9b3";
     }
 }
 
@@ -26,9 +26,9 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "65ccf8df499f7ad6";
+        public const string WorldReleaseExerciseResultCurrentSchema = "7af050f784d473c5";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
-        public const string WorldReleaseQualificationRunnerMarker = "2edc0a60cac45177";
+        public const string WorldReleaseQualificationRunnerMarker = "2b8f77ee9173c72c";
     }
 }
 
@@ -37,7 +37,7 @@ namespace Puck.Cli.Azure {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseDeploymentStore.Schema</c>, declared in <c>src/Puck.Cli/Azure/WorldReleaseDeploymentStore.cs</c>.</summary>
-        public const string WorldReleaseDeploymentStoreSchema = "fcc36d37d6a8da14";
+        public const string WorldReleaseDeploymentStoreSchema = "0ae69dba0c02136c";
     }
 }
 
@@ -64,9 +64,9 @@ namespace Puck.Cli.Determinism {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>DeterminismManifest.Schema</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismManifest.cs</c>.</summary>
-        public const string DeterminismManifestSchema = "5ec83ee1b8ac9f0f";
+        public const string DeterminismManifestSchema = "9e42b4cbef589ac9";
         /// <summary>The shape fingerprint of <c>DeterminismStream.Version</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismStream.cs</c>.</summary>
-        public const string DeterminismStreamVersion = "1322d9ae38aea843";
+        public const string DeterminismStreamVersion = "e998f8680234aaa2";
     }
 }
 
@@ -95,6 +95,6 @@ namespace Puck.Cli.Qualification {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
         public const string QualificationReportSchemaVersion = "f4defeca10504554";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "5e0ea23bbe0c844c";
+        public const string ReleaseProfileSchemaVersion = "33b7377faadf6d4c";
     }
 }

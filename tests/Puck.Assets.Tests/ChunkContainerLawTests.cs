@@ -34,6 +34,9 @@ public sealed class ChunkContainerLawTests {
         formatVersion: 7,
         header: "header"u8.ToArray()
     );
+
+    private const string Shape = "0123456789012345";
+
     private static int PayloadOffset(byte[] encoded, ReadOnlySpan<byte> payload) {
         for (var offset = 0; (offset <= (encoded.Length - payload.Length)); ++offset) {
             if (encoded.AsSpan(start: offset, length: payload.Length).SequenceEqual(other: payload)) {
@@ -46,8 +49,8 @@ public sealed class ChunkContainerLawTests {
 
     [Fact]
     public void AContainerRoundTripsCanonicallyWithEveryPayloadAligned() {
-        var encoded = Sample().Encode(magic: Magic);
-        var decoded = ChunkContainer.Decode(content: encoded, magic: Magic);
+        var encoded = Sample().Encode(magic: Magic, shape: Shape);
+        var decoded = ChunkContainer.Decode(content: encoded, magic: Magic, shape: Shape);
 
         Assert.Equal(expected: 7U, actual: decoded.FormatVersion);
         Assert.Equal(expected: "header"u8.ToArray(), actual: decoded.Header.ToArray());
@@ -55,15 +58,26 @@ public sealed class ChunkContainerLawTests {
         Assert.Equal(expected: [3U, 1U, 200U], actual: decoded.Chunks.Select(selector: static chunk => chunk.Version));
         Assert.Equal(expected: Sample().Chunks[1].Inputs, actual: decoded.Chunks[1].Inputs);
         Assert.Equal(expected: "payload bytes"u8.ToArray(), actual: decoded.Chunks[1].Payload.ToArray());
-        Assert.Equal(expected: encoded, actual: decoded.Encode(magic: Magic));
+        Assert.Equal(expected: encoded, actual: decoded.Encode(magic: Magic, shape: Shape));
         Assert.True(condition: decoded.TryFind(chunk: out var first, code: ChunkCode.Parse(text: "ONE ")));
         Assert.Equal(expected: 3U, actual: first.Version);
         Assert.Equal(expected: 0, actual: (PayloadOffset(encoded: encoded, payload: "payload bytes"u8) % ChunkContainer.PayloadAlignment));
         Assert.Equal(expected: 0, actual: (PayloadOffset(encoded: encoded, payload: "a"u8) % ChunkContainer.PayloadAlignment));
     }
+    // The same magic and version under another shape fingerprint is refused by name, before the header or any chunk is read.
+    [Fact]
+    public void ADecodeOfAnotherShapeRefusesByTheFingerprintBeforeReadingTheContainer() {
+        var encoded = Sample().Encode(magic: Magic, shape: Shape);
+        var other = Sample().Encode(magic: Magic, shape: "fedcba9876543210");
+        var refusal = Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: other, magic: Magic, shape: Shape));
+
+        Assert.Contains(expectedSubstring: $"another shape than {Shape}", actualString: refusal.Message);
+        Assert.Equal(expected: encoded.Length, actual: other.Length);
+        Assert.Equal(expected: Shape, actual: System.Text.Encoding.ASCII.GetString(bytes: encoded.AsSpan(length: 16, start: 5)));
+    }
     [Fact]
     public void ADecodeRefusesEveryByteItCannotAccountFor() {
-        var encoded = Sample().Encode(magic: Magic);
+        var encoded = Sample().Encode(magic: Magic, shape: Shape);
         var payload = PayloadOffset(encoded: encoded, payload: "payload bytes"u8);
 
         byte[] With(int offset, byte value) {
@@ -73,16 +87,16 @@ public sealed class ChunkContainerLawTests {
             return copy;
         }
 
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded, magic: "NOPE"u8));
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: With(offset: payload, value: ((byte)'P')), magic: Magic));
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: With(offset: (payload - 1), value: 0xff), magic: Magic));
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. encoded, 0]), magic: Magic));
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded.AsMemory(start: 0, length: (encoded.Length - 1)), magic: Magic));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded, magic: "NOPE"u8, shape: Shape));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: With(offset: payload, value: ((byte)'P')), magic: Magic, shape: Shape));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: With(offset: (payload - 1), value: 0xff), magic: Magic, shape: Shape));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. encoded, 0]), magic: Magic, shape: Shape));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded.AsMemory(start: 0, length: (encoded.Length - 1)), magic: Magic, shape: Shape));
         // The format version, 7, spelled with a redundant continuation byte.
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. "TEST"u8, 0x87, 0x00, .. encoded.AsSpan(start: 5)]), magic: Magic));
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded, magic: Magic, maximumBytes: (encoded.Length - 1)));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. "TEST"u8, 0x87, 0x00, .. encoded.AsSpan(start: 5)]), magic: Magic, shape: Shape));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: encoded, magic: Magic, shape: Shape, maximumBytes: (encoded.Length - 1)));
         // A chunk count no remaining bytes could hold is refused before anything is allocated for it.
-        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. "TEST"u8, 0x01, 0x00, 0xff, 0xff, 0xff, 0xff, 0x07]), magic: Magic));
+        Assert.Throws<InvalidDataException>(testCode: () => ChunkContainer.Decode(content: ((byte[])[.. "TEST"u8, 0x01, .. "0123456789012345"u8, 0x00, 0xff, 0xff, 0xff, 0xff, 0x07]), magic: Magic, shape: Shape));
     }
     [Fact]
     public void AChunkRefusesInputsOutOfOrderAndACodeRefusesUnprintableText() {

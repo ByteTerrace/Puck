@@ -7,7 +7,7 @@
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -809,7 +809,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

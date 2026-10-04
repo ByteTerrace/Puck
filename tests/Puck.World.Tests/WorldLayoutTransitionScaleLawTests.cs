@@ -13,10 +13,11 @@ namespace Puck.World.Tests;
 /// no allocation and rebuilds nothing (SdfWorldPassesLawTests holds the graph to that). A view at a native ceiling
 /// reconstructs nothing, so its grid stays its output through the dip.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldLayoutTransitionScaleLawTests : IDisposable {
     private const uint Display = 64;
     private const float Step = 0.1f;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-transition-scale-");
 

@@ -1,3 +1,5 @@
+using Puck.Assets;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionFileSource {
@@ -41,6 +43,87 @@ public static partial class WorldDefinitionFileSource {
         return described;
     }
 
+    /// <summary>Returns whether a document path names a document that exists: its file, or, for a
+    /// <c>.world.json</c> path, the <c>.puck</c> source of that name, which is what every door that reads
+    /// a document by its file name reads when no document file stands beside it.</summary>
+    /// <param name="path">The document path: a document file's, or a source file's.</param>
+    /// <returns><see langword="true"/> when the file exists or its source does.</returns>
+    public static bool DocumentFileExists(string path) => (File.Exists(path: path) || HasSource(documentPath: path));
+
+    private static bool HasSource(string documentPath) => (WorldDocumentName.IsDocumentFile(path: documentPath) && File.Exists(path: WorldDocumentName.SourceFile(name: WorldDocumentName.OfDocumentFile(path: documentPath))));
+
+    /// <summary>Reads the document a path names. A <c>.puck</c> path, and a <c>.world.json</c> path whose source of that
+    /// name exists (the source wins over a document file beside it, as it does for every name), read as the document that source lowers to through
+    /// <paramref name="documents"/>, so a source resolves exactly as the document it compiles to would; any other
+    /// path is the file as it stands.</summary>
+    /// <param name="path">The document path.</param>
+    /// <param name="content">The document's bytes on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line refusal (absent, unreadable, or a source the source cannot lower), or empty on
+    /// success.</param>
+    /// <param name="documents">The source a <c>.puck</c> reads through, or <see langword="null"/> for
+    /// <see cref="LocalDocuments"/>.</param>
+    /// <param name="shown">What a refusal calls the document, or <see langword="null"/> for its path.</param>
+    /// <param name="countsFileRead">Whether a plain file's read counts on the boot ledger; a source's lowering always
+    /// does, since it comes through the document source every composition read does.</param>
+    /// <returns><see langword="true"/> when the document was read.</returns>
+    public static bool TryReadDocumentFile(string path, out byte[]? content, out string reason, IWorldDocumentSource? documents = null, string? shown = null, bool countsFileRead = false) {
+        shown ??= path;
+        content = null;
+
+        if (!DocumentFileExists(path: path)) {
+            reason = $"no file at {shown}";
+
+            return false;
+        }
+
+        if (WorldDocumentName.IsSourceFile(path: path) || HasSource(documentPath: path)) {
+            // A supplied source owns how a .puck root reads — it lowers to its document, named by the path without
+            // its suffix — so a pin over the result covers the document that source produces, not the file's raw bytes.
+            var name = (WorldDocumentName.IsSourceFile(path: path)
+                ? WorldDocumentName.OfSourceFile(path: Path.GetFullPath(path: path))
+                : WorldDocumentName.OfDocumentFile(path: Path.GetFullPath(path: path))
+            );
+
+            if (!TryReadDocument(
+                source: (documents ?? LocalDocuments),
+                content: out var lowered,
+                name: name,
+                reason: out var readReason,
+                referrerName: path,
+                resolvedName: out _
+            )) {
+                reason = $"cannot read {shown}: {readReason.ReplaceLineEndings(replacementText: " ")}";
+
+                return false;
+            }
+
+            content = lowered;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
+        // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
+        // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
+        // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
+        try {
+            content = File.ReadAllBytes(path: path);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            reason = $"cannot read {shown}: {WorldDocumentLabel.Failure(exception: exception)}";
+
+            return false;
+        }
+
+        if (countsFileRead) {
+            WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
     // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
     // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
     // TryResolveChainFiles' push-side walk can never drift apart.
@@ -49,8 +132,10 @@ public static partial class WorldDefinitionFileSource {
     private sealed class DirectoryDocumentSource(Func<string, byte[]?>? read = null) : IWorldDocumentSource {
         public bool ResolvesFiles => (read is null);
 
+        public bool RecordInputs(string resolvedName, byte[] content) => ((read is null) && CompileInputs.ReadAllBytes(path: resolvedName).AsSpan().SequenceEqual(other: content));
+
         private bool Exists(string path) => ((read is null)
-            ? File.Exists(path: path)
+            ? CompileInputs.Exists(path: path)
             : (read(arg: path) is not null));
 
         public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
@@ -80,7 +165,7 @@ public static partial class WorldDefinitionFileSource {
 
             try {
                 content = ((read is null)
-                    ? File.ReadAllBytes(path: resolvedName)
+                    ? CompileInputs.ReadAllBytes(path: resolvedName)
                     : read(arg: resolvedName));
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 reason = $"cannot read basis document '{name}': {WorldDocumentLabel.Failure(exception: exception)}";

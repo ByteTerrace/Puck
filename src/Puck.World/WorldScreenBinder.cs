@@ -44,7 +44,7 @@ namespace Puck.World;
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
 /// lock guards this state.</para>
 /// </remarks>
-internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter {
+internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
     public WorldSkyAudition? SkyLayers { get; init; }
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
     private const int QrDefaultQuietZoneModules = 4;

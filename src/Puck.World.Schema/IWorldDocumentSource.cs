@@ -1,11 +1,29 @@
+using Puck.Assets;
+
 namespace Puck.World;
 
+/// <summary>One document's bytes in the order a composition read them.</summary>
+public sealed record WorldComposedLink(string Path, byte[] Bytes);
+/// <summary>A composed image and the filesystem facts that justify it. The original chain preserves content hashes.</summary>
+public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs);
+/// <summary>The persistent composition entries of the compile cache.</summary>
+public interface IWorldCompositionStore {
+    /// <summary>Reads an image for this source, path and catalog identity.</summary>
+    WorldComposedDocument? ReadComposition(string key);
+    /// <summary>Stores an image under this source, path and catalog identity.</summary>
+    void WriteComposition(string key, WorldComposedDocument image);
+}
 /// <summary>Resolves and reads one document's raw bytes by name — the byte-level seam basis-chain composition walks
 /// over, implemented once for a directory (the local load path) and once for a flat cloud namespace
 /// (<c>Puck.World.Server</c>'s storage tier). Lower-level than <see cref="IWorldNeighbourResolver"/>: this returns
 /// raw bytes for one named document, never a parsed or composed one, and is what
 /// <see cref="WorldDefinitionFileSource.TryComposeChain"/> calls once per chain link.</summary>
 public interface IWorldDocumentSource {
+    /// <summary>Gets the persistent store, when this source records every filesystem dependency.</summary>
+    IWorldCompositionStore? Compositions => null;
+
+    /// <summary>Records the inputs of an already-read root, returning whether they justify its bytes.</summary>
+    bool RecordInputs(string resolvedName, byte[] content) => false;
     /// <summary>Resolves <paramref name="name"/> (a <see cref="WorldDocumentBasis.BasisMemberName"/> value, authored
     /// verbatim) against <paramref name="referrerName"/> and reads its bytes.</summary>
     /// <param name="name">The authored basis reference, exactly as the document spells it.</param>

@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sky-layers/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sky-layers/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -1232,7 +1232,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sky-layers/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sky-layers/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

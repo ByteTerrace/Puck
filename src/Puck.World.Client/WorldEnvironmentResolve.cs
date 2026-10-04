@@ -704,6 +704,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, panel: panel, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror), tier: tier, visibility: visibility),
             _ => -1,
         };
 
@@ -996,6 +998,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
         Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
         Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),
+    };
+    // The view fit supplies the camera basis, rectangle and image for this static layer each frame.
+    private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage) => new() {
+        Coverage = (coverage ? 1u : 0u),
+        Fallback = Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror),
     };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var site = new WorldValueSite("render.environment");

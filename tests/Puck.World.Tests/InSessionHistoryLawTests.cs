@@ -549,9 +549,9 @@ public sealed class InSessionHistoryLawTests {
     public void ASeekRefusesByNameWhileARecordingCapturesTheTimeline() {
         using var harness = new WorldHistoryHarness(seed: 2UL);
 
-        harness.Steps(count: 20);
-        Assert.True(condition: harness.Tape.TryBeginRecording(name: $"history-{Guid.NewGuid():N}", refusal: out _));
-        harness.Steps(count: 5);
+        // A recording arms before the world's first step.
+        Assert.True(condition: harness.Tape.TryBeginRecording(name: $"history-{Guid.NewGuid():N}", refusal: out var arming), userMessage: arming);
+        harness.Steps(count: 25);
 
         Assert.False(condition: harness.History.TrySeek(
             documentPath: null,

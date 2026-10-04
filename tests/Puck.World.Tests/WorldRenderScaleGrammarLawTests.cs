@@ -10,6 +10,7 @@ namespace Puck.World.Tests;
 
 /// <summary>CONTRACT UNDER TEST: one render-scale grammar controls durable scalar ceilings and per-view tier floors,
 /// while a bindable pin is bounded, allocates nothing during a sweep, resumes within one policy step and is never saved.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldRenderScaleGrammarLawTests : IDisposable {
     private readonly TemporaryDirectory m_state = new(prefix: "puck-render-scale-grammar-");
 
@@ -19,7 +20,7 @@ public sealed class WorldRenderScaleGrammarLawTests : IDisposable {
         var host = m_state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_state,
-            world: "tests/Puck.Counters/counters.world.json").Build());
+            world: "tests/Puck.Counters/counters.puck").Build());
 
         host.Services.GetRequiredService<WorldClient>().AttachSessionLevers(levers: host.Services.GetRequiredService<WorldSessionLeverSink>());
         return (host.Services.GetRequiredService<CommandRegistry>(), host.Services.GetRequiredService<WorldRenderSettings>(),

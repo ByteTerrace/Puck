@@ -492,6 +492,21 @@ are refused by name at the tick boundary as they are from the console.
 | `world.place [<creation>] [<id>]` | Enter, South | Puts a placement down where the seat aims. |
 | `world.nudge [<placement>] x\|y\|z <steps>` | WASD, R, F, d-pad | Moves a placement by whole grid steps. |
 | `world.turn [<placement>] <steps>` | Q, E, shoulders | Turns a placement by whole angle steps. |
+| `world.history step -1\|step 1` | Z, X | Steps the in-session history a tick back or on. |
+| `world.history resume` | V | Continues live input from the history's cursor, discarding the recorded future. |
+| `world.history branch kept` | B | Continues live input from the cursor and keeps the recorded future as the branch `kept`. |
+| `world.history.drag` | Left mouse button | Held over the scrubber row, seeks to the tick under the pointer. |
+
+While `world.history` is on, a building seat's view draws the history's window
+as a scrubber row along its lower edge. The bar is the window, each keyframe is
+a tick on it, each kept branch is a fork raised above it, and the cursor is
+labelled with its tick; `world.history row` echoes the same facts. The history
+forms run under the seat's own principal and need `control` over the `history`
+grant subject, which every seat holds through its seeded `control all` until it
+is revoked (`world.grant control history seat2` grants it alone). `world.history
+on` itself, `switch`, `save`, `diff` and the other forms stay the operator's;
+the [state reference](../../docs/reference/state/worlds.md#travel-through-recorded-time)
+lists them.
 
 `world.grid` and `world.snap` echo the seat's whole state with no argument and
 after every change. They move presentation state only: each value a verb has
@@ -1422,7 +1437,9 @@ presentation verb bound over the row (`screen.source <index> <kind>`, a
 each frame its `sdf.world` passes bind the image the runtime hands them for a
 source to every screen showing it, under a lease their node holds until the
 submission that sampled it has finished. A live bind publishes its source's
-mapping as a row does. A screen
+mapping as a row does. `screen.source <index> row` drops the live bind and the
+screen shows its row's source again, releasing a camera view the bind
+registered and re-binding the row's own view when the row authors one. A screen
 showing a view or a session reads that view's own `sdf.world` instance
 (`WorldViewInstances`), which renders at its footprint's extent.
 
@@ -1638,7 +1655,8 @@ screen index removed and later restored by `world.reset`/`.load` exactly as
 world's residency binds every frame through the binder's `ISdfScreenSources`). It still
 OWNS the genuinely presentation sources bound through `screen.source <index>
 <kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
-present machine first, through the ordered domain)—a jumbotron view it renders
+present machine first, through the ordered domain, and `row` returns the
+screen to its row's source)—a jumbotron view it renders
 itself, any other a source instance it shows over the row—and `screen.eject`
 (which routes to whichever half—machine or presentation source—actually holds
 the slot). A camera source row picks its
@@ -2333,7 +2351,7 @@ calling principal's explicitly disclosed literal observations.
 `world.state.similar <row> <key> <table> [top]` ranks a vector table's cells
 against a query vector by cosine similarity and dot product, reading through
 the caller's visibility and writing nothing. The headless
-[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 
 [Decision policies](../Puck.World.Schema/README.md#decision-policies) let a world

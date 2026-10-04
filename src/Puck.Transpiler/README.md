@@ -21,7 +21,7 @@ keeps its typed descent. `Ast/QualifiedName` is the one reading of a dotted name
 document or the operand grammar as the name it reads. `Editing/LspJson` builds every Language Server Protocol completion item, position and range
 the world and cartridge editor services answer with, and converts between an LSP position and a source offset; a
 range that crosses line breaks ends on the line it ends on.
-A compile reads files only through `Modules/CompileInputs`, which records inside a `Record` scope every fact the
+A compile reads files only through `Puck.Assets.CompileInputs`, which records inside a `Record` scope every fact the
 compile learned — each file's bytes, each path it probed, absent or present, and each directory it listed, with
 every file name spelled as the file system spells it — so a vocabulary's cache can prove a held compile still stands.
 

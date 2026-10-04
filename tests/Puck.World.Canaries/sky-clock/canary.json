@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sky-clock/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sky-clock/fixture.puck",
     "script": "sky.script.txt",
     "commands": [
       {
@@ -58,7 +58,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sky-clock/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/sky-clock/discriminating.puck",
     "script": "sky.script.txt",
     "commands": [
       {

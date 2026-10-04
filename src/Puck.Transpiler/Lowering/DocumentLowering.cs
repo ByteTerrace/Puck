@@ -592,6 +592,10 @@ public static partial class DocumentLowering {
     public static string BareSpelling(DocumentValueForm form, string written) {
         ArgumentNullException.ThrowIfNull(argument: written);
 
+        // A bare `null` holds nothing, so a row or key that is named null is written as a computed name.
+        if ((form is DocumentValueForm.Name or DocumentValueForm.Key) && string.Equals(a: written, b: "null", comparisonType: StringComparison.Ordinal)) {
+            return "$\"null\"";
+        }
         if (form == DocumentValueForm.Name) {
             // Punctuation alone does not make a name a channel or an expression: `cards(active)` is also a
             // legal literal row name. Only a parsed channel may keep its call syntax here.

@@ -1,5 +1,5 @@
 {
-  "workload": "tests/Puck.Counters/sky-still.world.json",
+  "workload": "tests/Puck.Counters/sky-still.puck",
   "script": "tests/Puck.Counters/sky.script.txt",
   "width": 1920,
   "height": 1080,

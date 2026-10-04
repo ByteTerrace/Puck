@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/temporal-disocclusion/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-disocclusion/fixture.puck",
     "script": "capture.script.txt",
     "runSchedule": true,
     "commands": [
@@ -55,7 +55,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/temporal-disocclusion/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-disocclusion/discriminating.puck",
     "script": "capture.script.txt",
     "runSchedule": true,
     "commands": [

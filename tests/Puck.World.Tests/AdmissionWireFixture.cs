@@ -84,6 +84,7 @@ internal static class AdmissionWireFixture {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
                 key: WorldProtocol.WireProtocolKey,
+                shape: WorldProtocol.WireShape,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
 

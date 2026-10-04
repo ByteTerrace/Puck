@@ -502,9 +502,9 @@ internal sealed partial class WorldScreenBinder {
             feed: feed,
             source: source
         ));
-        ShowLive(
-            index: index,
-            source: source
+        Rebind(
+            live: source,
+            slot: m_slots[index]
         );
     }
     // Hands a capture source instance the capture a live verb parked for equal settings, if one is waiting.

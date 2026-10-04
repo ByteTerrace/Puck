@@ -7,7 +7,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The law: one game module composes twice under two aliases and both play. <c>Fixtures/twin-tictactoe-host.world.json</c>
+/// The law: one game module composes twice under two aliases and both play. <c>Fixtures/twin-tictactoe-host.puck</c>
 /// imports <c>games/tictactoe.puck</c> as <c>a</c> and as <c>b</c>; every row, lattice, and rule the module
 /// declares lands twice under <c>a$</c>/<c>b$</c>, the module's own references follow, and a move on one table
 /// leaves the other untouched.
@@ -17,7 +17,7 @@ public sealed class ModuleAliasImportLawTests {
         ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
         ? board.Empty
         : throw new InvalidOperationException(message: $"missing {row.Name}[{key}]")));
-    private static string FixturePath() => RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json");
+    private static string FixturePath() => RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck");
     private static WorldDefinition LoadTwinHost() {
         Assert.True(
             condition: WorldDefinitionLoader.TryLoadFile(
@@ -248,6 +248,7 @@ public sealed class ModuleAliasImportLawTests {
     public void CompositionReadBackNamesEachAlias() {
         Assert.True(
             condition: WorldDefinitionFileSource.TryDescribeComposition(
+                content: Puck.Testing.ShippedWorldDocuments.Read(path: FixturePath()),
                 path: FixturePath(),
                 layers: out var layers,
                 reason: out var reason

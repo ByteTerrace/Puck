@@ -12,8 +12,10 @@ namespace Puck.Networking;
 /// a challenge).
 /// </summary>
 public static class HandshakeWireFormat {
-    /// <summary>The Hello handshake's fixed size: one little-endian protocol key.</summary>
-    public const int HelloBytes = sizeof(ulong);
+    /// <summary>The length of a shape fingerprint, in ASCII digits.</summary>
+    public const int ShapeBytes = 16;
+    /// <summary>The Hello handshake's fixed size: one little-endian protocol key, then the dialect's shape fingerprint.</summary>
+    public const int HelloBytes = (sizeof(ulong) + ShapeBytes);
     /// <summary>The hard cap on a HelloIdentity frame's total bytes — generous for two chain envelopes plus one
     /// claim attestation (small P-256 payloads), while still refusing an absurd length before allocating for it.</summary>
     public const int MaxHelloIdentityBytes = (64 * 1024);
@@ -199,20 +201,37 @@ public static class HandshakeWireFormat {
 
         return whole;
     }
-    /// <summary>Writes the Hello key as a fixed <see cref="HelloBytes"/>-byte value with no length prefix of its
-    /// own — the opening exchange of every dialect built on this grammar.</summary>
+    /// <summary>Reads the Hello a dialer wrote.</summary>
+    /// <param name="hello">Exactly <see cref="HelloBytes"/> bytes.</param>
+    /// <returns>The offered key and the shape fingerprint it was offered with.</returns>
+    public static (ulong Key, string Shape) ReadHello(ReadOnlySpan<byte> hello) => (
+        BinaryPrimitives.ReadUInt64LittleEndian(source: hello),
+        System.Text.Encoding.ASCII.GetString(bytes: hello.Slice(
+            length: ShapeBytes,
+            start: sizeof(ulong)
+        ))
+    );
+    /// <summary>Writes the Hello as a fixed <see cref="HelloBytes"/>-byte value with no length prefix of its own — the
+    /// protocol key, then the dialect's shape fingerprint, the opening exchange of every dialect built on this
+    /// grammar.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="key">The offered opaque wire identity.</param>
+    /// <param name="shape">The shape fingerprint of the dialect's wire contract.</param>
     /// <param name="ct">Cancellation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-    public static async Task WriteHelloAsync(Stream stream, ulong key, CancellationToken ct) {
+    public static async Task WriteHelloAsync(Stream stream, ulong key, string shape, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
+        ArgumentNullException.ThrowIfNull(argument: shape);
 
         var buffer = new byte[HelloBytes];
 
         BinaryPrimitives.WriteUInt64LittleEndian(
             destination: buffer,
             value: key
+        );
+        System.Text.Encoding.ASCII.GetBytes(
+            bytes: buffer.AsSpan(start: sizeof(ulong)),
+            chars: shape
         );
         await stream.WriteAsync(
             buffer: buffer,

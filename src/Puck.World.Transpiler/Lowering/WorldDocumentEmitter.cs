@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -8,7 +9,6 @@ using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -117,7 +117,8 @@ public static partial class WorldDocumentEmitter {
         WorldDocumentVocabulary? vocabulary = null,
         List<WorldOutput>? worldOutputs = null,
         Assets.AssetCompilationContext? assets = null,
-        IReadOnlyList<EnumDefinition>? inheritedEnums = null
+        IReadOnlyList<EnumDefinition>? inheritedEnums = null,
+        bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -161,6 +162,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.Annotations["WorldDocumentRoot"] = root;
+        scope.Annotations["IncludeTests"] = includeTests;
         if (assets is not null) { scope.Annotations["AssetContext"] = assets; }
         if (basePath is not null) { scope.Annotations[WorldDocumentVocabulary.DocumentDirectoryAnnotation] = WorldDocumentPaths.FullDirectory(directory: basePath); }
         var composition = new Composition(statements: document.Statements);
@@ -527,6 +529,7 @@ public static partial class WorldDocumentEmitter {
                 break;
 
             case TestDeclarationNode test: {
+                    if (scope.Annotations.GetValueOrDefault(key: "IncludeTests") is false) { break; }
                     // A test reaches no member of the document it is written in. It is collected against the
                     // scope and lowered once the document is finished, since a generated test world is that
                     // finished document plus what the test asked for.
@@ -1063,7 +1066,7 @@ public static partial class WorldDocumentEmitter {
                 annotations[catalogName] = new HashSet<string>(collection: catalog, comparer: StringComparer.Ordinal);
             }
         }
-        foreach (var sharedName in new[] { "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases" }) {
+        foreach (var sharedName in new[] { "IncludeTests", "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases" }) {
             if (scope.Annotations.TryGetValue(key: sharedName, value: out var value)) { annotations[sharedName] = value; }
         }
         return annotations;

@@ -205,7 +205,7 @@ public sealed partial class GateRunLawTests {
             }
         );
         // The run keeps its log and step summary: the CLI copy and the file list go when it ends.
-        Assert.Equal(actual: Directory.EnumerateFileSystemEntries(path: directory.RootPath).Select(selector: static entry => Path.GetFileName(path: entry)), expected: ["gate.log", "gate.steps"]);
+        Assert.Equal(actual: Directory.EnumerateFileSystemEntries(path: directory.RootPath).Select(selector: static entry => Path.GetFileName(path: entry)).Order(comparer: StringComparer.Ordinal), expected: ["gate.log", "gate.steps"]);
     }
     [Fact]
     public void AFailedStepFailsTheGateWhileTheRestStillRun() {

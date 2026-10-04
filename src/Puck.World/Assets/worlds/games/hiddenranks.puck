@@ -6,7 +6,7 @@
 //
 // This is a module fragment, not a bootable world: a host supplies the seats,
 // the `attack` channel the two ready presses arrive on, and the simulation rate.
-// tests/Puck.World.Tests/Fixtures/minimal-hiddenranks-host.world.json is that host.
+// tests/Puck.World.Tests/Fixtures/minimal-hiddenranks-host.puck is that host.
 //
 // Ranks. 1 Marshal, 2 General, 3 Colonel, 4 Major, 5 Captain, 6 Lieutenant,
 // 7 Sergeant, 8 Miner, 9 Scout, 10 Spy, 11 Bomb, 12 Flag. A LOWER number wins,

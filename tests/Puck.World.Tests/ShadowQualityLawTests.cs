@@ -16,6 +16,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>CPU laws for authored shadow quality rows and their live lever, save and boot path.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class ShadowQualityLawTests {
     private sealed class AudioLever : IWorldAudioLever {
         public float? SessionMasterVolume { get; private set; }

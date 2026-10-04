@@ -19,11 +19,11 @@ namespace Puck.World.Server {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.Magic</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecMagic = "a4eff9187dc33c4b";
+        public const string WorldAuthorityCheckpointCodecMagic = "e8f833b90f52eed2";
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.SupportedVersion</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecSupportedVersion = "a4eff9187dc33c4b";
+        public const string WorldAuthorityCheckpointCodecSupportedVersion = "e8f833b90f52eed2";
         /// <summary>The shape fingerprint of <c>WorldAuthorityReceiptSnapshot.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs</c>.</summary>
-        public const string WorldAuthorityReceiptSnapshotCurrentSchema = "65fc344287a0a17e";
+        public const string WorldAuthorityReceiptSnapshotCurrentSchema = "04e08bae87857fb3";
         /// <summary>The shape fingerprint of <c>WorldAuthorityRecoveryRootCodec.Schema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs</c>.</summary>
         public const string WorldAuthorityRecoveryRootCodecSchema = "3c3d3348203bf86f";
         /// <summary>The shape fingerprint of <c>WorldExtensionConfiguration.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldExtensionConfiguration.cs</c>.</summary>

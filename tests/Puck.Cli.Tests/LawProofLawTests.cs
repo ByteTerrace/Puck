@@ -290,6 +290,27 @@ public sealed partial class LawProofLawTests {
         Assert.NotNull(@object: run.Error);
         Assert.Contains(expectedSubstring: "Holds", actualString: run.Error);
     }
+    // A failed result's output lines (Output/TextMessages) precede its ErrorInfo, and each is a Message element too.
+    [Fact]
+    public void AFailuresMessageIsItsErrorInfosNotItsOutputLines() {
+        var run = LawProof.ReadReport(report: """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="Failed">
+                <Output>
+                  <TextMessages><Message>run directory kept: D:/temp/run</Message></TextMessages>
+                  <ErrorInfo><Message>Assert.Equal() Failure: the assertion the law was written for
+            second line</Message></ErrorInfo>
+                </Output>
+              </UnitTestResult></Results>
+            </TestRun>
+            """);
+
+        Assert.Null(@object: run.Error);
+        Assert.Equal(
+            actual: Assert.Single(collection: run.Failures).Message,
+            expected: "Assert.Equal() Failure: the assertion the law was written for"
+        );
+    }
     [Fact]
     public void AnExplicitTestTheRunDidNotOptIntoIsNotSelected() {
         var run = LawProof.ReadReport(report: """

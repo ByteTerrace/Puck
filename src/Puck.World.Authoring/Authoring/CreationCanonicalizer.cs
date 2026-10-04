@@ -1572,7 +1572,7 @@ public static partial class CreationCanonicalizer {
             source: source
         );
 
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document), options: CreationJsonContext.Document.Options);
     }
 
     // Absent stays absent so a creation authored without domain ops keeps its canonical bytes and hash; a present

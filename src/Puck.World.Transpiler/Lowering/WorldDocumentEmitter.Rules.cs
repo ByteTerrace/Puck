@@ -1203,6 +1203,11 @@ public static partial class WorldDocumentEmitter {
     // Calls, sugar and classified block members bind the same operand tree. Quoted names and computed atoms
     // are terminal values, so binding never interprets their contents as further source syntax.
     internal static JsonNode? LowerOperandArgument(OperandExpressionNode operand, DocumentScope scope) {
+        // A bare `null` holds nothing, as it does in every other member; a row named null is written `$"null"`.
+        if (operand.Syntax is ExpressionSpelling.SourceName { Name: "null", Quoted: false }) {
+            return null;
+        }
+
         if ((operand.Form == DocumentValueForm.Name) &&
             (operand.Syntax is ExpressionSpelling.SourceName { Quoted: false } name) &&
             scope.TryLowerBinding(name.Name, out var bound) && (bound is JsonArray names)) {

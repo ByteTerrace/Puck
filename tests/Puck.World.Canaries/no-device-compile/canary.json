@@ -11,7 +11,7 @@
     "../pipeline-package/tint.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/no-device-compile/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/no-device-compile/fixture.puck",
     "script": "positive.script.txt",
     "hideShaderCompiler": true,
     "package": { "source": "../pipeline-package/tint.graph.json", "output": "tint" },
@@ -44,7 +44,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/no-device-compile/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/no-device-compile/discriminating.puck",
     "script": "discriminating.script.txt",
     "hideShaderCompiler": true,
     "package": { "source": "../pipeline-package/tint.graph.json", "output": "tint", "alter": "binaries/tint.default.comp.spv" },

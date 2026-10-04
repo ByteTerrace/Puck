@@ -276,7 +276,7 @@ public static class CurvatureSpline {
 }
 /// <summary>The compiled, curvature-continuous form of an authored curve — zero-allocation, exception-free evaluation
 /// over its whole arc-length domain.</summary>
-public sealed class CompiledCurvatureSpline {
+public sealed partial class CompiledCurvatureSpline {
     private const int NarrowingShift = (CurvatureSpline.CoefficientFractionBitCount - FixedQ4816.FractionBitCount); // Q32 -> Q16
 
     private readonly CurvatureSplineSegment[] m_segments;

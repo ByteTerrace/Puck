@@ -21,10 +21,11 @@ namespace Puck.World.Tests;
 /// the root's extent too. Every frame the root renders is judged: the aspect of the camera it rendered with against the
 /// extent its installed graph rendered at.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
     private const string Instance = "world";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-resize-projection-");
 

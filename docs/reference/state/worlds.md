@@ -457,7 +457,15 @@ deliberate edit to that list. Rule scheduling caches are never part of any hash.
 A checkpoint carries the same state, and search progress rides along through
 `ArenaSearch.Capture`. The replay tape records each tick's intent submissions and
 authority inputs, stamps the simulation rate in its header, and notes each pause or
-resume of the rate lever. It reproduces the authoritative trajectory. A matching replay proves the hashed
+resume of the rate lever. It reproduces the authoritative trajectory. A recording
+armed before the world's first step starts from the document's boot image. One
+armed later starts from a checkpoint taken at the arm, so it re-drives cleanly
+from its first tick. That checkpoint leaves out the owned identity documents, so
+a seat's identity travels as its projection. When the live state is one no
+checkpoint can capture (a mounted or pumped addon guest, a screen operation, a
+stepped machine without checkpoint support, a coupled link or rewind history, a
+live session, an engagement in flight, or an edit not yet applied),
+`replay.record` refuses by name (`StartNotCheckpointable`). A matching replay proves the hashed
 authoritative state; the document, the grant table, and the HUD are outside that
 hash. The world-level rules for transfer,
 determinism, and replay are in [Worlds and federation](../../architecture/worlds.md),
@@ -467,20 +475,38 @@ and the tape format is in the
 ## Travel through recorded time
 
 `world.history` keeps a bounded record of the boot world's recent past and moves
-the live world through it. It is off until switched on, and it answers the
-operator only, because it prints the values the rules computed.
+the live world through it. It is off until switched on. The forms that move the
+timeline for a seat (`step`, `scrub`, `resume`, `branch`) are bindable, and the
+build page binds them. Each one is checked when it runs, under the principal of
+the seat that pressed it. That seat must hold `control` over the `history`
+grant subject, either directly (`world.grant control history seat2`) or through
+the `control all` grant every seat starts with. A seat without it is refused by
+name (`seat2 cannot control history (no grant names it)`). `row` answers
+anyone. Every other form answers the operator only, because it prints the
+values the rules computed or administers the history.
 
 | Form | What it does |
 |---|---|
 | `world.history on [<MiB>]` | Starts recording, with a memory budget (64 MiB unless named). The next tick captures the first keyframe; a history already on takes the new budget. |
 | `world.history off` | Stops recording and releases everything it held. |
 | `world.history` or `world.history status` | Echoes the window (oldest and newest tick), the cursor, the keyframe spacing, the bytes held against the budget split into keyframes, input and branches, and the counted cost: ticks recorded, hash folds, keyframes captured, deferred and evicted, seeks, ticks re-simulated, and restores. |
+| `world.history row` | Echoes what the scrubber row draws: the window, the cursor, the keyframe ticks (at most 32, sampled evenly) and each kept branch as a fork, from its fork tick to its head. |
 | `world.history seek <tick>` | Moves the live world to any tick in the window, backward or forward, and proves the result against the authoritative hash recorded there. A seek behind the newest tick pauses the world. |
 | `world.history step <±n>` | Seeks relative to the cursor. |
+| `world.history scrub <0..1>` | Seeks to that fraction of the window: 0 is the oldest tick, 1 the newest, rounded to the nearest tick. |
 | `world.history resume` | Continues live input from the cursor. The recorded future behind it is discarded when the next tick lands. |
 | `world.history branch <name>` | Continues live input from the cursor and keeps the recorded future as a named branch instead of discarding it. |
+| `world.history switch <name>` | Re-enters a kept branch. The live world moves to the branch's fork, and the future recorded after the fork is kept as a branch under the same name in its place. The branch's ticks are then re-simulated through the live world, each one checked against the hash the branch recorded. Switching twice returns to where the first switch started. |
+| `world.history save <name> <tape>` | Writes a kept branch as a `.puckreplay` tape. The tape starts from the keyframe before the fork and carries the recorded ticks from there to the fork, then the branch's own ticks. It names its fork (`forked from 'world.history'` and how many ticks it copied from the timeline), and the verb reports the tape's re-drive verdict. `replay.verify <tape>` reads the same verdict from the file. |
 | `world.history diff <a> <b> [--json]` | Re-simulates both ticks in an isolated copy and prints which bodies, cells, fields and hash components changed, with values. `--json` prints every change with exact raw values. |
 | `world.history replay-edit <n>` | Takes the document edits made at the cursor, applies them `n` ticks earlier in an isolated copy, and reports the first tick the world would have diverged, with the diff there. |
+| `world.history.drag` | The scrubber row's pointer, a held verb that the build page binds to the left mouse button. While it is held over the row, it seeks to the tick under the pressing seat's pointer, as `scrub` does. A press off the row does nothing. |
+
+A seat that builds draws the window as a scrubber row along the lower edge of
+its view, on the editor overlay. The bar is the window, each keyframe is a tick
+on it, each kept branch is a fork raised above it, and the cursor is a taller
+mark labelled with its tick. The row draws nothing that `world.history row`
+does not echo, and the pointer reads the same rectangle the overlay draws.
 
 The history records a full checkpoint (a keyframe) between an eighth of a
 second and four seconds of simulation apart, and each tick's input and authoritative hash in between. A

@@ -53,7 +53,7 @@ public sealed class CanaryListenerLawTests {
             legDirectory: leg.PathOf(name: "occupied"),
             options: ["--listen", occupant.LocalEndPoint!.ToString()!],
             script: "quit\n",
-            world: "phase-fixture.world.json"
+            world: "phase-fixture.puck"
         );
         var transcript = new CanaryTranscript(
             RunDirectory: string.Empty,

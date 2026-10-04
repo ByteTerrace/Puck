@@ -69,6 +69,7 @@ public static class SdfSkyKindsHlsl {
         SdfSkyKindDeclaration.Of<SdfSkyPanorama>(),
         SdfSkyKindDeclaration.Of<SdfSkyDisc>(),
         SdfSkyKindDeclaration.Of<SdfSkyPanel>(),
+        SdfSkyKindDeclaration.Of<SdfSkyView>(),
     ];
 
     /// <summary>Generates the include for the kind table.</summary>

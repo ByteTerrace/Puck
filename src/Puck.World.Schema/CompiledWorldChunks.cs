@@ -97,8 +97,8 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
         m_chunks = chunks;
     }
 
-    /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/> and <see cref="AssetChunk"/>.</summary>
-    public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance]);
+    /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
+    public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);
     /// <inheritdoc/>
     public int Count => m_chunks.Length;
 
@@ -204,7 +204,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
     /// <inheritdoc/>
     public bool DerivesOnBoot => true;
     /// <inheritdoc/>
-    public uint Version => 2;
+    public uint Version => 1;
 
     /// <inheritdoc/>
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;

@@ -13,22 +13,24 @@ This page specifies the six laws: the claim, the exact scenario, the observable
 that decides it, the systems it crosses, what it adds over the laws that already
 exist, where it lives, and whether it needs a GPU. It also names the gaps found
 while designing them. The projection, time-travel and portal-unification lanes
-have landed, so every entry point named here exists, and five of the seven gaps
+have landed, so every entry point named here exists, and all seven gaps
 are fixed with laws of their own.
 
 ## Implementation status
 
 Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
 law 2's local walked crossing in
-`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`, without its federated,
-rollback and shared-identity variants;
+`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs` and its identity
+sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
-`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
-`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. Laws 4 and 6 are not
-written yet. The design was read against the integration branch, and a review
-checked that no law can pass while its claim is false. Designing the laws found
-seven gaps. Five of them (G1 to G5) are fixed in code, each held by laws of its
-own, so the six laws are written against the fixed contracts:
+`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
+legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
+`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
+`tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
+classified so far. The design was read against the integration branch, and a
+review checked that no law can pass while its claim is false. Designing the laws
+found seven gaps. All are fixed in code, each held by laws of
+its own, so the six laws are written against the fixed contracts:
 
 - G1 and G2 decide law 1: a seek delivers once
   (`HistorySeekDeliveryLawTests`), and a viewer never keeps a future clock
@@ -41,9 +43,7 @@ own, so the six laws are written against the fixed contracts:
   (`MachineBindingCheckpointLawTests`).
 
 Each law, once written, also confirms its gap's fix on the integration head.
-The other two land with their laws: G6 is part of law 6, which enumerates a
-classification the refusals declare in code rather than a list it carries, and
-G7 is the return seam law 4 needs.
+G6 is held by law 6, which enumerates the classification the refusals declare in code. G7 is the return seam held by law 4: releasing a displayed source rebinds the existing view to the root. The law variants still unstarted remain in the plan checklist.
 
 The open items are in [the plan checklist](open-items.md#cross-plan-maintenance).
 
@@ -220,15 +220,27 @@ crossing with a profiled traveller, through both tapes.
 **Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
-**As implemented.** The recording starts at the rows' first tick, because a tape
-re-establishes the document and the seats, never a pose or other state a row
-reached before it was armed. So row A's document authors seat 0's spawn a short
-walk in front of its door. The isolated reland is the companion tape's own
+**As implemented.** The recording starts at the rows' first tick, so each tape
+starts from its row's boot image. Row A's document authors seat 0's spawn a
+short walk in front of its door. A recording armed later would start from a
+checkpoint of its row instead (`ReplayArmingLawTests`). The isolated reland is the companion tape's own
 re-drive: at every recorded tick the replayed destination is read through
 `DriveTraces`' tick observer and compared with the live destination, field for
 field. A reservation that mints the credential is not red on this walk, because
 its reservation and detach run in one drain; G3's own laws witness it
 (`CrossingTapeOrderLawTests.Reservation.cs`).
+
+Two identity sequences join the law in `CrossingIdentityPrivacyLawTests`, both
+on the rule that an id names one live object:
+
+- A pull of the owned identity between two home arrivals. Outside a recording a
+  pull replaces the identity in place, so bound seats follow it
+  (`OwnedWorldPullLawTests`). While a tape records, the pull refuses by name
+  (`PullWhileRecording`), because a tape never carries an owned document, and
+  both seats keep the one identity the re-drive binds them to.
+- A fork's seat switch, then a home arrival under the same id. Every switch and
+  home adoption a re-drive binds under one id shares the escrow's one detached
+  identity for it, as the live seats share the owned object.
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's
@@ -374,15 +386,28 @@ its video output goes away, and the screen shows unbound glass until it resumes
 with the same output. The law pauses the pipeline node and the world rate, which
 keep the source bound.
 
-**What "back" means.** `screen.source` has no "row" kind, so the way back from
-a camera view or a QR source is an explicit bind of the original source, which
-proves a rebind, not a return to what the row authored. `screen.eject` clears
-the live override of an external source (a camera, a capture, a desktop or a
-probe output) and lets the row's own source show again, but it refuses a screen
-showing a camera view or a QR source. The law needs a return seam that covers
-those: a form that clears the live override and lets the row's own source show
-again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)). Until it
-exists, the return step uses the explicit bind and says so.
+**What "back" means.** `screen.source` has no "row" kind, so the only way back
+is an explicit bind of the original source, which proves a rebind, not a return
+to what the row authored. The law uses the return seam G7 added:
+`screen.source <index> row` drops the live bind and the screen shows its row's
+own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)).
+
+**As implemented.** The fixture boots headless, where the offscreen boot's
+composition is unavailable on a host without a GPU device. Headless, only screen
+0, the machine's video, publishes a mapping with a known extent, so the law runs
+on screen 0 and reads the mapping's source instance, the first token of its
+mapping segment. A pipeline node has no rendered instance to pause headless, and
+only the render root configures the views, so the pipeline pause, the
+camera-view retarget and a census that moves are the offscreen canary
+`displayed-source-render-root`, which requires a GPU. `pipeline.time` addresses
+only a source-driven graph row, and the fixture's graphs are packages while its
+screens show producers, so the canary layers the feedback pipeline over the
+fixture and pauses that;
+the headless law still reads the census before and after. The
+retarget is a QR source, and under it the route leg also reads the QR's
+authoring back, which proves the live bind survived. Red legs: a `row` form that
+leaves the live bind fails the return; a route change that drops the live bind
+fails the retargeted route leg.
 
 **What the destination change does not prove.** A Simulation route maps through
 the row's own mapping, not the live bind, so the change proves only that the
@@ -515,7 +540,29 @@ field or the verdict. None compares a whole-state hash with a twin, and nothing
 enumerates the unsupported operations. This law adds both: the twin comparison,
 with witnesses for what a checkpoint misses, over a set read from the code.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`.
+**GPU:** none.
+
+**As implemented.** G6's classification is `RefusalAttribute.Unsupported`,
+carried on `RefusalCatalogEntry` and tagged `, unsupported` in `world.refusals`.
+The theory's rows are the classified set, and an arrangement names how both
+twins are arranged, the operation, a witness over what the checkpoint does not
+capture, and the legal variant on its own twin. A classified refusal without an
+arrangement fails by name, and an arrangement naming no classified refusal fails
+`EveryArrangementNamesAClassifiedRefusal`. Six refusals are classified so far:
+`replay.record/StartNotCheckpointable`, `storage.pull/PullWhileRecording`,
+`world.undo/PastHorizon`, `machine.operation/WhileRecording`,
+`machine.operation/ProviderWithoutOperations` and
+`state.rule.compile/VectorEffectNotAdmitted`. The machine-operation rows witness
+the operated machine's generation and configuration; the provider row's twins
+run an engine without operations and its legal variant one with them. The
+vector row submits a rule adding to a vector cell, and its legal variant adds to
+an integer cell. `HudRefusal.SeatPanelReplaceRefused` refuses only through
+`identity.hud`, which needs a joined seat's roster profile, so its arrangement
+needs a twin that can join one. The rest
+of the table above joins as each refusal gains a code and an arrangement;
+`IdentityUnbound` refuses inside a rule firing whose scope rewinds it, so its
+arrangement needs a gate the twins can hold apart.
 
 **Scope.** Delivered effect arms (a cue, a pose, a body motion, a rigid impulse,
 a field paint, a save) are outside the atomic promise by contract: they fire
@@ -647,19 +694,19 @@ the set gain codes as they are classified.
 
 ### G7: a screen has no way back to its authored source
 
-`screen.source` binds a camera view, a QR source or another source, but has no
-form that clears the live override and returns the screen to the source its row
-authors. `screen.eject` returns a screen showing external content (a camera, a
-capture, a desktop or a probe output) to its row's source, but refuses a screen
-showing a camera view or a QR source. A return from those is therefore an
-explicit bind of the original source, which a law cannot tell apart from a
-rebind. Law 4 needs the return seam, a form that drops the override whatever the
-live source, to prove that a retarget can be undone.
+`screen.source` binds a camera view, a QR source or another source.
+`screen.eject` returns a screen showing external content (a camera, a capture, a
+desktop or a probe output) to its row's source, but refuses a screen showing a
+camera view or a QR source, so a return from those was an explicit bind of the
+original source, which a law cannot tell apart from a rebind.
+`screen.source <index> row` is the return seam: it drops the live bind, releases
+a camera view the bind registered, and re-binds the row's own view when the row
+authors one (`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone
+through it.
 
 ## Order of work
 
 1. Implement laws 1 to 5 on the integration head. Each confirms its gap's fix
-   there. Law 4 lands with G7's return seam, or names its explicit-bind return
-   until the seam exists.
+   there. Law 4 lands with G7's return seam.
 2. Land G6's classification and law 6 together, the law enumerating the
    classified set.

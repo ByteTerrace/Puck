@@ -11,7 +11,7 @@
     "seed.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -47,7 +47,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/resample-reconstruction/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

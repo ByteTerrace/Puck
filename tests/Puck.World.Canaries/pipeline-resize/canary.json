@@ -16,7 +16,7 @@
     "fixed-history.graph.json"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-resize/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-resize/fixture.puck",
     "script": "resize.script.txt",
     "commands": [
       {
@@ -343,7 +343,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-resize/fixed-history.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-resize/fixed-history.puck",
     "script": "resize.script.txt",
     "commands": [
       {

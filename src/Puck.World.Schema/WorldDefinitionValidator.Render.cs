@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -264,6 +265,8 @@ public static partial class WorldDefinitionValidator {
         var drawn = 0;
         var runs = new SdfSkyRunCount();
 
+        ValidateInfinityViewCount(errors: errors, layers: layers, path: path);
+
         for (var index = 0; (index < layers.Count); index++) {
             var layer = layers[index];
             var layerPath = $"{path}.layers[{index}]";
@@ -453,6 +456,54 @@ public static partial class WorldDefinitionValidator {
                         }
                         break;
                     }
+                case WorldRenderSkyLayer.View view: {
+                        if (string.IsNullOrWhiteSpace(value: view.Destination)) {
+                            errors.Add(item: $"{layerPath}.destination is required: a view shows the session of a destination world.");
+                        }
+
+                        ValidateInfinityView(
+                            anchor: view.Anchor,
+                            definition: definition,
+                            errors: errors,
+                            farDistance: view.FarDistance,
+                            fallback: view.Fallback,
+                            layer: view,
+                            name: view.Name,
+                            path: layerPath,
+                            refresh: view.Refresh,
+                            scale: view.Scale,
+                            turn: view.Turn
+                        );
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Far far: {
+                        if ((far.Prototypes is not { Count: > 0 } prototypes) || prototypes.Any(predicate: static id => string.IsNullOrWhiteSpace(value: id))) {
+                            errors.Add(item: $"{layerPath}.prototypes is required: far geometry is the named prototypes of this world, at least one.");
+                        } else {
+                            for (var prototypeIndex = 0; (prototypeIndex < prototypes.Count); prototypeIndex++) {
+                                if (!definition.Creations.Any(predicate: prototype => string.Equals(a: prototype.Id, b: prototypes[prototypeIndex], comparisonType: StringComparison.Ordinal))) {
+                                    errors.Add(item: $"{layerPath}.prototypes[{prototypeIndex}] names '{prototypes[prototypeIndex]}', which this world does not declare among its prototypes.");
+                                }
+                            }
+                        }
+
+                        ValidateInfinityView(
+                            anchor: far.Anchor,
+                            definition: definition,
+                            errors: errors,
+                            farDistance: far.FarDistance,
+                            fallback: far.Fallback,
+                            layer: far,
+                            name: far.Name,
+                            path: layerPath,
+                            refresh: far.Refresh,
+                            scale: far.Scale,
+                            turn: far.Turn
+                        );
+
+                        break;
+                    }
                 case WorldRenderSkyLayer.Panorama panorama: {
                         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanoramaIntensity, path: $"{layerPath}.intensity", scalar: panorama.Intensity);
                         if (panorama.Screen is { } screen) {
@@ -590,6 +641,60 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A screen a sky layer samples is one the world declares, by its surface index.
+    // The view and far layers of a stack: no more than the cap a world carries, each named and its name distinct.
+    private static void ValidateInfinityViewCount(List<string> errors, IReadOnlyList<WorldRenderSkyLayer?> layers, string path) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var count = 0;
+
+        for (var index = 0; (index < layers.Count); index++) {
+            if (layers[index] is not (WorldRenderSkyLayer.View or WorldRenderSkyLayer.Far)) {
+                continue;
+            }
+            if (++count == (SdfSky.MaxInfinityViews + 1)) {
+                errors.Add(item: $"{path}.layers[{index}] is infinity view {count}; a world carries at most {SdfSky.MaxInfinityViews}, one residency each.");
+            }
+            if ((layers[index]!.LayerName is { } name) && !names.Add(item: name)) {
+                errors.Add(item: $"{path}.layers[{index}].name '{name}' names a second infinity view; each instance is sky${name}, so a name is one view's.");
+            }
+        }
+    }
+    // What a view and a far layer share: a name that mints the instance, a finite anchor and turn, a scale in (0, 1], a
+    // refresh of at least one, a positive far distance, a fallback colour, and the camera alone seeing it.
+    private static void ValidateInfinityView(WorldDefinition definition, List<string> errors, WorldRenderSkyLayer layer, string path, string? name, DocumentVector3? anchor, float? turn, float? scale, int? refresh, float? farDistance, BindableColor? fallback) {
+        if (string.IsNullOrWhiteSpace(value: name)) {
+            errors.Add(item: $"{path}.name is required: an infinity view's instance is sky$name and its counted rows carry the name.");
+        } else if (name.Contains(value: '$') || name.Contains(value: '~')) {
+            errors.Add(item: $"{path}.name '{name}' contains '$' or '~'; the name is one part of the instance's generated name.");
+        }
+        if ((anchor is { } point) && !(float.IsFinite(f: point.Value.X) && float.IsFinite(f: point.Value.Y) && float.IsFinite(f: point.Value.Z))) {
+            errors.Add(item: $"{path}.anchor must be finite.");
+        }
+        if ((turn is { } degrees) && !float.IsFinite(f: degrees)) {
+            errors.Add(item: $"{path}.turn must be finite.");
+        }
+        if ((scale is { } renderScale) && !((renderScale > 0f) && (renderScale <= 1f))) {
+            errors.Add(item: $"{path}.scale {renderScale} lies outside (0, 1].");
+        }
+        if ((refresh is { } every) && (every < 1)) {
+            errors.Add(item: $"{path}.refresh {every} must be at least 1: the view renders at most once every that many frames.");
+        }
+        if ((farDistance is { } distance) && !(float.IsFinite(f: distance) && (distance > 0f))) {
+            errors.Add(item: $"{path}.farDistance {distance} must be finite and positive.");
+        }
+
+        JudgeColor(color: fallback, definition: definition, errors: errors, path: $"{path}.fallback");
+
+        if ((WorldSkyLayers.VisibilityOf(layer: layer) & SdfSkyVisibility.Lighting) != 0) {
+            errors.Add(item: $"{path}.visibility lets the lighting see an infinity view; the environment map binds no screen, so the camera alone sees one.");
+        }
+        if (layer.Mask is { } mask) {
+            if (mask.Cone is not { } cone) {
+                errors.Add(item: $"{path}.mask is a band; an infinity view renders the rectangle its cone covers, so its mask is a cone or none.");
+            } else if (!((cone.Spread > 0d) && (cone.Spread < (Math.PI / 2d)))) {
+                errors.Add(item: $"{path}.mask.cone.spread {cone.Spread} lies outside (0, π/2); a cone of a quarter turn or more reaches the horizon plane and has no bound on the camera's plane.");
+            }
+        }
+    }
     private static void RequireDeclaredScreen(WorldDefinition definition, int screen, string path, List<string> errors) {
         if (!definition.Screens.Any(predicate: candidate => (candidate?.Index == screen))) {
             errors.Add(item: $"{path} {screen} names no screen the world declares; a panorama or a textured disc samples a screen's image by its index.");

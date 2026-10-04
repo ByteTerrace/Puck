@@ -13,6 +13,8 @@ public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick, string Rece
 /// <summary>Immutable inventory for a coherent qualification snapshot. It contains no production signing keys.</summary>
 public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, string Group, string Release,
     Guid Owner, Guid MachineId, IReadOnlyDictionary<string, WorldReleaseFixtureRow> Worlds) {
+    /// <summary>The shape fingerprint of the inventory's layout, which a reader requires before any field is used.</summary>
+    public string Shape { get; init; } = FormatShapes.WorldReleaseFixtureArchiveSchema;
     /// <summary>Host capture time for the coherent group, distinct from each world's simulation tick.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTimeOffset? CapturedAt { get; init; }
     /// <summary>Full digest of the canonical inventory, including every row's checkpoint hash.</summary>
@@ -64,6 +66,9 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/fixtures/content/{Digest(pin: hash)}.receipts"
     );
     private void Validate(WorldReleaseFixtureManifest manifest) {
+        if (manifest.Shape != FormatShapes.WorldReleaseFixtureArchiveSchema) {
+            throw new InvalidDataException(message: $"release fixture shape fingerprint '{manifest.Shape}' is not '{FormatShapes.WorldReleaseFixtureArchiveSchema}'");
+        }
         if (
             (owner == Guid.Empty) ||
             (manifest.Owner != owner) ||

@@ -218,7 +218,7 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
     private static ManifestState LoadManifest(AnalyzerOptions options, CancellationToken cancellationToken) {
         var candidates = options.AdditionalFiles
             .Where(predicate: file => string.Equals(
-            a: Path.GetFileName(path: file.Path),
+            a: AnalyzerPaths.FileName(path: file.Path),
             b: ManifestFileName,
             comparisonType: StringComparison.OrdinalIgnoreCase
         ))

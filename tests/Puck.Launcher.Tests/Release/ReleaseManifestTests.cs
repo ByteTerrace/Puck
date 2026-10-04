@@ -41,6 +41,7 @@ public sealed class ReleaseManifestTests {
         Revoked: ["0.9.0", "0.9.0"],
         Rollout: new ReleaseRollout(Percent: 100),
         Schema: ReleaseManifest.CurrentSchema,
+        Shape: ReleaseManifest.CurrentShape,
         Signature: null,
         StateGeneration: 1,
         Version: "1.0.1"
@@ -62,6 +63,27 @@ public sealed class ReleaseManifestTests {
         Assert.Equal(
             expected: first.Bytes,
             actual: second.Bytes
+        );
+    }
+    // The manifest carries the shape fingerprint the ledger records for its layout; a document of the same schema under another
+    // shape is refused by the fingerprint, before any structural check reads the rest.
+    [Fact]
+    public void Validate_RefusesTheSameSchemaUnderAnotherShape_ByItsFingerprint() {
+        Assert.Equal(
+            expected: Puck.Testing.FormatLedgerShapes.Of(id: "ReleaseManifest.CurrentSchema"),
+            actual: ValidDocument().Shape
+        );
+        Assert.Empty(collection: ReleaseCanonicalizer.Validate(document: ValidDocument()));
+
+        var violation = Assert.Single(collection: ReleaseCanonicalizer.Validate(document: (ValidDocument() with { App = string.Empty, Shape = "0000000000000000" })));
+
+        Assert.Equal(
+            expected: "shape",
+            actual: violation.Path
+        );
+        Assert.Contains(
+            actualString: violation.Message,
+            expectedSubstring: "declares '0000000000000000'"
         );
     }
     [Fact]

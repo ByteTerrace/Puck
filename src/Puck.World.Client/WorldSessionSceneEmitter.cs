@@ -98,6 +98,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private int m_bodyColorRevision;
 
     private readonly bool m_castsAvatarShadows;
+    // The prototypes a far scene holds (see the constructor), or null for a scene of the whole world.
+    private readonly IReadOnlySet<string>? m_onlyPrototypes;
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
@@ -176,7 +178,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
     /// <param name="shadowSettings">The routed view's live policy, or its own boot policy when absent.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, Func<WorldShadowSettings>? shadowSettings = null) {
+    /// <param name="onlyPrototypes">The prototypes the scene holds, or <see langword="null"/> for the whole world: far
+    /// geometry (<c>Puck.SdfVm.Views.InfinityViewKind.Far</c>) emits the placements of these prototypes alone, with no
+    /// screen, no avatar and no body stamp, so its cost scales with what it shows.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: domains);
 
@@ -187,6 +192,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
         m_castsAvatarShadows = castsAvatarShadows;
+        m_onlyPrototypes = onlyPrototypes;
         m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
@@ -300,7 +306,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         WorldRigCatalog.Emit(
             builder: builder,
-            isActive: m_mirror.IsActive,
+            isActive: HoldsAvatar,
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             probeWorstCase: probeWorstCase,
@@ -558,7 +564,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
     /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
-        var definition = m_mirror.Definition;
+        var definition = Scoped(definition: m_mirror.Definition);
 
         if (context.Probe) {
             WorldSessionRenderEnvelope.EmitProbe(
@@ -585,7 +591,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // their target body, and the census's bodies on their live poses, as the local scene's pool does.
             m_census.Refresh(source: m_source);
             m_pool.Reconcile(
-                bodyStamps: m_census.Stamps,
+                bodyStamps: ((m_onlyPrototypes is null) ? m_census.Stamps : []),
                 creations: definition.Creations,
                 dynamics: definition.Dynamics,
                 placements: definition.Placements
@@ -626,10 +632,22 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             slotBase: context.SlotBase
         );
     }
+
+    // Whether the scene draws a body's avatar: the mirror's active bodies, none in far geometry.
+    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && m_mirror.IsActive(index: index));
+    // The definition the scene emits: the whole of it, or, for far geometry, its placements of the named prototypes alone and
+    // none of its screens.
+    private WorldDefinition Scoped(WorldDefinition definition) => ((m_onlyPrototypes is null)
+        ? definition
+        : (definition with {
+            PlacementRowsRaw = [.. definition.Placements.Where(predicate: placement => m_onlyPrototypes.Contains(item: placement.PrototypeId))],
+            ScreensRaw = null,
+        }));
+
     /// <summary>Measures a proposed destination definition against this view's frozen render envelope.</summary>
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
-            candidate: candidate,
+            candidate: Scoped(definition: candidate),
             bodyColor: m_bodyColor,
             colors: BakedColors(),
             pool: m_pool
@@ -642,7 +660,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!m_mirror.IsActive(index: index)) {
+            if (!HoldsAvatar(index: index)) {
                 m_avatarPoseSeeded[index] = false;
 
                 if (m_avatarOwners.Vacate(

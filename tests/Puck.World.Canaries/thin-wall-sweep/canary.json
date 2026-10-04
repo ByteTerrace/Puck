@@ -7,7 +7,7 @@
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/thin-wall-sweep/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/thin-wall-sweep/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -92,7 +92,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/thin-wall-sweep/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/thin-wall-sweep/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

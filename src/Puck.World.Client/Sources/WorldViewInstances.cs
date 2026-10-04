@@ -16,6 +16,14 @@ public enum WorldViewDemand : byte {
     /// <summary>The view is shown outside the world, by a HUD frame or a probe export: the display shows it directly, at
     /// its declared extent, whether or not anything schedules the world.</summary>
     Root = 2,
+    /// <summary>The sky of a world the display shows has the view, an infinity view (<c>sky$&lt;layer&gt;</c>), whether or
+    /// not it is seen this frame: a viewer that films the world reads it within the frame, so its composite samples the
+    /// view's latest image, a stale one while the view is not rendering.</summary>
+    Sky = 4,
+    /// <summary>A viewer's previous frame showed the infinity view on an uncovered pixel, and its region lies in the viewer's
+    /// frustum now, so the graph shows it this frame at the view's footprint and renders it when its refresh is due. Without
+    /// the flag the view renders nothing and keeps its last image.</summary>
+    SkySeen = 8,
 }
 /// <summary>One view a world renders beside its own: a camera it films itself from, another world's session, or a camera
 /// of a world shown through a screen.</summary>
@@ -157,6 +165,15 @@ public sealed class WorldViewInstances {
         view.Demand.HasFlag(flag: WorldViewDemand.Screen) &&
         (view.Parent is null)
     );
+    /// <summary>Returns whether a view is shown by the sky of a world the display shows directly: an infinity view
+    /// (<see cref="WorldViewDemand.Sky"/>) no session's own world shows (<see cref="WorldView.Parent"/>). Every view
+    /// filming such a world reads it within the frame.</summary>
+    /// <param name="view">The view.</param>
+    /// <returns><see langword="true"/> when every view of the worlds the display shows reads it.</returns>
+    public static bool IsShownBySky(in WorldView view) => (
+        view.Demand.HasFlag(flag: WorldViewDemand.Sky) &&
+        (view.Parent is null)
+    );
     /// <summary>Returns the instances the views render as, priced at the SDF engine's passes, after the source instances
     /// only sessions' screens show (<see cref="NestedSources"/>): each camera reading every source within the frame and
     /// every view a screen of its world shows at its previous frame, each session reading what its own screens show within
@@ -194,6 +211,7 @@ public sealed class WorldViewInstances {
                             PreviousFrame: true,
                             Producer: read.Name
                         )),
+                        .. Views.Where(predicate: static read => IsShownBySky(view: in read)).Select(selector: static read => new RenderGraphRead(Producer: read.Name)),
                     ]
                     : [
                         .. (view.Reads ?? []).Select(selector: static read => new RenderGraphRead(Producer: read)),

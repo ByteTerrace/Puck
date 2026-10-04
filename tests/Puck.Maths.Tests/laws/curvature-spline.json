@@ -1,5 +1,24 @@
 [
   {
+    "Id": "curvature-spline.binary-round-trip",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "Write" },
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "Read" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the binary round trip preserves every coefficient, arc table, closure and station exactly for straight, curved, multi-root and closed splines with elevation; evaluations agree at endpoints, adjacent raws, interior stations and both carrier extremes, rewriting reproduces the bytes, and a foreign fingerprint is refused",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "curvature-spline.endpoint-curvature-oracle",
     "Tier": "Default",
     "Members": [

@@ -715,7 +715,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 // A control application's target may be a BODY — a possession/co-drive application, bounded by the
                 // population exactly like Drive/Observe's own body subjects.
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
-                ((subject.Kind == GrantSubjectKind.Composition) && trustedWildcard) ||
+                ((subject.Kind is GrantSubjectKind.Composition or GrantSubjectKind.History) && trustedWildcard) ||
                 ((subject.Kind == GrantSubjectKind.Machine) && !string.IsNullOrWhiteSpace(value: subject.Id)) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
             // Mutate additionally admits the two ROW-SCOPED dispatch subjects — one creations row, one placements

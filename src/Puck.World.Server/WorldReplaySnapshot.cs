@@ -227,9 +227,10 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <summary>
 /// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
-/// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; the fresh
-/// world's starting body state is that definition's deterministic boot image (a fresh <see cref="WorldServer"/>
-/// reconstructs it exactly), not a per-body pose snapshot. The recording carries both the live session's per-tick
+/// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; a recording
+/// armed before the world's first step starts from that definition's deterministic boot image (a fresh
+/// <see cref="WorldServer"/> reconstructs it exactly), and one armed later, or a history branch saved as a tape, starts
+/// from an authority checkpoint of the live state (<see cref="StartCheckpoint"/>). The recording carries both the live session's per-tick
 /// pose trace (<see cref="RecordedHashes"/>) for inspection and the broader authoritative trace
 /// (<see cref="RecordedAuthoritativeHashes"/>) used for replay verdicts, sampled against the actual running session
 /// tick by tick rather than only at the tail.
@@ -248,17 +249,13 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <para>Honest scope. The captured state is the authoritative server simulation only — the world definition, the active
 /// seats, and the per-tick stream of human/authority inputs (commands, grants, revokes) and intents. A mounted addon's
 /// driving is deliberately absent from that stream (it never crosses <see cref="IServerLink"/>) and is re-derived by
-/// re-running the document's own pinned guests during <see cref="Drive"/>. Grant changes made before record-start are
-/// likewise absent — they were never submitted during the capture — which is the same mid-session-capture boundary the
-/// boot-image start already has, and it reports honestly as a mismatch rather than as a false match. Screen machines
+/// re-running the document's own pinned guests during <see cref="Drive"/>. Screen machines
 /// and their pixels, camera rigs, overlays, and audio are
 /// presentation and are excluded: they are re-derived from the definition by the live client each frame and never feed
 /// back into simulation, so a replay reproduces the hashed authoritative server state but does not
-/// re-run the emulated cabinets or redraw the HUD. Because the fresh world starts from the definition boot image, a
-/// replayed tail matches the live tail precisely when the live session was still at that boot image at record-start (a
-/// boot-anchored capture); a mid-session capture — the session already moved from boot — faithfully re-drives its stream
-/// but from the boot image, so the verify honestly reports mismatch. Full per-body record-start rehydration (so a
-/// mid-session capture also matches) is the identified next lever.</para>
+/// re-run the emulated cabinets or redraw the HUD. A mid-session capture starts from the checkpoint it was armed on, so
+/// everything the session reached before the arm — poses, cells, grants, latches, the machine cores a checkpoint holds —
+/// is where the re-drive begins; a start the checkpoint does not reproduce reports MISMATCH at the first tick.</para>
 /// <para>Determinism. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
 /// pose. The recorded intent currency is likewise fixed-point: a
 /// <see cref="PlayerIntent"/> crosses as sixteen raw <see cref="FixedQ4816"/> lanes and an optional pointer ray of six more, so the replay currency is the
@@ -296,13 +293,14 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 9 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
-    // full identity projection, the companion tapes of a set, each departure and its rollback where the authority
-    // decided it, settlements by target authority, every arrival a commit decided with its outcome and each traveler as
-    // its identity projection alone, federated input, and the seat identity a fork switches to. Refuse earlier tapes at
-    // intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 9u;
+    // A name, never a counter: this build writes and reads exactly one tape contract, and the tape's generated
+    // shape fingerprint (FormatShapes) is what refuses another layout at intake. The tape carries the recorded
+    // authority, its typed rebuild origins and its document paths, each starting seat's full identity projection, the
+    // companion tapes of a set, each departure and its rollback where the authority decided it, settlements by target
+    // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
+    // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
+    // or a saved history branch starts from.
+    private const uint ShapeToken = 1u;
     // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
     private const int MaxFingerprintChars = 32;
 
@@ -404,10 +402,6 @@ public sealed partial class WorldReplaySnapshot {
     /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
     internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
-        // Seats a tick's switches hand the same identity id share one detached identity, as the live rebind gave them the
-        // catalog's one object: a write through either seat is then read through the other.
-        Dictionary<string, WorldIdentity>? switched = null;
-
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -543,8 +537,7 @@ public sealed partial class WorldReplaySnapshot {
                     ApplySeatIdentity(
                         entry: seatIdentity,
                         population: population,
-                        server: server,
-                        switched: ref switched
+                        server: server
                     );
 
                     break;
@@ -585,7 +578,10 @@ public sealed partial class WorldReplaySnapshot {
     // Seats the one seat of a recorded switch at the population this tick holds, refusing by name a slot the re-drive has no
     // active local seat at (an authored seat count that shrank, a seat that left, a peer slot): the tape names slots, and a slot
     // the population does not hold would index past its entries.
-    private static void ApplySeatIdentity(WorldReplayEntry.SeatIdentity entry, WorldPopulation population, WorldServer server, ref Dictionary<string, WorldIdentity>? switched) {
+    // Seats a switch binds under one identity id share the escrow's one detached identity for that id, with every home
+    // adoption under it, as the live rebind gave them the catalog's one object: a write through either seat is read
+    // through the other.
+    private static void ApplySeatIdentity(WorldReplayEntry.SeatIdentity entry, WorldPopulation population, WorldServer server) {
         if (
             (((uint)entry.Slot) >= ((uint)population.LocalSeatCount)) ||
             !population.IsActive(index: entry.Slot) ||
@@ -594,17 +590,10 @@ public sealed partial class WorldReplaySnapshot {
             throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch names body:{entry.Slot}, which is not an active local seat in this re-drive (it holds {population.LocalSeatCount} local seat(s))");
         }
 
-        switched ??= new Dictionary<string, WorldIdentity>(comparer: StringComparer.Ordinal);
+        var profile = entry.Profile;
 
-        if (!switched.TryGetValue(
-            key: entry.Profile.Id,
-            value: out var identity
-        )) {
-            identity = WorldIdentity.FromProjection(
-                defaults: server.Definition.PlayerDefaults,
-                projection: entry.Profile
-            );
-            switched[entry.Profile.Id] = identity;
+        if (!server.TransferEscrow.TryBindDetached(detached: out var identity, reason: out var reason, taped: in profile)) {
+            throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch of body:{entry.Slot} to '{profile.Id}' could not bind its taped identity — {reason}");
         }
 
         population.SetSeatProfile(
@@ -1771,46 +1760,18 @@ public sealed partial class WorldReplaySnapshot {
             throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — re-driving at the wrong step size would produce a different trajectory that reports as an ordinary MISMATCH rather than naming the real cause. This tape is internally inconsistent; re-record it.");
         }
 
-        var population = new WorldPopulation(definition: definition);
         using var machines = machineHostFactory(
             definition.Screens,
             engines,
             DocumentPath,
             null
         );
-        // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
-        // authoritative simulation never consults GPU capacity, so no probe is needed offline.
-        var replayProfiles = profiles.CreateReplayCopy();
-        var server = new WorldServer(
+
+        var (server, population) = CreateShadow(
             definition: definition,
-            population: population,
-            profiles: replayProfiles,
-            envelope: new WorldRenderEnvelope(),
+            documents: documents,
             machines: machines,
-            instanceIdentity: Instance
-        );
-
-        server.RebuildDocuments = documents;
-        server.PipelineSources = ((PipelineSourceDirectory is { } pipelineSources)
-            ? new WorldPipelineSources(documentDirectory: pipelineSources)
-            : null);
-        server.Extensions.EnterReplay();
-
-        // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
-        // other rule effect, but writing the world's own file is engine I/O. The tap narrates why no file write
-        // happened; the population hash this drive compares never depends on whether the write occurred. This
-        // shadow server binds no sink of its own — Server cannot construct a console-writing one — so the line
-        // reaches a caller only if it attaches one first.
-        server.SaveEffectTap = tick => server.Output.Narrate(
-            channel: "replay",
-            text: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
-        );
-
-        SeatRecordedSeats(
-            definition: definition,
-            population: population,
-            profiles: profiles,
-            server: server
+            profiles: profiles
         );
 
         // Mounted AFTER the seats re-join and after the server's constructor applied the embedded document's grants —

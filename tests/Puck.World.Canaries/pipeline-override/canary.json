@@ -7,7 +7,7 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -42,7 +42,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },

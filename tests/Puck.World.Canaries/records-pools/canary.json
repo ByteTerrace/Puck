@@ -105,7 +105,7 @@
         "occurrence": 1
       }
     ],
-    "world": "tests/Puck.World.Canaries/records-pools/fixture.world.json"
+    "world": "tests/Puck.World.Canaries/records-pools/fixture.puck"
   },
   "discriminating": {
     "expect": [
@@ -183,6 +183,6 @@
         "occurrence": 1
       }
     ],
-    "world": "tests/Puck.World.Canaries/records-pools/fixture.world.json"
+    "world": "tests/Puck.World.Canaries/records-pools/fixture.puck"
   }
 }

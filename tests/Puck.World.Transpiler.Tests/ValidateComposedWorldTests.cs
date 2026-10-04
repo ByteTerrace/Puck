@@ -19,7 +19,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
           }
         }
         """;
-    // The root placement row deliberately omits prototypeId and scale; standard.world.json-style composition
+    // The root placement row deliberately omits prototypeId and scale; standard.puck-style composition
     // supplies them by merging a same-id basis row over it. Reproduces the exact shape of the bug this entry point
     // fixes: WorldPlacement is a required-field record, so deserializing the root JSON alone throws before any
     // semantic check runs.

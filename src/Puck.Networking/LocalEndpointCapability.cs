@@ -28,6 +28,7 @@ public sealed class LocalEndpointCapability {
         );
         m_descriptor = new(
             Revision,
+            FormatShapes.LocalEndpointCapabilityRevision,
             Guid.NewGuid().ToString(format: "N"),
             port,
             Convert.ToHexString(inArray: RandomNumberGenerator.GetBytes(count: 32))
@@ -75,12 +76,13 @@ public sealed class LocalEndpointCapability {
     private static void Validate(LocalEndpointHello hello, LocalEndpointDescriptor descriptor) {
         if (
             (hello.Revision != descriptor.Revision) ||
+            (hello.Shape != FormatShapes.LocalEndpointCapabilityRevision) ||
             (hello.Host != descriptor.Host) ||
             !IsHex(
             hello.Nonce,
             64
         )
-        ) { throw new UnauthorizedAccessException(message: "Attachment host or revision mismatch."); }
+        ) { throw new UnauthorizedAccessException(message: "Attachment host, revision or shape mismatch."); }
     }
     private static void Verify(string proof, string expected) {
         if (
@@ -110,6 +112,7 @@ public sealed class LocalEndpointCapability {
             await SendAsync(
                 hello: new(
                     Revision,
+                    FormatShapes.LocalEndpointCapabilityRevision,
                     descriptor.Host,
                     nonce,
                     ""
@@ -138,6 +141,7 @@ public sealed class LocalEndpointCapability {
             await SendAsync(
                 hello: new(
                     Revision,
+                    FormatShapes.LocalEndpointCapabilityRevision,
                     descriptor.Host,
                     nonce,
                     Proof(
@@ -163,6 +167,7 @@ public sealed class LocalEndpointCapability {
             await SendAsync(
                 hello: new(
                     Revision,
+                    FormatShapes.LocalEndpointCapabilityRevision,
                     descriptor.Host,
                     nonce,
                     Proof(
@@ -253,6 +258,7 @@ public sealed class LocalEndpointCapability {
 
         if (
             (descriptor.Revision != Revision) ||
+            (descriptor.Shape != FormatShapes.LocalEndpointCapabilityRevision) ||
             (descriptor.Port is <= 0 or > 65535) ||
             !Guid.TryParseExact(
             descriptor.Host,
@@ -302,8 +308,8 @@ public sealed class LocalEndpointCapability {
     }
 }
 
-internal sealed record LocalEndpointDescriptor(int Revision, string Host, int Port, string Secret);
-internal sealed record LocalEndpointHello(int Revision, string Host, string Nonce, string Proof);
+internal sealed record LocalEndpointDescriptor(int Revision, string Shape, string Host, int Port, string Secret);
+internal sealed record LocalEndpointHello(int Revision, string Shape, string Host, string Nonce, string Proof);
 [JsonSerializable(typeof(LocalEndpointDescriptor))]
 [JsonSerializable(typeof(LocalEndpointHello))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 8)]

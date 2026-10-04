@@ -18,8 +18,9 @@ namespace Puck.World.Tests;
 /// view also draws its destination's stamp pool: the same ball given a frame that moves its shape animates, rides the
 /// pool and still composes as the program's one instance, its root packed at its placement.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldSessionViewLawTests {
-    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.world.json";
+    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.puck";
 
     // The frame a session view of a destination renders, composed as WorldScreenBinder.RegisterSessionView composes it.
     private static SdfFrame SessionFrame(WorldDefinition definition) {

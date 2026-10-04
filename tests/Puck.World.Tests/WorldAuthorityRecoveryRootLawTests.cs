@@ -300,4 +300,90 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
             cancellation
         ));
     }
+    // A recovery root carries the shape fingerprint the ledger records for its layout; a root of the same schema under
+    // another shape is refused by the fingerprint's name, before any other member is read.
+    [Fact]
+    public async Task ARecoveryRootOfAnotherShapeIsRefusedByItsFingerprint() {
+        using var directory = new TemporaryDirectory();
+        var target = new DirectoryObjectStorageTarget(Path.Combine(
+            path1: directory.RootPath,
+            path2: "authority"
+        ));
+        var blobs = PuckStorageTestComposition.BuildStore();
+        var identity = new WorldAuthorityIdentity(
+            Owner: Guid.NewGuid(),
+            World: SafeName.Parse(candidate: "amber")
+        );
+        var operation = Guid.NewGuid();
+        var cancellation = TestContext.Current.CancellationToken;
+        var store = new WorldAuthorityBlobStore(
+            store: blobs,
+            target: target,
+            timeProvider: new VirtualClock()
+        );
+        var fence = await store.AcquireActivationAsync(
+            cancellationToken: cancellation,
+            identity: identity
+        );
+
+        Assert.NotNull(value: fence);
+        Assert.True(condition: (await store.WriteCheckpointAsync(
+            identity,
+            "protected"u8.ToArray(),
+            4,
+            cancellation,
+            fence
+        )).Ok);
+        _ = await store.CaptureRecoveryRootAsync(
+            cancellationToken: cancellation,
+            identity: identity,
+            operationId: operation
+        );
+
+        var key = Assert.Single(
+            collection: await blobs.ListAsync(
+                target,
+                identity.Owner,
+                "private/puck/hosted",
+                cancellation
+            ),
+            predicate: candidate => candidate.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: $"/recovery/{operation:D}/"
+            )
+        );
+        var path = Path.Combine(
+            path1: target.RootPath,
+            path2: identity.Owner.ToString(format: "D"),
+            path3: key.Replace(
+                newChar: Path.DirectorySeparatorChar,
+                oldChar: '/'
+            )
+        );
+        var recorded = FormatLedgerShapes.Of(id: "WorldAuthorityRecoveryRootCodec.Schema");
+        var text = File.ReadAllText(path: path);
+
+        Assert.Contains(
+            actualString: text,
+            expectedSubstring: $"\"shape\":\"{recorded}\""
+        );
+        File.WriteAllText(
+            contents: text.Replace(
+                newValue: "0000000000000000",
+                oldValue: recorded
+            ),
+            path: path
+        );
+
+        var refusal = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => store.FindRecoveryRootAsync(
+            cancellationToken: cancellation,
+            identity: identity,
+            operationId: operation
+        ));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "shape fingerprint"
+        );
+    }
 }

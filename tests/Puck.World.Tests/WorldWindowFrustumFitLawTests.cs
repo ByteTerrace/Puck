@@ -28,10 +28,11 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed partial class WorldWindowFrustumFitLawTests {
-    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
+    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
 
-    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
+    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.puck";
     private const float Tolerance = 2e-3f;
 
     // The destination's marker: a ball of radius 0.5 six units behind the arch.
@@ -248,7 +249,7 @@ public sealed partial class WorldWindowFrustumFitLawTests {
 
         Assert.False(condition: WorldWindowFrustumFit.TryResolveApertures(
             counterpart: out _,
-            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.world.json"),
+            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.puck"),
             local: local,
             screenIndex: DoorScreen(local: local),
             source: out _

@@ -84,6 +84,7 @@ public sealed partial class SkyLayerTableLawTests {
         Check<SdfSkyPanorama>,
         Check<SdfSkyDisc>,
         Check<SdfSkyPanel>,
+        Check<SdfSkyView>,
     ];
 
     // Packs a kind's record with a distinct sentinel in every field, runs the generated decoder over the record's lanes,

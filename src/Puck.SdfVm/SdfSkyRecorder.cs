@@ -200,6 +200,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             var screen = sky.LayerAt(index: layer).Kind switch {
                 SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
                 SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
+                SdfSkyLayerKind.View => sky.Parameters<SdfSkyView>(index: layer).Screen,
                 _ => -1,
             };
 

@@ -9,7 +9,7 @@ using Puck.World;
 namespace Puck.Cli.Counters;
 
 /// <summary><c>puck counters</c> — the work-counter collector. It boots the authored counters workload
-/// (<c>tests/Puck.Counters/counters.world.json</c>, driven by <c>counters.script.txt</c> beside it, unless
+/// (<c>tests/Puck.Counters/counters.puck</c>, driven by <c>counters.script.txt</c> beside it, unless
 /// <c>--world</c> and <c>--script</c> select another workload) offscreen once per
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
@@ -21,7 +21,7 @@ internal static class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/counters.script.txt";
     /// <summary>The workload's world document, repository-relative.</summary>
-    public const string WorldPath = "tests/Puck.Counters/counters.world.json";
+    public const string WorldPath = "tests/Puck.Counters/counters.puck";
 
     private const string ReportFileName = "counters.report.json";
     private const string ScratchPrefix = "puck-counters-";
@@ -65,6 +65,16 @@ internal static class CountersCommand {
             comparisonType: StringComparison.Ordinal
         )) {
             reason = $"a foreign report: its schema is '{report.Schema}', not '{WorldCountersReport.SchemaVersion}'";
+            report = null;
+
+            return false;
+        }
+        if (!string.Equals(
+            a: report.Shape,
+            b: WorldCountersReport.CurrentShape,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"a report of another shape: its shape fingerprint is '{report.Shape}', not '{WorldCountersReport.CurrentShape}'; record it again";
             report = null;
 
             return false;
@@ -340,11 +350,12 @@ internal static class CountersCommand {
         try {
             script = File.ReadAllText(path: workloadScriptPath).ReplaceLineEndings(replacementText: "\n");
 
-            using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: worldPath));
-            var host = document.RootElement.GetProperty(propertyName: "host");
+            if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(authored: out var authored, definition: out _, error: out var worldError, path: worldPath)) {
+                return CliExit.Refuse(verb: Verb, what: "the counters workload", why: worldError.ReplaceLineEndings(replacementText: " "));
+            }
 
-            width = host.GetProperty(propertyName: "width").GetInt32();
-            height = host.GetProperty(propertyName: "height").GetInt32();
+            width = authored!.Host.Width;
+            height = authored.Host.Height;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException or InvalidOperationException or FormatException)) {
             return CliExit.Refuse(verb: Verb, what: "the counters workload", why: exception.Message.ReplaceLineEndings(replacementText: " "));
         }
@@ -466,7 +477,7 @@ internal static class CountersCommand {
             Description = $"The ceilings file --check reads and --record writes; {CountersCeilings.CeilingsPath} when omitted.",
         };
         var worldOption = new Option<string>(name: "--world") {
-            Description = $"The authored JSON workload; {WorldPath} when omitted.",
+            Description = $"The authored workload world; {WorldPath} when omitted.",
         };
         var scriptOption = new Option<string>(name: "--script") {
             Description = $"The console script containing one counters reading; {ScriptPath} when omitted.",

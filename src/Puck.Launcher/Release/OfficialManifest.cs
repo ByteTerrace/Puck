@@ -172,6 +172,7 @@ public sealed record OfficialAssetEntry(
 /// in this package: publishing (signing, upload, a GitHub workflow) is a separate, later concern — <see cref="Signature"/> is always <see langword="null"/> here.
 /// </summary>
 /// <param name="Schema">The document version tag (<see cref="CurrentSchema"/>).</param>
+/// <param name="Shape">The shape fingerprint of the document's layout (<see cref="CurrentShape"/>).</param>
 /// <param name="Channel">The channel this manifest belongs to (<c>dev</c> for a local dry run; <c>stable</c>/<c>next</c>
 /// in production).</param>
 /// <param name="Build">What built this manifest.</param>
@@ -185,6 +186,7 @@ public sealed record OfficialAssetEntry(
 /// <param name="Signature">Always <see langword="null"/> in this package — an unsigned draft.</param>
 public sealed record OfficialManifest(
     string? Schema,
+    string? Shape,
     string Channel,
     OfficialBuildInfo Build,
     OfficialObjectRef WorldSchemaBundle,
@@ -197,6 +199,9 @@ public sealed record OfficialManifest(
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.official.manifest.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for this document, which a writer stamps and a validator
+    /// requires.</summary>
+    public const string CurrentShape = FormatShapes.OfficialManifestCurrentSchema;
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>

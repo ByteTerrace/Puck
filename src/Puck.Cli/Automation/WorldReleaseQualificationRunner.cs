@@ -30,6 +30,9 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
 
     private const string Marker = "puck.world.qualification.v1";
 
+    // The whole content of a fixture's marker file: the token, then the shape fingerprint of the fixture layout it marks.
+    internal const string MarkerFileContent = ((Marker + " ") + FormatShapes.WorldReleaseQualificationRunnerMarker);
+
     private readonly TimeProvider m_clock = (clock ?? TimeProvider.System);
     private readonly IWorldReleaseQualificationContainers m_containers = (containers ?? new WorldReleaseQualificationDocker(clock: (clock ?? TimeProvider.System)));
 
@@ -136,7 +139,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
                 path1: destination,
                 path2: "qualification.fixture"
             ),
-            Marker
+            MarkerFileContent
         );
         var config = JsonNode.Parse(WorldSiloDefinitionSerialization.Serialize(definition: definition))!.AsObject();
 
@@ -297,6 +300,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
 
         if (
             (result.Schema != WorldReleaseExerciseResult.CurrentSchema) ||
+            (result.Shape != WorldReleaseExerciseResult.CurrentShape) ||
             (result.ReceiptSeedHash != expectedReceipts) ||
             (result.ImportedReceiptHash != expectedReceipts) ||
             (result.ContinuedReceiptHash != expectedReceipts)
@@ -381,7 +385,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
                 path2: "qualification.fixture"
             ),
             128
-        )).Trim() != Marker) {
+        )).Trim() != MarkerFileContent) {
             throw new InvalidDataException(message: "qualification requires a marked offline fixture export");
         }
         if (!WorldSiloDefinitionSerialization.TryLoadFile(
@@ -567,7 +571,8 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             return WorldReleaseQualificationResult.Failed(failure: "source cannot preserve the candidate-written continuation state");
         }
         var evidence = JsonSerializer.SerializeToUtf8Bytes(new {
-            Schema = "puck.world.qualification.v1",
+            Schema = Marker,
+            Shape = FormatShapes.WorldReleaseQualificationRunnerMarker,
             SourceRelease = source?.Identity,
             TargetRelease = target.Identity,
             SourceImage = aImage,

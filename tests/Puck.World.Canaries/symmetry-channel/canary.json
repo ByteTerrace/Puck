@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/symmetry-channel/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/symmetry-channel/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -141,7 +141,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/symmetry-channel/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/symmetry-channel/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

@@ -806,8 +806,9 @@ internal static partial class CanaryCommand {
     // Starts every leg the slots admit (CanaryLegSlots), each on its own thread, and hands every finished leg, with its
     // wall time, to completed on the calling thread. Once cancellation fires no further leg starts, and no leg that
     // finishes afterwards is reported. Nothing leaves this method while a leg still runs: a leg that throws, or a
-    // completed callback that throws, cancels the rest, which kills their children, and the first failure is rethrown
-    // only after every leg has ended.
+    // started or completed callback that throws, cancels the rest, which kills their children, and the first failure
+    // is rethrown only after every leg has ended.
+    // started observes dispatch on the calling thread before completion is reported; the worker may already be running.
     internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, CanaryCapacity capacity, Action<CanaryLegWork, TimeSpan> completed, CancellationTokenSource cancellation, Action<CanaryLegWork>? started = null) {
         var slots = new CanaryLegSlots(capacity: capacity);
         var waiting = StartOrder(work: work);

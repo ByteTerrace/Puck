@@ -71,7 +71,8 @@ internal static class AffectedSuites {
     /// <param name="jobs">The most suites run at once; at least one runs.</param>
     /// <param name="run">Runs one suite on its own thread, its admission included.</param>
     /// <param name="completed">Receives each suite as it ends.</param>
-    /// <param name="started">Receives each admitted suite on the calling thread after its task is dispatched.</param>
+    /// <param name="started">Receives each dispatched suite on the calling thread before its completion is reported.
+    /// The worker may already be running; host admission happens inside <paramref name="run"/>.</param>
     public static void RunConcurrently(IReadOnlyList<AffectedSuite> suites, int jobs, Func<AffectedSuite, AffectedSuiteResult> run, Action<AffectedSuite, AffectedSuiteResult, TimeSpan> completed, Action<AffectedSuite>? started = null) {
         var waiting = new Queue<AffectedSuite>(collection: StartOrder(suites: suites));
         var running = new List<(Task<(AffectedSuiteResult Result, TimeSpan Elapsed)> Task, AffectedSuite Suite)>(capacity: suites.Count);

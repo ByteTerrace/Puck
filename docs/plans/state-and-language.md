@@ -573,6 +573,16 @@ pointed at the result and re-recorded, and the JSON sources are deleted.
 
 **Check:** the forcing world's check above.
 
+**Open:** `puck decompile` refuses a document carrying a module instance's
+machine. `tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
+(and each of its four quilts) declares `/machines/0/name` as
+`arcade$agb-screen`, and the decompiler answers `'arcade$agb-screen' … is a name
+Puck generates … a module's use does not print back from the document it
+expanded into; decompile the module's own document instead`. A machine
+declared by an aliased `use` has no printed form, so the canary's five
+documents stay JSON; done when they decompile, compile back as parsed, and the
+JSON is deleted.
+
 ### S7 — Records and pools
 
 The [implementation contract](records-and-pools.md) specifies instance lifetimes,
@@ -754,6 +764,30 @@ The gate and effect operand lowering recognizes bare `true` and `false` as
 boolean constants. A `Bool` row can therefore be compared with those literals
 and assigned from them without the document compiler mistaking either word for
 a row name.
+
+**Open:** three constructs the lowered test documents carry have no source
+spelling, so five hand-authored documents stay JSON
+(`tests/Puck.World.Verdicts/phase-advance.world.json`,
+`phase-advance-stopped.world.json`, `refused-command.world.json` and
+`proofs/expected-outcome.world.json`, `proofs/unexpected-outcome.world.json`)
+and `puck decompile` refuses each by name (`'passPhaseAdvanced' at
+/state/world/0 is a name Puck generates … a test block appends its verdict
+rows last, one per expectation, named 'expect$1' onward`):
+
+- A verdict row authored by name. A test block names its rows `expect$N`; a
+  document that needs a stable, meaningful row name (`passPhaseAdvanced`,
+  `wrongGuardRefused`, `passPhaseStillZero`) states it only as a state row, and
+  the decompiler cannot tell it from a generated one.
+- The never-evaluated status as an authored outcome. A verdict row with no
+  firing reads as never evaluated; no `expect` spelling asks for that, so the
+  documents that prove the status are rows the test block cannot produce.
+- A scheduled refusal expectation. A scheduled row's `expect: Refused` message
+  (the `refused-command` document's wrong-guard row) and a `rateHz: 0`
+  schedule have no `when` spelling; the test block lowers every scheduled
+  command as submitted.
+
+Done when each of the five decompiles, compiles back to its document as parsed,
+and the JSON is deleted.
 
 ### The costing correction
 

@@ -285,7 +285,7 @@ line. `lapStart` records `$tick` when the first gate fires and `lapTicks` is wri
 `lap` as a binding; nothing is exported as an action (nothing outside the module writes
 into a kart row).
 
-**Proving it.** `tests/Puck.World.Canaries/kart-lap/host.world.json` imports the module
+**Proving it.** `tests/Puck.World.Canaries/kart-lap/host.puck` imports the module
 under alias `kart` with one local seat spawned at `kart-arrival`. The positive leg's
 `body.fly 1 0 0 -1 0 0 5` (full throttle, a constant steer matching the curve's own
 authored direction of travel) drives the seat around the loop; by tick 151 (already
@@ -346,13 +346,13 @@ qualified row (`jump$reached`/`jump$falls`).
 
 ## Verifying headless
 
-`tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.puck`-based world that
+`tests/Puck.World.Canaries/jump-trophy/host.puck` is a minimal `standard.puck`-based world that
 imports `modules/jump.puck` under alias `jump` and spawns its one local seat on `jump-arrival` with
 the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --headless --state-dir <tmp> \
-  --world tests/Puck.World.Canaries/jump-trophy/host.world.json < tests/Puck.World.Canaries/jump-trophy/positive.script.txt
+  --world tests/Puck.World.Canaries/jump-trophy/host.puck < tests/Puck.World.Canaries/jump-trophy/positive.script.txt
 ```
 
 `body.fly 0.65 0.30 0.22 0 0 0 4.5` (forward/strafe/up channels, no yaw/pitch/roll, 4.5 simulated seconds)

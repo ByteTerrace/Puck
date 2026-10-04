@@ -21,7 +21,7 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
     /// <summary>The current snapshot format version. The serialized field layout is identified by its recorded shape
     /// (<c>puck formats</c>), which an incompatible snapshot fails to match, so changing the layout is not a reason to
     /// change this number.</summary>
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 1;
 
     /// <summary>Computes an identity for a console model and its immutable ROM images using a stable FNV-1a fingerprint.</summary>
     /// <param name="model">The emulated console model.</param>

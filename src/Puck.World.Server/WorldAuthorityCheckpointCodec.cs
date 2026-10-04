@@ -34,10 +34,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 21 carries, besides the time-travel and determinism shapes, the escrow's crossing sequence, the watermark
-    // crossing-log recovery redoes from, each occupant's, each committed traveler's and each peer event entry's
-    // accumulated arrival turn, and every identity projection's facts row.
-    public const ushort SupportedVersion = 21;
+    // The version is a name, never a counter: the shape fingerprint FormatShapes carries tells layouts apart.
+    public const ushort SupportedVersion = 1;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

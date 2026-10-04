@@ -9,6 +9,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Late comparison verdicts reach the script streams, administrative tape, and refusal count exactly once.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldCompareReportingLawTests {
     [InlineData(false)]
     [InlineData(true)]
@@ -19,7 +20,7 @@ public sealed class WorldCompareReportingLawTests {
         using var stderr = new MemoryStream();
         using var output = new BufferedConsoleOutput(error: stderr, output: stdout);
         var builder = WorldBootHarness.Compose(files, WorldHostPresentation.None,
-            "tests/Puck.World.Canaries/editor-grid/fixture.world.json");
+            "tests/Puck.World.Canaries/editor-grid/fixture.puck");
 
         builder.Services.AddSingleton(implementationInstance: output);
         var host = files.Own(owner: builder.Build());

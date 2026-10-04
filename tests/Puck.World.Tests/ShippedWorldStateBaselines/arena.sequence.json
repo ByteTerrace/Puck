@@ -3,7 +3,7 @@
   "world": "games/arena.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-arena-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-arena-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

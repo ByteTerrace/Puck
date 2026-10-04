@@ -76,7 +76,10 @@ public sealed class WorldBakePack {
             chunks: chunks,
             formatVersion: FormatVersion,
             header: header.WrittenSpan.ToArray()
-        ).Encode(magic: Magic);
+        ).Encode(
+            magic: Magic,
+            shape: FormatShapes.WorldBakePackFormatVersion
+        );
     }
     /// <summary>Returns the pack reference a document at <paramref name="documentPath"/> records for the pack at
     /// <paramref name="packPath"/>: the pack's path relative to the document's directory, with forward slashes.</summary>
@@ -119,7 +122,11 @@ public sealed class WorldBakePack {
         pack = null;
 
         try {
-            var container = ChunkContainer.Decode(content: content, magic: Magic);
+            var container = ChunkContainer.Decode(
+                content: content,
+                magic: Magic,
+                shape: FormatShapes.WorldBakePackFormatVersion
+            );
 
             if (container.FormatVersion != FormatVersion) {
                 reason = $"bake-pack format version {container.FormatVersion} is not {FormatVersion}";

@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
@@ -45,7 +45,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },

@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text;
 using Puck.Assets;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -61,7 +59,7 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
 /// The compile cache every door that needs only a <c>.puck</c> source's documents goes through — the game's boot
 /// loader, the document composer every basis and import reads through (and so <c>world.reload</c>), and
 /// <c>puck test</c>'s own compile of the source its tests generate worlds from — so an unchanged source is compiled
-/// once. A held compile is keyed by the source's full path, spelled with <c>/</c> on every platform and case-folded
+/// once per lowering mode. A held compile is keyed by whether tests are included and the source's full path, spelled with <c>/</c> on every platform and case-folded
 /// where the file system ignores case, so every spelling of one file shares one entry. It is served again only while every file fact it read still
 /// holds: the source, each module its import walk read, the embedding and asset locks, every asset it hashed, every
 /// path it only probed, absent or present, and the listing and sources of every directory its basis name resolved in
@@ -81,7 +79,7 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
 /// that compile and are served it as a hit. A hit never replaces a held compile with an older one.
 /// </para>
 /// </summary>
-public sealed class WorldCompileCache {
+public sealed partial class WorldCompileCache : IWorldCompositionStore {
     /// <summary>The most entries the persistent directory keeps; writing one more removes the least recently written.</summary>
     public const int MaxPersistedEntries = 1024;
 
@@ -91,7 +89,7 @@ public sealed class WorldCompileCache {
     // A temporary file untouched for this long belongs to a write that will never finish; a younger one may be
     // another process's write in flight.
     private static readonly TimeSpan AbandonedAfter = TimeSpan.FromMinutes(minutes: 1);
-    private static readonly byte[] Magic = "PUCKWCC3"u8.ToArray();
+    private static readonly byte[] Magic = "PUCKWCC1"u8.ToArray();
     private readonly ConcurrentDictionary<string, Lock> m_compiling = new(comparer: StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, WorldCompiledSource> m_held = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_persistLock = new();
@@ -226,17 +224,18 @@ public sealed class WorldCompileCache {
     /// once; the others wait for that compile and are served it.</summary>
     /// <param name="path">The <c>.puck</c> source. A relative path resolves against the current directory, and the
     /// compile sees the full path, so every file fact it records is a full path that any process can check.</param>
+    /// <param name="includeTests">Whether to lower test worlds as well as the document; part of the cache key.</param>
     /// <param name="compiled">The source's documents on success; <see langword="null"/> when it does not compile.</param>
     /// <param name="failure">The failed compilation, whose diagnostics say why; <see langword="null"/> on
     /// success.</param>
     /// <returns><see langword="true"/> when the source compiled, now or earlier.</returns>
     /// <exception cref="IOException">The source could not be read.</exception>
     /// <exception cref="UnauthorizedAccessException">The source may not be read.</exception>
-    public bool TryCompile(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure) {
+    public bool TryCompile(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure, bool includeTests = false) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
         var fullPath = Path.GetFullPath(path: path);
-        var key = KeyOf(fullPath: fullPath);
+        var key = (KeyOf(fullPath: fullPath) + (includeTests ? "\0tests" : "\0document"));
 
         failure = null;
 
@@ -255,6 +254,7 @@ public sealed class WorldCompileCache {
 
             using (CompileInputs.Record(log: reads)) {
                 compilation = WorldCompiler.CompileFile(
+                    includeTests: includeTests,
                     allowMultiple: true,
                     path: fullPath
                 );
@@ -353,61 +353,8 @@ public sealed class WorldCompileCache {
         )
         : null
     );
-    // A persisted entry is read whole and trusted only if its trailing digest covers everything before it and it was
-    // written by this compiler build for this path; anything else, torn or foreign, is a miss.
     private bool TryReadPersisted(string key, out WorldCompiledSource? compiled) {
-        compiled = null;
-
-        if (EntryPath(key: key) is not { } path) {
-            return false;
-        }
-
-        byte[] bytes;
-
-        try {
-            if (!File.Exists(path: path)) {
-                return false;
-            }
-
-            bytes = File.ReadAllBytes(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return false;
-        }
-
-        if (bytes.Length < (Magic.Length + 32)) {
-            return false;
-        }
-
-        var body = bytes.AsSpan(start: 0, length: (bytes.Length - 32));
-        Span<byte> digest = stackalloc byte[32];
-
-        SHA256.HashData(
-            destination: digest,
-            source: body
-        );
-
-        if (!digest.SequenceEqual(other: bytes.AsSpan(start: body.Length)) || !body.StartsWith(value: Magic)) {
-            return false;
-        }
-
-        try {
-            using var reader = new BinaryReader(
-                encoding: Encoding.UTF8,
-                input: new MemoryStream(
-                    buffer: bytes,
-                    count: (body.Length - Magic.Length),
-                    index: Magic.Length,
-                    writable: false
-                )
-            );
-
-            if (
-                !string.Equals(a: reader.ReadString(), b: CompilerIdentity, comparisonType: StringComparison.Ordinal) ||
-                !string.Equals(a: reader.ReadString(), b: key, comparisonType: StringComparison.Ordinal)
-            ) {
-                return false;
-            }
-
+        compiled = ReadPersisted(key: key, read: static reader => {
             var inputs = new CompileInput[reader.ReadInt32()];
 
             for (var index = 0; (index < inputs.Length); index++) {
@@ -440,7 +387,7 @@ public sealed class WorldCompileCache {
                 );
             }
 
-            compiled = new WorldCompiledSource(
+            return new WorldCompiledSource(
                 Document: document,
                 EmitsDocument: emitsDocument,
                 Inputs: inputs,
@@ -449,77 +396,46 @@ public sealed class WorldCompileCache {
                 Worlds: worlds
             );
 
-            return true;
-        } catch (Exception exception) when ((exception is EndOfStreamException or IOException or FormatException)) {
-            return false;
-        }
+        });
+        return (compiled is not null);
     }
-    // Best effort: an entry that cannot be written is only a later compile. Each write lands whole through a
-    // sibling temporary file, so a reader never sees a torn entry under the entry's own name.
-    private void WritePersisted(string key, WorldCompiledSource compiled) {
-        if (EntryPath(key: key) is not { } path) {
-            return;
+    private void WritePersisted(string key, WorldCompiledSource compiled) => WritePersisted(key: key, write: writer => {
+        writer.Write(value: compiled.Inputs.Count);
+        foreach (var input in compiled.Inputs) {
+            writer.Write(value: input.ContentHash);
+            writer.Write(value: ((byte)input.Kind));
+            writer.Write(value: input.Path);
         }
-
-        var stream = new MemoryStream();
-
-        stream.Write(buffer: Magic);
-        using (var writer = new BinaryWriter(
-            encoding: Encoding.UTF8,
-            leaveOpen: true,
-            output: stream
-        )) {
-            writer.Write(value: CompilerIdentity);
-            writer.Write(value: key);
-            writer.Write(value: compiled.Inputs.Count);
-            foreach (var input in compiled.Inputs) {
-                writer.Write(value: input.ContentHash);
-                writer.Write(value: ((byte)input.Kind));
-                writer.Write(value: input.Path);
+        writer.Write(value: (compiled.Document is not null));
+        if (compiled.Document is { } document) {
+            writer.Write(value: document.Length);
+            writer.Write(buffer: document);
+        }
+        writer.Write(value: compiled.EmitsDocument);
+        WriteWorlds(
+            worlds: compiled.Worlds,
+            writer: writer
+        );
+        writer.Write(value: (compiled.Schema is not null));
+        if (compiled.Schema is { } schema) {
+            writer.Write(value: schema);
+        }
+        writer.Write(value: compiled.Tests.Count);
+        foreach (var test in compiled.Tests) {
+            writer.Write(value: test.Name);
+            writer.Write(value: test.Test);
+            writer.Write(value: (test.Subject is not null));
+            if (test.Subject is { } subject) {
+                writer.Write(value: subject);
             }
-            writer.Write(value: (compiled.Document is not null));
-            if (compiled.Document is { } document) {
-                writer.Write(value: document.Length);
-                writer.Write(buffer: document);
-            }
-            writer.Write(value: compiled.EmitsDocument);
+            writer.Write(value: test.Json.Length);
+            writer.Write(buffer: test.Json);
             WriteWorlds(
-                worlds: compiled.Worlds,
+                worlds: test.Siblings,
                 writer: writer
             );
-            writer.Write(value: (compiled.Schema is not null));
-            if (compiled.Schema is { } schema) {
-                writer.Write(value: schema);
-            }
-            writer.Write(value: compiled.Tests.Count);
-            foreach (var test in compiled.Tests) {
-                writer.Write(value: test.Name);
-                writer.Write(value: test.Test);
-                writer.Write(value: (test.Subject is not null));
-                if (test.Subject is { } subject) {
-                    writer.Write(value: subject);
-                }
-                writer.Write(value: test.Json.Length);
-                writer.Write(buffer: test.Json);
-                WriteWorlds(
-                    worlds: test.Siblings,
-                    writer: writer
-                );
-            }
         }
-
-        stream.Write(buffer: SHA256.HashData(source: stream.GetBuffer().AsSpan(start: 0, length: ((int)stream.Length))));
-
-        try {
-            AtomicFile.WriteAllBytes(
-                bytes: stream.ToArray(),
-                path: path
-            );
-            Trim(directory: Path.GetDirectoryName(path: path)!);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // Best effort: an entry that cannot be written is only a later compile.
-        }
-    }
+    });
     // The order every field is written in is the order it is read back in; a world is its entry flag, its name and
     // its length-prefixed document.
     private static WorldCompiledWorld[] ReadWorlds(BinaryReader reader) {
@@ -563,7 +479,7 @@ public sealed class WorldCompileCache {
             return;
         }
 
-        foreach (var stale in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc).Take(count: (entries.Count - MaxPersistedEntries))) {
+        foreach (var stale in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc).ThenBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal).Take(count: (entries.Count - MaxPersistedEntries))) {
             Remove(file: stale);
         }
     }

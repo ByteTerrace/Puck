@@ -306,6 +306,15 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
+- **A vertex per cell patch.** `SdfDualContouring` places a vertex for each
+  connected piece of a cell's marching-cubes surface (`Patches`, from the eight
+  corner signs alone), never one per cell, so two sheets in a cell are two
+  vertices and no edge is shared by more than two quads. An ambiguous face is cut
+  by a rule of its own four signs (separate the inside corners), which both
+  cells that share it read alike; make it depend on the cell, the side or the
+  axis and the mesh cracks. `SdfBakerLawTests` hold it with a plate about a cell
+  thick, counted by position, which scenes with sharp clamped features cannot
+  be (coincident vertices read as shared edges there).
 - **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
   `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
   `puck derivations` follows their transitive source dependencies across
@@ -1342,7 +1351,7 @@ submits the volume count you expect. Disassembly and code-path inspection are
 the tools for a question `world.counters`' counts cannot answer directly.
 
 For a repeatable before-and-after reading, `puck counters` boots
-`tests/Puck.Counters/counters.world.json` offscreen on both backends, writes a
+`tests/Puck.Counters/counters.puck` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
@@ -2088,6 +2097,35 @@ frame). The binder sets its views each time a registration, a screen or a
 session moves, and a `WorldViewSet` publishes them only when one changed, so a
 steady frame allocates nothing; a capture frame renders every tainted view
 again.
+
+An infinity view (`sky$<layer>`, nested `<view>$sky$<layer>`; P18-11) is a view
+of this kind beside the session screens, driven by one neutral record,
+`InfinityViewSpec` (`src/Puck.SdfVm/Views/Infinity`), that the sky layer or body
+shape lowers to. `InfinityViewFit.Fit` is the CPU reference of what it renders:
+the camera at the anchor, turned with the viewer and never translated by it, over
+the bounding rectangle the mask's cone projects to on the viewer's camera plane,
+as an off-axis frustum of the viewer's own. `WorldInfinityViewPlan` nests the
+views to the graph's depth (a view past it draws its fallback colour) and caps a
+world at `MaxViews` instances; `WorldInfinityViews` publishes each as a
+`WorldView` with `WorldViewDemand.Sky` (the world's viewers read its latest image
+within the frame) and, only while a viewer's previous frame showed it and its
+region is in the frustum, `SkySeen`, which the graph host turns into a footprint,
+so an unseen view renders nothing and keeps its last image
+(`InfinityViewDemand`). `WorldInfinityViewScene` rewrites the emitter's frame to
+the fitted camera, a quality with shadows and ambient occlusion off unless the
+view's levers turn them on, and the view's far distance; far geometry is a
+`WorldSessionSceneEmitter` given `onlyPrototypes`.
+
+The sky layer that shows one is the `view` kind (`SdfSkyView`, one GPU kind for the
+`view` and `far` document arms, `sky/kinds/view.hlsli`): a point kind that indexes
+the instance's image by the tangent the pixel's world direction has on the viewer's
+basis, inside the rectangle the fit chose (`InfinityViewSampling` is its CPU
+reference, `Describe` packs a fitted frame into the record), counts a shown texel
+in its layer's detail row whether it reads the image or draws its fallback colour,
+and is camera-only. `WorldInfinityViewSpecs.Of` lowers a sky's `view` and `far`
+layers to `InfinityViewSpec`s, carrying a cone from the sky frame into the viewer's
+(`SdfSky.MaxInfinityViews` bounds them, validated and planned alike). The record's
+basis, rectangle and screen come from the frame's fit, not from resolution.
 
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):

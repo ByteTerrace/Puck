@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/body-dynamics/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/body-dynamics/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
@@ -28,7 +28,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/body-dynamics/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/body-dynamics/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -38,7 +38,7 @@
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" }
     ],
     "expect": [
-      {"type": "line", "name": "both-along-and-dynamics-refused", "stream": "stderr", "match": "contains", "text": "kits[0].motion.shaping[0] authors both along and dynamics 'stride' - a shaping row selects exactly one.", "present": true},
+      {"type": "line", "name": "both-along-and-dynamics-refused", "stream": "stderr", "match": "contains", "text": "kits[0].motion.shaping[0] authors both along and dynamics 'stride' — a shaping row selects exactly one.", "present": true},
       { "type": "line", "name": "kit-still-shows-dynamics-shaping-unmodified", "stream": "stdout", "match": "contains", "text": "shaping=dynamics:stride", "present": true }
     ]
   }

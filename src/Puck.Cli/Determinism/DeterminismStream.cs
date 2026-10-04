@@ -55,6 +55,9 @@ internal sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Deter
     /// <summary>The stream's version token, its first line.</summary>
     public const string Version = "puck.determinism.stream.v1";
 
+    // The stream's first line: the version token, then the shape fingerprint puck formats records for the layout below.
+    private const string FirstLine = ((Version + " ") + FormatShapes.DeterminismStreamVersion);
+
     /// <summary>Gets the authoritative components hashed one by one, in the authoritative order, without the seed
     /// and the tick, which carry no state of their own.</summary>
     public static IReadOnlyList<WorldStateHashComponent> TickComponents { get; } = [.. WorldStateHashComposition.Authoritative.Where(predicate: static component => (component is not (WorldStateHashComponent.Seed or WorldStateHashComponent.Tick)))];
@@ -112,7 +115,7 @@ internal sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Deter
     public string Render() {
         var builder = new StringBuilder();
 
-        builder.Append(value: Version).Append(value: '\n');
+        builder.Append(value: FirstLine).Append(value: '\n');
         builder.Append(value: "manifest ").Append(value: ManifestPin).Append(value: '\n');
         builder.Append(value: "components ").AppendJoin(separator: ' ', values: Components).Append(value: '\n');
 
@@ -154,8 +157,11 @@ internal sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Deter
 
         var lines = text[..^1].Split(separator: '\n');
 
-        if (lines[0] != Version) {
-            error = $"line 1 is '{lines[0]}', not the version token {Version}; a stream of another version is not compared";
+        if (lines[0] != FirstLine) {
+            error = (lines[0].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{Version} ")
+                ? $"line 1 names shape fingerprint '{lines[0][(Version.Length + 1)..]}', not {FormatShapes.DeterminismStreamVersion}; a stream of another shape is not compared"
+                : $"line 1 is '{lines[0]}', not the version token {Version}; a stream of another version is not compared"
+            );
 
             return false;
         }

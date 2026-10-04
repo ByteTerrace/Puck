@@ -421,6 +421,8 @@ keyed the same way) merges BY KEY in basis order — new keys
 append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone refuses by name), a leading
 `{"$replace": true}` row replaces wholesale. Any other list replaces wholesale too — notably an overlay's `chords`
 (unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
+A present list is what replaces, empty included: `.puck` lowers a list only where its source writes one, so
+`placements { policy { … } }` leaves `rows` absent and keeps the rows beneath it, and `rows []` clears them.
 `$drop`/`$replace` are compose-time vocabulary only; the basis-and-import graph is depth-capped
 (`WorldDocumentBasis.MaxChainDepth`, 8, shared across both edge types on any one resolution path) and cycles
 refuse by name.

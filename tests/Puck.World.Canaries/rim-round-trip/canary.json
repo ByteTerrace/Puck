@@ -5,11 +5,11 @@
   "requirements": [],
   "timeoutSeconds": 60,
   "fixtures": [
-    "corner.world.json"
+    "corner.puck"
   ],
-  "binding": "The rim-drop pair with a jetpack on the kit: island.world.json owns the half-space above a flat seam at y=80 and corner.world.json owns everything below it, under real separate authorities colocated in one process. The script walks the body off the deck, lets it fall through the seam, flies it back up through the seam, and lets it fall through a second time, so the seam is crossed down, up, and down again. On each commit the neighbour's delivered record still shows the traveler at the slot it has just departed from, because that record was frozen before the handoff. The arrival carries that slot in its mobility identity (WorldMobilityIdentity.DepartedFrom), stamped by the source when it offers the traveler and installed before the arrival is placed, and the seam's contact declines the one entity whose address equals it: the traveler seen before its handoff. Every asserted position is engine-emitted inline in the transfer narration at the crossing tick, so a loaded host's catch-up burst cannot move a verdict. All three arrivals keep x=0.00 exactly. Depenetrating an arrival from its own record instead shoves it the sum of two collider radii along an invented axis, 0.70 m per leg, and the displacement accumulates across legs. The discriminating leg boots island-solo.world.json, the same island with its references, destinations and adjacencies removed, and runs the same script: no crossing fires and nothing arrives.",
+  "binding": "The rim-drop pair with a jetpack on the kit: island.puck owns the half-space above a flat seam at y=80 and corner.puck owns everything below it, under real separate authorities colocated in one process. The script walks the body off the deck, lets it fall through the seam, flies it back up through the seam, and lets it fall through a second time, so the seam is crossed down, up, and down again. On each commit the neighbour's delivered record still shows the traveler at the slot it has just departed from, because that record was frozen before the handoff. The arrival carries that slot in its mobility identity (WorldMobilityIdentity.DepartedFrom), stamped by the source when it offers the traveler and installed before the arrival is placed, and the seam's contact declines the one entity whose address equals it: the traveler seen before its handoff. Every asserted position is engine-emitted inline in the transfer narration at the crossing tick, so a loaded host's catch-up burst cannot move a verdict. All three arrivals keep x=0.00 exactly. Depenetrating an arrival from its own record instead shoves it the sum of two collider radii along an invented axis, 0.70 m per leg, and the displacement accumulates across legs. The discriminating leg boots island-solo.puck, the same island with its references, destinations and adjacencies removed, and runs the same script: no crossing fires and nothing arrives.",
   "positive": {
-    "world": "tests/Puck.World.Canaries/rim-round-trip/island.world.json",
+    "world": "tests/Puck.World.Canaries/rim-round-trip/island.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -69,7 +69,7 @@
         "name": "the first descent arrives beneath the point of fall",
         "stream": "stdout",
         "match": "contains",
-        "text": "-> '6~global6~corner' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 79.09, -13.54)",
+        "text": "-> '6~global6~corner' seat 1 arrived (anonymous) — [body.where: body:0 pos=(0.00, 79.09, -13.54)",
         "present": true
       },
       {
@@ -77,7 +77,7 @@
         "name": "the ascent arrives above the point it rose through",
         "stream": "stdout",
         "match": "contains",
-        "text": "-> 'boot' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 80.69, -13.54)",
+        "text": "-> 'boot' seat 1 arrived (anonymous) — [body.where: body:0 pos=(0.00, 80.69, -13.54)",
         "present": true
       },
       {
@@ -85,7 +85,7 @@
         "name": "the second descent arrives beneath the same point",
         "stream": "stdout",
         "match": "contains",
-        "text": "transfer=1 'boot' seat 1 departed -> '6~global6~corner' seat 1 arrived (anonymous) - [body.where: body:0 pos=(0.00, 79.16, -13.54)",
+        "text": "transfer=1 'boot' seat 1 departed -> '6~global6~corner' seat 1 arrived (anonymous) — [body.where: body:0 pos=(0.00, 79.16, -13.54)",
         "present": true
       },
       {
@@ -107,7 +107,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/rim-round-trip/island-solo.world.json",
+    "world": "tests/Puck.World.Canaries/rim-round-trip/island-solo.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

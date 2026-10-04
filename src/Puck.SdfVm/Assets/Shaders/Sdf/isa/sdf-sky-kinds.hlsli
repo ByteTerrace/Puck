@@ -7,7 +7,6 @@
 #define SDF_SKY_MAX_STOPS 4u
 #define SDF_SKY_MAX_UPPER_FIELD_RUNS 2u
 #define SDF_SKY_DETAIL_RUNS 3u
-#define SDF_SKY_DETAIL_ATMOSPHERE 3u
 
 // Puck.SignedDistance.SdfSkyBlend.
 #define SDF_SKY_BLEND_OVER 0u
@@ -49,7 +48,7 @@
 #define SDF_SKY_KIND_PATTERN 5u
 #define SDF_SKY_KIND_PANORAMA 6u
 #define SDF_SKY_KIND_DISC 7u
-#define SDF_SKY_KIND_PANEL 8u
+#define SDF_SKY_KIND_VIEW 8u
 
 // Whether a kind is a field kind, evaluated by the sky pass at its field extent and summarized with its run; a point
 // kind is evaluated by the composite at each pixel.
@@ -275,21 +274,27 @@ SdfSkyDisc sdfSkyDiscOf(SdfSkyLayer layer) {
     return parameters;
 }
 
-// The panel kind (SdfSkyPanel), a point kind.
-struct SdfSkyPanel {
-    float3 Direction;
+// The view kind (SdfSkyView), a point kind.
+struct SdfSkyView {
+    float3 Right;
     float Intensity;
-    float3 Color;
-    float2 Size;
-    float Blur;
+    float3 Up;
+    int Screen;
+    float3 Forward;
+    uint Coverage;
+    float4 Rect;
+    float3 Fallback;
 };
-SdfSkyPanel sdfSkyPanelOf(SdfSkyLayer layer) {
-    SdfSkyPanel parameters;
-    parameters.Direction = layer.P0.xyz;
+SdfSkyView sdfSkyViewOf(SdfSkyLayer layer) {
+    SdfSkyView parameters;
+    parameters.Right = layer.P0.xyz;
     parameters.Intensity = layer.P0.w;
-    parameters.Color = layer.P1.xyz;
-    parameters.Size = layer.P2.xy;
-    parameters.Blur = layer.P2.z;
+    parameters.Up = layer.P1.xyz;
+    parameters.Screen = asint(layer.P1.w);
+    parameters.Forward = layer.P2.xyz;
+    parameters.Coverage = asuint(layer.P2.w);
+    parameters.Rect = layer.P3.xyzw;
+    parameters.Fallback = layer.P4.xyz;
     return parameters;
 }
 

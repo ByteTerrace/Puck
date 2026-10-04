@@ -102,6 +102,10 @@ public sealed class SdfSky {
     public const int MaxStops = 4;
     /// <summary>The most layers a sky carries: the records of the layer table.</summary>
     public const int MaxLayers = 8;
+    /// <summary>The most infinity views (<see cref="SdfSkyLayerKind.View"/> layers, view and far alike) a world carries at once,
+    /// at any nesting depth: each is a second residency whose tables take aperture bytes the smallest supported GPU's
+    /// host-visible heap cannot spare.</summary>
+    public const int MaxInfinityViews = 8;
     /// <summary>The most field runs above a stack's lowest run: the runs the sky pass's upper images hold.</summary>
     public const int MaxUpperFieldRuns = 2;
     /// <summary>The default look's one layer's detail label.</summary>

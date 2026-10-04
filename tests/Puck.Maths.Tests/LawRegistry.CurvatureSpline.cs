@@ -2,6 +2,7 @@ namespace Puck.Maths.Tests;
 
 internal static partial class LawRegistry {
     private static LawCase[] CurvatureSplineCases() => [
+        ClaimCase(claim: Subjects.CurvatureSplineBinaryRoundTrip, id: "curvature-spline.binary-round-trip"),
         ClaimCase(
             claim: Subjects.CurvatureSplineEndpointCurvatureOracle,
             id: "curvature-spline.endpoint-curvature-oracle"

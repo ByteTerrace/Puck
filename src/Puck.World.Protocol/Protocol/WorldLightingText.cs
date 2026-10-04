@@ -243,6 +243,20 @@ public static class WorldLightingText {
                         .Field(key: "projection", value: (panorama.Projection ?? WorldSkyProjection.Equirect).ToString().ToLowerInvariant())
                         .Field(key: "intensity", value: Describe(value: panorama.Intensity, change: change));
                 }
+            case WorldRenderSkyLayer.View view: {
+                    return echo
+                        .Field(key: "type", value: "view")
+                        .Field(key: "destination", value: (view.Destination ?? "none"))
+                        .Field(key: "scale", value: Describe(value: view.Scale))
+                        .Field(key: "refresh", value: Describe(value: view.Refresh));
+                }
+            case WorldRenderSkyLayer.Far far: {
+                    return echo
+                        .Field(key: "type", value: "far")
+                        .Field(key: "prototypes", value: string.Join(separator: ",", values: (far.Prototypes ?? [])))
+                        .Field(key: "scale", value: Describe(value: far.Scale))
+                        .Field(key: "refresh", value: Describe(value: far.Refresh));
+                }
             default: {
                     return echo.Field(
                         key: "type",

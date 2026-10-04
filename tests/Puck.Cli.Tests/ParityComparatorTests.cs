@@ -175,11 +175,65 @@ public sealed class ParityComparatorTests : IDisposable {
 
         return path;
     }
-    private static void WriteManifestFile(string path, string backend, string captureLine) =>
+    private static void WriteManifestFile(string path, string backend, string captureLine, string? shape = null) =>
         File.WriteAllText(
-            contents: (((("{\"schema\":\"puck.parity.manifest.v1\",\"backend\":\"" + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
+            contents: (((((("{\"schema\":\"puck.parity.manifest.v1\",\"shape\":\"" + (shape ?? FormatLedgerShapes.Of(id: "WorldCaptureManifest.SchemaId"))) + "\",\"backend\":\"") + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
             path: path
         );
+
+    // A capture manifest carries the shape fingerprint the ledger records for its layout; the same schema under another shape is
+    // refused by the fingerprint's name before any member is read.
+    [Fact]
+    public void AManifestOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+        using var directory = new TemporaryDirectory(prefix: "puck-parity-shape-");
+
+        var path = Path.Combine(
+            path1: directory.RootPath,
+            path2: "manifest.json"
+        );
+
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ),
+            path: path
+        );
+        Assert.True(
+            condition: ParityManifestLoader.TryLoadManifest(
+                error: out var control,
+                manifest: out _,
+                path: path
+            ),
+            userMessage: control
+        );
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ),
+            path: path,
+            shape: "0000000000000000"
+        );
+        Assert.False(condition: ParityManifestLoader.TryLoadManifest(
+            error: out var error,
+            manifest: out _,
+            path: path
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "shape fingerprint '0000000000000000'"
+        );
+    }
+
     private static void WritePng(string directory, string fileName, byte[] rgba, int width, int height) =>
         PngEncoder.Write(
             height: height,

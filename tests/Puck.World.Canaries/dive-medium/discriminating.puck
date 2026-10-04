@@ -1,0 +1,11 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "dive-medium-canary-discriminating"
+
+rules dive {
+  rule "dive-depth-deep" {
+    when region("dive$diveDepth1") >= 1
+    mode: Level
+    setState(state: `dive$depth`, value: 2.9)
+  }
+}

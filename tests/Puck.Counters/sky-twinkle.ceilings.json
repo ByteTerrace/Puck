@@ -1,5 +1,5 @@
 {
-  "workload": "tests/Puck.Counters/sky-twinkle.world.json",
+  "workload": "tests/Puck.Counters/sky-twinkle.puck",
   "script": "tests/Puck.Counters/sky.script.txt",
   "width": 1920,
   "height": 1080,

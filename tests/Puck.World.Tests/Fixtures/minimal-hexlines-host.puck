@@ -1,0 +1,111 @@
+schema: "puck.world.definition.v1"
+basis: "../../../src/Puck.World/Assets/worlds/standard"
+
+import "../../../src/Puck.World/Assets/worlds/games/hexlines"
+
+bodies {
+  capacity: 40
+  localSeats: 1
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "walk"
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels [
+  {
+    frame: Heading
+    name: "forward"
+    role: MoveAdvance
+    shape: Bipolar
+  }
+  {
+    frame: Heading
+    name: "strafe"
+    role: MoveStrafe
+    shape: Bipolar
+  }
+  {
+    name: "turn"
+    role: Turn
+    shape: Bipolar
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [SmoothUnionContact]
+}
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -46, 0]
+}
+
+placements {
+  placement "hexTable" {
+    position [20, -0.5, -12]
+    board {
+      topology: "hexLinesBoard"
+      occupancy: "hexBoard"
+      turn: "hexTurn"
+      verdict: "hexVerdict"
+      move: "hexMove"
+    }
+  }
+}
+
+rule "hex-derive-stone-cell" {
+  mode: Level
+  forEach: hexStoneCell
+  hexStoneCell[$each] = board(cellOf, hexBoard, placement, $each)
+}
+
+simulation {
+  rateHz: 30
+}
+
+state {}
+
+views {
+  layout "action" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 0.5
+    transitionSeconds: 0.4
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626001, pitch: 0.4145069, yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599311)
+    ]
+  }
+}

@@ -10,7 +10,7 @@
     "solid.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pane-display/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pane-display/fixture.puck",
     "script": "pane.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -32,7 +32,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pane-display/moved.world.json",
+    "world": "tests/Puck.World.Canaries/pane-display/moved.puck",
     "script": "pane.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Cli.Refusals;
 
 namespace Puck.Cli.Canary;
 
@@ -1491,6 +1492,21 @@ internal static partial class CanaryManifestLoader {
 
         return fullPath;
     }
+    // Spells a line expectation's census token as the header the source census computes, so the running World's
+    // reflective scan is held to an independent count rather than to a number written into the manifest.
+    private static CanaryLeg WithRefusalCensus(CanaryLeg leg, string repositoryRoot) {
+        if (!leg.Assertions.Any(predicate: static assertion => ((assertion is CanaryLineAssertion line) && line.Text.Contains(comparisonType: StringComparison.Ordinal, value: RefusalCensus.Token)))) {
+            return leg;
+        }
+
+        var header = RefusalCensus.Header(census: RefusalCensus.Count(repositoryRoot: repositoryRoot));
+
+        return leg with {
+            Assertions = [.. leg.Assertions.Select(selector: assertion => ((assertion is CanaryLineAssertion line)
+                ? (line with { Text = line.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: header, oldValue: RefusalCensus.Token) })
+                : assertion))],
+        };
+    }
     private static bool TryLoadManifest(string repositoryRoot, string directory, string manifestPath, out CanaryManifest manifest, out string error) {
         manifest = null!;
         error = string.Empty;
@@ -1669,11 +1685,11 @@ internal static partial class CanaryManifestLoader {
                 Binding: binding,
                 BootShape: bootShape,
                 DirectoryPath: directory,
-                Discriminating: discriminating,
+                Discriminating: WithRefusalCensus(leg: discriminating, repositoryRoot: repositoryRoot),
                 Exclusive: exclusive,
                 Fixtures: fixtures,
                 Id: id,
-                Positive: positive,
+                Positive: WithRefusalCensus(leg: positive, repositoryRoot: repositoryRoot),
                 Requirements: requirements,
                 TimeoutSeconds: timeoutSeconds,
                 Title: title

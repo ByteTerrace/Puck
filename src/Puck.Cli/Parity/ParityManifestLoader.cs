@@ -470,6 +470,22 @@ internal static class ParityManifestLoader {
             throw new ParityDocumentRefusal(message: $"{context} schema '{schema}' is not '{expected}'.");
         }
     }
+    private static void RequireShape(JsonElement element, string context, string expected) {
+        var shape = CliStrictJson.ReadRequiredString(
+            context: context,
+            element: element,
+            member: "shape",
+            refusal: Refusal
+        );
+
+        if (!string.Equals(
+            a: shape,
+            b: expected,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ParityDocumentRefusal(message: $"{context} shape fingerprint '{shape}' is not '{expected}'; capture it again.");
+        }
+    }
 
     public static bool TryLoadContract(string path, out ParityContract contract, out string error) {
         contract = null!;
@@ -565,12 +581,20 @@ internal static class ParityManifestLoader {
                 refusal: Refusal
             );
 
+            // The shape is named before any other member is looked at: a manifest written under another layout is refused
+            // by its fingerprint, not by whichever member of it this build happens to miss first.
+            RequireShape(
+                context: "manifest",
+                element: root,
+                expected: WorldCaptureManifest.CurrentShape
+            );
             CliStrictJson.RequireOnlyMembers(
                 element: root,
                 context: "manifest root",
                 unknownMemberDetail: "strict documents refuse fields the comparator does not read.",
                 refusal: Refusal,
                 "schema",
+                "shape",
                 "backend",
                 "world",
                 "captures"

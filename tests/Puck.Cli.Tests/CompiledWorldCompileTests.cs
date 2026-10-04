@@ -39,7 +39,7 @@ public sealed class CompiledWorldCompileTests {
         Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: fromSource, header: out var header, reason: out var reason), userMessage: reason);
         Assert.Equal(expected: WorldDefinitionLoader.BootInstanceName, actual: header.InstanceIdentity);
         Assert.Equal(expected: CompiledWorld.EngineBuild, actual: header.EngineBuild);
-        Assert.Equal(expected: ["DEFN", "ASST", "BAKE"], actual: container.Chunks.Select(selector: static chunk => chunk.Code.ToString()));
+        Assert.Equal(expected: ["DEFN", "ASST", "CURV", "BAKE"], actual: container.Chunks.Select(selector: static chunk => chunk.Code.ToString()));
         Assert.True(condition: container.TryFind(chunk: out var bakes, code: WorldBakeChunk.BakeCode));
         Assert.True(condition: WorldBakeChunk.TryRead(keys: out var keys, packReference: out var reference, payload: bakes.Payload.Span, reason: out reason), userMessage: reason);
         Assert.Equal(actual: reference, expected: WorldBakePack.FileName);

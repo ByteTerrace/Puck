@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// publishes the screens and declares the reads they make, so a screen retargeted to another camera's view reads that view
 /// on the frame of the change.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const float Delta = (StepTicks / 50400f);
     private const uint Display = 64;
@@ -32,7 +33,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const string Pane = "pane";
     private const string SecondCamera = "second";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
     // The shipped ink pipeline, relative to the counters world's directory.
     private const string InkPipeline = "../../src/Puck.World/Assets/pipelines/ink.graph.json";
 
@@ -121,7 +122,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck",
             edit: definition => definition with {
                 CamerasRaw = [.. definition.Cameras, Filming(name: FirstCamera)],
                 ViewsRaw = definition.Views with {

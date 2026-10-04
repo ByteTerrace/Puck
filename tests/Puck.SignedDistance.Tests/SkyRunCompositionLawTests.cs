@@ -91,16 +91,17 @@ public sealed class SkyRunCompositionLawTests {
             (SdfSkyPanorama.Kind, SdfSkyPanorama.Class),
             (SdfSkyDisc.Kind, SdfSkyDisc.Class),
             (SdfSkyPanel.Kind, SdfSkyPanel.Class),
+            (SdfSkyView.Kind, SdfSkyView.Class),
         };
 
         Assert.Equal(actual: kinds.Select(selector: static kind => kind.Kind).Order(), expected: Enum.GetValues<SdfSkyLayerKind>().Order());
         Assert.Equal(
             actual: kinds.Where(predicate: static kind => (kind.Class == SdfSkyLayerClass.Point)).Select(selector: static kind => kind.Kind).Order(),
-            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc, SdfSkyLayerKind.Panel }.Order()
+            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc, SdfSkyLayerKind.Panel, SdfSkyLayerKind.View }.Order()
         );
 
-        // Every kind in a stack, each blend in turn: a gradient, stars, clouds, aurora, noise, a pattern, a panorama and a
-        // disc, which cut into three runs.
+        // Every kind in a stack, each blend in turn: a gradient, stars, clouds, aurora, noise, a pattern, a panorama, a disc,
+        // a panel and a view, which cut into four runs.
         var random = new Random(Seed: 818);
         var stack = kinds.Select(selector: (kind, index) => new SdfSkyLayerSample(
             Alpha: (0.25f + (0.5f * random.NextSingle())),

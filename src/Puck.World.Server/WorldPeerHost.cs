@@ -385,9 +385,23 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
-            var offeredKey = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(source: helloBuffer);
+            var (offeredKey, offeredShape) = HandshakeWireFormat.ReadHello(hello: helloBuffer);
 
             if (offeredKey == WorldFederationCodec.WireKey) {
+                if (!string.Equals(
+                    a: offeredShape,
+                    b: WorldFederationCodec.WireShape,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    await WriteFederationRefusal(
+                        ct: handshakeCt,
+                        detail: $"federation wire shape {offeredShape} is not this authority's {WorldFederationCodec.WireShape}",
+                        refusal: WorldFederationRefusal.WireShapeMismatch,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+
                 if (!m_authenticator.IsConfigured) {
                     await WriteFederationRefusal(
                         ct: handshakeCt,
@@ -470,11 +484,12 @@ public sealed class WorldPeerHost : IDisposable {
 
             if (!WorldHelloDoor.TryAccept(
                 offeredKey: offeredKey,
+                offeredShape: offeredShape,
                 refusal: out var helloRefusal
             )) {
                 await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: handshakeCt,
-                    reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}",
+                    reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} shape {offeredShape} != server 0x{WorldProtocol.WireProtocolKey:x16} shape {WorldProtocol.WireShape}",
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 

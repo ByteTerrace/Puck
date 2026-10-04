@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -29,10 +30,11 @@ public static class WorldStateDocumentValues {
     [ThreadStatic]
     private static HashSet<object>? Seen;
 
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, ValueProperty[]> PropertyCache = new();
     private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
 
-    private sealed record Traversal(bool Skip, PropertyInfo[] Properties);
+    private sealed record ValueProperty(string Name, Type PropertyType, Func<object, object?> GetValue);
+    private sealed record Traversal(bool Skip, ValueProperty[] Properties);
     // What the one walk does when it reaches a bound value.
     private enum Walk {
         // Read the referenced cell and fill the value, leaving the reference attached for canonical write-back.
@@ -169,11 +171,25 @@ public static class WorldStateDocumentValues {
             );
         }
     );
-    private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(
+    private static ValueProperty[] Properties(Type type) => PropertyCache.GetOrAdd(
         key: type,
-        valueFactory: static type =>
-        [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
-            .Where(predicate: static property => (property.CanRead && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))]
+        valueFactory: static type => {
+            if (WorldModelShape.Of(type: type) is { } shape) {
+                return [.. shape.Members.Concat(second: shape.Properties)
+                    .Where(predicate: static member => (member.Get is not null))
+                    .Select(selector: static member => new ValueProperty(member.Member, member.Type, member.Get!))];
+            }
+            // The graph API also accepts caller-owned shapes. Bind their getters once; walking a value invokes
+            // a delegate, never PropertyInfo.GetValue. Engine documents use the generated readers above.
+            return [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
+                .Where(predicate: static property => (property.CanRead && !property.PropertyType.IsByRefLike && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))
+                .Select(selector: static property => {
+                    var value = Expression.Parameter(name: "value", type: typeof(object));
+                    var getter = Expression.Lambda<Func<object, object?>>(Expression.Convert(expression: Expression.Property(expression: Expression.Convert(expression: value, type: property.DeclaringType!), property: property), type: typeof(object)), value).Compile();
+
+                    return new ValueProperty(property.Name, property.PropertyType, getter);
+                })];
+        }
     );
     private static HashSet<object> RentSeen() {
         var seen = Seen;
@@ -341,7 +357,7 @@ public static class WorldStateDocumentValues {
         }
 
         foreach (var property in traversal.Properties) {
-            var child = property.GetValue(obj: value);
+            var child = property.GetValue(value);
 
             if (child is null) {
                 continue;

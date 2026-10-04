@@ -8,10 +8,10 @@ namespace Puck.World.Protocol {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldAuthorityStoreWireCodec.JournalMagic</c>, declared in <c>src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs</c>.</summary>
-        public const string WorldAuthorityStoreWireCodecJournalMagic = "0106eeeb71a2689f";
+        public const string WorldAuthorityStoreWireCodecJournalMagic = "16d6100f7622a0ec";
         /// <summary>The shape fingerprint of <c>WorldAuthorityStoreWireCodec.JournalVersion</c>, declared in <c>src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs</c>.</summary>
-        public const string WorldAuthorityStoreWireCodecJournalVersion = "0106eeeb71a2689f";
+        public const string WorldAuthorityStoreWireCodecJournalVersion = "16d6100f7622a0ec";
         /// <summary>The shape fingerprint of <c>WorldProtocol.WireProtocolKey</c>, declared in <c>src/Puck.World.Protocol/Protocol/WorldProtocol.cs</c>.</summary>
-        public const string WorldProtocolWireProtocolKey = "be9220ad224173b3";
+        public const string WorldProtocolWireProtocolKey = "4c1d3f03d5d8c4b6";
     }
 }

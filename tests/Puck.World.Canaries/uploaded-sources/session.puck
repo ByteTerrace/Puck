@@ -1,0 +1,72 @@
+schema: "puck.world.definition.v1"
+documentId: "uploaded-sources-session"
+
+admission [
+  {
+    algorithm: ""
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+    publicKey: ""
+    subject: null
+  }
+]
+
+cameras [
+  {
+    anchor: null
+    name: "ball-cam"
+    renderHeight: 144
+    renderWidth: 160
+    rig {
+      name: "ball-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 1, -6]))
+        lookAt(subject: worldPoint(point: [0, 1, -12]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+placements {
+  placement "subject" {
+    prototype: "ball"
+    position [0, 0, -12]
+  }
+}
+
+prototypes {
+  prototype "ball" {
+    document {
+      name: "ball"
+      palette [
+        {
+          color: "#FF0000"
+          emissive: 0.5
+          roughness: 0.6
+          sheen: 0
+          specular: 0
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "ball" {
+        material: 0
+        position [0, 1, 0]
+        scale [2, 2, 2]
+      }
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}

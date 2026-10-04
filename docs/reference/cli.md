@@ -119,6 +119,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against the release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
+| [`puck refusals`](#puck-refusalsrefusal-census) | the source census of the refusals `world.refusals` lists, which the refusal-catalog-census canary holds the running World's scan to. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
@@ -766,13 +767,15 @@ base, so passing both is refused.
   shaders it declares and every file they include, each resolved as the host
   resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or post-process packages need the host's resolvers still reaches
-  them.
+  them. A world authored as a `.puck` source is read as the document it lowers
+  to, so a canary whose manifest names the source reaches what the document
+  does.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
   chooses no canary when the document named by its stem compiles to the same
   value at the base and in the working tree. Both sides use the world's document
-  reader, with the base's shipped assets extracted from git. Object member order
-  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  reader, with the base's `src/Puck.World/Assets` exported from git. Object
+  member order and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
   array order and every member's value do. A JSON-to-source replacement judges
   both paths. The owner's suites, catalog check and changed test blocks still
   run, and neither path is listed as `unmapped` or unplaced `deleted`.
@@ -829,7 +832,13 @@ base, so passing both is refused.
   tree: each canary's worlds and graph documents are read as the base recorded
   them, through the same readers, so a deleted pass source that a base graph
   document declared, or an asset a base world named, chooses the canaries whose
-  documents reached it there. The canaries are today's, since only a canary
+  documents reached it there. A base `.puck` source composes through an export
+  of the base revision's document trees (`src/Puck.World/Assets`,
+  `tests/Puck.World.Canaries`, `tests/Puck.World.Verdicts` and `worlds`, written
+  by `git archive` to a temporary directory when the first document is read and
+  deleted when the selection ends), because the composer reads files. A git run
+  the export needs that fails, or does not finish within two minutes, refuses
+  the selection by name. The canaries are today's, since only a canary
   that exists now can run. One none of these places is listed as `deleted`, and
   its project's suites still run. Nothing reads a deleted file from disk.
 
@@ -1806,7 +1815,7 @@ law rather than by a directory sweep.
 
 ## `puck parity`—cross-backend parity over the authored parity world
 
-`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+`puck parity` boots `tests/Puck.Parity/parity.puck` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
@@ -1919,7 +1928,7 @@ puck counters --report <file> [--check | --record] [--ceilings <file>]
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/counters.world.json` once per backend
+The run boots `tests/Puck.Counters/counters.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
@@ -2116,7 +2125,7 @@ The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
 nothing that depends on the host:
 
 ```text
-puck.determinism.stream.v1
+puck.determinism.stream.v1 <the shape fingerprint puck formats records for this layout>
 manifest <the manifest's content pin>
 components <one name per per-tick hash>
 scenario <name> <ticks>
@@ -2562,7 +2571,7 @@ separate evidence, and unresolved rows remain unmodeled.
 
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `puck.world.json` and a checked-in Klondike fixture document
-(`Bench/klondike.fixture.world.json`, spliced the way
+(`Bench/klondike.fixture.puck`, spliced the way
 `tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
@@ -2624,6 +2633,27 @@ separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
 
 ---
+
+## `puck refusals`—refusal census
+
+Counts every enum member tagged `[Refusal(...)]`, and the distinct doors they
+name, in the projects whose assemblies the World's refusal catalog anchors, by
+reading their sources with Roslyn rather than loading the World. It prints the
+count as the header `world.refusals` prints over the whole catalog, then the
+projects it counted.
+
+```text
+puck refusals               print the census and the projects counted
+puck refusals -h / --help   this text
+```
+
+The `refusal-catalog-census` canary spells the token `{refusal-census}` in a
+line expectation, and the runner replaces it with this census, so the running
+World's reflective scan is held to an independent count rather than to a number
+written into the manifest. Two laws hold both sides to the projects whose
+sources tag a refusal: `RefusalCensusLawTests` for this verb's project list and
+`RefusalCatalogAnchorLawTests` for the catalog's anchors. Exit codes: **0**
+counted, **2** missing repository root.
 
 ## `puck registry`—world name registry
 
@@ -3042,6 +3072,17 @@ source that emits them, with `--output` naming it: each world becomes a module a
 generated in both worlds it joins. A document declaring a generated name that nothing
 prints back is refused by that name, so the verb never writes a source the compiler
 refuses.
+
+The source composes to the document it came from: a list or object the document holds
+empty prints as `rows []` or the like, because composition replaces a list that is
+present and keeps the layers beneath one that is absent, and a member held `null`
+prints as `null`: a bare `null` holds nothing in every member, a name or key member
+included, so a row or key actually named null is written `$"null"`. A number prints in the spelling the document holds it in (`0.0` stays
+`0.0`), and a member a construct defaults (a transfer's `insertFirst: false`) is left
+to the construct's default, which composes to the same definition. The world-document round-trip law
+(`WorldDecompileRoundTripLawTests`) holds every JSON world document in the repository,
+and every empty list and object and every `null` member the generated schema declares,
+to this.
 
 `embed` resolves all authored `embed(...)` text expressions and vector table literals in a
 `.puck` file or directory into committed `.embeddings.json` lock files. Pass `--check` in CI to verify
@@ -3538,10 +3579,10 @@ The check records shape and never demands a token bump: a format whose source ch
 `puck formats` records the new fingerprint, and the generated constant moves with it, so the codec that reads it
 refuses what was written under the old one.
 
-Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
-`*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
-slashes. Run `git add` on those files or remove them first: the ledger is computed from tracked sources only and
-cannot describe what will be committed while those sources are omitted.
+Both forms read tracked and non-ignored new C# sources under `src/`, excluding
+`*.g.cs` files. Staging a source does not change its recorded shape. A new codec
+participates in discovery before it is staged, and `--check` reports its missing
+entry without writing the ledger.
 
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:
@@ -3611,6 +3652,14 @@ is refused.
 
 An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
 member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
+
+A machine-written document that the same build reads back carries a `shape` member beside its schema token: the writer
+stamps the constant its project generates, and the reader names a mismatch before it reads another member (the
+determinism stream's first line, the capture and release manifests, the retained deployment reference, the release
+group, receipt snapshot, fixture inventory and recovery root, the counters report, the counterpart attestation). A
+ledger a verb rewrites (`FormatVersions.json`, the canary ceilings and coverage, the ratchet ledgers, the lock files) carries
+none: its verb's `--check` is its shape check. A document nothing in the repository reads back is not stamped, and one
+whose magic belongs to an outside specification (SPIR-V, WebAssembly) is not a Puck format and is not ledgered.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
@@ -3782,9 +3831,17 @@ and block every removal because the integration branch's local name is unknown.
 `unlanded`, `dirty`, `locked`, `main-worktree`, `integration-branch`,
 `main-worktree-branch`, `unreadable`. A prunable flag alone does not grant removal.
 
+Git reads run with `--no-lazy-fetch` where git accepts it (2.44 and later), so a
+partial clone never fetches a missing object during a report. An older git has no
+way to forbid that fetch. With such a git, the report still reads a repository
+that has no promisor remote, since nothing there can be fetched lazily, but it
+refuses a partial clone (`extensions.partialClone` or a `remote.<name>.promisor`
+setting).
+
 Exit **0** means the report is produced, even with no removable entries or with
-unreadable worktrees. Missing or unknown `--into`, or failure to read the local
-branch inventory, exits **2** with a reason on stderr.
+unreadable worktrees. Missing or unknown `--into`, failure to read the local
+branch inventory, or a partial clone under a git without `--no-lazy-fetch` exits
+**2** with a reason on stderr.
 
 ## `puck branding`—maintained assets
 

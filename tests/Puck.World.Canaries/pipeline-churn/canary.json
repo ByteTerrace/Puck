@@ -12,7 +12,7 @@
   ],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.puck",
     "script": "churn.script.txt",
     "commands": [
       {
@@ -476,7 +476,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.puck",
     "script": "churn-ends-corrected.script.txt",
     "commands": [
       {

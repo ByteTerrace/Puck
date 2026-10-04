@@ -39,7 +39,7 @@ use crate::{Inputs, Outputs};
 // time (`AbiMismatch`) on any other value — that mismatch is a stale-artifact detector, never a
 // compatibility surface: there is one addon ABI, and a module built against an older shape is
 // simply stale.
-pub use crate::abi_generated::{ABI_VERSION, CHANNEL_DESCRIPTOR_BYTES, IN_CELL_BYTES, OUT_CELL_BYTES};
+pub use crate::abi_generated::{ABI_SHAPE, ABI_VERSION, CHANNEL_DESCRIPTOR_BYTES, IN_CELL_BYTES, OUT_CELL_BYTES};
 
 /// Output-cell capacity this module reserves at [`out_ptr`] — this crate's OWN budget, not a mirror
 /// of anything on the host: the assertion just below enforces the one host-side constraint that

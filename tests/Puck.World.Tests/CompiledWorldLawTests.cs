@@ -91,8 +91,9 @@ public sealed class CompiledWorldLawTests {
     // The products the pinned fixture's derivations produce at their current versions. A derivation whose product
     // moves is a deliberate change to it: bump the chunk's Version and re-record its pin here.
     private static readonly (string Code, uint Version, string Product)[] Pins = [
-        ("DEFN", 2, "sha256-64/30103fb9e3ffe8ca"),
+        ("DEFN", 1, "sha256-64/30103fb9e3ffe8ca"),
         ("ASST", 1, "sha256-64/1bc8ff1f5742445f"),
+        ("CURV", 1, "sha256-64/db2fa90498613fdf"),
     ];
     private static readonly WorldMachineCatalog Catalog = TestHookInstaller.CreateMachineCatalog();
 
@@ -152,7 +153,7 @@ public sealed class CompiledWorldLawTests {
                 authored: out var authored,
                 catalog: Catalog,
                 catalogFingerprint: Catalog.CompositionFingerprint,
-                document: File.ReadAllBytes(path: path),
+                document: Puck.Testing.ShippedWorldDocuments.Read(path: path),
                 path: path,
                 reason: out var reason
             ),
@@ -204,9 +205,9 @@ public sealed class CompiledWorldLawTests {
         var cache = new CompiledWorldCache(directory: directory.PathOf(name: "state/compiled"));
         var fresh = Boot(cache: cache, path: path);
 
-        Assert.Equal(actual: (fresh.Hits, fresh.Derivations), expected: (0L, 2L));
+        Assert.Equal(actual: (fresh.Hits, fresh.Derivations), expected: (0L, 3L));
         Assert.Null(@object: fresh.Resolution.LoadedFrom);
-        Assert.Equal(expected: ["DEFN", "ASST"], actual: Codes(codes: fresh.Resolution.Derived));
+        Assert.Equal(expected: ["DEFN", "ASST", "CURV"], actual: Codes(codes: fresh.Resolution.Derived));
         Assert.Equal(expected: cache.FileFor(documentPath: path), actual: fresh.Resolution.WrittenTo);
         Assert.True(condition: File.Exists(path: cache.FileFor(documentPath: path)));
 
@@ -214,7 +215,7 @@ public sealed class CompiledWorldLawTests {
 
         Assert.Equal(actual: (cached.Hits, cached.Derivations), expected: (1L, 0L));
         Assert.Equal(expected: cache.FileFor(documentPath: path), actual: cached.Resolution.LoadedFrom);
-        Assert.Equal(expected: ["DEFN", "ASST"], actual: Codes(codes: cached.Resolution.Kept));
+        Assert.Equal(expected: ["DEFN", "ASST", "CURV"], actual: Codes(codes: cached.Resolution.Kept));
         Assert.Null(@object: cached.Resolution.WrittenTo);
         Assert.Equal(expected: Canonical(admission: fresh.Admission), actual: Canonical(admission: cached.Admission));
         Assert.Equal(
@@ -258,7 +259,7 @@ public sealed class CompiledWorldLawTests {
 
             var boot = Boot(cache: cache, path: path);
 
-            Assert.Equal(actual: (boot.Hits, boot.Derivations), expected: (0L, 2L));
+            Assert.Equal(actual: (boot.Hits, boot.Derivations), expected: (0L, 3L));
             Assert.Null(@object: boot.Resolution.LoadedFrom);
             Assert.Equal(expected: valid, actual: File.ReadAllBytes(path: cache.FileFor(documentPath: path)));
         }
@@ -288,7 +289,7 @@ public sealed class CompiledWorldLawTests {
         var boot = Boot(cache: cache, path: path);
 
         Assert.Equal(actual: (boot.Hits, boot.Derivations), expected: (1L, 1L));
-        Assert.Equal(expected: ["DEFN"], actual: Codes(codes: boot.Resolution.Kept));
+        Assert.Equal(expected: ["DEFN", "CURV"], actual: Codes(codes: boot.Resolution.Kept));
         Assert.Equal(expected: ["ASST"], actual: Codes(codes: boot.Resolution.Derived));
         Assert.Equal(expected: valid, actual: File.ReadAllBytes(path: cache.FileFor(documentPath: path)));
     }
@@ -311,7 +312,7 @@ public sealed class CompiledWorldLawTests {
         var boot = Boot(cache: cache, path: path);
 
         Assert.Equal(actual: (boot.Hits, boot.Derivations), expected: (1L, 1L));
-        Assert.Equal(expected: ["DEFN"], actual: Codes(codes: boot.Resolution.Kept));
+        Assert.Equal(expected: ["DEFN", "CURV"], actual: Codes(codes: boot.Resolution.Kept));
         Assert.Equal(expected: ["ASST"], actual: Codes(codes: boot.Resolution.Derived));
         Assert.True(condition: CompiledWorld.TryDecode(container: out var written, content: File.ReadAllBytes(path: cache.FileFor(documentPath: path)), header: out _, reason: out var reason), userMessage: reason);
         Assert.True(condition: written.TryFind(chunk: out var assets, code: AssetChunk.Instance.Code));
@@ -341,7 +342,7 @@ public sealed class CompiledWorldLawTests {
 
         var boot = Boot(cache: cache, path: path);
 
-        Assert.Equal(expected: ["DEFN"], actual: Codes(codes: boot.Resolution.Kept));
+        Assert.Equal(expected: ["DEFN", "CURV"], actual: Codes(codes: boot.Resolution.Kept));
         Assert.Equal(expected: ["ASST", "DOCI"], actual: Codes(codes: boot.Resolution.Derived));
         Assert.Equal(expected: valid, actual: File.ReadAllBytes(path: cache.FileFor(documentPath: path)));
     }

@@ -108,7 +108,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
-        if (!m_slots.ContainsKey(key: index)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -118,15 +121,15 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         // Demand resolves at the next publish (ReconcileCameraDemand reads the camera each screen shows) — one produced
         // frame's seam between this bind and the seat's device/feed appearing live.
-        ShowLive(
-            index: index,
-            source: WorldImageProducerSettings.SourceOf(
+        Rebind(
+            live: WorldImageProducerSettings.SourceOf(
                 id: WorldImageProducerSettings.CameraId,
                 settings: new WorldCameraSettings(
                     Seat: seat,
                     Sensor: sensor
                 )
-            )
+            ),
+            slot: slot
         );
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");

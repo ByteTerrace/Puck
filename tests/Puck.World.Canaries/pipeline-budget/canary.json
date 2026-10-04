@@ -15,7 +15,7 @@
     "wide.graph.json"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-budget/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-budget/fixture.puck",
     "script": "over-budget.script.txt",
     "commands": [
       {
@@ -297,7 +297,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-budget/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-budget/fixture.puck",
     "script": "in-budget.script.txt",
     "commands": [
       {

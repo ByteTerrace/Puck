@@ -30,6 +30,19 @@ public static class AddonAbi {
     /// handshake (<c>AbiMismatch</c>). Staleness detection does not rest on this number alone: a stale artifact
     /// fails the export pre-flight or the content-hash pin regardless of what it reports here.</summary>
     public const int AbiVersion = 1;
+    /// <summary>The shape fingerprint <c>puck formats</c> records for the addon ABI's host side, sixteen hexadecimal
+    /// digits. A guest reports the same digits as one 64-bit word from <c>puck_abi_shape</c>
+    /// (<see cref="AbiShape"/>), and the host refuses a guest built against any other shape at handshake.</summary>
+    public const string AbiShapeFingerprint = FormatShapes.AddonAbiAbiVersion;
+
+    /// <summary>The 64-bit word a guest's <c>puck_abi_shape</c> export returns: <see cref="AbiShapeFingerprint"/> read as
+    /// hexadecimal.</summary>
+    public static readonly ulong AbiShape = ulong.Parse(
+        s: AbiShapeFingerprint,
+        style: System.Globalization.NumberStyles.AllowHexSpecifier,
+        provider: System.Globalization.CultureInfo.InvariantCulture
+    );
+
     /// <summary>The size in bytes of a single channel descriptor table entry (<c>16</c>).</summary>
     public const int ChannelDescriptorBytes = 16;
     /// <summary>The default per-tick fuel budget before a deterministic halt (<c>1_000_000</c>).</summary>
@@ -88,6 +101,8 @@ public static class AddonAbi {
 
     /// <summary>The by-name guest exports the host binds at instantiation.</summary>
     public static class Exports {
+        /// <summary>The <c>() -&gt; i64</c> export returning the guest's ABI shape word, <see cref="AddonAbi.AbiShape"/>.</summary>
+        public const string AbiShape = "puck_abi_shape";
         /// <summary>The <c>() -&gt; i32</c> export returning the guest's ABI version.</summary>
         public const string AbiVersion = "puck_abi_version";
         /// <summary>The <c>() -&gt; i32</c> export returning the declared channel count at <see cref="ChannelsPtr"/>, <c>1..=MaxChannels</c>.</summary>

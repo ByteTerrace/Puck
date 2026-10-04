@@ -158,9 +158,8 @@ public sealed class WorldBootWorkLawTests {
 
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
-        // A compile of the lineup reads the enums its basis declares, one more ask of the cache than a held lineup
-        // makes, so the lineup is held before the boot and every boot asks the same two: the lineup and, once, its
-        // basis.
+        // Hold the lineup first so its enum discovery is outside the measured boot. The cold composition asks for
+        // the lineup and basis and records each source's input facts; a warm composition only asks for the lineup.
         Assert.True(condition: WorldCompileCache.Shared.TryCompile(
             compiled: out _,
             failure: out var failure,
@@ -170,7 +169,7 @@ public sealed class WorldBootWorkLawTests {
         // The lineup and its basis are the two sources the boot reads; one load reads the basis, merges both, and
         // parses, validates and compiles the rules of the one document it admits.
         AssertPinned(
-            asks: 2L,
+            asks: 4L,
             compileCeiling: 2L,
             counts: BootLineup(catalog: catalog),
             exact: [
@@ -186,7 +185,7 @@ public sealed class WorldBootWorkLawTests {
         );
         // The second boot compiles nothing and answers the whole graph from the image the first one held.
         AssertPinned(
-            asks: 2L,
+            asks: 1L,
             compileCeiling: 0L,
             counts: BootLineup(catalog: catalog),
             exact: [
@@ -207,13 +206,17 @@ public sealed class WorldBootWorkLawTests {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
         // Twenty-five documents — the island, its basis, its games and modules, the shared quality presets, and the
-        // four shards its borders name — are read and merged once each; twenty of them are .puck sources (the basis among
-        // them), each asked of the compile cache nine times a boot. The island is parsed once and each shard once, though admission and its
-        // completion each prove all four borders.
-        var first = BootIsland(catalog: catalog);
+        // four shards its borders name — are read and merged once each. Each of the twenty .puck sources is asked
+        // once to read it and once to capture the composition's input facts. Reuse checks those facts directly rather
+        // than asking for every compile again. The island and four shards are each parsed once, though admission and
+        // its completion each prove all four borders.
+        Dictionary<string, long> first = null!;
+        var firstBytes = AllocationWindow.Total(window: () => first = BootIsland(catalog: catalog));
+
+        Console.WriteLine(value: $"island first allocation={firstBytes}: {string.Join(separator: ", ", values: first.Select(selector: pair => $"{pair.Key}={pair.Value}"))}");
 
         AssertPinned(
-            asks: 180L,
+            asks: 40L,
             compileCeiling: 20L,
             counts: first,
             exact: [
@@ -229,10 +232,14 @@ public sealed class WorldBootWorkLawTests {
         );
         Assert.True(condition: (first["world.boot.curve-compiles"] <= 2L));
         // The second boot compiles nothing, merges nothing, and parses only the island itself.
+        Dictionary<string, long> second = null!;
+        var secondBytes = AllocationWindow.Total(window: () => second = BootIsland(catalog: catalog));
+
+        Console.WriteLine(value: $"island warm allocation={secondBytes}: {string.Join(separator: ", ", values: second.Select(selector: pair => $"{pair.Key}={pair.Value}"))}");
         AssertPinned(
-            asks: 180L,
+            asks: 0L,
             compileCeiling: 0L,
-            counts: BootIsland(catalog: catalog),
+            counts: second,
             exact: [
                 ("world.boot.loads", 1L),
                 ("world.boot.documents-read", 1L),

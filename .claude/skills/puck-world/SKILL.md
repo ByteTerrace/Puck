@@ -54,13 +54,16 @@ document into the output tree. `Puck.World`'s boot loader
 (`PuckWorldLoader.TryResolveWorld`) transparently compiles a `--world
 <x>.puck` path before composing and validating it exactly like a JSON boot.
 Every door that needs only a source's documents (the boot, the composer's
-basis and import reads, `world.reload`, `puck test`) compiles through
+basis and import reads, and `world.reload`) compiles through
 `WorldCompileCache`, which serves a held compile while every file fact it read
-(`CompileInputs`) still holds and persists per user, so an unchanged source is
-never compiled twice. A boot then takes its drawn definition from a compiled
+(`Puck.Assets.CompileInputs`) still holds and persists per user, so an unchanged source is
+never compiled twice. Document compiles omit test lowering; `puck test` asks for
+the distinct test-bearing cache entry. The same cache persists composed JSON,
+its original chain bytes and all input facts; a changed source, basis, import,
+catalog or compiler misses. A boot then takes its drawn definition from a compiled
 world (`CompiledWorld`, `<name>.puckb`: a `PWLD` chunk container whose header keys
 the engine build, catalog fingerprint, authored-definition hash and instance,
-holding `DEFN`, `ASST` and `BAKE`, the keys of the creation bakes it needs in
+holding `DEFN`, `ASST`, `CURV` (exact compiled splines), and `BAKE`, the keys of the creation bakes it needs in
 the build's one bake pack, `bakes.puckbake`) beside its document or
 in the per-user `compiled-worlds` cache (shared by every boot whatever its state
 root), re-derives only the chunks whose version, inputs or dependencies moved,

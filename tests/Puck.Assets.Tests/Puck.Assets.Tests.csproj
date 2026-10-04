@@ -11,4 +11,7 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+    </ItemGroup>
 </Project>

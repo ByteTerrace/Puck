@@ -10,6 +10,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldTemporalCaptureLawTests {
     [Fact]
     public void AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing() {
@@ -17,7 +18,7 @@ public sealed class WorldTemporalCaptureLawTests {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Windowed,
             stateDirectory: state,
-            world: "tests/Puck.Counters/counters.world.json"
+            world: "tests/Puck.Counters/counters.puck"
         ).Build();
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
@@ -56,7 +57,7 @@ public sealed class WorldTemporalCaptureLawTests {
         var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
-            world: "tests/Puck.Counters/counters.world.json"
+            world: "tests/Puck.Counters/counters.puck"
         ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 

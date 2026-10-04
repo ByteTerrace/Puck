@@ -20,9 +20,11 @@
         <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
     </ItemGroup>
     <ItemGroup>
         <None Update="Assets/**">
