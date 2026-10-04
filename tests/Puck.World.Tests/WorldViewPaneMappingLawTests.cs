@@ -23,6 +23,7 @@ namespace Puck.World.Tests;
 /// answers for the pointer is the hovered pane, the cursor writer outlines exactly its rect, and a steady hovered frame
 /// allocates nothing.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private const int Display = 64;
     private const string Pane = "pane";

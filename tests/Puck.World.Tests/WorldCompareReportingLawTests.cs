@@ -9,6 +9,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Late comparison verdicts reach the script streams, administrative tape, and refusal count exactly once.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldCompareReportingLawTests {
     [InlineData(false)]
     [InlineData(true)]

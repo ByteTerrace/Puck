@@ -13,6 +13,7 @@ namespace Puck.World.Tests;
 /// <summary>The host prepares its graph before the residency captures the world. That capture composes both the
 /// cameras and placements, an eased rect does not change a view's scheduled allocation extent, and a transition
 /// rebuilds its node at most once, an opposite-axis one included.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldCameraPlacementLawTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new();
 

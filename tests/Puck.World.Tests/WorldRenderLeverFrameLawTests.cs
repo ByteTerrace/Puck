@@ -15,6 +15,7 @@ namespace Puck.World.Tests;
 /// pass block (<see cref="SdfFrameBlock"/>, SdfFrameBlockLawTests) and the ambient and shadow parts skip a frame whose
 /// lever turns them off (the world-counters canary's pass lines).
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldRenderLeverFrameLawTests : IDisposable {
     private const uint Display = 64;
     private const string World = "tests/Puck.Counters/counters.world.json";

@@ -17,6 +17,7 @@ namespace Puck.World.Tests;
 /// placement's scale, yaw and position, and a stamp (an animated or attached placement) draws it at its root this frame.
 /// <para>Each refusal is paired with a control that differs in one authored field.</para>
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class PrototypeMeshLawTests {
     private const string PlacementId = "slab-at-gate";
     private const string PrototypeId = "slab";

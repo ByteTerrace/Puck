@@ -13,6 +13,7 @@ namespace Puck.World.Tests;
 /// <summary>Laws for the render-capacity registrations shared by the world continuum and session-screen views.</summary>
 /// <param name="scenes">The boot probes the headroom laws share, built at most once for this class.</param>
 /// <param name="output">The test's output, where the shipped-world law prints its measured figures.</param>
+[Collection(AllocationCollection.Name)]
 public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTests.Scenes scenes, ITestOutputHelper output) : IClassFixture<WorldRenderEnvelopeLawTests.Scenes> {
     [Fact]
     public void GrowingConsumerStillRefusesTheEngineInstanceCeiling() {

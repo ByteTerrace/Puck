@@ -13,6 +13,7 @@ namespace Puck.World.Tests;
 /// trailing <c>capture:</c> option alone all resolve body 0. The verbs run in a boot composed as a real one is, and each
 /// answer is the verb's own refusal, which names the body it resolved.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class EngageBodyIndexLawTests : IDisposable {
     // A world that authors a population past its one local seat, so its last body is a population entry.
     private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json";

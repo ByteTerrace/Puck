@@ -10,6 +10,7 @@ namespace Puck.World.Tests;
 
 /// <summary>CONTRACT UNDER TEST: one render-scale grammar controls durable scalar ceilings and per-view tier floors,
 /// while a bindable pin is bounded, allocates nothing during a sweep, resumes within one policy step and is never saved.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldRenderScaleGrammarLawTests : IDisposable {
     private readonly TemporaryDirectory m_state = new(prefix: "puck-render-scale-grammar-");
 
