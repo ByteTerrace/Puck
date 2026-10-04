@@ -1,6 +1,7 @@
 // The tile cone and its march bounds, and the per-tile instance masks, over the camera ray of frame/sdf-viewport.hlsli.
 #ifndef MARCH_SDF_CONE_HLSLI
 #define MARCH_SDF_CONE_HLSLI
+#include "sdf-grid-walk.hlsli"
 struct TileCone {
     float3 centerDirection;
     float chord;
@@ -278,18 +279,6 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 // content this rebuild) packs a negative-radius sentinel host-side (SdfProgram.ParkedBoundRadius): reject it with the
 // single leading branch — no sqrt, no dot, mask bit left 0. A real bound radius is always non-negative, so this never
 // misfires.
-bool sdfInstancePassesTileCone(float4 bound, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
-    if (bound.w < 0.0) {
-        return false;
-    }
-
-    float3 toCenter = (bound.xyz - rayOrigin);
-    float alongRay = max(dot(toCenter, centerDirection), 0.0);
-    float axisDistance = length(toCenter - (centerDirection * alongRay));
-
-    return (axisDistance <= ((bound.w + (chord * alongRay)) * inverseAperture));
-}
-
 uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceCount, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
     uint bits = 0u;
     uint first = (wordIndex << 5u);
@@ -307,12 +296,7 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     return bits;
 }
 
-// The uniform-grid CELL WALK lives in sdf-instance-cull.comp.hlsl (collectInstanceGridMask): it writes mask bits
-// straight into the per-tile mask buffer (each tile's words are exclusively owned by ONE invocation, so a same-thread
-// read-modify-write is race-free), which only that kernel binds writable. Two rejected shapes, both MEASURED worse on
-// the 4096-instance sweep: (a) a per-thread accumulation array — a dynamically indexed uint[SDF_MAX_INSTANCES/32]
-// local allocates 512 B of thread scratch per invocation; (b) fusing the cull into sdf-beam — the walk's register
-// high-water mark cost the co-resident cone march ~12% occupancy on BOTH paths (grid enabled or not). Hence the
-// dedicated pass.
+// sdf-grid-walk.hlsli enumerates candidates for the camera, shadow and indirect gathers. The camera's dedicated
+// collectInstanceGridMask pass writes directly into its exclusively owned mask words, without per-thread arrays.
 
 #endif

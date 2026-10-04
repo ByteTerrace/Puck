@@ -400,6 +400,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var tables = m_tables!;
 
+        if (frame.IndirectTier != IndirectTier) { frame = frame with { IndirectTier = IndirectTier }; }
+        PrepareIndirect(frame: frame, tables: tables);
+
         ApplyPendingShaderReload();
         tables.Pipelines.RequestShadowFadeVariants(cache: m_pipelines.Catalog.Pipelines, device: device,
             variants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity));

@@ -49,6 +49,6 @@ public sealed partial class WorldRenderProbeAllocationLawTests(ITestOutputHelper
     [GeneratedRegex(@"//[^\r\n]*|/\*.*?\*/", RegexOptions.Singleline)]
     private static partial Regex CommentsPattern();
     // Type references include target-typed construction and fixture fields, not just explicit constructor calls.
-    [GeneratedRegex(@"\b(?:WorldBootHarness|WorldSceneEmitter|WorldFramePresenter|SdfCompositionFrameSource)\b")]
+    [GeneratedRegex(@"\b(?:WorldBootHarness|WorldSceneEmitter|WorldFramePresenter|SdfCompositionFrameSource|ComposedSdfWorldFixture)\b")]
     private static partial Regex ProbeOwnerPattern();
 }

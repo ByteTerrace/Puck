@@ -16,7 +16,9 @@ pipeline.wait overlay installed 10
 pipeline.wait sdf-world compiled 40
 pipeline.wait sdf-world installed 10
 pipeline.wait source compiled 40
+pipeline.wait indirect compiled 40
 pipeline.wait source installed 10
+pipeline.wait indirect installed 10
 world.row.set views.graphs {"name":"ink-simulation","source":"{fixtures}/ink-simulation-perturbed.graph.json"}
 pipeline.reload ink-simulation
 pipeline.wait ink-simulation compiled 40
@@ -50,9 +52,13 @@ pipeline.reload sdf-world
 pipeline.wait sdf-world compiled 40
 pipeline.wait sdf-world installed 10
 world.row.set views.graphs {"name":"source","source":"{fixtures}/source-perturbed.graph.json"}
+world.row.set views.graphs {"name":"indirect","source":"{fixtures}/indirect-perturbed.graph.json"}
 pipeline.reload source
+pipeline.reload indirect
 pipeline.wait source compiled 40
+pipeline.wait indirect compiled 40
 pipeline.wait source installed 10
+pipeline.wait indirect installed 10
 pipeline.sentinels ink-simulation on
 pipeline.reset ink-simulation
 pipeline.wait ink-simulation submitted 1 10
@@ -94,7 +100,12 @@ pipeline.wait sdf-world submitted 1 10
 pipeline.capture sdf-world {run}/sdf-world.png
 pipeline.wait sdf-world captured 10
 pipeline.sentinels source on
+pipeline.sentinels indirect on
 pipeline.reset source
+pipeline.reset indirect
 pipeline.wait source submitted 1 10
+pipeline.wait indirect submitted 1 10
 pipeline.capture source {run}/source.png
+pipeline.capture indirect {run}/indirect.png
 pipeline.wait source captured 10
+pipeline.wait indirect captured 10

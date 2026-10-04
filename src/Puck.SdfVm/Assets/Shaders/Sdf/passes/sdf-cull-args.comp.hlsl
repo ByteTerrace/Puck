@@ -2,8 +2,8 @@
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
 // margins (e.g. the sky above the scene) are never dispatched, and every pixel outside the box reads as uncovered to
-// the sky and composite passes. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
-// the beam proved about its tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// the sky and composite passes. Mesh draws and the probe debug view cover the whole grid instead: meshes and probe
+// spheres can occupy tiles the beam proved empty. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 //
@@ -64,25 +64,13 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
         return;
     }
 
-    uint boxMinX = minTileX;
-    uint boxMinY = minTileY;
-    uint boxMaxX = maxTileX;
-    uint boxMaxY = maxTileY;
-
-    if (passGroup.meshDraws != 0u) {
-        // A mesh draws this frame: a mesh pixel reaches the hit passes whatever the beam proved about its tile, so the box
-        // is the whole tile grid and every record of the view is current.
-        boxMinX = 0u;
-        boxMinY = 0u;
-        boxMaxX = (passGroup.tileGrid.x - 1u);
-        boxMaxY = (passGroup.tileGrid.y - 1u);
-    } else if (0xFFFFFFFFu == boxMinX) {
-        // No surviving tiles (every ray clears the field): dispatch one degenerate tile; the compositor flattens all.
-        boxMinX = 0u;
-        boxMinY = 0u;
-        boxMaxX = 0u;
-        boxMaxY = 0u;
-    }
+    // Empty beam tiles retain TileEmpty, so primary skips their field march while the debug view can draw probes there.
+    uint4 box = sdfViewDispatchBox(uint4(minTileX, minTileY, maxTileX, maxTileY), passGroup.tileGrid,
+        passGroup.meshDraws, (int)passGroup.debugMode);
+    uint boxMinX = box.x;
+    uint boxMinY = box.y;
+    uint boxMaxX = box.z;
+    uint boxMaxY = box.w;
 
     // A tile is WorldTileSize px, (WorldTileSize / SDF_VISIBILITY_BOX_EDGE) groups of the hit passes' workgroup on each
     // axis. The dispatch is origin-anchored (0,0); the hit passes add cullBounds as their pixel-group origin to land on

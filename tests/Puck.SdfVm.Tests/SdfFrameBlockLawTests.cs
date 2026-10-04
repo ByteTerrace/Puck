@@ -90,6 +90,7 @@ public sealed class SdfFrameBlockLawTests {
             DisableShadowCull = true,
             EnableShadowProxy = true,
             FarDistance = 30f,
+            IndirectTier = SdfIndirectTier.High,
             Lights = Lights(),
             UseFiniteDifferenceNormals = true,
         };
@@ -114,6 +115,16 @@ public sealed class SdfFrameBlockLawTests {
         return lights;
     }
 
+    [InlineData(SdfIndirectTier.Off)]
+    [InlineData(SdfIndirectTier.Medium)]
+    [InlineData(SdfIndirectTier.High)]
+    [Theory]
+    public void IndirectTierReachesTheGeneratedPassBlock(SdfIndirectTier tier) {
+        var block = new byte[SdfFrameBlock.SizeBytes];
+
+        SdfFrameBlock.Write(block: block, frame: Frame() with { IndirectTier = tier }, height: 16, tables: default, view: 0, width: 16);
+        Assert.Equal(((uint)tier), BitConverter.ToUInt32(block, ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectTier))));
+    }
     [Fact]
     public void EveryStableSlotAndBothActiveCountsReachTheFrameBlock() {
         var frame = Frame();

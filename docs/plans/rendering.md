@@ -2837,7 +2837,7 @@ slots, never K alone.
 | Bodies | — | receive | cast |
 | Near field (G9) | — | off | on |
 
-*Memory at `medium`, every resource:*
+*Planned complete solve memory at `medium`, every resource:*
 
 | Resource | Bytes |
 |---|---|
@@ -2858,6 +2858,20 @@ level's 16,384 at 2,588 bytes and the `room` and `world` levels' 16,384 at 4,636
 118,358,016 bytes; three slots' maps add 6,291,456, the proof hash at 262,144
 entries 6,291,456, and the fragment and small tables 24,117,248, at most
 155,058,176 bytes in all.
+
+G2's traced cache uses a 16-byte hit record: full float distance, an octahedral
+normal word, the full material identity and a terminal/proof/launch word. The
+launch uses a twenty-bit fraction of spacing, rounded toward the hit; the proof
+is issued at the point reconstructed from that fraction and the stored normal.
+Its successful
+proof entries also carry a publication sequence, 28 bytes each. The current raw
+cache therefore owns 37,683,200 bytes at `medium` and 142,475,264 at `high`, plus
+the region rings, counters and descriptors that `world.budget` reports. G2
+allocates no irradiance generations, ray radiance or light-view maps. The
+complete-solve estimates above depend on an eight-byte hit encoding; that encoding
+is not implemented. G4 must resolve that storage gap before claiming the complete
+solve's memory ceiling. Truncating a material identity or weakening the hit's
+absolute distance acceptance is not a storage solution.
 
 *Field evaluations at `medium`, every pass, against today's ambient occlusion
 (about 2,100,000 a frame whenever `ambient` runs):*
@@ -2905,7 +2919,7 @@ or slot as the detail label P18 adds to the ledger:
 - `gpu.indirect.hits`, the hits `shade` lit, `gpu.indirect.samples`, the cache
   lookups `views` made, and `gpu.indirect.unresolved` (rays, light-view texels
   and shadow fallbacks by detail), all `PerBackendDeterministic`;
-- in an `indirect` `WorkCounterSet` on the host, all `Deterministic`:
+- in a `sdf.indirect` `WorkCounterSet` on the host, all `Deterministic`:
   `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason (`demand`,
   `geometry`, `light`, `shadow`, `screen`, `converge`),
   `indirect.bricks.allocated`, `.evicted` and `.refused` per level,
@@ -2980,15 +2994,14 @@ re-record explained in the same change.
      the far distance; no interval counted twice) and
      `IrradianceScheduleLawTests` (budgets, order independence, idle plans, a
      shared brick, the nearest bricks kept, invalidation over continuation and
-     relocation). Nothing outside the tests references the folder.
+     relocation). G2 uses the lattice, layout and schedule from the live cache.
    - Counted-cost gate: no GPU row moves.
    - Status: landed, with the review corrections and the round-three
      contract. Every law passes on the CPU, and the whole
      `Puck.SignedDistance.Tests` suite with it.
-2. **G2, the cache traced and partitioned.** After P18-4 and P18-5, which have
-   landed, since it extends the package declarations and the World group they
-   move.
-   - Delivers: the `indirect` package and its one instance per residency;
+2. **G2, the cache traced and partitioned.** Extends P18-4's package declarations
+   and P18-5's World group.
+   - The implementation provides the `indirect` package and its one instance per residency;
      `SdfWorldTables.Indirect.cs`, the residency-owned pools, cell records,
      brick tables and proof hash, published as buffer outputs a view reads
      through a buffer edge; G1's schedule writing its update list and brick
@@ -2996,13 +3009,25 @@ re-record explained in the same change.
      absolute acceptance, clipped masked steps, support-seeking continuation,
      hit launches and feedback proofs, unresolved rays) as `SdfKernel` members;
      one instance-grid walker over a query shape (a cone, a ball, a box)
-     shared by `collectInstanceGridMask`, the shadow gather and the trace, in
-     place of the hand-kept near-clone the shadow gather's comment asks to keep
-     in step; an epoch reset of the whole cache on every program upload, which
+     shared by `collectInstanceGridMask`, the shadow gather and the trace;
+     an epoch reset of the whole cache on every program upload, which
      G5 narrows; the `world.indirect off|medium|high` lever; and the debug
      views `indirect-probes` (each probe a small sphere coloured by its class)
-     and `indirect-cells` (each surface coloured by the component it proved).
+     and `indirect-cells` (each hit coloured by its stored cell partition: the
+     component of the cell corner nearest it, read with no field evaluation).
      Nothing is lit or applied.
+     The lever defaults to `off`; G4 owns enabling tier defaults. Placement and
+     partitioning are two ordered dispatches of the classify kernel. G1's
+     schedule waits for allocated neighboring corners to be placed before it
+     partitions a boundary cell, and invalidates neighboring partitions when
+     brick residency changes. A placement spends at most three field queries;
+     a failed relocation stays inactive. Proof entries use the existing cell-slot
+     lookup and eight buckets keyed by level and the anchor's eighth-spacing slot.
+     Only that cell's first ray publishes
+     its successful proof, once per epoch, and readers consume publications from
+     earlier submissions. This makes reuse independent of workgroup arrival order.
+     Continuations read an immutable host region of earlier submissions' completed
+     strata, so they cannot race another workgroup publishing this frame's rays.
    - Touches: `SdfWorldPackage` (a partial file), `RenderGraphPackages`,
      `SdfKernel`, `passes/` and a new `indirect/` kernel module directory, the
      shared grid walk in `march/` and `surface/sdf-shadow-gather.hlsli`,
@@ -3010,7 +3035,7 @@ re-record explained in the same change.
      `debug/sdf-debug-views.hlsli`, `WorldSessionLevers`,
      `WorldRenderLeverCommandModule`, `SdfPassPlanLawTests`,
      `tests/Puck.Counters`.
-   - Done when: `SdfIndirectTraceDeviceLawTests` hold stored hits, partitions,
+   - Checks: `SdfIndirectTraceDeviceLawTests` hold stored hits, partitions,
      classes, launches and proofs on G1's fixtures to the CPU model on both
      backends (red leg: a mask that drops an instance inside the reach);
      `SdfIndirectGatherLawTests` hold the masked march's hits and cleared
@@ -3028,6 +3053,9 @@ re-record explained in the same change.
      share within the fixtures' ceilings, none on a completed still world or a
      pan with no new demand, every byte of the memory table in `world.budget`,
      and every row zero with the lever off.
+   - Verification state: device laws, their mutation legs, diagnostic rendering,
+     cadence, parity and measured counter ceilings require the GPU verification
+     run. Their presence in the tree is not evidence that those checks pass.
 3. **G3, the light view.** After G2.
    - Delivers: the one depth-only camera view per residency cycling its held
      and fading slots' two regions, its distance D from the penumbra, its

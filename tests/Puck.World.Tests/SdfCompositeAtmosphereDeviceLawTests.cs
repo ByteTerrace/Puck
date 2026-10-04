@@ -25,9 +25,10 @@ namespace Puck.World.Tests;
 public sealed class SdfCompositeAtmosphereDeviceLawTests {
     private const uint Width = 16;
     private const uint Height = 8;
-    // The pass, its plain detail, then gradient, disc, stars, clouds and atmosphere.
-    private const int Rows = 7;
-    private const int AtmosphereRow = 6;
+    // The pass, its plain detail, then the shared fixed and layer detail rows at their capacity.
+    private const int DetailRow = 2;
+    private const int Rows = (DetailRow + SdfSkyDetails.Capacity);
+    private const int AtmosphereRow = (DetailRow + SdfSkyDetails.AtmosphereRow);
     private const float SurfaceDistance = 20f;
 
     [Fact]
@@ -77,7 +78,7 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);
-        Word(member: ShaderWorkCounters.DetailRow, value: 2u);
+        Word(member: ShaderWorkCounters.DetailRow, value: DetailRow);
         Vector(member: SdfWorldPackage.ViewPosition, value: new Vector3(x: 0f, y: 2f, z: 0f));
         Vector(member: SdfWorldPackage.ViewRight, value: Vector3.UnitX);
         Vector(member: SdfWorldPackage.ViewUp, value: up);
@@ -217,7 +218,9 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
             long Count(int row, int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((row * GpuKernelCounters.RowBytes) + ((kind * GpuKernelCounters.CountWords) * sizeof(uint)))));
             var layers = Count(kind: 2, row: 0);
 
-            for (var row = 2; (row < AtmosphereRow); row++) { layers += Count(kind: 2, row: row); }
+            for (var row = DetailRow; (row < Rows); row++) {
+                if (row != AtmosphereRow) { layers += Count(kind: 2, row: row); }
+            }
 
             return (Atmosphere: Count(kind: 2, row: AtmosphereRow), Layers: layers);
         } finally {

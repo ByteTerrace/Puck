@@ -12,7 +12,9 @@
 #ifndef SDF_SHADOW_FADE_SLOTS
 #define SDF_SHADOW_FADE_SLOTS 0
 #endif
-#if SDF_SHADOW_FADE_SLOTS == 1
+#ifdef SDF_INDIRECT_PASS
+#include "../isa/indirect.interface.hlsli"
+#elif SDF_SHADOW_FADE_SLOTS == 1
 #include "../isa/sdf-world-fade1.interface.hlsli"
 #elif SDF_SHADOW_FADE_SLOTS == 2
 #include "../isa/sdf-world-fade2.interface.hlsli"

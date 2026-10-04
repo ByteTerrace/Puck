@@ -123,7 +123,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
-            if (resource.Buffers is { } buffers) {
+            if (!resource.Borrowed && (resource.Buffers is { } buffers)) {
                 foreach (var buffer in buffers) {
                     if (buffer is not null) {
                         bytes = checked((bytes + buffer.SizeBytes));

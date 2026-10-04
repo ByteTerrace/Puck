@@ -1,4 +1,5 @@
 using Puck.Launcher;
+using Puck.SignedDistance;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -30,6 +31,8 @@ public static partial class WorldSessionLevers {
     public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
+    /// <summary>The residency's indirect-cache tier (<c>world.indirect</c>).</summary>
+    public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
@@ -111,6 +114,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: FarBound,
             setter: lever => settings.FarBound = Flag(lever: lever)
+        );
+        sink.Register(
+            name: Indirect,
+            setter: lever => settings.IndirectTier = ((SdfIndirectTier)((int)lever.A))
         );
         sink.Register(
             name: ShadowMask,

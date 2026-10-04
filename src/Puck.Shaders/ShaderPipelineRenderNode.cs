@@ -420,10 +420,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
                 var resource = new RuntimeResource(
-                    count: InstancesOf(
+                    count: (IsBorrowedStorage(plan: plan, storage: planned) ? 1 : InstancesOf(
                         inFlight: m_inFlight,
                         storage: planned
-                    ),
+                    )),
                     storage: planned
                 );
 
@@ -516,6 +516,25 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     );
 
                     resource.Buffers = new IGpuBuffer[resource.Count];
+                    IGpuBuffer? borrowed = null;
+
+                    foreach (var pass in built.Passes) {
+                        if ((pass?.PackageContext is { } context) && context.Outputs.Any(predicate: output => planned.Versions.Contains(value: output.Name))) {
+                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, resource: declaration);
+                            if (borrowed is not null) { break; }
+                        }
+                    }
+                    if (borrowed is not null) {
+                        if (borrowed.SizeBytes < sizeBytes) {
+                            throw new InvalidDataException(message: $"Borrowed buffer '{declaration.Name}' holds {borrowed.SizeBytes} bytes, requires {sizeBytes}.");
+                        }
+                        resource.Borrowed = true;
+                        Array.Fill(array: resource.Buffers, value: borrowed);
+                        continue;
+                    }
+                    if (IsBorrowedStorage(plan: plan, storage: planned)) {
+                        throw new InvalidDataException(message: $"Package-owned buffer '{declaration.Name}' has no allocation.");
+                    }
                     for (var i = 0; (i < resource.Count); i++) {
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
                             name: new GpuObjectName(

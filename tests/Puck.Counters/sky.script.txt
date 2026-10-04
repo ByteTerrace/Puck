@@ -1,6 +1,7 @@
 # A frozen camera and cadence enabled: each fixture changes one sky value class.
 world.cadence on
 world.quality low
+world.indirect off
 world.rate pause
 world.wait ready 180
 world.rate resume

@@ -56,6 +56,15 @@ public sealed class SdfShadowAmortizationLawTests {
         Assert.Contains(actualString: gather, expectedSubstring: "sdfShadowMovedCandidate(instanceOffset, index, origin, direction, chord, inverseAperture, inflate)");
     }
     [Fact]
+    public void DepartingOccludersAreCheckedOutsideTheCurrentGridCandidateWalk() {
+        var gather = Source(path: "surface/sdf-shadow-gather.hlsli");
+        var walk = gather.IndexOf(value: "SdfGridWalk walk =", comparisonType: StringComparison.Ordinal);
+
+        Assert.True(condition: (walk >= 0));
+        Assert.Matches(actualString: gather[..walk], expectedRegexPattern: @"(?s)if \(sdfShadowMotionActive\).*for \(uint index = lane; index < packedInstanceCount; index \+= SDF_GROUP_SHADOW_LANES\)\s*\{\s*sdfShadowMovedCandidate\(");
+        Assert.DoesNotContain(actualString: gather[walk..], expectedSubstring: "sdfShadowMovedCandidate(");
+    }
+    [Fact]
     public void ReceiverValidationUsesTheSharedFivePercentRuleAndTheLastWriterStamp() {
         var shadow = Source(path: "surface/sdf-shadow.hlsli");
         var reprojection = Source(path: "frame/sdf-reprojection.hlsli");

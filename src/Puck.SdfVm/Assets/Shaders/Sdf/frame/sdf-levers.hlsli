@@ -4,6 +4,7 @@
 #define FRAME_SDF_LEVERS_HLSLI
 #include "sdf-environment.hlsli"
 #include "sdf-lights.hlsli"
+#include "sdf-view-domain.hlsli"
 // March + shade one viewport's ray for a pixel at the viewport-local UV, starting the march at `marchStart` (the
 // tile-cull lower bound; TileEmpty skips the march entirely → background) and resolving the debug view mode.
 // `instanceMaskBase` is the pixel's tile mask base in the mask buffer (SDF_INSTANCE_MASK_ALL when the beam prepass

@@ -110,12 +110,11 @@ public sealed partial class RenderGraphRuntime {
                     instance: set.Instances[index],
                     packages: m_packages
                 )) {
-                    effective[index] = ((kept[index] >= 0)
-                        ? m_graphs[kept[index]]
-                        : PackageGraphOf(
-                            fault: out _,
+                    effective[index] = PackageGraphFor(
+                            instance: set.Instances[index].Name,
+                            packages: m_packages,
                             package: set.Instances[index].ExternalPackage!
-                        ));
+                        );
 
                     continue;
                 }

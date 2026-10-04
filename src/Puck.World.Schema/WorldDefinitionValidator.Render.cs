@@ -280,7 +280,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{layerPath} is layer {drawn} of the stack; a sky draws at most {SdfSky.MaxLayers} layers.");
             }
             if ((layer.LayerName is { } name) && SdfSkyDetails.IsFixed(label: name)) {
-                errors.Add(item: $"{layerPath}.name '{name}' is a fixed work-counter row's label (a field run's or the atmosphere's); name the layer otherwise.");
+                errors.Add(item: $"{layerPath}.name '{name}' is a fixed work-counter row's label (a field run's, the atmosphere's or indirect diagnostics'); name the layer otherwise.");
             }
 
             ValidateSkyLayerCommon(definition: definition, errors: errors, layer: layer, path: layerPath);

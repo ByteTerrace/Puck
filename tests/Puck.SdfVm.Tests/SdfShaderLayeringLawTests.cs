@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Tests;
 /// The SDF kernels' module tree (<c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>) is layered, lowest first: the generated
 /// declarations (<c>isa</c>), the field interpreter (<c>field</c>), the frame's data (<c>frame</c>), the march
 /// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the sky's layer stack and its kinds'
-/// modules (<c>sky</c>), the debug views (<c>debug</c>), and the pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
+/// modules (<c>sky</c>), the indirect cache's classify, trace and reads (<c>indirect</c>), the debug views (<c>debug</c>), and the pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
 /// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
 /// includes a higher module first would otherwise hide the dependency. Every source lives in a layer's directory, and
 /// every include resolves to a source in the tree or the shared reconstruction module, which has no SDF dependency.
@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfShaderLayeringLawTests {
     private const string SharedReconstruction = "Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli";
 
-    private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "sky", "debug", "passes"];
+    private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "sky", "indirect", "debug", "passes"];
 
     [Fact]
     public void NoModuleDependsOnAHigherLayer() {

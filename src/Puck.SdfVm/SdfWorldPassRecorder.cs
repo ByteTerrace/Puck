@@ -39,6 +39,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ReactivityWritten,
         SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.ShadowHistoryWritten,
+        SdfWorldPackage.IndirectCache,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -686,6 +687,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             if (m_outputs[port] == SdfWorldPackage.ShadowHistory) { shadowPorts.Write = recording.Outputs[port].Buffer!.BufferHandle; }
         }
 
+        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[0].Buffer(slot: tables.CurrentSlot) ?? tables.DummyBuffer),
+            member: SdfWorldPackage.IndirectBricks, set: set);
+
         if (ReferenceEquals(
             objA: m_portTables[slot],
             objB: tables
@@ -805,6 +809,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
+        SdfWorldPackage.IndirectCache => SdfWorldPackage.IndirectCache,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,

@@ -2,11 +2,12 @@ namespace Puck.Shaders;
 
 /// <summary>What a node resolves its counted buffers against (<see cref="ShaderPipelineResource.Count"/>): the counts of
 /// every basis at a frame extent, and a revision that moves whenever a count that is not the extent's own changes, such
-/// as a program growing its instances. A package states it for the instances running it
+/// as a program growing its instances, or retained package storage must be replaced even at the same size.
+/// A package states it for the instances running it
 /// (<see cref="IRenderGraphPackageFactory.CounterOf"/>).</summary>
 public interface IShaderPipelineStorageCounter {
-    /// <summary>Gets the revision of the counts, which moves whenever <see cref="CountsAt"/> would return another value
-    /// at an unchanged extent.</summary>
+    /// <summary>Gets the storage revision, which moves whenever <see cref="CountsAt"/> would return another value
+    /// at an unchanged extent or the installed recorders must bind replacement package storage.</summary>
     long Revision { get; }
 
     /// <summary>Returns the counts at a frame extent.</summary>

@@ -1,0 +1,480 @@
+{
+  "id": "indirect-cadence",
+  "title": "A residency traces demand once and a pan with no new bricks schedules no rays",
+  "binding": "The offscreen fixture starts with indirect off and reads zero scheduled rays. Medium then schedules rays until the cache is traced. Its cumulative scheduled-ray total stands across later frames and a camera rotation whose origin stays fixed, so it introduces no brick demand. Turning indirect off retires the cache while preserving the counter total. The discriminating leg moves the camera origin into new bricks instead of rotating it, requiring additional scheduled rays. A schedule that retraces existing camera demand fails the completed-cache or pan relation. GPU execution and that schedule mutation are required on each backend.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/indirect-cadence/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "rays-1",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-1",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-2",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-2",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-3",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 3,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-3",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-4",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 4,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-4",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-5",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 5,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-5",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-6",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 6,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-6",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "off-schedules-nothing",
+        "operator": "equal",
+        "left": {
+          "value": "rays-1"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "enabled-cache-schedules-rays",
+        "operator": "greater",
+        "left": {
+          "value": "rays-2"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "completed-cache-schedules-no-more-rays",
+        "operator": "equal",
+        "left": {
+          "value": "rays-4"
+        },
+        "right": {
+          "value": "rays-3"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "off-keeps-the-scheduled-total",
+        "operator": "equal",
+        "left": {
+          "value": "rays-6"
+        },
+        "right": {
+          "value": "rays-5"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "pan-with-no-new-bricks-schedules-no-rays",
+        "operator": "equal",
+        "left": {
+          "value": "rays-5"
+        },
+        "right": {
+          "value": "rays-4"
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/indirect-cadence/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "rays-1",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-1",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-2",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-2",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-3",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 3,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-3",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-4",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 4,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-4",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-5",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 5,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-5",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "rays-6",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 6,
+        "count": 6,
+        "extract": [
+          {
+            "name": "rays-6",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "off-schedules-nothing",
+        "operator": "equal",
+        "left": {
+          "value": "rays-1"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "enabled-cache-schedules-rays",
+        "operator": "greater",
+        "left": {
+          "value": "rays-2"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "completed-cache-schedules-no-more-rays",
+        "operator": "equal",
+        "left": {
+          "value": "rays-4"
+        },
+        "right": {
+          "value": "rays-3"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "off-keeps-the-scheduled-total",
+        "operator": "equal",
+        "left": {
+          "value": "rays-6"
+        },
+        "right": {
+          "value": "rays-5"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "new-bricks-schedule-more-rays",
+        "operator": "greater",
+        "left": {
+          "value": "rays-5"
+        },
+        "right": {
+          "value": "rays-4"
+        }
+      }
+    ]
+  }
+}

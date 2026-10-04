@@ -36,6 +36,10 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         kinds: SdfMovedTransforms.Kinds,
         name: SdfMovedTransforms.SourceName
     );
+    /// <summary>The host's scheduled indirect work, summed once per active residency and retained after retirement.</summary>
+    public ForwardingWorkCounterSource Indirect { get; } = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
+    /// <summary>The residencies currently demanding an indirect cache, once each.</summary>
+    public HashSet<SdfWorldResidency> IndirectResidencies { get; } = [];
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }

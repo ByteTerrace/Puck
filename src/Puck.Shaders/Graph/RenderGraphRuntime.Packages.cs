@@ -4,17 +4,22 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 // Package instances. An external instance whose package neither an external producer nor an upload serves, but a
-// recorder serves and runs as a fragment with no input port (RenderGraphPackageFragment), renders through a node like a
+// recorder serves and runs as a fragment (RenderGraphPackageFragment), renders through a node like a
 // graph instance, running a graph the runtime makes: one pass running the package, named by its id, whose one output is
 // the instance's, declared as the fragment declares its output version. So an SDF view (sdf.world) is a graph instance
 // of its package's passes, planned, allocated and barriered by the one planner, with no graph document of its own.
 //
-// Before each frame is scheduled the runtime asks the package of every instance whose graph binds no input and runs only
+// Before each frame is scheduled the runtime asks the package of every instance whose inputs stand unchanged and runs only
 // package passes whether anything the instance renders from has changed since its latest render
 // (IRenderGraphPackageFactory.IsUnchanged), and declares the instances none of whose packages saw a change unchanged
 // (RenderGraphFrame.Unchanged), so their latest output stands for the frame. An instance a pending capture reads is never
 // declared unchanged, since only a render serves it.
 public sealed partial class RenderGraphRuntime {
+    private static RenderGraphRuntimeGraph? PackageGraphFor(string package, string instance, RenderGraphPackageRecorders packages) {
+        packages.TryGetFactory(factory: out var factory, package: package);
+        return PackageGraphOf(package: package, fault: out _, selected: factory?.FragmentOf(instance: instance), inputs: factory?.InputsOf(instance: instance));
+    }
+
     // The instances the frame being scheduled declares unchanged, reused frame to frame.
     private readonly List<string> m_unchanged = [];
 
@@ -41,25 +46,24 @@ public sealed partial class RenderGraphRuntime {
         return fault;
     }
     // Makes the one-pass graph a package instance renders, or returns why the package does not run as an instance: it
-    // is no fragment of the engine's catalog with no input port and one image output.
-    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null) {
+    // is no fragment of the engine's catalog with one output.
+    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null, IReadOnlyList<RenderGraphRuntimeInput>? inputs = null) {
         if (
             !RenderGraphPackageCatalog.Engine.TryGet(
                 id: package,
                 package: out var declared
             ) ||
             (declared.Fragment is not { } fragment) ||
-            (declared.Inputs.Count != 0) ||
             (fragment.OutputVersions.Count != 1)
         ) {
-            fault = "is served by a recorder, but runs as no fragment with no input port and one output";
+            fault = "is served by a recorder, but runs as no fragment with one output";
 
             return null;
         }
 
         fragment = (selected ?? fragment);
-        if ((fragment.InputVersions.Count != 0) || (fragment.OutputVersions.Count != 1)) {
-            fault = "selected a fragment without exactly one output and no inputs";
+        if (fragment.OutputVersions.Count != 1) {
+            fault = "selected a fragment without exactly one output";
             return null;
         }
         var version = fragment.OutputVersions[0];
@@ -73,11 +77,7 @@ public sealed partial class RenderGraphRuntime {
             fault = $"selected a fragment whose output '{version}' has no resource declaration";
             return null;
         }
-        if (output.Kind != ShaderPipelineResourceKind.Image) {
-            fault = $"is served by a recorder, but its output '{version}' is {output.Kind}, not an image";
-
-            return null;
-        }
+        var inputResources = fragment.InputVersions.Select(selector: name => fragment.Resources.Single(predicate: resource => (resource.Name == name))).ToArray();
 
         var definition = new RenderGraphDefinition(
             Name: package,
@@ -85,15 +85,24 @@ public sealed partial class RenderGraphRuntime {
             Packages: [
                 new RenderGraphPackagePass(
                     Name: package,
+                    Inputs: [.. fragment.InputVersions.Select(selector: name => new ResourceReference(Name: name))],
                     Outputs: [new ResourceReference(Name: version)],
                     Package: package
                 ),
             ],
-            Resources: [output with { From = null, Transient = false }],
+            Resources: [.. inputResources, output with { From = null, Transient = false }],
             Schema: RenderGraphSchemas.Graph
         );
 
-        if (!new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [declared with { Fragment = fragment }])).TryCompile(
+        if (!new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [declared with {
+            // The instance graph owns its external input declarations. Expansion contributes private and output
+            // versions only; its input-port names refer to the declarations already in the graph.
+            Fragment = ((inputResources.Length == 0) ? fragment : fragment with {
+                Resources = [.. fragment.Resources.Where(predicate: resource => !fragment.InputVersions.Contains(value: resource.Name))],
+            }),
+            Inputs = [.. inputResources.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
+                Access: RenderGraphPortAccess.ComputeRead, StrideBytes: resource.StrideBytes, Count: resource.Count))],
+        }])).TryCompile(
             definition: definition,
             diagnostics: out var diagnostics,
             plan: out var plan
@@ -106,7 +115,7 @@ public sealed partial class RenderGraphRuntime {
         fault = null;
 
         return new RenderGraphRuntimeGraph(
-            Inputs: [],
+            Inputs: (inputs ?? []),
             Pipeline: new CompiledShaderPipeline(
                 plan: plan.Pipeline,
                 shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
@@ -120,12 +129,14 @@ public sealed partial class RenderGraphRuntime {
 
         var captured = CapturedInstance();
 
-        for (var index = 0; (index < m_nodes.Length); index++) {
+        for (var position = 0; (position < m_set.Order.Count); position++) {
+            var index = m_set.Order[position];
+
             if (
                 (index != captured) &&
                 !IsConverging(index: index) &&
                 (m_sources[index] is null) &&
-                (m_inputs[index].Length == 0) &&
+                InputsUnchanged(index: index) &&
                 (m_graphs[index] is { } graph) &&
                 PackagesUnchanged(
                     context: in context,
@@ -154,11 +165,24 @@ public sealed partial class RenderGraphRuntime {
             Unchanged = m_unchanged,
         });
     }
+    private bool InputsUnchanged(int index) {
+        var inputs = m_inputs[index];
+
+        for (var position = 0; (position < inputs.Length); position++) {
+            var input = inputs[position];
+
+            if (input.PreviousFrame || !m_unchanged.Contains(item: input.ProducerName)) { return false; }
+        }
+        return true;
+    }
     // Cadence may stand only after the scheduled pixel extent has installed. Fractions alone miss a display resize,
     // and a node still drawing its old graph while the new one builds must keep being polled until that build installs.
     private bool MatchesAllocatedExtent(int index, in RenderGraphFrame frame) {
         if (m_nodes[index] is not { IsReady: true } node) {
             return false;
+        }
+        if (m_set.Instances[index].Output == ShaderPipelineResourceKind.Buffer) {
+            return !node.HasPendingCandidate;
         }
         if (node.Export is { } export) {
             return (node.Extent == (export.Width, export.Height));

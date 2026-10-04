@@ -154,6 +154,20 @@ internal static class WorldRenderRoot {
                         )))
             );
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
+        host.Indirect = new SdfIndirectPasses(views: host.Pickers);
+        host.ReadIndirectTier = () => sp.GetRequiredService<WorldRenderSettings>().IndirectTier;
+        host.IndirectResidencyChanged = (cacheResidency, added) => {
+            var indirectProbe = sp.GetRequiredService<WorldRenderProbe>();
+
+            if (added) {
+                indirectProbe.Indirect.Attach(instance: cacheResidency.IndirectWork);
+                indirectProbe.IndirectResidencies.Add(item: cacheResidency);
+            } else {
+                indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
+                indirectProbe.IndirectResidencies.Remove(item: cacheResidency);
+            }
+        };
+        packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),

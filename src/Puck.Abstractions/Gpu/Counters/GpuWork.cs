@@ -40,12 +40,14 @@ public static partial class GpuWork {
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
     internal const int SkyEvaluationsColumn = 18;
+    internal const int ShapesEvaluatedColumn = (IndirectUnresolvedColumn + 1);
+    internal const int ShapeGradientsColumn = (ShapesEvaluatedColumn + 1);
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
     internal const int EnvironmentProjectionsColumn = (ShadowPixelsColumn + 1);
     internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
-    internal const int SubmissionColumnCount = (EnvironmentProjectionsColumn + 3);
+    internal const int SubmissionColumnCount = (ShapeGradientsColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -101,6 +103,10 @@ public static partial class GpuWork {
     /// the gradient used by surface fog. Each evaluated layer counts once per invocation. Coverage comes from the
     /// march, so it is per-backend-deterministic, as <see cref="MarchSteps"/> is.</summary>
     public static WorkKind SkyEvaluations { get; } = new(name: "gpu.sky.evaluations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets primitive distance and analytic derivative evaluations, including winner searches and each finite-difference tap.</summary>
+    public static WorkKind ShapesEvaluated { get; } = new(name: "gpu.shapes.evaluated", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets analytic primitive gradient evaluations at surface samples. Finite differences count only their scalar taps in <see cref="ShapesEvaluated"/>.</summary>
+    public static WorkKind ShapeGradients { get; } = new(name: "gpu.shapes.gradients", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting procedural hashes evaluated by sky layers, including noise lattice hashes.</summary>
     public static WorkKind SkyHashes { get; } = new(name: "gpu.sky.hashes", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting texture loads of sky field runs, including invalid base taps.</summary>
@@ -133,7 +139,9 @@ public static partial class GpuWork {
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
-    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShadowSteps"/> in slot order.</summary>
+    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShadowSteps"/> in slot order,
+    /// followed by <see cref="ShadowPixels"/>, <see cref="IndirectHits"/>, <see cref="IndirectSamples"/> and <see cref="IndirectUnresolved"/>,
+    /// then <see cref="ShapesEvaluated"/> and <see cref="ShapeGradients"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -147,7 +155,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels, IndirectHits, IndirectSamples, IndirectUnresolved, ShapesEvaluated, ShapeGradients];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -192,6 +200,11 @@ public static partial class GpuWork {
             kinds[SkyEvaluationsColumn] = SkyEvaluations;
             kinds[SkyHashesColumn] = SkyHashes;
             kinds[SkyTextureLoadsColumn] = SkyTextureLoads;
+            kinds[IndirectHitsColumn] = IndirectHits;
+            kinds[IndirectSamplesColumn] = IndirectSamples;
+            kinds[IndirectUnresolvedColumn] = IndirectUnresolved;
+            kinds[ShapesEvaluatedColumn] = ShapesEvaluated;
+            kinds[ShapeGradientsColumn] = ShapeGradients;
             for (var slot = 0; (slot < ShadowSlotCount); slot++) {
                 kinds[(ShadowStepsFirstColumn + slot)] = ShadowSteps[slot];
             }

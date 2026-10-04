@@ -56,11 +56,12 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
 
-        // The sky and the composite report the sky's detail rows, whichever recorder serves them: its field runs' rows and the
-        // default look's gradient, whose evaluations are counted there, and a part that named none would drop them.
-        string[] skyRows = [.. Enumerable.Range(count: SdfSkyDetails.Runs, start: 0).Select(selector: SdfSkyDetails.RunLabel), SdfSky.DefaultGradientLabel];
+        // The views, sky and composite share the fixed rows and the default look's gradient, whose evaluations stay
+        // distinct from indirect diagnostics even when both kinds of work run in the views pass.
+        string[] skyRows = [.. Enumerable.Range(count: SdfSkyDetails.Runs, start: 0).Select(selector: SdfSkyDetails.RunLabel),
+            SdfSkyDetails.Atmosphere, SdfSkyDetails.Indirect, SdfSky.DefaultGradientLabel];
 
-        foreach (var part in new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }) {
+        foreach (var part in new[] { SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }) {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
 
             foreach (var label in skyRows) {

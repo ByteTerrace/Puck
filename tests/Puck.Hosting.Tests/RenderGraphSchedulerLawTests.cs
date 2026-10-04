@@ -603,7 +603,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
     }
     [Fact]
-    public void AnExternalProducerReadsImagesAndPreviousFramesButNoBuffer() {
+    public void AnExternalInstanceReadsImagesBuffersAndPreviousFrames() {
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Instance(name: "camera"),
@@ -627,17 +627,15 @@ public sealed partial class RenderGraphSchedulerLawTests {
             Assert.True(condition: withRead.Reads[1][0].PreviousFrame);
         }
 
-        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Bricks(),
                 World(reads: [BufferRead(producer: "bricks")]),
             ],
             refusal: out var refusal,
-            set: out _
-        ));
-        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
-        Assert.Equal(expected: ["world"], actual: refusal.Instances);
-        Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+            set: out var bufferSet
+        ), userMessage: refusal?.Message);
+        Assert.Equal(expected: [0, 1], actual: bufferSet.Order);
     }
     [Fact]
     public void TwoExternalViewsReadEachOthersPreviousFrame() {

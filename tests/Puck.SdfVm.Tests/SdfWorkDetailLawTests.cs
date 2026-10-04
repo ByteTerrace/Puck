@@ -8,25 +8,27 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>The sky's detail rows (<see cref="SdfSkyDetails"/>) and the packed row address agree with the counted sky kernel
 /// sites, and the shadow pass counts its slots as kinds of its own row. The field runs own the first rows and the
-/// composite's atmosphere the next, each layer label takes the next row the first time it is packed and keeps it, and the
-/// rows past the capacity share one.</summary>
+/// composite's atmosphere and indirect diagnostics the next. Each layer label takes the next row the first time it is
+/// packed and keeps it; rows past the capacity share one.</summary>
 public sealed class SdfWorkDetailLawTests {
     [Fact]
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
         var details = new SdfSkyDetails();
 
         // The runs' rows, then the composite's atmosphere row, which the composite counts each atmosphere kind it evaluates
-        // in (SDF_SKY_DETAIL_ATMOSPHERE), then the layers' labels.
-        Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere" }, actual: details.Labels);
+        // in (SDF_SKY_DETAIL_ATMOSPHERE), the view's indirect diagnostics, then the layers' labels.
+        Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere", "indirect" }, actual: details.Labels);
         Assert.Equal(actual: 3u, expected: ((uint)SdfSkyDetails.AtmosphereRow));
         Assert.Contains(expectedSubstring: "puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, ", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
         Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_ATMOSPHERE 3u", actualString: Source(path: "isa/sdf-sky-kinds.hlsli"));
-        Assert.Equal(expected: 4u, actual: details.RowOf(label: "gradient"));
-        Assert.Equal(expected: 5u, actual: details.RowOf(label: "clouds"));
-        Assert.Equal(expected: 4u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: 6u, actual: details.RowOf(label: "clouds"));
+        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: "run1"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Atmosphere));
-        Assert.True(condition: (SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere") && !SdfSkyDetails.IsFixed(label: "gradient")));
+        Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Indirect));
+        Assert.True(condition: (SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere")
+            && SdfSkyDetails.IsFixed(label: "indirect") && !SdfSkyDetails.IsFixed(label: "gradient")));
         for (var index = 0; (index < SdfSkyDetails.Capacity); index++) {
             _ = details.RowOf(label: $"layer{index}");
         }
@@ -43,6 +45,23 @@ public sealed class SdfWorkDetailLawTests {
         Assert.Equal(expected: 37u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
         Assert.DoesNotContain(expectedSubstring: "puckCountDetail", actualString: Source(path: "passes/sdf-world-views.comp.hlsl"));
         Assert.Contains(expectedSubstring: "puckCountShadow(shadowSlot, (sdfWorkSteps - before));", actualString: Source(path: "surface/sdf-shadow.hlsli"));
+    }
+    [Fact]
+    public void IndirectDiagnosticsKeepAReservedRowAsSkyLabelsGrow() {
+        var details = new SdfSkyDetails();
+        var before = details.Labels.ToArray();
+
+        Assert.Equal(expected: 4, actual: SdfSkyDetails.IndirectRow);
+        Assert.Equal(expected: "indirect", actual: before[SdfSkyDetails.IndirectRow]);
+        for (var index = 0; (index < (SdfSkyDetails.Capacity + 1)); index++) {
+            _ = details.RowOf(label: $"layer{index}");
+        }
+        Assert.Equal(expected: before, actual: details.Labels.Take(count: before.Length));
+        Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_INDIRECT 4u", actualString: SdfSkyKindsHlsl.Generate());
+        var reads = Source(path: "indirect/sdf-indirect-read.hlsli");
+
+        Assert.Equal(expected: 2, actual: Regex.Matches(input: reads, pattern: @"puckCountIndirect\(SDF_SKY_DETAIL_INDIRECT, 0u,").Count);
+        Assert.DoesNotContain(expectedSubstring: "puckCountIndirect(0u,", actualString: reads);
     }
     // Every kind counts its own evaluation in its layer's row, each hash at the operation that performs it, and the field
     // runs' texture loads in their runs' rows: the base in the lowest run's, the upper images in their runs'.

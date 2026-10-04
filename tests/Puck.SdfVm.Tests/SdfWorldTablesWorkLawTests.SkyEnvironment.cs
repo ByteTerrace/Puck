@@ -198,9 +198,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             expected: (65_536, 144, 65_680)
         );
         // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass, the environment's plain row
-        // and one row each of the sky's detail rows, at their capacity, each row twelve 64-bit counters: six shadow slots and
-        // the secondary shadow pixels.
-        Assert.Equal(expected: 3_552, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.Capacity) * GpuKernelCounters.RowBytes));
+        // and one row each of the sky's detail rows, at their capacity, each row seventeen 64-bit counters, including
+        // secondary-shadow pixels, indirect work and primitive evaluations.
+        Assert.Equal(expected: 5_032, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.Capacity) * GpuKernelCounters.RowBytes));
     }
 
     // The sky evaluations a report's environment line carries.

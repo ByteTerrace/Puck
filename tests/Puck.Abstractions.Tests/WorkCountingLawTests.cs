@@ -159,6 +159,11 @@ public sealed class WorkCountingLawTests {
                 "gpu.environment.projections",
                 "gpu.environment.projection-texels",
                 "gpu.environment.skipped",
+                "gpu.indirect.hits",
+                "gpu.indirect.samples",
+                "gpu.indirect.unresolved",
+                "gpu.shapes.evaluated",
+                "gpu.shapes.gradients",
             ],
             actual: GpuWork.SubmissionKinds.ToArray().Select(selector: kind => kind.Name)
         );
@@ -175,15 +180,11 @@ public sealed class WorkCountingLawTests {
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );
         Assert.Same(expected: GpuWork.Dispatches, actual: GpuWork.SubmissionKinds[0]);
-        Assert.Same(expected: GpuWork.ShadowSteps[^1], actual: GpuWork.SubmissionKinds[26]);
-        Assert.Same(expected: GpuWork.ShadowPixels, actual: GpuWork.SubmissionKinds[27]);
-        Assert.Same(expected: GpuWork.EnvironmentProjections, actual: GpuWork.SubmissionKinds[28]);
-        Assert.Same(expected: GpuWork.EnvironmentProjectionTexels, actual: GpuWork.SubmissionKinds[29]);
-        Assert.Same(expected: GpuWork.EnvironmentSkipped, actual: GpuWork.SubmissionKinds[30]);
+        Assert.Same(expected: GpuWork.ShapeGradients, actual: GpuWork.SubmissionKinds[^1]);
         Assert.Equal(
-            expected: ["gpu.march.steps", "gpu.texels.written", "gpu.sky.evaluations", "gpu.sky.hashes", "gpu.sky.texture-loads",
-                .. GpuWork.ShadowSteps.ToArray().Select(selector: kind => kind.Name), "gpu.shadow.pixels"],
-            actual: GpuWork.KernelKinds.ToArray().Select(selector: kind => kind.Name)
+            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, .. GpuWork.ShadowSteps,
+                GpuWork.ShadowPixels, GpuWork.IndirectHits, GpuWork.IndirectSamples, GpuWork.IndirectUnresolved, GpuWork.ShapesEvaluated, GpuWork.ShapeGradients],
+            actual: GpuWork.KernelKinds.ToArray()
         );
     }
 
