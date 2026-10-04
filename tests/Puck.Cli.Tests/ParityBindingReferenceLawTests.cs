@@ -60,11 +60,11 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
         edit(obj: contract);
 
-        // The reference's graph and world resolve beside the contract, so a copy names the checked-in ones.
+        // Copied parameter contracts isolate parameter diagnostics from source loading.
         foreach (var station in contract["stations"]!.AsObject()) {
             if (station.Value!["reference"] is { } reference) {
                 reference["graph"] = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/binding.graph.json");
-                reference["world"] = RepositoryPaths.Resolve(relativePath: WorldPath);
+                reference["world"] = EmittedWorld();
             }
         }
 
