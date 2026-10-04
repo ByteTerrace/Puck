@@ -90,9 +90,6 @@ yields an empty, default or stale result that the frame presents as success.
 `RenderGraphRuntimeLawTests.UnboundReads`, and the `pipeline-package` and
 `no-device-compile` canaries.
 
-**Where the code is weaker.** A refused residency build reads as not ready:
-nothing in the frame result separates it from a build still running (§4).
-
 **Violations to hunt.** A path that returns null, empty or a default handle and
 lets the frame present; a stand-in bound without being recorded; a refusal
 whose message omits the name a reader needs; a released or retired producer
@@ -131,9 +128,10 @@ nothing captures its input version in that version's layout.
 `RenderGraphRuntimeLawTests.Alias`
 (`ARootCaptureOfAFrameThatDrewNothingReadsTheInputVersionInItsLayout`).
 
-**Where the code is weaker.** There is no copy path. A node that published
-another instance's image in its output's place serves a capture from that
-image under the producer's retirement rule, without a lease of its own.
+`RenderGraphRuntime.OfferCaptureSource` offers an aliased output under its own
+lease. A node serving it without rendering copies it before readback
+(`ShaderPipelineRenderNode.CapturePin.cs`); a node that renders releases the
+offer and captures its new output.
 
 **Violations to hunt.** A capture served from an image a later frame
 overwrites; a capture served at the wrong extent or from a frame of another
