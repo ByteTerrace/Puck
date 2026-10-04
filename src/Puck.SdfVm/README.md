@@ -138,7 +138,8 @@ The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
 `SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
-data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
+data, dynamic frame/lanes, primary iteration/evaluation counts, and the
+indirect receiver's certified camera-ray approach in L.y. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
 shadow four 8-bit stable visibilities in the one K word, each adding its queries
 to the combined count. Active handoffs add incoming marches, bounded by K + F,

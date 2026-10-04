@@ -855,7 +855,9 @@ A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the
 transform table of the frame the record was rendered from, the rows that frame's
 upload staged, captured when the copy records, as `SdfPickResult.Transform`.
 Surface shading reads the four anonymous lanes from the existing dynamic
-transform row; static hits read zero. The remaining L words are reserved. A slot
+transform row; static hits read zero. L.y carries an indirect receiver's approach:
+the distance back along its camera ray and the certified clearance, packed as
+two half floats. L.z and L.w carry the ambient and shadow query counts. A slot
 fits every lane that carries it: `SdfProgram.DynamicTransformSlotBits` is the
 float data lane's exact range, and a program naming a larger slot is refused.
 

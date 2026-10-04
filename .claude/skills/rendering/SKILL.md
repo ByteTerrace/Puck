@@ -51,6 +51,12 @@ path, and count traversal scratch and constant rings beside the depth bank in
 `SdfPassPlanLawTests`. The [light-view contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view)
 owns the geometry support limits.
 
+The receiver approach in visibility L.y is owned by `SdfIndirectApproach` and
+`indirect/sdf-indirect-approach.hlsli`. Keep the reconstructed ball inside its
+complete-field certificate and within half a spacing; do not derive a ball from
+a camera mask or an independent part. Primary publishes zero when no approach
+is certified, leaving the bounded normal-launch fallback to the receiver.
+
 The indirect `shade` pass uses `IrradianceSolveSchedule`, the same finite order as
 the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through

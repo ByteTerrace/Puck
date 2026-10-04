@@ -259,6 +259,16 @@ describes the complete generation readers still see during a later solve.
 Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable
 light and sky tables for a CPU reference without consulting a newer live frame.
 The cache snapshot reports admitted shade probes and submitted whole sweeps.
+Primary traversal publishes a receiver approach in the existing visibility
+record. It keeps a positive complete-field sample whose clear ball joins the
+accepted sample, at most half the finest spacing away. The packed retreat and
+clearance use one word: moving the point onto the half-float grid subtracts
+the reconstruction error from its radius, and the radius rounds downward.
+Misses, meshes and uncertified approaches publish zero. With indirect enabled,
+primary evaluates its existing interpreter over the complete field instead of
+independent parts and camera masks, whose exclusions cannot certify that ball.
+This adds no launch query, but the primary shape count can increase.
+
 Actual GPU classifications and selected receiver contributions still require
 their fenced readback. Receiver application and its qualification remain part
 of the open cache work in the rendering plan.
