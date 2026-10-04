@@ -1,5 +1,5 @@
 using Puck.Cli.Affected;
-using Puck.Transpiler.Modules;
+using Puck.Assets;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
 using Xunit;

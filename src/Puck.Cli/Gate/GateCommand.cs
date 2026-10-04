@@ -58,7 +58,7 @@ internal static class GateCommand {
             The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
             side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
             Counters expands every
-            tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
+            tests/Puck.Counters/*.ceilings.json using each recorded workload path and its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
             Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
             CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.

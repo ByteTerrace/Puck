@@ -20,7 +20,7 @@ internal sealed class GateClock : TimeProvider {
 public sealed partial class GateRunLawTests {
     private static void Workload(Branches branches, string name, bool ceilings = true, bool script = false) {
         branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.world.json", text: "{}");
-        if (ceilings) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.ceilings.json", text: "{}"); }
+        if (ceilings) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.ceilings.json", text: $$"""{"workload":"tests/Puck.Counters/{{name}}.world.json"}"""); }
         if (script) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.script.txt", text: "world.counters --json"); }
     }
 
@@ -242,17 +242,17 @@ public sealed class GatePlanLawTests {
         directory.WriteText(name: "tests/Puck.Counters/unrecorded.world.json", text: "{}");
         directory.WriteText(name: "tests/Puck.Counters/unrecorded.script.txt", text: "script");
         directory.WriteText(name: "tests/Puck.Counters/z.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/z.ceilings.json", text: "{}");
+        directory.WriteText(name: "tests/Puck.Counters/z.ceilings.json", text: """{"workload":"tests/Puck.Counters/z.world.json"}""");
         directory.WriteText(name: "tests/Puck.Counters/z.script.txt", text: "script");
-        directory.WriteText(name: "tests/Puck.Counters/a.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/a.ceilings.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/shared.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/shared.ceilings.json", text: "{\"script\":\"tests/Puck.Counters/common.script.txt\"}");
+        directory.WriteText(name: "tests/Puck.Counters/a.puck", text: "world {}");
+        directory.WriteText(name: "tests/Puck.Counters/a.ceilings.json", text: """{"workload":"tests/Puck.Counters/a.puck"}""");
+        directory.WriteText(name: "fixtures/recorded-source.puck", text: "world {}");
+        directory.WriteText(name: "tests/Puck.Counters/shared.ceilings.json", text: """{"workload":"fixtures/recorded-source.puck","script":"tests/Puck.Counters/common.script.txt"}""");
         var workloads = GatePlan.CounterWorkloads(repositoryRoot: directory.RootPath, step: GatePlan.Steps.Single(predicate: step => (step.Kind == GateStepKind.Counters))).ToArray();
 
         Assert.Equal(["counters a", "counters shared", "counters z"], workloads.Select(selector: step => step.Name));
-        Assert.Equal(["counters", "--check", "--world", "tests/Puck.Counters/a.world.json", "--ceilings", "tests/Puck.Counters/a.ceilings.json"], workloads[0].Arguments);
-        Assert.Equal(["--script", "tests/Puck.Counters/common.script.txt"], workloads[1].Arguments.TakeLast(count: 2));
+        Assert.Equal(["counters", "--check", "--world", "tests/Puck.Counters/a.puck", "--ceilings", "tests/Puck.Counters/a.ceilings.json"], workloads[0].Arguments);
+        Assert.Equal(["counters", "--check", "--world", "fixtures/recorded-source.puck", "--ceilings", "tests/Puck.Counters/shared.ceilings.json", "--script", "tests/Puck.Counters/common.script.txt"], workloads[1].Arguments);
         Assert.Equal(["--script", "tests/Puck.Counters/z.script.txt"], workloads[2].Arguments.TakeLast(count: 2));
     }
     [Fact]

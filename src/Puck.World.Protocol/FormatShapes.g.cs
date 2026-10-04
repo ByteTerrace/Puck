@@ -12,6 +12,6 @@ namespace Puck.World.Protocol {
         /// <summary>The shape fingerprint of <c>WorldAuthorityStoreWireCodec.JournalVersion</c>, declared in <c>src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs</c>.</summary>
         public const string WorldAuthorityStoreWireCodecJournalVersion = "16d6100f7622a0ec";
         /// <summary>The shape fingerprint of <c>WorldProtocol.WireProtocolKey</c>, declared in <c>src/Puck.World.Protocol/Protocol/WorldProtocol.cs</c>.</summary>
-        public const string WorldProtocolWireProtocolKey = "4c1d3f03d5d8c4b6";
+        public const string WorldProtocolWireProtocolKey = "f9b4404ea0ca1765";
     }
 }

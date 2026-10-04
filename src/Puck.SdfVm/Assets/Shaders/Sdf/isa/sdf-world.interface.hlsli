@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/0e30e9ba0f395fa7ff35fc4fe2f71a5c9aa24438cc72dbd5a97bdc759e059036). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/2fb4904e0f81c4a6132531769424b5212e6b5a865fd891759ff06d6496032b9b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -16,14 +16,18 @@ struct SdfLight {
 struct SdfSkyBlock {
     [[vk::offset(0)]] float FogDensity;
     [[vk::offset(4)]] uint LayerCount;
-    [[vk::offset(8)]] float Ambient;
+    [[vk::offset(8)]] uint SoftboxCount;
     [[vk::offset(12)]] uint Quality;
     [[vk::offset(16)]] float3 FrameRight;
     [[vk::offset(28)]] uint BaseRun;
     [[vk::offset(32)]] float3 FrameUp;
     [[vk::offset(44)]] uint UpperRuns;
     [[vk::offset(48)]] float3 FrameForward;
-    [[vk::offset(60)]] float Reflection;
+    [[vk::offset(60)]] uint _pad60;
+    [[vk::offset(64)]] float3 HorizonLow;
+    [[vk::offset(76)]] uint _pad76;
+    [[vk::offset(80)]] float3 HorizonHigh;
+    [[vk::offset(92)]] uint _pad92;
 };
 
 struct SdfSkyLayer {
@@ -45,6 +49,16 @@ struct SdfSkyLayer {
     [[vk::offset(144)]] float4 P5;
     [[vk::offset(160)]] float4 P6;
     [[vk::offset(176)]] float4 P7;
+};
+
+struct SdfSoftbox {
+    [[vk::offset(0)]] float3 Direction;
+    [[vk::offset(12)]] float Weight;
+    [[vk::offset(16)]] float3 Color;
+    [[vk::offset(28)]] uint _pad28;
+    [[vk::offset(32)]] float2 Size;
+    [[vk::offset(40)]] float Blur;
+    [[vk::offset(44)]] uint _pad44;
 };
 
 struct SdfShadowHandoff {
@@ -103,11 +117,12 @@ struct SdfWorldFrame {
 [[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
 [[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
 #define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
-[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout68c8432bd7e9f4a002fbe41662ca5860b9fdd3d3d1daeb2649d6c1d415b5dc13 : register(t26, space1);
-#define sdfSky sdfSkyLayout68c8432bd7e9f4a002fbe41662ca5860b9fdd3d3d1daeb2649d6c1d415b5dc13
+[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout18bdcd9d9a9298fda6d03178d92762358a576a0e94d2b6cc2cb399de54837b24 : register(t26, space1);
+#define sdfSky sdfSkyLayout18bdcd9d9a9298fda6d03178d92762358a576a0e94d2b6cc2cb399de54837b24
 [[vk::binding(27, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t27, space1);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
-[[vk::binding(28, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t28, space1);
+[[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
+#define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
 [[vk::binding(29, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t29, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
 [[vk::binding(30, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t30, space1);
@@ -186,8 +201,8 @@ struct SdfWorldPass {
     [[vk::offset(496)]] uint workCounterRow;
     [[vk::offset(500)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa8056D0AA : register(b0, space3);
-#define passGroup passGroupIsa8056D0AA
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaB87966AB : register(b0, space3);
+#define passGroup passGroupIsaB87966AB
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);

@@ -30,7 +30,7 @@ public sealed class CreationBakeLawTests {
         ],
         """;
     // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
-    private const string PinnedProduct = "sha256-64/b3113c2b360522f1";
+    private const string PinnedProduct = "sha256-64/366e59c290c244be";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -358,7 +358,7 @@ public sealed class CreationBakeLawTests {
         var store = new WorldBakeStore();
         var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
 
-        Assert.Equal(expected: ["DEFN", "ASST", "BAKE"], actual: boot.Resolution.Kept.Select(selector: static code => code.ToString()));
+        Assert.Equal(expected: ["DEFN", "ASST", "CURV", "BAKE"], actual: boot.Resolution.Kept.Select(selector: static code => code.ToString()));
         Assert.Equal(expected: 3, actual: store.HeldCount);
 
         foreach (var request in WorldBakeStore.RequestsOf(definition: boot.Admission.Definition, quality: WorldBakeChunk.Quality)) {
@@ -555,7 +555,7 @@ public sealed class CreationBakeLawTests {
         var cache = new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled"));
         var boot = CompiledWorldLawTests.Boot(cache: cache, path: path);
 
-        Assert.Equal(expected: ["DEFN", "ASST"], actual: boot.Resolution.Derived.Select(selector: static code => code.ToString()));
+        Assert.Equal(expected: ["DEFN", "ASST", "CURV"], actual: boot.Resolution.Derived.Select(selector: static code => code.ToString()));
         Assert.Equal(expected: ["BAKE"], actual: boot.Resolution.Deferred.Select(selector: static code => code.ToString()));
         Assert.Equal(expected: 0, actual: store.HeldCount);
         Assert.True(condition: CompiledWorld.TryDecode(container: out var written, content: File.ReadAllBytes(path: cache.FileFor(documentPath: path)), header: out _, reason: out var reason), userMessage: reason);
