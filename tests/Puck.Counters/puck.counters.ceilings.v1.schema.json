@@ -6,7 +6,7 @@
     "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck counters ceilings (puck.counters.ceilings.v1)",
-  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. The ceilings every device shares (deterministic counts, and the zeros that are structural contracts, RequiredZero) are the backend\u0027s own; the magnitudes of per-backend-deterministic counts (PerBackendDeterministic), which follow the device, are one record per device, and a run is judged against its own device\u0027s record.",
+  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. The ceilings every device shares (deterministic counts, and required zeros whose count no retained device record owns) are the backend\u0027s own; the magnitudes of per-backend-deterministic counts (PerBackendDeterministic), which follow the device, are one record per device, including a newly recorded zero when another retained device owns that count. A run is judged against its backend\u0027s shared ceilings and its own device\u0027s record.",
   "type": [
     "object",
     "null"
@@ -46,7 +46,7 @@
             "description": "One record per device, keyed by its adapter (the PCI vendor and device) and its driver implementation (DriverId), in the order they were first recorded; a record of one device never moves another\u0027s.",
             "type": "array",
             "items": {
-              "description": "One device\u0027s ceilings on one backend: the per-backend-deterministic magnitudes its run read.",
+              "description": "One device\u0027s ceilings on one backend: its per-backend-deterministic readings, including required zeros scoped to it because another retained device record owns the count.",
               "type": [
                 "object",
                 "null"
@@ -107,7 +107,7 @@
                   "title": "GpuDeviceIdentity"
                 },
                 "ceilings": {
-                  "description": "Every per-backend-deterministic count that is not a required zero, in the order the run reported the counts.",
+                  "description": "The device\u0027s per-backend-deterministic ceilings. Required zeros scoped to this device follow its other readings; no count also belongs to the backend\u0027s shared ceilings.",
                   "type": "array",
                   "items": {
                     "description": "What one kind may read in one pass of one render node, or in the work outside its every pass.",
@@ -146,7 +146,7 @@
                         "type": "integer"
                       },
                       "requiredZero": {
-                        "description": "Whether the ceiling is a zero that holds on every device: the kind is a magnitude that varies with the device (a kernel kind such as the march steps), and the pass never does that kind of work, so zero is a structural contract and not one device\u0027s reading, and it is a ceiling every device shares. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic ceiling is shared by its class, and a count loosened to its pass\u0027s class is one device\u0027s reading.",
+                        "description": "Whether this zero ceiling belongs to a per-backend-deterministic kind, such as march steps, recorded in that class. It strictly requires zero within its containing record\u0027s scope: shared unless another retained device record owns the count, in which case it belongs to the newly recorded device. A deterministic ceiling is shared by its class; a deterministic kind loosened to its pass\u0027s class does not carry this flag.",
                         "type": "boolean",
                         "default": false
                       },
@@ -181,7 +181,7 @@
             }
           },
           "ceilings": {
-            "description": "The ceilings every device is judged against: each deterministic count\u0027s, and each required zero, in the order the run reported the counts.",
+            "description": "The ceilings every device is judged against: each deterministic count\u0027s, and each required zero whose count no retained device record owns, in the order the run reported the counts.",
             "type": "array",
             "items": {
               "$ref": "#/properties/backends/items/properties/devices/items/properties/ceilings/items"
