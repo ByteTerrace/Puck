@@ -344,6 +344,75 @@ public sealed class CounterpartAttestationLawTests {
             expectedSubstring: "no key-bearing admission entries"
         );
     }
+    // The payload names the shape fingerprint the ledger records for its layout; a signed payload of the same schema under
+    // another shape verifies as a signature and is still refused by the fingerprint's name.
+    [Fact]
+    public void AnAttestationOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+        using var trusted = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+        var spki = trusted.ExportSubjectPublicKeyInfo();
+        var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki);
+        var trust = new WorldAdmissionEntry(
+            Domain: domain,
+            Subject: "counterpart",
+            Mode: WorldAdmissionTrustMode.SignsDirectly,
+            Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            PublicKey: Convert.ToBase64String(inArray: spki),
+            Grants: []
+        );
+        var east = Quilt(
+            name: "east",
+            counterpart: "west",
+            document: "west",
+            center: new Vector3(
+                x: -10f,
+                y: 0f,
+                z: 0f
+            ),
+            yaw: -90f,
+            admission: [trust]
+        );
+
+        Assert.True(condition: WorldCounterpartAttestation.TryCompose(
+            attestation: out var attested,
+            definition: east,
+            document: "east",
+            reason: out _
+        ));
+        Assert.Equal(
+            actual: attested!.Shape,
+            expected: Puck.Testing.FormatLedgerShapes.Of(id: "WorldCounterpartAttestation.SchemaVersion")
+        );
+
+        var codec = new CborAttestationCodec();
+
+        Assert.True(
+            condition: TryVerifySigned(
+                attestation: attested,
+                codec: codec,
+                domain: domain,
+                entries: [trust],
+                key: trusted,
+                reason: out var control,
+                subject: "counterpart",
+                verified: out _
+            ),
+            userMessage: control
+        );
+        Assert.False(condition: TryVerifySigned(
+            attestation: (attested with { Shape = "0000000000000000" }),
+            codec: codec,
+            domain: domain,
+            entries: [trust],
+            key: trusted,
+            reason: out var reason,
+            subject: "counterpart",
+            verified: out _
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "shape fingerprint '0000000000000000'"
+        );
+    }
     // A claim vouched for by a root the reading world never admitted refuses by name — the resolver trusts only
     // ITS OWN admission rows, never whatever chain the oracle happened to sign.
     [Fact]

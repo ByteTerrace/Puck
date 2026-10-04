@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Scripting;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -24,6 +26,7 @@ public sealed class AddonGuestLawTests {
     private const string Handshake = """
           (data (i32.const 0) "\02\00\01\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
           (func (export "puck_abi_version") (result i32) (i32.const 1))
+          (func (export "puck_abi_shape") (result i64) (i64.const 0x@ABI_SHAPE@))
           (func (export "puck_channels_ptr") (result i32) (i32.const 0))
           (func (export "puck_channels_count") (result i32) (i32.const 2))
           (func (export "puck_out_ptr") (result i32) (i32.const 64))
@@ -86,7 +89,7 @@ public sealed class AddonGuestLawTests {
             engine: engine
         ).Load(path: path);
     }
-    private static AddonInstance Mount(ScriptingEngine engine, string wat, long fuelPerTick = AddonAbi.DefaultFuelPerTick) {
+    private static AddonInstance Mount(ScriptingEngine engine, string wat, long fuelPerTick = AddonAbi.DefaultFuelPerTick, string? shape = null) {
         var instance = new AddonInstance(
             channelResolver: new NoChannels(),
             descriptor: new AddonDescriptor(
@@ -97,7 +100,7 @@ public sealed class AddonGuestLawTests {
                 Name: "guest"
             ),
             engine: engine,
-            moduleInfo: Load(bytes: Encoding.UTF8.GetBytes(s: wat), engine: engine)
+            moduleInfo: Load(bytes: Encoding.UTF8.GetBytes(s: wat.Replace(newValue: (shape ?? FormatLedgerShapes.Of(id: "AddonAbi.AbiVersion")), oldValue: "@ABI_SHAPE@")), engine: engine)
         );
 
         if (instance.State == AddonState.Enabled) {
@@ -157,6 +160,47 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: AddonTickStatus.Ok, actual: tick.Status);
         Assert.Equal(expected: 0, actual: tick.CellCount);
         Assert.Equal(expected: AddonState.Enabled, actual: guest.State);
+    }
+    // A guest reports the host's ABI shape word from puck_abi_shape: the same version under any other shape faults at handshake
+    // as AbiMismatch, naming both shapes, before the guest's channels are read or anything is mounted.
+    [Fact]
+    public void AGuestOfTheSameVersionAndAnotherAbiShapeFaultsAtHandshake() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var guest = Mount(
+            engine: engine,
+            shape: "0000000000000001",
+            wat: Quiet
+        );
+
+        Assert.Equal(expected: AddonState.Faulted, actual: guest.State);
+        Assert.Equal(expected: AddonFaultKind.AbiMismatch, actual: guest.Fault.Kind);
+        Assert.Contains(
+            actualString: guest.Fault.Detail,
+            expectedSubstring: $"guest ABI shape 0000000000000001, host speaks ABI shape {FormatLedgerShapes.Of(id: "AddonAbi.AbiVersion")}"
+        );
+    }
+    // The committed guest binaries are built against this host's ABI shape: a stale one reports another word from
+    // puck_abi_shape (or none) and is refused here, so rebuilding them is owed whenever the ABI's shape moves.
+    [InlineData("Assets/addons/puck-addon-default.wasm")]
+    [InlineData("Assets/addons/puck-addon-hudbuilder.wasm")]
+    [Theory]
+    public void ACommittedGuestBinaryReportsTheHostsAbiShape(string relativePath) {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        var instance = new AddonInstance(
+            channelResolver: new NoChannels(),
+            descriptor: new AddonDescriptor(
+                Enabled: true,
+                FuelPerTick: AddonAbi.DefaultFuelPerTick,
+                ModuleHash: null,
+                ModulePath: "guest.wasm",
+                Name: "guest"
+            ),
+            engine: engine,
+            moduleInfo: Load(bytes: File.ReadAllBytes(path: PuckPaths.Shipped(relativePath: relativePath)), engine: engine)
+        );
+
+        Assert.NotEqual(expected: AddonFaultKind.AbiMismatch, actual: instance.Fault.Kind);
+        Assert.NotEqual(expected: AddonFaultKind.BadExport, actual: instance.Fault.Kind);
     }
     [Fact]
     public void AGuestGrowsToTheCeilingAndIsRefusedOnePagePastIt() {

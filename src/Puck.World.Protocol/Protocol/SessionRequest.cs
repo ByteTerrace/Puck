@@ -20,7 +20,9 @@ public abstract record SessionRequest(Principal Principal) {
     /// <param name="Slot">The 0-based slot to join, or -1 for the next free slot.</param>
     /// <param name="IdentityName">The owned-world identity to seat on, or <see langword="null"/> to join pending.</param>
     /// <param name="WireProtocolKey">The client's <see cref="WorldProtocol.WireProtocolKey"/> echo.</param>
-    public sealed record Join(Principal Principal, int Slot, string? IdentityName, ulong WireProtocolKey) : SessionRequest(Principal);
+    /// <param name="WireShape">The client's <see cref="WorldProtocol.WireShape"/> echo; an in-process caller is this build, so
+    /// its shape is this build's unless a caller states another.</param>
+    public sealed record Join(Principal Principal, int Slot, string? IdentityName, ulong WireProtocolKey, string WireShape = WorldProtocol.WireShape) : SessionRequest(Principal);
     /// <summary>Removes a scripted or device player, unmapping its devices and freeing its profile (slot 0 never leaves).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Slot">The 0-based slot to free.</param>

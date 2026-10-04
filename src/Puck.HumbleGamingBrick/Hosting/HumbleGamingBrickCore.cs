@@ -58,7 +58,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// double speed. Choose true when using <see cref="CycleRate"/> to pace a hardware-speed host loop.</param>
     public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
-            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{MachineIdentity.CurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/{dmgSpeed}"),
+            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{FormatShapes.MachineIdentityCurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/{dmgSpeed}"),
             configuration.BootRom,
             configuration.CartridgeRom
         );

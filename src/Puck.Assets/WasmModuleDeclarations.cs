@@ -344,7 +344,7 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
 
         if (
             (module.Length < 8) ||
-            !module[..4].SequenceEqual(other: WasmBinaryFormat.Magic)
+            !module[..4].SequenceEqual(other: WasmBinaryFormat.WasmMagic)
         ) {
             error = "the module does not begin with the WebAssembly magic bytes";
 

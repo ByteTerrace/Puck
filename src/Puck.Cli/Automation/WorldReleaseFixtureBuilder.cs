@@ -198,7 +198,7 @@ internal sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRe
                 path1: directory,
                 path2: "qualification.fixture"
             ),
-            "puck.world.qualification.v1",
+            WorldReleaseQualificationRunner.MarkerFileContent,
             token
         ).ConfigureAwait(continueOnCapturedContext: false);
     }

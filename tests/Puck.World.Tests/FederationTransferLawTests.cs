@@ -904,6 +904,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1103,6 +1104,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1179,6 +1181,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1285,6 +1288,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1319,6 +1323,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1347,6 +1352,56 @@ public sealed partial class FederationTransferLawTests {
                 comparisonType: StringComparison.Ordinal
             );
         }
+    }
+    // A federation hello carries the shape of the federation wire contract after its key; the same key under another shape
+    // is refused by name before any challenge is issued.
+    [Fact]
+    public async Task FederationDoor_RefusesAHelloOfThisKeyUnderAnotherShape_BeforeAnyChallenge() {
+        using var fixture = Fixtures.FreshServer();
+        using var oracle = LocalOracle(subject: "machine-a/boot");
+        var security = Authenticator(
+            trustEntries: () => [TrustEntryFor(oracle: oracle)],
+            oracle: oracle
+        );
+        using var host = new WorldPeerHost(
+            server: fixture.Server,
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
+
+        PeerTestClient.StartOrSkip(host: host);
+        var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
+        var testToken = TestContext.Current.CancellationToken;
+        using var client = new PeerTestClient();
+
+        await client.ConnectAsync(
+            address: endpoint.Address,
+            port: endpoint.Port,
+            cancellationToken: testToken
+        );
+        var stream = client.GetStream();
+
+        await HandshakeWireFormat.WriteHelloAsync(
+            ct: testToken,
+            key: WorldFederationCodec.WireKey,
+            shape: "0000000000000000",
+            stream: stream
+        );
+        var refusal = await RequireFrameAsync(
+            ct: testToken,
+            stream: stream
+        );
+
+        Assert.Equal(
+            expected: ((byte)WorldFederationResponse.Refusal),
+            actual: refusal.Kind
+        );
+        Assert.StartsWith(
+            expectedStartString: nameof(WorldFederationRefusal.WireShapeMismatch),
+            actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span),
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public async Task FederationDoor_RejectsBadProof_AndAuthorityRebinding() {
@@ -1378,6 +1433,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1423,6 +1479,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(

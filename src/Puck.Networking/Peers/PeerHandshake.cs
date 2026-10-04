@@ -147,6 +147,7 @@ internal static class PeerHandshake {
         var offer = new WireWriter();
 
         offer.WriteUInt64(value: PeerWireProtocol.ProtocolKey);
+        offer.WriteString(value: FormatShapes.PeerWireProtocolProtocolKey);
         offer.WriteBlock(value: local.SubjectPublicKeyInfo);
         offer.WriteBlock(value: ownChallenge);
 
@@ -195,6 +196,10 @@ internal static class PeerHandshake {
 
         var offerReader = new WireReader(bytes: offerFrame.Body.Span);
         var protocolKey = offerReader.ReadUInt64();
+        var protocolShape = offerReader.ReadRequiredString(
+            field: "protocol shape",
+            maxBytes: HandshakeWireFormat.ShapeBytes
+        );
         // Read under the frame cap, not the attestation profile's SPKI cap: an oversized key (an RSA-4096 SPKI is
         // 550 bytes, over AttestationResourceLimits.SubjectPublicKeyInfoBytes) is an honest offer of the wrong key,
         // refused below as IdentityKeyInvalid, not a grammar violation. The frame's own cap already bounds the
@@ -225,6 +230,22 @@ internal static class PeerHandshake {
                 ct: ct,
                 failure: new PeerFailure(
                     Detail: $"offered protocol key 0x{protocolKey:x16} != 0x{PeerWireProtocol.ProtocolKey:x16}",
+                    Refusal: PeerRefusal.ProtocolMismatch
+                ),
+                stream: stream,
+                timeProvider: timeProvider
+            ).ConfigureAwait(continueOnCapturedContext: false));
+        }
+
+        if (!string.Equals(
+            a: protocolShape,
+            b: FormatShapes.PeerWireProtocolProtocolKey,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return (null, await RefuseAsync(
+                ct: ct,
+                failure: new PeerFailure(
+                    Detail: $"offered protocol shape {protocolShape} != {FormatShapes.PeerWireProtocolProtocolKey}",
                     Refusal: PeerRefusal.ProtocolMismatch
                 ),
                 stream: stream,

@@ -1458,8 +1458,12 @@ in its declared space, and stored block-compressed by the CPU codecs in
 occlusion and impostor depth as BC4, and surface and impostor emission as BC6H,
 while material identity stays uncompressed with majority mips. The encoders write the same
 bytes on every machine and each has an exact decoder as its test oracle.
-Dual contouring is the extraction: it strays from the field about half as far
-as surface nets did, for about a tenth more evaluations over a whole bake. A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
+Dual contouring won the extraction: it strays from the field about half as far
+as surface nets did, for about a tenth more evaluations over a whole bake, and
+surface nets is deleted. It places a vertex per surface patch of a cell, so a
+plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
+shares an edge among more than two quads, at 0.26% more vertices than one vertex
+per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -6326,7 +6330,8 @@ its chunk in compiled worlds, and background baking on the CPU thread pool.
 
 **Delivers:** one baker that turns an SDF prototype into presentation assets:
 
-- A mesh with UVs, extracted with dual contouring.
+- A mesh with UVs, extracted with manifold dual contouring, which beat surface nets on
+  silhouette error and cost and beat one vertex per cell on topology.
 - Baked textures for albedo, normals, ambient occlusion, and material identity.
 - Impostors for distant content.
 
@@ -6351,21 +6356,42 @@ The parity world ships its bakes, so captures never depend on a local bake.
 Which representation a placement uses follows P6's rule that representations
 are chosen by measured cost.
 
-**Open experiment.** A CPU experiment compares manifold dual contouring with
-`SdfDualContouring`'s one vertex per cell. A census at the standard tier over
-the 93 prototypes baked from the counters, parity, nexus, standard and courtyard
-worlds found 19 with edges shared by more than two triangles, every mesh still
-closed (the Nexus kart ramp 33 such edges, the kart bank wall 30, the granary
-anchor 27, each hex tile 8, the courtyard floor 1), and a plate one cell thick
-meshing with 84 such edges where plates 0.4, 0.7 and 1.3 to 3 cells thick have
-none. The census does not separate its causes (a cell shared by two sheets and
-coincident clamped vertices both count), covers one tier, matches vertices by
-position to 1e-5, and does not ask whether any consumer of the mesh needs a
-two-manifold; its figures survive only in the study's commit messages. The
-experiment is done when it reports each extractor's non-manifold edges,
-silhouette error and cost over the same prototypes, so the mesh choice above
-rests on the counts. An octree sign resolution is not adopted (see P14's *Not
-adopted*).
+**Manifold extraction.** The extractor places one vertex per surface patch of a
+cell, not one per cell: a cell's patches are the connected pieces of the
+marching-cubes surface inside it, found from the eight corner signs alone, so a
+cell two sheets cross holds a vertex for each. An ambiguous face, whose diagonal
+corners agree, is cut to separate its inside corners, a rule that reads nothing
+but the face's four signs, so the two cells sharing a face agree and the mesh has
+no crack. Over the 93 prototypes baked at the standard tier from the counters,
+parity, nexus, standard and courtyard worlds, counting edges shared by more than
+two quads by vertex index:
+
+| Extractor | Prototypes with such edges | Such edges | Vertices | Mesh evaluations | Whole-bake evaluations | Worst error | Mean error |
+|---|---|---|---|---|---|---|---|
+| One vertex per cell | 8 | 106 | 52,649 | 2,100,421 | 21,591,844 | 0.600 cells | 0.229 cells |
+| One vertex per patch | 0 | 0 | 52,787 | 2,101,141 | 21,596,216 | 0.600 cells | 0.229 cells |
+
+A prototype's error is the baker's own measure (`SdfBaker.MeasureError`), the
+largest field magnitude at a vertex, an edge midpoint or a triangle centroid, in
+lattice cells; the table gives the worst prototype, the courtyard tree under
+both, and the mean over prototypes. Patches cost 138 more vertices (0.26%) and
+0.02% more evaluations over whole bakes, and the triangles are the same 105,004.
+Eighty-five meshes are byte-identical under the two extractors, including each of the parity
+world's five, so no parity reference moves; the eight that differ are the eight
+prototypes the old extractor pinched (the kart ramp 33 such edges, the bank wall
+30, the granary store 18 and anchor 17, the wren 4, the spider 2, the courtyard
+floor and grass 1 each), and their error moves by at most 0.01 cells. A plate
+tilted off the lattice axes meshes as a closed two-manifold at every thickness
+from 0.4 to 3 cells, where one vertex per cell leaves 36 to 84 shared edges from
+0.85 to 1.1 cells (84 at one cell) and none at 0.4, 0.7, 1.2 or 1.3 to 3. Counting
+edges by vertex position instead reports 19 prototypes before and 14 after,
+because 11 prototypes carry no shared edge by index: each holds 1 to 8 positions
+where two distinct vertices coincide (the hex tiles, the arena pools, the groove
+seam, the jump wall, the isle shard, the dragonfly and the courtyard tree), which
+the census does not explain and no indexed consumer reads as topology. Whether any
+consumer needs those vertices apart stays open. The numbers come from a CPU
+census whose code is not kept; the laws in `SdfBakerLawTests` hold the plate and
+the closed meshes.
 
 **Impostors for distant content** are octahedral and view-dependent, and a
 placement hands over to them by its size on screen:
@@ -6412,7 +6438,8 @@ placement hands over to them by its size on screen:
 device, the same bytes; editing one prototype rebakes only that prototype; a
 compiled world with a filled cache bakes nothing on load, counted; a missing
 bake renders through SDF and then switches; baked silhouettes stay under a
-stated error against the SDF; state hashes are equal with bakes on and off; a
+stated error against the SDF; a baked plate about one cell thick meshes as a
+closed two-manifold; state hashes are equal with bakes on and off; a
 view records a placement's impostor and not its mesh once the placement is under
 the switch, hands back with hysteresis, and counts the draws it records; the
 impostor's views reproduce the field's sphere and box within a stated share of
@@ -6421,6 +6448,19 @@ above the switch, so no parity reference depends on an impostor.
 
 **Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
 packaging, and compiled worlds in the runtime and delivery programme.
+
+#### Research input: manifold meshes and octree sign resolution
+
+A CPU study of the baker counted two things against the mesher that placed one
+vertex per cell. At the standard tier, 19 of the 93 prototypes baked from the
+counters, parity, nexus, standard and courtyard worlds carry edges shared by more
+than two triangles by vertex position (a nexus kart ramp 33, a kart bank wall 30,
+a granary anchor 27, each hex tile 8, the courtyard floor 1), while every mesh is
+closed; the manifold extraction above separates the causes. A plate one cell thick
+meshed with 84 such edges. An octree sign resolution saved 20.9% of sign
+evaluations but 0.5% of a whole bake's evaluations. The octree count covers one
+tier and matches vertices by position to 1e-5. The figures survive only in the
+study's commit messages.
 
 ### P18 — Sky and atmosphere
 

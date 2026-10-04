@@ -172,7 +172,7 @@ public static class EmbedCommand {
         List<string> puckFiles = [];
 
         if (Directory.Exists(path: fullPath)) {
-            puckFiles.AddRange(collection: Directory.GetFiles(path: fullPath, searchOption: SearchOption.AllDirectories, searchPattern: "*.puck"));
+            puckFiles.AddRange(collection: Directory.GetFiles(path: fullPath, searchOption: SearchOption.AllDirectories, searchPattern: "*.puck").Order(comparer: StringComparer.Ordinal));
         } else if (File.Exists(path: fullPath)) {
             puckFiles.Add(item: fullPath);
         } else {

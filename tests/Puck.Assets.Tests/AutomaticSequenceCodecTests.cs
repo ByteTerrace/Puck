@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Assets.Tests;
@@ -34,9 +35,18 @@ public sealed class AutomaticSequenceCodecTests {
             expected: ContentPin.Compute(content: encoded).Hex,
             actual: ContentPin.Compute(content: reencoded).Hex
         );
+        // The artifact's header is the magic, the version byte, then the shape fingerprint the ledger records for this
+        // codec; the pin covers every other byte, so it moves with the layout's bytes and never with the fingerprint.
+        Assert.Equal(
+            expected: FormatLedgerShapes.Of(id: "AutomaticIntegerSequenceCodec.Version"),
+            actual: System.Text.Encoding.ASCII.GetString(bytes: encoded.AsSpan(
+                length: 16,
+                start: 5
+            ))
+        );
         Assert.Equal(
             expected: "4ac441487cdcc97eaf5e534c2bd116ea83985a1a8859aada2b374dcfffd1c004",
-            actual: ContentPin.Compute(content: encoded).Hex
+            actual: ContentPin.Compute(content: [.. encoded[..5], .. encoded[21..]]).Hex
         );
 
         for (ulong index = 0; (index < 4096); ++index) {
@@ -45,6 +55,28 @@ public sealed class AutomaticSequenceCodecTests {
                 actual: decoded.ValueAt(index: index)
             );
         }
+    }
+    // The same magic and version under another shape fingerprint is refused by the fingerprint's name before any field is read.
+    [Fact]
+    public void AnArtifactOfTheSameVersionAndAnotherShapeIsRefusedByItsFingerprint() {
+        var encoded = AutomaticIntegerSequenceCodec.Encode(sequence: BinaryParitySequence());
+        var expected = System.Text.Encoding.ASCII.GetString(bytes: encoded.AsSpan(
+            length: 16,
+            start: 5
+        ));
+        var other = ((expected[0] == '0') ? ('1' + expected[1..]) : ('0' + expected[1..]));
+
+        System.Text.Encoding.ASCII.GetBytes(
+            bytes: encoded.AsSpan(start: 5),
+            chars: other
+        );
+
+        var refusal = Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(content: encoded));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: $"another shape than {expected}"
+        );
     }
     [Fact]
     public void DecoderRejectsTrailingBytesAndCeilingBreaches() {

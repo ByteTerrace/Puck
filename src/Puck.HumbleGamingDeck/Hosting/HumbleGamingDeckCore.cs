@@ -51,7 +51,7 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
             cartridge: configuration.Cartridge.Image,
             descriptor: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"puck.hgd.core.v1/{HgdMachineIdentity.CurrentVersion}/{configuration.Model}/{powerOn.Name}/{powerOn.AlignmentPhase}/{powerOn.WorkRamFill}"
+                handler: $"puck.hgd.core.v1/{FormatShapes.HgdMachineIdentityCurrentVersion}/{configuration.Model}/{powerOn.Name}/{powerOn.AlignmentPhase}/{powerOn.WorkRamFill}"
             ),
             firmware: []
         );

@@ -35,15 +35,16 @@ public sealed class WorldCompileCacheLawTests {
         return (work.Read(kind: WorldBootWork.Compiles), work.Read(kind: WorldBootWork.PuckCacheHits));
     }
     // The persisted entry format, written independently of the cache: the magic, then UTF-8 length-prefixed fields —
-    // the writing build, the key, the file facts, the document, whether it emits one, no worlds, no schema, no tests —
+    // the writing build, the shape fingerprint the ledger records for the format, the key, the file facts, the document, whether it emits one, no worlds, no schema, no tests —
     // and a trailing SHA-256 over all of it. The one fact recorded is the source's current bytes, so the entry stands.
-    private static byte[] Forge(string build, string key, string source, byte[] document) {
+    private static byte[] Forge(string build, string key, string source, byte[] document, string? shape = null) {
         using var stream = new MemoryStream();
 
-        stream.Write(buffer: "PUCKWCC3"u8);
+        stream.Write(buffer: "PUCKWCC1"u8);
         using (var writer = new BinaryWriter(encoding: Encoding.UTF8, leaveOpen: true, output: stream)) {
             writer.Write(value: FormatLedgerShapes.Of(id: "WorldCompileCache.Magic"));
             writer.Write(value: build);
+            writer.Write(value: (shape ?? Puck.Testing.FormatLedgerShapes.Of(id: "WorldCompileCache.Magic")));
             writer.Write(value: key);
             writer.Write(value: 1);
             writer.Write(value: Convert.ToHexStringLower(inArray: System.Security.Cryptography.SHA256.HashData(source: File.ReadAllBytes(path: source))));
@@ -143,6 +144,27 @@ public sealed class WorldCompileCacheLawTests {
             expected: Encoding.UTF8.GetBytes(s: WorldCompiler.CompileFile(path: root, cancellationToken: TestContext.Current.CancellationToken).RequireJson().ToJsonString()),
             actual: compiled!.Document
         );
+    }
+    // An entry under this build's name and magic but another shape fingerprint is a miss: the cache recompiles rather than
+    // serve bytes written under a layout this build does not read.
+    [Fact]
+    public void AnEntryOfAnotherShapeIsNotServed() {
+        using var files = new TemporaryDirectory();
+
+        files.WriteText(name: "counter.puck", text: Counter);
+
+        var root = User(files: files, name: "root");
+        var directory = files.PathOf(name: "cache");
+
+        Assert.Equal(expected: (1L, 0L), actual: Compile(cache: new WorldCompileCache(directory: directory), paths: root));
+
+        var ours = Assert.Single(collection: Directory.GetFiles(path: directory, searchPattern: "*.compiled"));
+        var forged = "{\"forged\":true}"u8.ToArray();
+
+        File.WriteAllBytes(bytes: Forge(build: BuildOf(entry: ours), document: forged, key: KeyOf(path: root), shape: "0000000000000000", source: root), path: ours);
+        Assert.Equal(expected: (1L, 0L), actual: Compile(cache: new WorldCompileCache(directory: directory), paths: root));
+        Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out var compiled, failure: out _, path: root));
+        Assert.NotEqual(expected: forged, actual: compiled!.Document);
     }
     [Fact]
     public void AnEntryAnotherBuildWroteIsNeitherServedNorOverwritten() {

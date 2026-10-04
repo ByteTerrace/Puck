@@ -8,7 +8,7 @@ namespace Puck.Machines;
 
 internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState, ulong CycleRemainder,
     ulong CycleScale, long CompletedSteps, int FastForwardFactor, int RunaheadFrames) {
-    private const string Format = "puck.queued-machine.v4";
+    private const string Format = "puck.queued-machine.v1";
     private const int MaximumBytes = ((128 * 1024) * 1024);
 
     public static (QueuedMachineCheckpoint Checkpoint, MachinePads Inputs, int Seats) Decode(ReadOnlyMemory<byte> bytes) {
@@ -28,6 +28,12 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         );
 
         if (reader.ReadString() != Format) { throw new InvalidDataException(message: "machine checkpoint format is unsupported"); }
+        var shape = reader.ReadString();
+
+        if (shape != FormatShapes.QueuedMachineCheckpointFormat) {
+            throw new InvalidDataException(message: $"machine checkpoint shape fingerprint {shape} is not {FormatShapes.QueuedMachineCheckpointFormat}");
+        }
+
         var identity = reader.ReadString();
         var remainder = reader.ReadUInt64();
         var scale = reader.ReadUInt64();
@@ -87,6 +93,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
             leaveOpen: true
         )) {
             writer.Write(value: Format);
+            writer.Write(value: FormatShapes.QueuedMachineCheckpointFormat);
             writer.Write(value: Identity);
             writer.Write(value: CycleRemainder);
             writer.Write(value: CycleScale);

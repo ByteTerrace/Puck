@@ -55,6 +55,7 @@ public sealed class PlaceholderReleaseVerifierTests : IDisposable {
                 Revoked: null,
                 Rollout: new ReleaseRollout(Percent: 100),
                 Schema: ReleaseManifest.CurrentSchema,
+                Shape: ReleaseManifest.CurrentShape,
                 Signature: null,
                 StateGeneration: 1,
                 Version: "1.0.1"

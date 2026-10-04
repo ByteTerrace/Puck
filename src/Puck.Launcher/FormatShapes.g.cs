@@ -8,8 +8,8 @@ namespace Puck.Launcher.Release {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>OfficialManifest.CurrentSchema</c>, declared in <c>src/Puck.Launcher/Release/OfficialManifest.cs</c>.</summary>
-        public const string OfficialManifestCurrentSchema = "de912c599a99a412";
+        public const string OfficialManifestCurrentSchema = "49752aa75d51b676";
         /// <summary>The shape fingerprint of <c>ReleaseManifest.CurrentSchema</c>, declared in <c>src/Puck.Launcher/Release/ReleaseManifest.cs</c>.</summary>
-        public const string ReleaseManifestCurrentSchema = "8e15a0e58039c4ae";
+        public const string ReleaseManifestCurrentSchema = "998bfb681cb448ff";
     }
 }

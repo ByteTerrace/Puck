@@ -700,6 +700,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await upstream.AuthenticateAsync(
@@ -1493,6 +1494,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
                 key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
             await m_owner.AuthenticateAsync(

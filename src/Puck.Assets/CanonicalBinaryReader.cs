@@ -45,6 +45,26 @@ public ref struct CanonicalBinaryReader {
 
         m_offset += value.Length;
     }
+    /// <summary>Consumes the shape fingerprint <see cref="CanonicalBinaryWriterExtensions.WriteShape"/> wrote and requires it to be
+    /// <paramref name="shape"/>: the one shape this build reads, so a blob of the same token and another layout refuses by name
+    /// before any field after it is read.</summary>
+    /// <param name="shape">The sixteen-digit fingerprint the reading codec's <c>FormatShapes</c> constant holds.</param>
+    /// <exception cref="InvalidDataException">The content ends first or carries another fingerprint.</exception>
+    public void ExpectShape(string shape) {
+        var expected = Encoding.ASCII.GetBytes(s: shape);
+
+        if (
+            (Remaining < expected.Length) ||
+            !m_content.Slice(
+                start: m_offset,
+                length: expected.Length
+            ).SequenceEqual(other: expected)
+        ) {
+            throw new InvalidDataException(message: $"the artifact is of another shape than {shape}; re-record it");
+        }
+
+        m_offset += expected.Length;
+    }
     /// <summary>Requires that every byte has been read.</summary>
     /// <exception cref="InvalidDataException">Bytes remain.</exception>
     public readonly void ExpectEnd() {

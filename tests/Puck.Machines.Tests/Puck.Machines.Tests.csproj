@@ -14,4 +14,7 @@
         <ProjectReference Include="../../src/Puck.Machines/Puck.Machines.csproj" />
         <ProjectReference Include="../../src/Puck.Machines.Post/Puck.Machines.Post.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+    </ItemGroup>
 </Project>

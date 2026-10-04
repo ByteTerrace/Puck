@@ -10,9 +10,9 @@ namespace Puck.Attestation;
 /// means the exact bytes that were signed travel verbatim and never need re-deriving by re-encoding a
 /// decoded model (definite-length CBOR arrays are canonical for a fixed field sequence, so re-encoding
 /// would reproduce the same bytes regardless, but the wrapped form makes that a structural guarantee rather
-/// than an encoder-implementation detail). The signed portion itself is a definite-length 11-element array,
+/// than an encoder-implementation detail). The signed portion itself is a definite-length 12-element array,
 /// in field order:
-/// format version, domain, subject, algorithm, purpose, not-before, not-after, audience, sequence, payload
+/// format version, shape fingerprint, domain, subject, algorithm, purpose, not-before, not-after, audience, sequence, payload
 /// kind, payload. A key binding payload is a 5-element array (target domain, target subject, target
 /// algorithm, target key-hash, public key SPKI); a sealed payload is an 8-element array (recipient domain,
 /// recipient subject, recipient sealing algorithm, recipient key-hash, ephemeral SPKI, nonce, tag,
@@ -75,7 +75,7 @@ public sealed class CborAttestationCodec : IAttestationCodec {
         );
 
         ExpectArrayLength(
-            expected: 11,
+            expected: 12,
             reader: reader
         );
 
@@ -83,6 +83,16 @@ public sealed class CborAttestationCodec : IAttestationCodec {
 
         if (version != FormatVersion) {
             throw new FormatException(message: $"The attestation declares format version {version}, but this codec only understands version {FormatVersion}.");
+        }
+
+        var shape = reader.ReadTextString();
+
+        if (!string.Equals(
+            a: shape,
+            b: FormatShapes.CborAttestationCodecFormatVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new FormatException(message: $"The attestation declares shape fingerprint {shape}, but this codec only understands {FormatShapes.CborAttestationCodecFormatVersion}.");
         }
 
         var domain = ReadFingerprint(
@@ -223,8 +233,9 @@ public sealed class CborAttestationCodec : IAttestationCodec {
         }
     }
     private static void WriteSignedPortion(CborWriter writer, AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
-        writer.WriteStartArray(definiteLength: 11);
+        writer.WriteStartArray(definiteLength: 12);
         writer.WriteUInt64(value: FormatVersion);
+        writer.WriteTextString(value: FormatShapes.CborAttestationCodecFormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
         WriteOptionalText(
             writer: writer,
@@ -439,8 +450,9 @@ public sealed class CborAttestationCodec : IAttestationCodec {
     public byte[] EncodeHeader(AttestationHeader header) {
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-        writer.WriteStartArray(definiteLength: 9);
+        writer.WriteStartArray(definiteLength: 10);
         writer.WriteUInt64(value: FormatVersion);
+        writer.WriteTextString(value: FormatShapes.CborAttestationCodecFormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
         WriteOptionalText(
             writer: writer,

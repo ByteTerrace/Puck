@@ -153,7 +153,7 @@ internal static class SchemaCommand {
             foreach (var existing in Directory.EnumerateFiles(
                 path: sectionsDirectory,
                 searchPattern: "*.schema.json"
-            )) {
+            ).Order(comparer: StringComparer.Ordinal)) {
                 if (!expectedNames.Contains(item: Path.GetFileName(path: existing))) {
                     problems.Add(item: $"{CliPaths.ToDisplay(fullPath: existing)} is an ORPHAN — no current document section produces it.");
                 }
@@ -389,7 +389,7 @@ internal static class SchemaCommand {
             foreach (var existing in Directory.EnumerateFiles(
                 path: sectionsDirectory,
                 searchPattern: "*.schema.json"
-            )) {
+            ).Order(comparer: StringComparer.Ordinal)) {
                 if (!expectedNames.Contains(item: Path.GetFileName(path: existing))) {
                     File.Delete(path: existing);
                     removed.Add(item: CliPaths.ToDisplay(fullPath: existing));

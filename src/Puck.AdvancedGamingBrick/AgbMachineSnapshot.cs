@@ -19,7 +19,7 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
     /// <c>FormatVersions.json</c>, and a snapshot of another layout is rejected rather than misread.</summary>
     /// <remarks>6: AgbCartridge gained the rumble motor latch, the solar-sensor counter/edge/threshold (G1/G2), and
     /// the address-mapped tilt sensor's latched X/Y bytes (G3).</remarks>
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 1;
 
     /// <summary>Computes an identity for a BIOS image and cartridge ROM using a stable FNV-1a fingerprint.</summary>
     /// <param name="bios">The BIOS image bytes.</param>

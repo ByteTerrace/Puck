@@ -28,7 +28,9 @@ public readonly record struct WorldAuthorityJournalEntry(ulong Tick, ulong Engin
 public static class WorldAuthorityStoreWireCodec {
     // "PJNL" — Puck Journal.
     private const uint JournalMagic = 0x4C4E4A50U;
-    private const ushort JournalVersion = 3;
+    private const ushort JournalVersion = 1;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
     private const int MaxEntryBytes = ((8 * 1024) * 1024);
 
     /// <summary>Encodes one journal page's whole entry sequence.</summary>
@@ -39,6 +41,7 @@ public static class WorldAuthorityStoreWireCodec {
 
         writer.WriteUInt32(value: JournalMagic);
         writer.WriteUInt32(value: JournalVersion);
+        writer.WriteString(value: FormatShapes.WorldAuthorityStoreWireCodecJournalVersion);
         writer.WriteInt32(value: entries.Count);
 
         foreach (var entry in entries) {
@@ -75,6 +78,25 @@ public static class WorldAuthorityStoreWireCodec {
         ) {
             reader.Fail(
                 detail: $"journal version {version} is not the supported version {JournalVersion}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var shape = reader.ReadRequiredString(
+            field: "shape fingerprint",
+            maxBytes: MaxFingerprintChars
+        );
+
+        if (
+            !reader.Failed &&
+            !string.Equals(
+                a: shape,
+                b: FormatShapes.WorldAuthorityStoreWireCodecJournalVersion,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            reader.Fail(
+                detail: $"journal shape fingerprint {shape}, expected {FormatShapes.WorldAuthorityStoreWireCodecJournalVersion}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }

@@ -215,7 +215,7 @@ wasm-tools print target/wasm32-unknown-unknown/release/puck_addon_default.wasm |
 ```
 
 The import list must be empty. The export list must cover the full required surface—`memory`,
-`puck_abi_version`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
+`puck_abi_version`, `puck_abi_shape`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
 `puck_channels_ptr`, `puck_channels_count`, `puck_on_tick`, and optionally `puck_init`. Signatures
 and semantics are in
 [the ABI contract](../docs/reference/scripting.md#guest-exports).

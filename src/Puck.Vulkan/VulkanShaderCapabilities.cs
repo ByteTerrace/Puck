@@ -28,8 +28,9 @@ public static class VulkanShaderCapabilities {
     /// needs the <c>shaderDemoteToHelperInvocation</c> feature.</summary>
     public const uint DemoteToHelperInvocation = 5379u;
 
-    // The SPIR-V module's magic number, its first word.
-    private const uint Magic = 0x07230203u;
+    // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions, so
+    // puck formats ledgers none.
+    private const uint SpirvMagic = 0x07230203u;
     // The words of a module's header before its first instruction: magic, version, generator, bound and schema.
     private const int HeaderWords = 5;
     // The opcode of OpCapability.
@@ -53,7 +54,7 @@ public static class VulkanShaderCapabilities {
     /// <exception cref="ArgumentException">The bytes are not a SPIR-V module: too short, not whole words, without its
     /// magic number, or with an instruction that runs past the end or has no words.</exception>
     public static IReadOnlyList<uint> Declared(ReadOnlySpan<byte> spirv) {
-        if (((spirv.Length % sizeof(uint)) != 0) || (spirv.Length < (HeaderWords * sizeof(uint))) || (Word(index: 0, spirv: spirv) != Magic)) {
+        if (((spirv.Length % sizeof(uint)) != 0) || (spirv.Length < (HeaderWords * sizeof(uint))) || (Word(index: 0, spirv: spirv) != SpirvMagic)) {
             throw new ArgumentException(message: "The bytes are not a little-endian SPIR-V module.", paramName: nameof(spirv));
         }
 

@@ -15,5 +15,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.Attestation/Puck.Attestation.csproj" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
     </ItemGroup>
 </Project>

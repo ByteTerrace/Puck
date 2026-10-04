@@ -79,7 +79,7 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
     private static TextDocument? FindManifest(Project project) {
         var candidates = project.AdditionalDocuments
             .Where(predicate: document => string.Equals(
-            a: Path.GetFileName(path: (document.FilePath ?? document.Name)),
+            a: AnalyzerPaths.FileName(path: (document.FilePath ?? document.Name)),
             b: ManifestFileName,
             comparisonType: StringComparison.OrdinalIgnoreCase
         ))

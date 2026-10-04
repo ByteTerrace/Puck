@@ -69,12 +69,16 @@ public sealed record WorldCaptureManifestEntry(
 public sealed record WorldCaptureSourceVerdict(bool Holds, string Detail);
 /// <summary>The <c>manifest.json</c> document a capture run writes into its output directory.</summary>
 /// <param name="Schema">The manifest schema identifier, <see cref="SchemaId"/>.</param>
+/// <param name="Shape">The manifest shape fingerprint, <see cref="CurrentShape"/>.</param>
 /// <param name="Backend">The graphics backend that rendered the frames: <c>vulkan</c> or <c>directx</c>.</param>
 /// <param name="World">The booted world document's file name.</param>
 /// <param name="Captures">Every armed capture's outcome, in the order each was decided.</param>
-public sealed record WorldCaptureManifest(string Schema, string Backend, string World, IReadOnlyList<WorldCaptureManifestEntry> Captures) {
+public sealed record WorldCaptureManifest(string Schema, string Shape, string Backend, string World, IReadOnlyList<WorldCaptureManifestEntry> Captures) {
     /// <summary>The manifest schema identifier.</summary>
     public const string SchemaId = "puck.parity.manifest.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for the manifest, which a run stamps and the comparator
+    /// requires.</summary>
+    public const string CurrentShape = FormatShapes.WorldCaptureManifestSchemaId;
 }
 /// <summary>
 /// Arms captures at the document's scheduled authority ticks and accounts for every one of them: each armed capture
@@ -969,6 +973,7 @@ public sealed class WorldCaptureScheduler {
             Backend: m_backend,
             Captures: m_landed,
             Schema: WorldCaptureManifest.SchemaId,
+            Shape: WorldCaptureManifest.CurrentShape,
             World: m_worldFile
         );
         var path = Path.Combine(

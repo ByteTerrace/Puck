@@ -408,6 +408,7 @@ attestation = [ signedPortion: bstr, signature: bstr ]
 ; the content of signedPortion, encoded independently, is:
 signed-portion = [
     formatVersion: uint,          ; MUST be 1
+    shape:         tstr,          ; the sixteen-digit shape fingerprint of this layout; any other value is refused
     domain:        bstr,          ; exactly 32 bytes
     subject:       tstr / null,
     algorithm:     tstr,          ; a §4 registry name
@@ -456,8 +457,8 @@ bytes, never against a re-encoding of what it parsed out of them. §3 makes the
 two identical anyway, and that is the point—the wrapping makes it structural
 rather than a property of somebody's encoder.
 
-**All eleven signed-portion elements are inside the signature, format version
-included.** A version outside the signature is a field an attacker rewrites for
+**All twelve signed-portion elements are inside the signature, format version
+and shape fingerprint included.** A version outside the signature is a field an attacker rewrites for
 free, and the version is what decides how every later byte is read.
 
 **A key binding is not a separate artifact.** It is this attestation with
@@ -879,13 +880,13 @@ key, from being silently accepted in the recipient role.
 The recipient id is part of the signed payload and is additionally bound into
 both HKDF info and AEAD associated data. The header component of that associated
 data is the encoding of the **context header** alone—signed-portion elements 1
-through 9, with no `payloadKind` and no `payload`. Tampering the header or any
+through 10, with no `payloadKind` and no `payload`. Tampering the header or any
 recipient-id field therefore fails closed.
 
 **The header is encoded independently, never sliced.** It is a definite-length
-9-element array holding signed-portion elements 1 through 9 in order, encoded
+10-element array holding signed-portion elements 1 through 10 in order, encoded
 by §3's rules. It is not a byte prefix of the signed portion: that array's head
-says eleven elements and this one's says nine, so the two differ in their first
+says twelve elements and this one's says ten, so the two differ in their first
 byte.
 
 First form `recipientContext` independently of the attestation codec:

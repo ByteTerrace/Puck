@@ -89,6 +89,7 @@ public sealed class OfficialManifestTests {
         ]
         ),
         Schema: OfficialManifest.CurrentSchema,
+        Shape: OfficialManifest.CurrentShape,
         Signature: null,
         Sources: [
             new OfficialSourceEntry(
@@ -114,6 +115,27 @@ public sealed class OfficialManifestTests {
         )
     );
 
+    // The manifest carries the shape fingerprint the ledger records for its layout; a document of the same schema under another
+    // shape is refused by the fingerprint, before any structural check reads the rest.
+    [Fact]
+    public void Validate_RefusesTheSameSchemaUnderAnotherShape_ByItsFingerprint() {
+        Assert.Equal(
+            expected: Puck.Testing.FormatLedgerShapes.Of(id: "OfficialManifest.CurrentSchema"),
+            actual: ValidDocument().Shape
+        );
+        Assert.Empty(collection: OfficialCanonicalizer.Validate(document: ValidDocument()));
+
+        var violation = Assert.Single(collection: OfficialCanonicalizer.Validate(document: (ValidDocument() with { Channel = string.Empty, Shape = "0000000000000000" })));
+
+        Assert.Equal(
+            expected: "shape",
+            actual: violation.Path
+        );
+        Assert.Contains(
+            actualString: violation.Message,
+            expectedSubstring: "declares '0000000000000000'"
+        );
+    }
     [Fact]
     public void Canonicalize_RoundTrips_ByteIdentically() {
         var first = OfficialCanonicalizer.Canonicalize(document: ValidDocument());

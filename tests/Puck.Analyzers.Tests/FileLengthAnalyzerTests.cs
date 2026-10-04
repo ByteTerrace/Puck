@@ -21,7 +21,7 @@ public sealed class FileLengthAnalyzerTests {
 
         return builder.Append(value: " } }").ToString();
     }
-    private static AnalysisResult Run(string fileName, int lines, string? ledgerJson) {
+    private static AnalysisResult Run(string fileName, int lines, string? ledgerJson, string ledgerPath = LedgerPath) {
         var compilation = Harness.Compile(
             assemblyName: Harness.DefaultAssemblyName,
             sources: new SourceFile(
@@ -32,7 +32,7 @@ public sealed class FileLengthAnalyzerTests {
         var additionalFiles = ((ledgerJson is null)
             ? []
             : new AdditionalText[] { new HarnessAdditionalText(
-                path: LedgerPath,
+                path: ledgerPath,
                 text: ledgerJson
             ) }
         );
@@ -60,6 +60,26 @@ public sealed class FileLengthAnalyzerTests {
             fileName: "Long.cs",
             lines: Ceiling,
             ledgerJson: Ledger()
+        );
+
+        Assert.Empty(collection: result.Analyzer);
+    }
+    // A path is one path whichever separator spells it, and whichever host runs the analyzer: Path.GetFileName on Linux reads
+    // only '/', so the ledger of 'X:\repo\FileLengths.json' was not found there and was found on Windows.
+    [InlineData(@"X:\repo\FileLengths.json", @"X:\repo\src\Thing\Long.cs")]
+    [InlineData(@"X:\repo\FileLengths.json", "X:/repo/src/Thing/Long.cs")]
+    [InlineData("X:/repo/FileLengths.json", @"X:\repo\src\Thing\Long.cs")]
+    [InlineData("X:/repo/FileLengths.json", "X:/repo/src/Thing/Long.cs")]
+    [InlineData("/repo/FileLengths.json", "/repo/src/Thing/Long.cs")]
+    [Theory]
+    public void ALedgerAndASourceAreFoundAndKeyedTheSameWhicheverSeparatorSpellsTheirPaths(string ledgerPath, string sourcePath) {
+        // Recorded at 130 lines and written at 130: silent only when the ledger was found and the file's key is its path under
+        // the ledger's directory, so a lookup or a key the separator changed reports LEN004 or LEN001 instead.
+        var result = Run(
+            fileName: sourcePath,
+            ledgerJson: Ledger(("src/Thing/Long.cs", 130)),
+            ledgerPath: ledgerPath,
+            lines: 130
         );
 
         Assert.Empty(collection: result.Analyzer);

@@ -60,7 +60,7 @@ internal sealed class OperatorAttachment(string target, TimeProvider clock) : ID
         );
 
         // Newest first; a World that exited without removing its file refuses the connection and is skipped.
-        foreach (var file in files.Select(selector: path => new FileInfo(fileName: path)).OrderByDescending(keySelector: file => file.LastWriteTimeUtc)) {
+        foreach (var file in files.Select(selector: path => new FileInfo(fileName: path)).OrderByDescending(keySelector: file => file.LastWriteTimeUtc).ThenBy(keySelector: file => file.FullName, comparer: StringComparer.Ordinal)) {
             var readable = false;
 
             try {

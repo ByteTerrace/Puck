@@ -35,6 +35,36 @@ public sealed class LocalEndpointCapabilityTests {
         );
         Assert.Throws<UnauthorizedAccessException>(testCode: () => LocalEndpointCapability.ReadDescriptor(path: path));
     }
+    // The descriptor names the shape of the capability's wire contract; the same revision under another shape is refused by
+    // the reader before the port or secret is used.
+    [Fact]
+    public void ADescriptorCarriesTheLedgersShapeAndAnotherShapeIsRefused() {
+        using var directory = new TemporaryDirectory(prefix: "puck-capability-shape-");
+
+        var path = directory.PathOf(name: "capability");
+
+        using (new LocalEndpointCapability(port: 12345).WriteDescriptor(path: path)) { }
+
+        var recorded = FormatLedgerShapes.Of(id: "LocalEndpointCapability.Revision");
+        var text = File.ReadAllText(path: path);
+
+        Assert.Contains(
+            actualString: text,
+            expectedSubstring: $"\"shape\":\"{recorded}\""
+        );
+        Assert.Equal(
+            12345,
+            LocalEndpointCapability.ReadDescriptor(path: path).Port
+        );
+        File.WriteAllText(
+            contents: text.Replace(
+                newValue: "0000000000000000",
+                oldValue: recorded
+            ),
+            path: path
+        );
+        Assert.Throws<InvalidDataException>(testCode: () => LocalEndpointCapability.ReadDescriptor(path: path));
+    }
     [Fact]
     public void NullDaclIsNotMistakenForAnOwnerOnlyCapability() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }

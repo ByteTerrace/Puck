@@ -8,8 +8,8 @@ namespace Puck.Overlays {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>OverlayGlyphSdfPack.PackMagic</c>, declared in <c>src/Puck.Overlays/OverlayGlyphSdfPack.cs</c>.</summary>
-        public const string OverlayGlyphSdfPackPackMagic = "a85157d5a5d7a5b6";
+        public const string OverlayGlyphSdfPackPackMagic = "f2daadb767e8a78a";
         /// <summary>The shape fingerprint of <c>OverlayGlyphSdfPack.PackVersion</c>, declared in <c>src/Puck.Overlays/OverlayGlyphSdfPack.cs</c>.</summary>
-        public const string OverlayGlyphSdfPackPackVersion = "a85157d5a5d7a5b6";
+        public const string OverlayGlyphSdfPackPackVersion = "f2daadb767e8a78a";
     }
 }

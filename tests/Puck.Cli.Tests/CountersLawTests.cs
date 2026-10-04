@@ -256,6 +256,24 @@ public sealed class CountersLawTests {
 
         Assert.Equal(actual: garbage, expected: 2);
     }
+    // A report carries the shape fingerprint the ledger records for its layout; the same schema under another shape is refused
+    // by the fingerprint's name and never compared.
+    [Fact]
+    public void AReportOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+        var recorded = FormatLedgerShapes.Of(id: "WorldCountersReport.SchemaVersion");
+        var written = JsonSerializer.Serialize(value: Report(vulkan: Run(backend: "vulkan")), jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport);
+
+        Assert.Contains(actualString: written, expectedSubstring: recorded);
+
+        var (control, _, _) = CompareText(leftText: written);
+
+        Assert.Equal(actual: control, expected: 0);
+
+        var (refused, _, error) = CompareText(leftText: written.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"0000000000000000\"", oldValue: $"\"{recorded}\""));
+
+        Assert.Equal(actual: refused, expected: 2);
+        Assert.Contains(actualString: error, expectedSubstring: "a report of another shape");
+    }
     [Fact]
     public void AWrittenReportReadsBackAsWritten() {
         using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");

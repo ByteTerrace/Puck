@@ -210,4 +210,50 @@ public sealed class AuthorityWireCodecLawTests {
             expectedSubstring: "journal magic"
         );
     }
+
+    // The page's header: the "PJNL" magic and the u32 version (8 bytes), then the shape fingerprint as a u16-prefixed string.
+    private const int JournalFingerprintOffset = 8;
+
+    private static string JournalFingerprint(byte[] page) => System.Text.Encoding.UTF8.GetString(
+        bytes: page.AsSpan(
+            length: System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: page.AsSpan(start: JournalFingerprintOffset)),
+            start: (JournalFingerprintOffset + sizeof(ushort))
+        )
+    );
+
+    [Fact]
+    public void JournalPageCarriesTheShapeFingerprintTheLedgerRecords() {
+        var page = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: []);
+
+        Assert.Equal(
+            actual: JournalFingerprint(page: page),
+            expected: Puck.Testing.FormatLedgerShapes.Of(id: "WorldAuthorityStoreWireCodec.JournalVersion")
+        );
+    }
+    // The same magic and version under another shape fingerprint is refused by the fingerprint before the entry count is read.
+    [Fact]
+    public void JournalPageOfTheSameVersionAndAnotherShapeRefusesByItsFingerprint() {
+        var page = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldAuthorityJournalEntry(
+            Encoded: new byte[] { 1 },
+            EngineTick: 1UL,
+            Tick: 1UL
+        )]);
+        var expected = JournalFingerprint(page: page);
+        var other = ((expected[0] == '0') ? ('1' + expected[1..]) : ('0' + expected[1..]));
+
+        System.Text.Encoding.UTF8.GetBytes(
+            bytes: page.AsSpan(start: (JournalFingerprintOffset + sizeof(ushort))),
+            chars: other
+        );
+        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
+            bytes: page,
+            entries: out var entries,
+            reason: out var refusal
+        ));
+        Assert.Empty(collection: entries);
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"journal shape fingerprint {other}, expected {expected}"
+        );
+    }
 }

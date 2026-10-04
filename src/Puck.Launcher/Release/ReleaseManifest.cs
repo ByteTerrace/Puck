@@ -41,6 +41,7 @@ public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain)
 /// never a world or library asset.
 /// </summary>
 /// <param name="Schema">The document version tag (<see cref="CurrentSchema"/>).</param>
+/// <param name="Shape">The shape fingerprint of the document's layout (<see cref="CurrentShape"/>).</param>
 /// <param name="App">The application id this release belongs to (e.g. <c>puck.world</c>).</param>
 /// <param name="Channel">The release channel (e.g. <c>stable</c>, <c>beta</c>) — an author-chosen string, not a closed enum.</param>
 /// <param name="Version">The release's semantic version, including build metadata.</param>
@@ -55,6 +56,7 @@ public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain)
 /// <param name="Signature">The issuing claim over this manifest's unsigned canonical bytes, or <see langword="null"/> for an unsigned draft (a dry-run publish, or a canary's throwaway-chain fixture before signing).</param>
 public sealed record ReleaseManifest(
     string? Schema,
+    string? Shape,
     string App,
     string Channel,
     string Version,
@@ -68,6 +70,9 @@ public sealed record ReleaseManifest(
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.release.manifest.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for this document, which a writer stamps and a validator
+    /// requires.</summary>
+    public const string CurrentShape = FormatShapes.ReleaseManifestCurrentSchema;
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
@@ -223,6 +228,7 @@ public static class ReleaseCanonicalizer {
             Payloads = payloads,
             Revoked = revoked,
             Schema = ReleaseManifest.CurrentSchema,
+            Shape = ReleaseManifest.CurrentShape,
         });
     }
     /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
@@ -240,6 +246,16 @@ public static class ReleaseCanonicalizer {
             return [new DocumentValidationError(
                     Message: schemaViolation,
                     Path: "schema"
+                )];
+        }
+
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Shape,
+            recognized: ReleaseManifest.CurrentShape
+        ) is { } shapeViolation) {
+            return [new DocumentValidationError(
+                    Message: shapeViolation,
+                    Path: "shape"
                 )];
         }
 

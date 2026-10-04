@@ -123,7 +123,10 @@ public static class CompiledWorld {
             chunks: chunks,
             formatVersion: FormatVersion,
             header: writer.WrittenSpan.ToArray()
-        ).Encode(magic: Magic);
+        ).Encode(
+            magic: Magic,
+            shape: FormatShapes.CompiledWorldFormatVersion
+        );
     }
     /// <summary>Returns the header a boot of <paramref name="authored"/> keys its compiled world by.</summary>
     /// <param name="authored">The parsed, composed, undrawn definition.</param>
@@ -202,7 +205,8 @@ public static class CompiledWorld {
         try {
             var decoded = ChunkContainer.Decode(
                 content: content,
-                magic: Magic
+                magic: Magic,
+                shape: FormatShapes.CompiledWorldFormatVersion
             );
 
             if (decoded.FormatVersion != FormatVersion) {
