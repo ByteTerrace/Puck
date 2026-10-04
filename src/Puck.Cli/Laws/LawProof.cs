@@ -48,7 +48,8 @@ internal interface ILawRunner {
 /// uncommitted change put back to HEAD), the law's project built and the law run, which must fail; then the fix is
 /// restored, the project built again and the law run, which must pass. A build that fails in either phase refuses the
 /// proof. The clone is retained under an exclusive lease for incremental builds. A busy or unavailable cache uses a
-/// fresh scratch worktree instead. Scratch cleanup never changes the proof's verdict.
+/// fresh scratch worktree instead. Grouped selectors share each side's build, with independent reports and verdicts.
+/// Scratch cleanup never changes the proof's verdict.
 /// </summary>
 internal static partial class LawProof {
     private const string Verb = "laws prove";
@@ -269,8 +270,8 @@ internal static partial class LawProof {
             _ = evidence.Append(value: $"  {failure.Test}: {failure.Message}\n");
         }
     }
-    private static bool TryPhase(ILawRunner runner, string tree, string project, string law, string results, string phase, CancellationToken cancellationToken, out LawRun run, out int refusal) {
-        run = new LawRun(Error: null, Failures: [], Tests: []);
+    private static bool TryPhase(ILawRunner runner, string tree, string project, IReadOnlyList<string> laws, string results, string phase, CancellationToken cancellationToken, out IReadOnlyList<LawRun> runs, out int refusal) {
+        runs = [];
         Console.Error.WriteLine(value: $"laws prove: building {project} {phase}.");
         _ = Directory.CreateDirectory(path: results);
 
@@ -293,28 +294,31 @@ internal static partial class LawProof {
             return false;
         }
 
-        Console.Error.WriteLine(value: $"laws prove: running {law} {phase}.");
-        _ = Directory.CreateDirectory(path: results);
-        run = runner.Run(
-            cancellationToken: cancellationToken,
-            law: law,
-            project: project,
-            results: results,
-            tree: tree
-        );
-
-        if (run.Error is { } error) {
-            refusal = Refuse(what: law, why: $"the run {phase} cannot be judged: {error}");
-
-            return false;
+        var selected = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var completed = new List<LawRun>();
+        for (var index = 0; index < laws.Count; index++) {
+            var law = laws[index];
+            var reportDirectory = laws.Count == 1 ? results : Path.Combine(path1: results, path2: $"selector-{index:D3}");
+            Console.Error.WriteLine(value: $"laws prove: running {law} {phase}; report {CliPaths.ToDisplay(fullPath: reportDirectory)}.");
+            _ = Directory.CreateDirectory(path: reportDirectory);
+            var run = runner.Run(cancellationToken: cancellationToken, law: law, project: project, results: reportDirectory, tree: tree);
+            if (run.Error is { } error) {
+                refusal = Refuse(what: law, why: $"the run {phase} cannot be judged: {error}");
+                return false;
+            }
+            if (run.Total == 0) {
+                refusal = Refuse(what: law, why: $"selects no test in {project} {phase}.");
+                return false;
+            }
+            foreach (var test in run.Tests) {
+                if (!selected.Add(item: test)) {
+                    refusal = Refuse(what: law, why: $"test {test} occurs more than once {phase}; selectors must not overlap.");
+                    return false;
+                }
+            }
+            completed.Add(item: run);
         }
-
-        if (run.Total == 0) {
-            refusal = Refuse(what: law, why: $"selects no test in {project} {phase}.");
-
-            return false;
-        }
-
+        runs = completed;
         refusal = CliExit.Success;
 
         return true;
@@ -368,14 +372,22 @@ internal static partial class LawProof {
     /// <param name="cleanupGit">Runs cleanup's git commands; the real git process when omitted.</param>
     /// <param name="reportCleanupFailure">Writes the cleanup warning; standard error when omitted. A failed write
     /// cannot replace the proof's outcome.</param>
+    /// <param name="alsoLaws">Additional independent dotted selectors in the same project. Each is judged separately
+    /// after the side's one build; overlapping selections are refused.</param>
     /// <returns><see cref="CliExit.Success"/> when the law fails without the fix and passes with it,
     /// <see cref="CliExit.Failed"/> when it passes without the fix (it cannot fail) or fails with it, and
     /// <see cref="CliExit.Refused"/> for a build that failed, a law that selects no test, or a fix that cannot be
     /// withheld.</returns>
-    public static int Prove(string repositoryRoot, string law, string? project, LawFix fix, ILawRunner runner, string scratchRoot, string lawTreesRoot, CancellationToken cancellationToken = default, Func<string, string[], ChildProcessResult>? cleanupGit = null, Action<string>? reportCleanupFailure = null) {
+    public static int Prove(string repositoryRoot, string law, string? project, LawFix fix, ILawRunner runner, string scratchRoot, string lawTreesRoot, CancellationToken cancellationToken = default, Func<string, string[], ChildProcessResult>? cleanupGit = null, Action<string>? reportCleanupFailure = null, IReadOnlyList<string>? alsoLaws = null) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!LawName().IsMatch(input: law)) {
-            return Refuse(what: law, why: "a law is a test name of dotted identifiers, such as Class or Class.Method.");
+        string[] laws = [law, .. (alsoLaws ?? [])];
+        foreach (var selector in laws) {
+            if (!LawName().IsMatch(input: selector)) {
+                return Refuse(what: selector, why: "a law is a test name of dotted identifiers, such as Class or Class.Method.");
+            }
+        }
+        if (laws.Distinct(comparer: StringComparer.Ordinal).Count() != laws.Length) {
+            return Refuse(what: law, why: "selectors must not repeat or overlap.");
         }
 
         if (
@@ -518,6 +530,16 @@ internal static partial class LawProof {
             if (!TryResolveProject(error: out var projectError, law: law, named: project, project: out var lawProject, tree: tree)) {
                 return Refuse(what: law, why: projectError);
             }
+            if (laws.Length > 1) {
+                foreach (var selector in laws) {
+                    if (!TryResolveProject(tree: tree, law: selector, named: null, project: out var owner, error: out projectError)) {
+                        return Refuse(what: selector, why: projectError);
+                    }
+                    if (!string.Equals(a: owner, b: lawProject, comparisonType: Puck.Abstractions.PuckPaths.Comparison)) {
+                        return Refuse(what: selector, why: $"belongs to {owner}, not {lawProject}; grouped selectors must share one project.");
+                    }
+                }
+            }
 
             var original = withheld.ToDictionary(
                 comparer: StringComparer.Ordinal,
@@ -568,26 +590,27 @@ internal static partial class LawProof {
                 return Refuse(what: withheldSymbolic, why: "withholding created a link in the proven tree.");
             }
             LawProofFiles.Touch(tree: tree, paths: mirrored.Concat(second: withheld).Distinct(comparer: StringComparer.Ordinal));
-            if (!TryPhase(cancellationToken: cancellationToken, law: law, phase: "with the fix withheld", project: lawProject, refusal: out var refusal, results: Path.Combine(path1: scratch, path2: "withheld"), run: out var without, runner: runner, tree: tree)) {
+            if (!TryPhase(cancellationToken: cancellationToken, laws: laws, phase: "with the fix withheld", project: lawProject, refusal: out var refusal, results: Path.Combine(path1: scratch, path2: "withheld"), runs: out var without, runner: runner, tree: tree)) {
                 return refusal;
             }
 
             var evidence = new StringBuilder();
 
-            _ = evidence.Append(value: $"Law: {law} ({lawProject})\n");
+            _ = evidence.Append(value: $"Law: {string.Join(separator: ", ", values: laws)} ({lawProject})\n");
             _ = evidence.Append(value: $"Withheld: {described}\n");
 
             foreach (var path in withheld) {
                 _ = evidence.Append(value: $"  {path}\n");
             }
 
-            Describe(evidence: evidence, phase: "Without the fix", run: without);
-
-            if (without.Failures.Count == 0) {
-                Console.Out.Write(value: evidence.ToString());
-                _ = Refuse(what: law, why: "cannot fail: it passes with the fix withheld.");
-
-                return CliExit.Failed;
+            for (var index = 0; index < laws.Length; index++) {
+                if (laws.Length > 1) { _ = evidence.Append(value: $"Selector: {laws[index]}\n"); }
+                Describe(evidence: evidence, phase: "Without the fix", run: without[index]);
+                if (without[index].Failures.Count == 0) {
+                    Console.Out.Write(value: evidence.ToString());
+                    _ = Refuse(what: laws[index], why: "cannot fail: it passes with the fix withheld.");
+                    return CliExit.Failed;
+                }
             }
 
             foreach (var (path, content) in original) {
@@ -595,21 +618,22 @@ internal static partial class LawProof {
             }
             LawProofFiles.Touch(paths: withheld, tree: tree);
 
-            if (!TryPhase(cancellationToken: cancellationToken, law: law, phase: "with the fix restored", project: lawProject, refusal: out refusal, results: Path.Combine(path1: scratch, path2: "restored"), run: out var with, runner: runner, tree: tree)) {
+            if (!TryPhase(cancellationToken: cancellationToken, laws: laws, phase: "with the fix restored", project: lawProject, refusal: out refusal, results: Path.Combine(path1: scratch, path2: "restored"), runs: out var with, runner: runner, tree: tree)) {
                 return refusal;
             }
-            if (!without.Tests.SequenceEqual(second: with.Tests, comparer: StringComparer.Ordinal)) {
-                return Refuse(what: law, why: "the withheld and restored runs executed different tests, so the failed law was not proven to pass.");
+            for (var index = 0; index < laws.Length; index++) {
+                if (!without[index].Tests.SequenceEqual(second: with[index].Tests, comparer: StringComparer.Ordinal)) {
+                    return Refuse(what: laws[index], why: "the withheld and restored runs executed different tests, so the failed law was not proven to pass.");
+                }
+                if (laws.Length > 1) { _ = evidence.Append(value: $"Selector: {laws[index]}\n"); }
+                Describe(evidence: evidence, phase: "With the fix", run: with[index]);
+                if (with[index].Failures.Count > 0) {
+                    Console.Out.Write(value: evidence.ToString());
+                    _ = Refuse(what: laws[index], why: "fails with the fix in place, so the fix does not make it pass.");
+                    return CliExit.Failed;
+                }
             }
-
-            Describe(evidence: evidence, phase: "With the fix", run: with);
             Console.Out.Write(value: evidence.ToString());
-
-            if (with.Failures.Count > 0) {
-                _ = Refuse(what: law, why: "fails with the fix in place, so the fix does not make it pass.");
-
-                return CliExit.Failed;
-            }
 
             cancellationToken.ThrowIfCancellationRequested();
             return CliExit.Success;

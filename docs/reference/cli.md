@@ -105,7 +105,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
-| [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
+| [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -1102,6 +1102,15 @@ with it, and prints the evidence for the commit that lands them. The law is a
 test name of dotted identifiers, `Class` or `Class.Method`, matched anywhere in
 each test's fully qualified method name (`--filter-method "*<law>*"`); its project is the test project whose sources
 declare that class, or `--project`.
+
+Repeat `--also-law <Class[.Method]>` to prove independent selectors in that same
+project against one withheld fix. Each side builds the project once, then runs
+each selector separately against those binaries with its own report. Every
+selector must execute at least one test and fail without the fix; a failure in
+another selector cannot supply its evidence. The restored side must run the same
+tests for each selector and pass them all. Duplicate or overlapping selections,
+different owning projects, skipped tests and incomplete reports are refused.
+Use separate proofs for different projects or mutations that mask each other.
 
 The fix is one of:
 

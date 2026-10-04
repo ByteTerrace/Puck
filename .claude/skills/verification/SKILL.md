@@ -37,6 +37,11 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
+  For independent fixes in one project, repeat `--also-law <Class[.Method]>`
+  with exact selectors and one reviewed production-only restoration. Each side
+  builds once and retains a separate report for every selector; every selector
+  must fail withheld and pass restored. Overlapping selections and different
+  projects are refused. Keep masking mutations in separate proof cycles.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
 machine that must not build the solution. Complete checks the gate omits: explicit

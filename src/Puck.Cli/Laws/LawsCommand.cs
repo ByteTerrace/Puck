@@ -7,7 +7,7 @@ namespace Puck.Cli.Laws;
 internal static class LawsCommand {
     private const string ProveVerb = "laws prove";
 
-    private static int Prove(string law, string? fix, string? fileList, string? project, CancellationToken cancellationToken) {
+    private static int Prove(string law, string[] alsoLaws, string? fix, string? fileList, string? project, CancellationToken cancellationToken) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -29,6 +29,7 @@ internal static class LawsCommand {
         }
 
         return LawProof.Prove(
+            alsoLaws: alsoLaws,
             cancellationToken: cancellationToken,
             fix: new LawFix(Paths: paths, Revision: fix),
             law: law,
@@ -43,13 +44,14 @@ internal static class LawsCommand {
     }
     private static Command CreateProve() {
         var lawArgument = new Argument<string>(name: "law") { Description = "The law: a test name of dotted identifiers (Class or Class.Method), matched anywhere in each test's fully qualified method name." };
+        var alsoLawOption = new Option<string[]>(name: "--also-law") { DefaultValueFactory = static _ => [], Description = "Another exact dotted selector in the same project (repeatable). Every selector must fail withheld and pass restored; each side builds once." };
         var fixOption = new Option<string>(name: "--fix") { Description = "The commit whose change is the fix; its first-parent change is reversed, and it must be in HEAD's history." };
         var fileListOption = CliOptions.FileList(description: "The paths to withhold: with --fix, the subset of the commit's change to reverse; without it, the paths whose uncommitted change is the fix.");
         var projectOption = new Option<string>(name: "--project") { Description = "The law's test project or its directory (default: the test project whose sources declare the law's class)." };
         var command = new Command(
             description: "Prove that a law fails without its fix and passes with it.",
             name: "prove"
-        ) { lawArgument, fixOption, fileListOption, projectOption };
+        ) { lawArgument, alsoLawOption, fixOption, fileListOption, projectOption };
 
         command.Detail(detail: """
               The proof never touches the working tree. It keeps a shared-object git clone under the
@@ -73,6 +75,9 @@ internal static class LawsCommand {
               Caller Git hooks are disabled; links in the proven tree and projects outside it are refused.
               Every selected test must execute, and both legs must execute the same tests. A skipped
               test, an aborted process or an inconsistent report refuses the proof.
+              Repeat --also-law for independent selectors in the same project. Each side builds once,
+              then runs each selector separately, retaining its own report and verdict. Every selector
+              must fail withheld; overlapping selections and different projects are refused.
 
               Standard output carries the evidence block for a commit body: the law and its project,
               what was withheld, each failure's first message line without the fix, and the pass with it.
@@ -86,6 +91,7 @@ internal static class LawsCommand {
               cannot be withheld; 130 cancelled after cleanup.
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Prove(
+            alsoLaws: parseResult.GetValue(option: alsoLawOption) ?? [],
             cancellationToken: cancellationToken,
             fileList: parseResult.GetValue(option: fileListOption),
             fix: parseResult.GetValue(option: fixOption),
