@@ -10,6 +10,7 @@ namespace Puck.World.Tests;
 
 /// <summary>The indirect gather keeps every surface in its reach, and the march relinquishes that mask at its
 /// boundary. The probe compares the production masked march to the full field and samples every cleared interval.
+/// A shallow inside origin remains unresolved even when an outward witness could bracket its nearby surface.
 /// Cone, ball and box walks also produce exactly the flat query's bits with one and sixty-four lanes.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
@@ -39,6 +40,12 @@ public sealed partial class SdfIndirectGatherLawTests {
 
     private static void Verify(GpuDeviceServices services, string extension) {
         var cases = Cases();
+        var initialInsideIndex = cases.Length;
+
+        // This origin is 0.0005 inside the first sphere, close enough for an outward surface certificate. It must
+        // still refuse before spending a gradient or witness query; only an advance from outside may use that proof.
+        cases = [.. cases, new("a shallow inside origin stays unresolved", Sphere(radius: 0.2f, slot: 0),
+            new Vector3(x: 3.4005f, y: 0, z: 0), Vector3.UnitX, 4, 10)];
         var rows = new Vector4[(cases.Length * 2)];
 
         for (var index = 0; (index < cases.Length); index++) {
@@ -50,7 +57,18 @@ public sealed partial class SdfIndirectGatherLawTests {
         var results = SdfIndirectDeviceProbe.Run(programs: cases.Select(selector: static item => item.Program).ToArray(), rows: rows,
             extension: extension, kernel: Kernel, resultRows: ResultRows, services: services, transforms: Transforms());
 
-        for (var index = 0; (index < cases.Length); index++) {
+        var insideMasked = results[initialInsideIndex];
+        var insideFull = results[(cases.Length + initialInsideIndex)];
+
+        Assert.True(condition: ((insideMasked.X == ((float)IrradianceHitKind.Unresolved)) && (insideFull.X == ((float)IrradianceHitKind.Unresolved))),
+            userMessage: $"A shallow inside origin must stay unresolved: masked {insideMasked}, full field {insideFull}.");
+        Assert.Equal(actual: insideMasked.Y, expected: 0f);
+        Assert.Equal(actual: insideFull.Y, expected: 0f);
+        Assert.Equal(actual: insideMasked.W, expected: 63f);
+        Assert.Equal(actual: insideFull.W, expected: 63f);
+        Assert.Equal(actual: results[((4 * cases.Length) + initialInsideIndex)].W, expected: 1f);
+
+        for (var index = 0; (index < initialInsideIndex); index++) {
             var item = cases[index];
             var masked = results[index];
             var full = results[(cases.Length + index)];

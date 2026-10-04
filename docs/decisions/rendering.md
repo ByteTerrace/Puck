@@ -674,8 +674,12 @@ conservative gauge does not do. A view's receivers take the launched point free
 from their own primary march's approach. A hit is accepted only within an
 absolute distance of a zero the field brackets: a threshold that grows with
 travel stops grazing rays on empty space, and a small clamped distance is only
-a lower bound, which a conservative gauge reads far from any surface. A
-grazing ray that runs out of steps is unresolved and is excluded from its
+a lower bound, which a conservative gauge reads far from any surface. A GPU
+advance that rounds just inside a surface may certify it with an outward
+positive witness within the same threshold; a ray whose origin is already
+inside remains unresolved. The certificate always samples the full field and
+spends the ray's existing query budget. A grazing ray that runs out of steps
+is unresolved and is excluded from its
 probe's mean, an error bounded by its cosine share.
 
 **Continuation seeks support and reprojects by the stored hit.** A fine ray

@@ -11,6 +11,7 @@ struct SdfIndirectRay {
 };
 
 // Acceptance is absolute and certified by a sign bracket, never by the conservative distance alone.
+// A rounded advance may land just inside a surface; its witness points outward. An inside origin stays unresolved.
 // Normal and bracket queries consume the same whole-ray allowance, including continuation segments.
 SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, float farDistance, uint mask, inout uint budget) {
     SdfIndirectRay result = (SdfIndirectRay)0;
@@ -25,19 +26,21 @@ SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, fl
         uint activeMask = sdfIndirectMasked(result.distance, reach, mask) ? mask : SDF_INSTANCE_MASK_ALL;
         SdfHit sample = sdfIndirectSample(position, activeMask);
         float clearance = sdfMapBallClearance(sample.distance);
-        if (!isfinite(sample.distance) || sample.distance < 0.0) { return result; }
-        if (sample.distance <= SdfIndirectSurfaceEpsilon) {
+        if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
+        if (abs(sample.distance) <= SdfIndirectSurfaceEpsilon) {
             if (activeMask != SDF_INSTANCE_MASK_ALL) {
                 if (budget == 0u) { return result; }
                 budget--;
                 sample = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
                 clearance = sdfMapBallClearance(sample.distance);
+                if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
             }
             if (!gradientUsed && budget > 0u) { budget--; normal = sdfIndirectGradient(position); gradientUsed = true; }
             if (dot(normal, normal) > 0.0 && budget > 0u) {
                 budget--;
-                SdfHit inside = sdfIndirectSample(position - normal * SdfIndirectSurfaceEpsilon, SDF_INSTANCE_MASK_ALL);
-                if (inside.distance <= 0.0) {
+                float witnessOffset = sample.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
+                SdfHit witness = sdfIndirectSample(position + normal * witnessOffset, SDF_INSTANCE_MASK_ALL);
+                if (isfinite(witness.distance) && (sample.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0)) {
                     result.kind = SdfIndirectKindHit;
                     result.normal = normal;
                     result.material = (uint)sample.material;
