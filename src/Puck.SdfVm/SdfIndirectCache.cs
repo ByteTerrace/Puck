@@ -8,7 +8,7 @@ using Puck.SignedDistance.Illumination;
 namespace Puck.SdfVm;
 
 /// <summary>One residency's queue-ordered cache and host regions. Package builds retain it across tier replacements.</summary>
-public sealed class SdfIndirectCache : IDisposable {
+public sealed partial class SdfIndirectCache : IDisposable {
     private readonly GpuRegionCopyPool m_copies;
     private readonly WorkCounterSet m_work;
     private readonly Dictionary<IrradianceBrickKey, int> m_slots = [];

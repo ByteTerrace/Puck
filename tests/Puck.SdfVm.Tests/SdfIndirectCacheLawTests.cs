@@ -19,12 +19,18 @@ public sealed class SdfIndirectCacheLawTests {
         rig.Cache.Plan(inputs: Inputs);
         var traces = rig.Cache.TraceCount;
         var words = rig.Cache.Regions[1].Contents.ToArray();
+        var pending = rig.Cache.Snapshot();
 
         Assert.True(condition: (traces > 0));
         Assert.Equal(0, rig.Work.Read(kind: SdfIndirectWork.Rays));
         rig.Cache.Plan(inputs: Inputs);
         Assert.Equal(words, rig.Cache.Regions[1].Contents.ToArray());
         rig.Cache.Submitted();
+        var submitted = rig.Cache.Snapshot();
+        Assert.Equal(pending.Allocation, submitted.Allocation);
+        Assert.All(pending.Bricks.SelectMany(static brick => brick.SubmittedStrata), static mask => Assert.Equal(0u, mask));
+        Assert.Contains(submitted.Bricks.SelectMany(static brick => brick.SubmittedStrata), static mask => mask != 0u);
+        Assert.Equal(pending.Submission + 1, submitted.Submission);
         Assert.Equal((traces * 64), rig.Work.Read(kind: SdfIndirectWork.Rays));
         rig.Cache.Submitted();
         Assert.Equal((traces * 64), rig.Work.Read(kind: SdfIndirectWork.Rays));
