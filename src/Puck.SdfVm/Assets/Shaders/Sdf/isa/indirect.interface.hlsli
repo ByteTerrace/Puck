@@ -1,4 +1,4 @@
-// Generated from shader interface 'indirect' (sha256/9ffe640170ea635990f557f63d47c379cb5209ca5aabbbd73f84a71624b6e081). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'indirect' (sha256/32a6a94f14ccfafc6e6f8ff7a7e2ac0ebf4a03743255f04ac723ab1f78a80fb4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_INDIRECT
 #define PUCK_SHADER_INTERFACE_INDIRECT
 
@@ -191,36 +191,41 @@ struct IndirectPass {
     [[vk::offset(260)]] uint instanceMaskWordCount;
     [[vk::offset(264)]] float2 jitter;
     [[vk::offset(272)]] uint lightCount;
-    [[vk::offset(276)]] uint meshDraws;
-    [[vk::offset(280)]] float nearDistance;
+    [[vk::offset(276)]] uint lightMap;
+    [[vk::offset(280)]] uint lightMapCount;
     [[vk::offset(284)]] uint _pad284;
-    [[vk::offset(288)]] float4 previousView[6];
-    [[vk::offset(384)]] uint screenCount;
-    [[vk::offset(388)]] uint shadowAmortize;
-    [[vk::offset(392)]] float shadowDistanceScale;
-    [[vk::offset(396)]] uint shadowFadeCount;
-    [[vk::offset(400)]] uint shadowLightReject;
-    [[vk::offset(404)]] uint shadowOwnershipReject;
-    [[vk::offset(408)]] uint shadowSlotCount;
-    [[vk::offset(412)]] uint _pad412;
-    [[vk::offset(416)]] int4 shadowSlots;
-    [[vk::offset(432)]] float tanHalfFieldOfView;
-    [[vk::offset(436)]] uint temporal;
-    [[vk::offset(440)]] uint2 tileGrid;
-    [[vk::offset(448)]] uint viewBase;
-    [[vk::offset(452)]] uint _pad452;
-    [[vk::offset(456)]] uint _pad456;
-    [[vk::offset(460)]] uint _pad460;
-    [[vk::offset(464)]] float3 viewForward;
-    [[vk::offset(476)]] uint _pad476;
-    [[vk::offset(480)]] float3 viewPosition;
-    [[vk::offset(492)]] uint _pad492;
-    [[vk::offset(496)]] float3 viewRight;
-    [[vk::offset(508)]] uint _pad508;
-    [[vk::offset(512)]] float3 viewUp;
-    [[vk::offset(524)]] uint viewportCount;
-    [[vk::offset(528)]] uint workCounterRow;
-    [[vk::offset(532)]] uint workCounterRowDetail;
+    [[vk::offset(288)]] float4 lightMaps[84];
+    [[vk::offset(1632)]] float lightSweepRadius;
+    [[vk::offset(1636)]] uint meshDraws;
+    [[vk::offset(1640)]] float nearDistance;
+    [[vk::offset(1644)]] uint _pad1644;
+    [[vk::offset(1648)]] float4 previousView[6];
+    [[vk::offset(1744)]] uint screenCount;
+    [[vk::offset(1748)]] uint shadowAmortize;
+    [[vk::offset(1752)]] float shadowDistanceScale;
+    [[vk::offset(1756)]] uint shadowFadeCount;
+    [[vk::offset(1760)]] uint shadowLightReject;
+    [[vk::offset(1764)]] uint shadowOwnershipReject;
+    [[vk::offset(1768)]] uint shadowSlotCount;
+    [[vk::offset(1772)]] uint _pad1772;
+    [[vk::offset(1776)]] int4 shadowSlots;
+    [[vk::offset(1792)]] float tanHalfFieldOfView;
+    [[vk::offset(1796)]] uint temporal;
+    [[vk::offset(1800)]] uint2 tileGrid;
+    [[vk::offset(1808)]] uint viewBase;
+    [[vk::offset(1812)]] uint _pad1812;
+    [[vk::offset(1816)]] uint _pad1816;
+    [[vk::offset(1820)]] uint _pad1820;
+    [[vk::offset(1824)]] float3 viewForward;
+    [[vk::offset(1836)]] uint _pad1836;
+    [[vk::offset(1840)]] float3 viewPosition;
+    [[vk::offset(1852)]] uint _pad1852;
+    [[vk::offset(1856)]] float3 viewRight;
+    [[vk::offset(1868)]] uint _pad1868;
+    [[vk::offset(1872)]] float3 viewUp;
+    [[vk::offset(1884)]] uint viewportCount;
+    [[vk::offset(1888)]] uint workCounterRow;
+    [[vk::offset(1892)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa61A351B3 : register(b0, space3);
 #define passGroup passGroupIsa61A351B3

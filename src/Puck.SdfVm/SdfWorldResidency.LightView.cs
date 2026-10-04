@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
 

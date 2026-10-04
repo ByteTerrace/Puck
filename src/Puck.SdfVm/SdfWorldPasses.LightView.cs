@@ -1,4 +1,3 @@
-using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;

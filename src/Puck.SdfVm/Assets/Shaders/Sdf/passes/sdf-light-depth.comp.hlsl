@@ -1,6 +1,5 @@
 // Publishes exactly one region; untouched maps retain their previously submitted depths.
-#define SDF_PRIMARY_READ
-#include "sdf-world.hlsli"
+#include "../isa/sdf-world.interface.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #include "../isa/sdf-indirect-layout.hlsli"
 
@@ -8,8 +7,8 @@
 void CSMain(uint3 id : SV_DispatchThreadID) {
     if (any(id.xy >= passGroup.imageExtent) || passGroup.lightMap == 0u) { return; }
     float depth = asfloat(0x7f800000u);
-    if (worldVisibilityCurrent(id.xy)) {
-        SdfVisibility visibility = sdfLoadVisibility(worldVisibilityRecord(id.xy, 0u));
+    if (SDF_VISIBILITY_CURRENT(id.xy, cullBounds)) {
+        SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(id.xy, 0u, passGroup.imageExtent));
         if (visibility.identity != 0u || isnan(visibility.t)) { depth = visibility.t; }
     }
     uint address = (passGroup.lightMap - 1u) * SdfIndirectLightResolution * SdfIndirectLightResolution +
