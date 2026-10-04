@@ -11,6 +11,9 @@ static uint sdfIndirectSteps = 0u;
 static uint sdfIndirectProofEvaluations = 0u;
 static uint sdfIndirectLaunchEvaluations = 0u;
 
+#if defined(__spirv__) && defined(SDF_VIEWS_PASS)
+[noinline]
+#endif
 SdfHit sdfIndirectSample(float3 position, uint mask) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;
@@ -28,6 +31,9 @@ SdfHit sdfIndirectSample(float3 position, uint mask) {
     return hit;
 }
 
+#if defined(__spirv__) && defined(SDF_VIEWS_PASS)
+[noinline]
+#endif
 float3 sdfIndirectGradient(float3 position) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;

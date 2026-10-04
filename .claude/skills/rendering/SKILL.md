@@ -195,7 +195,9 @@ The indirect comparison helper keeps its SPIR-V function boundary with
 `[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
 body into Views exceeds legalization capacity or crashes the compiler. DXIL
 keeps ordinary inlining; retain identical arithmetic, policy restoration and
-work counts on both paths.
+work counts on both paths. The Views-only SPIR-V sample and gradient wrappers
+also retain their shared function bodies, preserving the tape/mask save and
+restore and the evaluation counters while reducing repeated VM expansion.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), and views
