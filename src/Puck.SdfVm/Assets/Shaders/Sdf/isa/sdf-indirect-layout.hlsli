@@ -43,6 +43,13 @@ static const uint SdfIndirectAlternativeConeSteps = 24u;
 static const uint SdfIndirectAlternativePhases = 4u;
 static const float SdfIndirectAlternativeReach = 4;
 static const float SdfIndirectAlternativeConeSlope = 0.25;
+static const uint SdfIndirectNearSteps = 12u;
+static const uint SdfIndirectNearPhases = 4u;
+static const float SdfIndirectNearReach = 0.5;
+static const uint SdfIndirectNearOutcomeNotAttempted = 0u;
+static const uint SdfIndirectNearOutcomeUnresolved = 1u;
+static const uint SdfIndirectNearOutcomeHit = 2u;
+static const uint SdfIndirectNearOutcomeContinuation = 3u;
 static const uint SdfIndirectTierOff = 0u;
 static const uint SdfIndirectTierMedium = 1u;
 static const uint SdfIndirectTierHigh = 2u;
@@ -83,15 +90,15 @@ uint sdfIndirectProbeWordOffset(uint tier) { return tier == SdfIndirectTierHigh 
 uint sdfIndirectCellWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 131072u : (tier == SdfIndirectTierMedium ? 65536u : 0u); }
 uint sdfIndirectHitWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 229376u : (tier == SdfIndirectTierMedium ? 114688u : 0u); }
 uint sdfIndirectProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 33783808u : (tier == SdfIndirectTierMedium ? 8503296u : 0u); }
-uint sdfIndirectRadianceProbeOffset(uint tier) { return tier == SdfIndirectTierHigh ? 16384u : (tier == SdfIndirectTierMedium ? 12288u : 0u); }
-uint sdfIndirectRadianceProbeCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 16384u : (tier == SdfIndirectTierMedium ? 4096u : 0u); }
+uint sdfIndirectRadianceProbeOffset(uint tier) { return tier == SdfIndirectTierHigh ? 0u : (tier == SdfIndirectTierMedium ? 12288u : 0u); }
+uint sdfIndirectRadianceProbeCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 32768u : (tier == SdfIndirectTierMedium ? 4096u : 0u); }
 uint sdfIndirectRadianceWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 35618816u : (tier == SdfIndirectTierMedium ? 9420800u : 0u); }
-uint sdfIndirectRadianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 20971520u : (tier == SdfIndirectTierMedium ? 2621440u : 0u); }
-uint sdfIndirectIrradianceWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 77561856u : (tier == SdfIndirectTierMedium ? 14663680u : 0u); }
+uint sdfIndirectRadianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 41943040u : (tier == SdfIndirectTierMedium ? 2621440u : 0u); }
+uint sdfIndirectIrradianceWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 119504896u : (tier == SdfIndirectTierMedium ? 14663680u : 0u); }
 uint sdfIndirectIrradianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 10485760u : (tier == SdfIndirectTierMedium ? 5242880u : 0u); }
-uint sdfIndirectPublicationWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 98533376u : (tier == SdfIndirectTierMedium ? 25149440u : 0u); }
-uint sdfIndirectReceiverProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 98598912u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
-uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 98598914u : (tier == SdfIndirectTierMedium ? 25182210u : 0u); }
+uint sdfIndirectPublicationWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140476416u : (tier == SdfIndirectTierMedium ? 25149440u : 0u); }
+uint sdfIndirectReceiverProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140541952u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
+uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 140541954u : (tier == SdfIndirectTierMedium ? 25182210u : 0u); }
 uint sdfIndirectTraceEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 3440640u : (tier == SdfIndirectTierMedium ? 860160u : 0u); }
 uint sdfIndirectClassifyEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 460288u : (tier == SdfIndirectTierMedium ? 230144u : 0u); }
 static const float SdfIndirectSurfaceEpsilon = 0.001;

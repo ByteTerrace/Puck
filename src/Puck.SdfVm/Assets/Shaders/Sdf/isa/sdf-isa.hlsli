@@ -38,7 +38,18 @@
 #define SDF_SHADOW_DECISION_OCCLUDER_MOTION 3u
 #define SDF_SHADOW_DECISION_RECEIVER        4u
 #define SDF_SHADOW_DECISION_REPROJECTED     5u
-#define SDF_SHADOW_HISTORY_WORDS            5u
+
+// Puck.SignedDistance.SdfIndirectParticipation.
+#define SDF_INDIRECT_PARTICIPATION_DEFAULT 0u
+#define SDF_INDIRECT_PARTICIPATION_CAST    1u
+#define SDF_INDIRECT_PARTICIPATION_RECEIVE 2u
+#define SDF_INDIRECT_PARTICIPATION_OFF     3u
+
+// Puck.SignedDistance.SdfIndirectTier.
+#define SDF_INDIRECT_TIER_OFF    0u
+#define SDF_INDIRECT_TIER_MEDIUM 1u
+#define SDF_INDIRECT_TIER_HIGH   2u
+#define SDF_SHADOW_HISTORY_WORDS 5u
 
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
@@ -175,7 +186,9 @@
 #define SDF_SEGMENT_BOUND_MASK              0x000000FFu
 #define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
 #define SDF_INSTANCE_CAMERA_HIDDEN_BIT      0x40000000u
-#define SDF_INSTANCE_SEGMENT_END_MASK       0x3FFFFFFFu
+#define SDF_INSTANCE_SEGMENT_END_MASK       0x0FFFFFFFu
+#define SDF_INSTANCE_INDIRECT_SHIFT         28u
+#define SDF_INSTANCE_INDIRECT_MASK          0x30000000u
 #define SDF_NO_DETAIL_SHAPES_FLAG           0x00000001u
 
 // The rigid-leaf plan.
@@ -188,17 +201,21 @@
 #define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
-#define SDF_MAX_INSTANCES              65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 20u
-#define SDF_GRID_HEADER_WORDS          16u
-#define SDF_GRID_MAX_DIM               64u
-#define SDF_MAX_FIELD_SCOPE_DEPTH      1u
-#define SDF_FLARE_MIN_SCALE            0.05
-#define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
-#define SDF_SCREEN_MATERIAL            65535
-#define SDF_MAX_SCREEN_SURFACES        32u
-#define SDF_MINIMUM_NEAR               0.02
-#define SDF_NOISE_PERIOD_CELLS         4096u
+#define SDF_MAX_INSTANCES               65536u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY  20u
+#define SDF_GRID_HEADER_WORDS           16u
+#define SDF_GRID_MAX_DIM                64u
+#define SDF_MAX_FIELD_SCOPE_DEPTH       2u
+#define SDF_FLARE_MIN_SCALE             0.05
+#define SDF_LANE_ERODE_RAGGED_AMOUNT    0.35
+#define SDF_SCREEN_MATERIAL             65535
+#define SDF_MAX_SCREEN_SURFACES         32u
+#define SDF_SCREEN_EMISSION_EDGE        4u
+#define SDF_SCREEN_EMISSION_MEAN        16u
+#define SDF_SCREEN_EMISSION_RECORDS     17u
+#define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5
+#define SDF_MINIMUM_NEAR                0.02
+#define SDF_NOISE_PERIOD_CELLS          4096u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u
