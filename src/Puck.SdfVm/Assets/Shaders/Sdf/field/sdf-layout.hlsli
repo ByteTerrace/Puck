@@ -88,19 +88,21 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         uint4 instanceMeta = sdfWords[entryBase + 1u];
+        if (sdfIndirectParticipationActive && sdfInstanceIndirectPolicy(instanceMeta) != SDF_INDIRECT_PARTICIPATION_CAST) {
+            continue;
+        }
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        // The per-instance shadow-participation skip is active in soft-shadow marches and the conservative light-camera
-        // beam and primary sweep; ordinary camera/AO/coverage enumerations leave it off. A DYNAMIC instance whose packed
+        // The per-instance shadow-participation skip is active in direct soft-shadow marches;
+        // indirect queries and ordinary camera/AO/coverage enumerations do not use it. A DYNAMIC instance whose packed
         // position.w > 0.5 is shadow-suppressed (host encoding: 0 casts / 1 suppressed), so drop its whole segment range
         // from the shadow enumeration — mirroring the parked-radius continue above. Static instances (no dynamic slot)
         // always cast: they never take this branch.
-        if (sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * instanceMeta.y].w > 0.5)) {
+        if (!sdfIndirectParticipationActive && sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * instanceMeta.y].w > 0.5)) {
             continue;
         }
 #endif
-        // Strip the shadow-transparent flag (i1.w's high bit — SDF_INSTANCE_SHADOW_TRANSPARENT_BIT) before using the
-        // lane as segmentEnd: it is a shadow-gather-only classification, unrelated to the render range. The mask is the
-        // identity when the flag is clear; a set flag never changes the segment range it names.
+        // Strip the four participation/visibility flag bits before using this lane as segmentEnd.
+        // Their values never change the segment range they classify.
         uint metaSegmentEnd = (instanceMeta.w & SDF_INSTANCE_SEGMENT_END_MASK);
 
         if (instanceMeta.z < metaSegmentEnd) {

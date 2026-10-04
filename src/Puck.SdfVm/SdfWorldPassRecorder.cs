@@ -573,7 +573,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_view.LightView) {
             // A point-sampled impostor cannot certify a swept shadow column. The retained field supplies its geometry;
             // full baked meshes may shorten that field search without becoming a visibility certificate themselves.
-            for (var index = 0; (index < count); index++) { m_recorded[index] = (draws[index].Impostor is null); }
+            for (var index = 0; (index < count); index++) {
+                m_recorded[index] = draws[index].Impostor is null &&
+                    draws[index].Indirect is SdfIndirectParticipation.Default or SdfIndirectParticipation.Cast;
+            }
         } else { m_lod.Select(
             cameraForward: camera.Forward,
             cameraPosition: camera.Position,

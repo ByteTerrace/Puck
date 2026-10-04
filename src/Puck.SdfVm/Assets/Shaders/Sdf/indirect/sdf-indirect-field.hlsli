@@ -18,15 +18,21 @@ SdfHit sdfIndirectSample(float3 position, uint mask) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;
     bool previousTape = sdfTapeActive;
+    bool previousParticipation = sdfIndirectParticipationActive;
+    sdfIndirectParticipationActive = true;
     sdfTapeActive = false;
 #ifdef SDF_SCREEN_SOURCES
     bool previousMask = sdfShadowMaskActive;
+    bool previousAmbientMask = sdfAmbientMaskActive;
     sdfShadowMaskActive = mask != SDF_INSTANCE_MASK_ALL;
+    sdfAmbientMaskActive = false;
 #endif
     SdfHit hit = mapCore(position, mask, true);
+    sdfIndirectParticipationActive = previousParticipation;
     sdfTapeActive = previousTape;
 #ifdef SDF_SCREEN_SOURCES
     sdfShadowMaskActive = previousMask;
+    sdfAmbientMaskActive = previousAmbientMask;
 #endif
     return hit;
 }
@@ -38,10 +44,23 @@ float3 sdfIndirectGradient(float3 position) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;
     bool previousTape = sdfTapeActive;
+    bool previousParticipation = sdfIndirectParticipationActive;
+    sdfIndirectParticipationActive = true;
     sdfTapeActive = false;
+#ifdef SDF_SCREEN_SOURCES
+    bool previousMask = sdfShadowMaskActive;
+    bool previousAmbientMask = sdfAmbientMaskActive;
+    sdfShadowMaskActive = false;
+    sdfAmbientMaskActive = false;
+#endif
     float3 gradient;
     mapGradCore(position, SDF_INSTANCE_MASK_ALL, gradient);
+    sdfIndirectParticipationActive = previousParticipation;
     sdfTapeActive = previousTape;
+#ifdef SDF_SCREEN_SOURCES
+    sdfShadowMaskActive = previousMask;
+    sdfAmbientMaskActive = previousAmbientMask;
+#endif
     float magnitude = length(gradient);
     return magnitude > 0.0 && isfinite(magnitude) ? gradient / magnitude : 0.0;
 }

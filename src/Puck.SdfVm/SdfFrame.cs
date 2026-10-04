@@ -231,6 +231,9 @@ public sealed record SdfFrame(
     public bool EnableCadenceGate { get; init; }
     /// <summary>The residency's indirect-cache demand. Off allocates and schedules no cache work.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>The dynamic-instance default. Default receives at Medium and casts and receives at High; a placement's
+    /// explicit policy wins. Static instances retain their normal casting and receiving policy.</summary>
+    public SdfIndirectParticipation IndirectBodies { get; init; }
     /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
     /// require their captured source publications; the default admits authored lights, feedback, emission and sky.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.Direct | SdfIndirectSources.Feedback | SdfIndirectSources.Emission | SdfIndirectSources.Sky;

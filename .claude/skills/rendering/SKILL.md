@@ -111,11 +111,22 @@ receiver certificates for a lighting-only edit.
 
 Dynamic transport invalidation follows actual packed transform-row changes.
 `SdfProgram.BuildDynamicTransformBounds` collects the existing segment/instance
-bounds once per upload; the tables queue old and current bounds before overwrite.
-Preserve rotation, participation and lane changes, identical-row standing, and
+bounds for actual casters when the program or body policy changes; the tables
+queue old and current bounds before overwrite. Preserve rotation and lane changes,
+identical-row standing, receiver-only motion standing, and
 the distinction between static unbounded geometry and an unbounded dynamic
 dependency. Reuse `MarkGeometry` and its admitted/frozen queue instead of adding
 another invalidation schedule.
+
+`SdfIndirectParticipation` owns whole-instance casting and receiving. Keep its
+packed instance and mesh bits, frame body default, field queries and receiver
+application synchronized. Direct-shadow suppression is independent. Static
+Default casts; moving Default receives at medium and casts at high; explicit
+placement policy wins. Refuse exclusions across dependent root operands and
+name unsupported CPU reference policies rather than evaluating a different field.
+Indirect helpers save and restore both ambient and shadow mask flags. Their
+full-field distance and gradient walks cannot inherit a caller's clipped mask;
+an explicitly masked distance uses only its own gathered indirect mask.
 
 Indirect inspection extends the existing surface picker. Its 272-byte GPU
 record and full probe-state census share the visibility submission's fence and

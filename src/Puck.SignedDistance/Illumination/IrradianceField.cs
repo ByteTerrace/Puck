@@ -35,8 +35,13 @@ public sealed class IrradianceField {
     /// interprets.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> holds an operation the evaluator refuses; the
-    /// message names it.</exception>
+    /// message names it. Explicit Receive/Off instance policies are also refused because this evaluator has no
+    /// render-policy filter; its ordinary collision field must not be mislabeled as the indirect caster field.</exception>
     public IrradianceField(SdfProgram program) {
+        ArgumentNullException.ThrowIfNull(program);
+        if (program.Instances.Any(instance => instance.Active && instance.Indirect is SdfIndirectParticipation.Receive or SdfIndirectParticipation.Off)) {
+            throw new ArgumentException("The CPU indirect field does not yet interpret per-instance Receive/Off participation.", nameof(program));
+        }
         m_evaluator = new SdfFieldEvaluator(program: program);
     }
 

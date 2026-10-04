@@ -117,7 +117,8 @@ public sealed partial class SdfWorldTables {
     }
 
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
-    // soft-shadow march and conservative light camera), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
+    // direct soft-shadow march), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. Indirect queries
+    // and their conservative light camera use the independent instance policy. The lanes row is what an op
     // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
     // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
     /// <summary>Packs a transform into the world table's three float4 rows: position and shadow participation,
@@ -250,6 +251,7 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        StageIndirectParticipation(frame);
         var transformsChanged = PackDynamicTransforms(frame: frame);
 
         // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose

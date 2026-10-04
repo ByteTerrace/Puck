@@ -47,6 +47,13 @@ public static class SdfEncodingProbe {
                 Name: name
             ));
 
+        foreach (var policy in Enum.GetValues<SdfIndirectParticipation>()) {
+            Call(name: $"indirect instance {policy}", inputs: [0.25f], emit: (b, m, v) => b
+                .BeginInstance(Vector3.Zero, 1f, indirect: policy).ResetPoint().Sphere(v[0], m).EndInstance());
+        }
+        Call(name: "indirect instance bits", inputs: [0f], emit: static (b, m, v) => b
+            .BeginInstance(Vector3.Zero, 1f, indirect: (SdfIndirectParticipation)(int)v[0]).ResetPoint().Sphere(0.25f, m).EndInstance());
+
         Call(name: "tape certificate", inputs: [0.2f, 0.3f, 0.4f, 0.5f], emit: static (b, m, v) => b.ResetPoint()
             .Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])).Sphere(radius: v[3], material: m));
         // Point operations, each ahead of a unit sphere.

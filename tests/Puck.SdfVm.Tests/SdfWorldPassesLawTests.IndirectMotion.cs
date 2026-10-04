@@ -10,11 +10,11 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("translation")]
     [InlineData("rotation")]
     [InlineData("lanes")]
-    [InlineData("participation")]
+    [InlineData("shadow-suppression")]
     public void ActualPackedPoseChangesWithdrawTransportAtTheOldGeometry(string change) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
-        builder.BeginInstanceDynamic(slot: 0, boundOffset: Vector3.Zero, boundRadius: 1f)
+        builder.BeginInstanceDynamic(slot: 0, boundOffset: Vector3.Zero, boundRadius: 1f, indirect: SdfIndirectParticipation.Cast)
             .ResetPoint().TransformDynamic(0).Box(halfExtents: new Vector3(0.4f, 0.2f, 0.1f), round: 0f, material: material).EndInstance();
         var transform = new DynamicTransform(Vector3.Zero, Quaternion.Identity);
         var source = Frame() with { Program = builder.Build(), FarDistance = 1f,
@@ -52,6 +52,11 @@ public sealed partial class SdfWorldPassesLawTests {
         source = source with { DynamicTransforms = new[] { transform } };
         residency.BeginFrame();
         Assert.True(residency.Prepare(context));
+        if (change == "shadow-suppression") {
+            Assert.True(cache.IsComplete);
+            Assert.Equal(certificate, cache.CertificateRevision);
+            return;
+        }
         Assert.False(cache.IsComplete);
         Assert.Equal(certificate, cache.CertificateRevision);
         cache.Plan(demand);

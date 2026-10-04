@@ -243,14 +243,33 @@ replaces it; placement lookup can still find the neighboring probes it needs.
 The change also withdraws the lighting publication and receiver certificates.
 This transport operation does not require replacing the cache allocation.
 
-Program upload collects a conservative influence bound for each dynamic slot
+Program upload and a changed body policy collect a conservative influence bound for each casting dynamic slot
 from the existing packed segment and instance bounds. Static unbounded geometry
 does not taint unrelated dynamic slots; an unsupported dynamic dependency stays
 explicitly unbounded. Before an actual transform-row overwrite, the tables queue
-both the old and new bounds. Every packed component participates, including
-orientation, shadow participation and anonymous lanes, so a rotation in place
-cannot retain stale transport. Identical packed rows queue nothing. The bounds
-are collected once per program upload and reused without a per-motion program scan.
+both the old and new bounds. Position, orientation and anonymous lanes participate,
+so a rotation in place cannot retain stale transport. Direct-shadow suppression
+is a separate policy and does not change this field. Identical packed geometry
+and receiver-only motion queue nothing. The bounds are reused without a
+per-motion program scan.
+
+Each whole instance has an indirect participation policy. `Default` keeps static
+geometry casting and receiving; moving bodies receive at medium and cast and
+receive at high. `Receive` receives without casting, `Cast` does both, and `Off`
+does neither. A placement's explicit policy wins over the frame's body default.
+Field queries, paired mesh draws, receiver shading and light views use the same
+policy; direct visibility, collision and direct-shadow policy stay independent.
+Nested indirect distance and gradient queries suspend the caller's ambient and
+shadow masks for their own field scope, then restore both masks. A full-field
+gradient uses the same caster field as a full-field distance query.
+Changing the body policy withdraws transport through the existing geometry queue.
+The policy occupies two existing instance/mesh flag bits and one common pass word.
+
+Excluding an instance requires complete independent root operands. Internal CSG
+inside an instance is supported; cross-instance field operations are refused
+when a policy would omit an operand. The CPU irradiance reference currently names
+filtered `Receive`/`Off` programs as unsupported rather than reporting ordinary
+collision-field values as an indirect comparison.
 
 ## Finite indirect lighting sweeps
 

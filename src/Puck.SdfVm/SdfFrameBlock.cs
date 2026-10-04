@@ -205,6 +205,7 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
         WriteUInt32(block: block, offset: IndirectTier, value: ((uint)frame.IndirectTier));
         WriteUInt32(block: block, offset: Offset(SdfWorldPackage.IndirectSources), value: ((uint)frame.IndirectSources));
+        WriteUInt32(block: block, offset: Offset(SdfWorldPackage.IndirectBodies), value: (uint)frame.IndirectBodies);
         WriteUInt32(block: block, offset: IndirectMethod, value: ((uint)quality.IndirectMethod));
         var lights = frame.Lights;
         var curvature = lights.Curvature;

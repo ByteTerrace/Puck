@@ -7,10 +7,12 @@ namespace Puck.SdfVm;
 
 /// <summary>The exact uploaded geometry revisions that invalidate a residency's light maps.</summary>
 /// <param name="Program">Program and shader revision.</param>
-/// <param name="Poses">Uploaded dynamic-transform revision.</param>
+/// <param name="Poses">Revision of uploaded transforms that change an indirect caster.</param>
 /// <param name="Mesh">Uploaded mesh revision.</param>
 /// <param name="Decals">Glyph geometry revision.</param>
-public readonly record struct SdfLightGeometry(ulong Program, ulong Poses, long Mesh, ulong Decals);
+/// <param name="Bodies">The resolved dynamic indirect participation; changing it changes the caster field.</param>
+public readonly record struct SdfLightGeometry(ulong Program, ulong Poses, long Mesh, ulong Decals,
+    SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default);
 
 /// <summary>A finite receiver box from the allocated bricks of one cache level.</summary>
 /// <param name="Min">Least corner.</param>

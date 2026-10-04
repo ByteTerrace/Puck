@@ -59,6 +59,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // step, so the decode must happen exactly once here, before the first call below.
     sdfProgramLayout = sdfLoadProgramLayout();
     sdfShadowParticipationActive = passGroup.lightMap != 0u;
+    sdfIndirectParticipationActive = passGroup.lightMap != 0u;
     sdfSecondaryMarchActive = passGroup.lightMap != 0u;
 
     // The view's render extent (worldViewDims — the same integers Stage 1 and the instance cull read), so tile coverage

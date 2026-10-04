@@ -217,6 +217,7 @@ public sealed partial class SdfProgram {
             instructionsParamName: nameof(instructions),
             screenSurfacesParamName: nameof(screenSurfaces)
         );
+        IndirectInstancesComposable = CanTracePartsIndependently();
 
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
             instances: m_instances,
@@ -1472,7 +1473,7 @@ public sealed partial class SdfProgram {
                 val2: 0
             ));
 
-            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its two high bits (InstanceFlagsOf);
+            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its four high bits (InstanceFlagsOf);
             // mapCore masks them off before using the lane as a range.
             var segmentEndPacked = ((uint)Math.Max(
                 val1: segmentEnd[instanceIndex],

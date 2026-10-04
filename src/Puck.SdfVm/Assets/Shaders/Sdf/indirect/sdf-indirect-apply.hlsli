@@ -55,10 +55,18 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
     sdfIndirectReceiverPosition = surfacePoint;
     sdfIndirectReceiverNormal = normal;
     if (passGroup.indirectTier == SdfIndirectTierOff) { return result; }
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    uint source = sdfVisibilitySource(sdfLoadVisibility(record).identity);
+    uint policy = SDF_INDIRECT_PARTICIPATION_CAST;
+    if (receiver.mesh) {
+        policy = (sdfMeshRegion[sdfMeshRecord(source) + SdfMeshFlagsWord] & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT;
+    } else if (source != 0u) {
+        policy = sdfInstanceIndirectPolicy(sdfWords[sdfInstanceEntryOffset(sdfInstanceDirectoryOffset(), source - 1u) + 1u]);
+    }
+    if (policy == SDF_INDIRECT_PARTICIPATION_OFF) { sdfIndirectReceiverStatus = 0u; return result; }
     sdfIndirectReceiverStatus = 1u;
     if (passGroup.indirectReadPublication == 0u) { return result; }
     sdfIndirectReceiverStatus = 2u;
-    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
     uint retainedLevel;
     uint retainedMask;
     float3 retainedLaunch;

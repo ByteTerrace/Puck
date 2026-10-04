@@ -253,7 +253,7 @@ public sealed partial class SdfProgram {
         m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
-        m_words[header] = ((uint)plan.CompiledCount) | (CanTracePartsIndependently()
+        m_words[header] = ((uint)plan.CompiledCount) | (IndirectInstancesComposable
             ? IndependentPartTracingFlag
             : 0u
         );

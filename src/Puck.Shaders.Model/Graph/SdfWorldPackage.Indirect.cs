@@ -9,6 +9,8 @@ public static partial class SdfWorldPackage {
     public const string IndirectTier = "indirectTier";
     /// <summary>The enabled source-category bits, shared by the solve and every receiver algorithm.</summary>
     public const string IndirectSources = "indirectSources";
+    /// <summary>The dynamic-body policy; Default resolves against the actual bound cache tier.</summary>
+    public const string IndirectBodies = "indirectBodies";
     /// <summary>The per-view counted comparison method: cache, screen-space samples or one-bounce field cones.</summary>
     public const string IndirectMethod = "indirectMethod";
     /// <summary>The geometry epoch carried by valid probe states.</summary>

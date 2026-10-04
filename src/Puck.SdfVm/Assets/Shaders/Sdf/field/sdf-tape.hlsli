@@ -39,7 +39,7 @@ void sdfTapeSample(float3 position, uint instanceMask) {
     if (!sdfTapeActive || instanceMask != sdfTapeInstanceMask || sdfSecondaryMarchActive ||
         (sdfDetailShadingActive && !sdfProgramLayout.noDetailShapes)) { return; }
 #ifdef SDF_DYNAMIC_TRANSFORMS
-    if (sdfShadowParticipationActive) { return; }
+    if (sdfShadowParticipationActive || sdfIndirectParticipationActive) { return; }
 #endif
 #ifdef SDF_SCREEN_SOURCES
     if (sdfShadowMaskActive || sdfAmbientMaskActive) { return; }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -151,6 +152,9 @@ public sealed record SdfMesh {
 /// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
 /// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
+    /// <summary>Gets the draw's whole-placement indirect policy. Default has the static Cast policy; a dynamic
+    /// emitter resolves its body default before declaring its draw. The matching retained SDF uses the same policy.</summary>
+    public SdfIndirectParticipation Indirect { get; init; }
     /// <summary>Gets whether this draw is a bake of geometry the same frame also carries in its SDF at the same pose.
     /// Only that emitting seam can certify the conservative field sweep; an independent triangle mesh cannot acquire
     /// this certificate from its bounds or identity. The light camera falls back when any draw is uncertified.</summary>
@@ -269,6 +273,7 @@ public static class SdfMeshRegion {
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var mesh = draws[draw].Mesh;
+            if (!Enum.IsDefined(draws[draw].Indirect)) { throw new ArgumentException("A mesh draw's indirect policy must be Default, Cast, Receive or Off.", nameof(draws)); }
 
             if (meshes.TryAdd(
                 key: mesh,
@@ -349,7 +354,8 @@ public static class SdfMeshRegion {
             record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
-            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag);
+            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag)
+                | ((uint)draws[draw].Indirect << SdfProgram.IndirectInstanceShift);
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,

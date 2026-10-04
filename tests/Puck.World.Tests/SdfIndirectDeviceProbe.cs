@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
@@ -13,13 +14,19 @@ internal static class SdfIndirectDeviceProbe {
         ReadOnlyMemory<byte> passValues = default, ReadOnlyMemory<byte> environment = default) {
         var skyBinding = SdfKernelInterfaces.BindingOf(SdfWorldInterfaces.IndirectParameters.Layout, SdfKernelInterfaces.SkyEnvironment);
         var counterBinding = SdfKernelInterfaces.BindingOf(SdfWorldInterfaces.IndirectParameters.Layout, ShaderWorkCounters.Buffer);
+        if (passValues.IsEmpty) {
+            var values = new byte[SdfWorldInterfaces.IndirectParameters.SizeBytes];
+            BinaryPrimitives.WriteUInt32LittleEndian(values.AsSpan((int)SdfWorldInterfaces.IndirectParameters.BlockOffsetOf(SdfWorldPackage.IndirectBodies)),
+                (uint)SdfIndirectParticipation.Cast);
+            passValues = values;
+        }
         var world = new GpuGroupLayoutDescription(ordinal: 1, bindings: [
             new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ReadOnlyBuffer),
             new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer),
             .. (environment.IsEmpty ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: skyBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
         ]);
         var pass = new GpuGroupLayoutDescription(ordinal: 3, bindings: [
-            .. (passValues.IsEmpty ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ConstantBuffer)]),
+            new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ConstantBuffer),
             new GpuGroupBinding(binding: 5, kind: GpuBindingKind.ReadWriteBuffer),
             .. (environment.IsEmpty ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: counterBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
             new GpuGroupBinding(binding: 60, kind: GpuBindingKind.ReadOnlyBuffer),
@@ -38,7 +45,7 @@ internal static class SdfIndirectDeviceProbe {
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var padded = new byte[((((((ulong)passValues.Length) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
         passValues.Span.CopyTo(destination: padded);
-        using var constants = (passValues.IsEmpty ? null : services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform));
+        using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         // The shader writes this cache; it needs device-local storage, cleared before the first dispatch.
         // A host-visible upload buffer cannot supply Direct3D's unordered-access view.
         using var cache = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (cacheWords * sizeof(uint)), usage: GpuBufferUsage.Storage);
@@ -58,10 +65,8 @@ internal static class SdfIndirectDeviceProbe {
         try {
             var set = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[3], name: default, poolHandle: pool);
 
-            if (constants is not null) {
-                services.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: constants.BufferHandle,
-                    bufferSize: constants.SizeBytes, descriptorSetHandle: set);
-            }
+            services.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: constants.BufferHandle,
+                bufferSize: constants.SizeBytes, descriptorSetHandle: set);
             services.Bindings.WriteBuffer(binding: 5, bufferHandle: cache.BufferHandle, bufferSize: cache.SizeBytes, descriptorSetHandle: set, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
             if (counters is not null) {
                 services.Bindings.WriteBuffer(binding: counterBinding, bufferHandle: counters.BufferHandle, bufferSize: counters.SizeBytes,

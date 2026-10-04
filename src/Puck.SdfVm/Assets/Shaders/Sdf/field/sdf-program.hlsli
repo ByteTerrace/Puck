@@ -81,10 +81,20 @@ static bool sdfAmbientMaskActive = false;
 // Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). shade/sdf-light-stage.hlsli
 // flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
-// The conservative light camera also sets it for its beam and sphere sweep. Ordinary camera/AO/coverage enumerations
-// leave it false, so their participation is unchanged and a default-casts frame is byte-identical.
+// Indirect queries and their conservative light camera use their own instance policy. Ordinary camera/AO/coverage
+// enumerations leave it false, so their participation is unchanged.
 static bool sdfShadowParticipationActive = false;
 #endif
+
+// Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
+static bool sdfIndirectParticipationActive = false;
+uint sdfInstanceIndirectPolicy(uint4 meta) {
+    uint policy = (meta.w & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT;
+    if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
+    if (meta.x != SDF_BOUND_DYNAMIC) { return SDF_INDIRECT_PARTICIPATION_CAST; }
+    return passGroup.indirectBodies != SDF_INDIRECT_PARTICIPATION_DEFAULT ? passGroup.indirectBodies :
+        passGroup.indirectTier == SDF_INDIRECT_TIER_HIGH ? SDF_INDIRECT_PARTICIPATION_CAST : SDF_INDIRECT_PARTICIPATION_RECEIVE;
+}
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word
