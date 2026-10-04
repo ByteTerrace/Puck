@@ -22,14 +22,13 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
     private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-reference-");
 
-    // The checked-in contract names the emitted parity.world.json, which the tree compile writes beside it, so the law loads a
-    // copy whose reference names the emitted document it writes into its own directory.
+    // Load the checked-in contract itself: its relative references must resolve the authored world source.
     private (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
         Assert.True(
             condition: ParityManifestLoader.TryLoadContract(
                 contract: out var contract,
                 error: out var error,
-                path: WriteContract(edit: static _ => { })
+                path: RepositoryPaths.Resolve(relativePath: ContractPath)
             ),
             userMessage: error
         );
@@ -40,8 +39,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
         return (contract, Assert.IsType<ParityBindingReference>(@object: resolved.Reference));
     }
-    // The parity world is authored as a .puck source; the tree compile emits parity.world.json from it, and the reference
-    // reads that document, so the law writes the emitted document into its own directory once.
+    // The schedule reader consumes the compiled world that the parity runner ships into its run directory.
     private string EmittedWorld() {
         var path = Path.Combine(
             path1: m_directory.RootPath,
@@ -66,7 +64,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         foreach (var station in contract["stations"]!.AsObject()) {
             if (station.Value!["reference"] is { } reference) {
                 reference["graph"] = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/binding.graph.json");
-                reference["world"] = EmittedWorld();
+                reference["world"] = RepositoryPaths.Resolve(relativePath: WorldPath);
             }
         }
 

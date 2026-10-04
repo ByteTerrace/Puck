@@ -62,9 +62,10 @@ the frame each capture must be and fails a side that differs by one byte
 that reads a wrong config value or a wrong binding fails even when both
 backends make the same mistake. The census stays as the floor under it. The one
 reference kind, `binding`, is `ParityBindingReference`: it reads the config
-defaults from `binding.graph.json` and the step rate from `parity.puck`,
-and repeats the three passes' integer steps at the capture tick. A station whose
-row binds a scalar field states the steps of the bound row in the reference's
+defaults from `binding.graph.json` and the step rate from `parity.puck` through
+the world's document reader, which lowers the source, and repeats the three
+passes' integer steps at the capture tick. A station whose row binds a scalar
+field states the steps of the bound row in the reference's
 `parameters`, keyed by pass and field as the row keys them, each step mapping
 the simulation tick a value starts at to the value (`bound` states `grain.seed`
 as `{ "0": 0, "1210": 13 }`). At a capture tick the field reads the last step at
