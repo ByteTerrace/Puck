@@ -587,8 +587,10 @@ the 3x3 saw no surface, through the camera's rotation alone. History at the move
 position is rejected when the history surface there names another identity or a
 ray distance more than 5% from the reprojected one; the pixel then shows the
 spatial path at this frame's sample grid and its history restarts. Surviving
-history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
-joined by this frame's samples. The transport history is clamped to the 3x3's
+history is clamped component by component to the 3x3's YCoCg box, so correcting
+chroma leaves an already valid luminance alone, including when a chroma interval
+has zero width. It is weighted down by the reactivity and joined by this frame's
+samples. The transport history is clamped to the 3x3's
 range, as coverage is, and joined with the same weights.
 Non-finite history colors or transports are rejected before clipping. History
 writes stay within the half-float range; a non-finite accumulation stores zero

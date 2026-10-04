@@ -59,15 +59,10 @@ float3 sdfFromYCoCg(float3 color) {
 
     return float3((t + color.y), (color.x + color.z), (t - color.y));
 }
-// Moves a color outside an axis-aligned box toward the box's center until it lies on the box.
+// Projects each component to its measured interval. A thin chroma interval must not amplify a half-float rounding
+// difference into a luminance change: moving toward the box's center couples those otherwise independent corrections.
 float3 sdfClipToBox(float3 color, float3 boxMin, float3 boxMax) {
-    float3 center = (0.5 * (boxMin + boxMax));
-    float3 extent = max((0.5 * (boxMax - boxMin)), 1.0e-6);
-    float3 offset = (color - center);
-    float3 units = abs(offset / extent);
-    float reach = max(units.x, max(units.y, units.z));
-
-    return ((reach > 1.0) ? (center + (offset / reach)) : color);
+    return clamp(color, boxMin, boxMax);
 }
 // The history at a continuous output position, the first texel's center at zero: Catmull-Rom over the sixteen nearest
 // texels, each clamped to the image, the color from the history color and the transport from the history surface with

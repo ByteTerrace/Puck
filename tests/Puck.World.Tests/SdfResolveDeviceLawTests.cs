@@ -15,7 +15,8 @@ namespace Puck.World.Tests;
 /// visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
 /// reduced-world canary exercises its ordinary package recorder. Every output transport element is poisoned before the
 /// dispatch and read back afterwards: native copies carry the sample tag and zero distance, reconstructed misses carry
-/// zero weights, and both formats overwrite the second packed word.</summary>
+/// zero weights, and both formats overwrite the second packed word. An accepted finite history with a chroma
+/// perturbation preserves its valid luminance while each component enters the current neighborhood's box.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfResolveDeviceLawTests {
@@ -35,6 +36,20 @@ public sealed class SdfResolveDeviceLawTests {
         using var device = DirectXTestDevices.Hardware();
 
         Verify(services: device.Services, extension: ".dxil");
+    }
+    [Fact]
+    public void VulkanClipsNarrowChromaWithoutChangingValidLuminance() {
+        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfResolveDeviceLawTests));
+
+        _ = Run(services: device.Services, extension: ".spv", sharpness: 1f,
+            width: RenderWidth, height: RenderHeight, narrowChromaHistory: true);
+    }
+    [Fact]
+    public void DirectXClipsNarrowChromaWithoutChangingValidLuminance() {
+        using var device = DirectXTestDevices.Hardware();
+
+        _ = Run(services: device.Services, extension: ".dxil", sharpness: 1f,
+            width: RenderWidth, height: RenderHeight, narrowChromaHistory: true);
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
@@ -76,8 +91,8 @@ public sealed class SdfResolveDeviceLawTests {
         }
         Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
     }
-    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false) {
-        var temporal = (poisonedHistory.HasValue || poisonCurrent);
+    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false, bool narrowChromaHistory = false) {
+        var temporal = (poisonedHistory.HasValue || poisonCurrent || narrowChromaHistory);
         var parameters = SdfWorldInterfaces.ResolveParameters;
         var block = new byte[parameters.SizeBytes];
 
@@ -131,6 +146,19 @@ public sealed class SdfResolveDeviceLawTests {
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
         using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
+        var historyInputBytes = new byte[checked((int)((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width * height))];
+
+        if (narrowChromaHistory) {
+            for (var pixel = 0; (pixel < (width * height)); pixel++) {
+                // A miss's identity and ray distance are zero; its eight samples of finite history have full weight.
+                var offset = checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + 1) * sizeof(uint)));
+
+                BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: offset),
+                    value: ((uint)BitConverter.HalfToUInt16Bits(value: (Half)8f) << 16));
+            }
+        }
+        using var historyInput = (narrowChromaHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
+        using var historySeed = (narrowChromaHistory ? services.BufferFactory.CreateHostVisible(data: historyInputBytes, name: default, usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
         // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss. Each output pixel's
         // transport occupies the structured element declared by the resolve interface, including both packed words.
@@ -156,6 +184,20 @@ public sealed class SdfResolveDeviceLawTests {
             source = MemoryMarshal.AsBytes(span: Enumerable.Repeat(element: Half.PositiveInfinity, count: source.Length).ToArray().AsSpan()).ToArray();
             sourceFormat = GpuPixelFormat.R16G16B16A16Float;
         }
+        if (narrowChromaHistory) {
+            var grays = new Half[(RenderWidth * RenderHeight * 4)];
+
+            for (var y = 0u; (y < RenderHeight); y++) {
+                for (var x = 0u; (x < RenderWidth); x++) {
+                    var offset = ((y * RenderWidth + x) * 4);
+                    var gray = (Half)((x < 8) ? 0.25f : 0.75f);
+
+                    grays[offset] = gray; grays[offset + 1] = gray; grays[offset + 2] = gray; grays[offset + 3] = (Half)1f;
+                }
+            }
+            source = MemoryMarshal.AsBytes(span: grays.AsSpan()).ToArray();
+            sourceFormat = GpuPixelFormat.R16G16B16A16Float;
+        }
         var sourceView = upload.Upload(pixels: source, format: sourceFormat, width: RenderWidth, height: RenderHeight);
         using var fillerUpload = services.SurfaceTransferFactory.CreateUpload();
         var fillerSampled = fillerUpload.Upload(pixels: new byte[4], format: GpuPixelFormat.R8G8B8A8Unorm, width: 1, height: 1);
@@ -166,7 +208,7 @@ public sealed class SdfResolveDeviceLawTests {
             var previous = new Half[((width * height) * 4)];
 
             for (var pixel = 0; (pixel < (previous.Length / 4)); pixel++) {
-                for (var channel = 0; (channel < 3); channel++) { previous[((pixel * 4) + channel)] = (poisonedHistory ?? ((Half)0.5f)); }
+                for (var channel = 0; (channel < 3); channel++) { previous[((pixel * 4) + channel)] = (poisonedHistory ?? ((Half)(narrowChromaHistory ? ((channel == 1) ? 0.74951171875f : 0.75f) : 0.5f))); }
                 previous[((pixel * 4) + 3)] = ((Half)8f);
             }
             historyView = historyUpload.Upload(pixels: MemoryMarshal.AsBytes(span: previous.AsSpan()).ToArray(), format: GpuPixelFormat.R16G16B16A16Float, width: width, height: height);
@@ -190,6 +232,9 @@ public sealed class SdfResolveDeviceLawTests {
                 [Binding(member: SdfWorldPackage.VisibilityRecords)] = visibility,
                 [Binding(member: SdfWorldPackage.TransportWritten)] = transport,
             };
+            if (historyInput is not null) {
+                buffers[Binding(member: SdfWorldPackage.HistorySurface)] = historyInput;
+            }
             var sets = new List<(uint Group, nint Set)>();
 
             foreach (var group in parameters.Layout.Groups) {
@@ -234,6 +279,14 @@ public sealed class SdfResolveDeviceLawTests {
             var command = commands.CommandBufferHandle;
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
+            if (historyInput is not null) {
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historyInput.BufferHandle,
+                    sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: historyInput.BufferHandle,
+                    sizeBytes: historyInput.SizeBytes, sourceBufferHandle: historySeed!.BufferHandle);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historyInput.BufferHandle,
+                    sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
+            }
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: transport.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
             recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: transport.BufferHandle,
@@ -286,11 +339,28 @@ public sealed class SdfResolveDeviceLawTests {
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
             var colors = readback.Read(bytesPerPixel: 8, format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
                 sourceImageHandle: (poisonCurrent ? historyOutput!.ImageHandle : output.ImageHandle), sourceLayout: GpuImageLayout.General);
+            var result = MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
+
+            if (narrowChromaHistory) {
+                // At (8,8), the 3x3 holds gray .25 in the left column and .75 elsewhere: Co=Cg=0 while
+                // Y spans [.25,.75]. History's one-half-step green perturbation gives valid Y=.749755859375.
+                // Clipping its chroma leaves that Y alone. With k=exp(-4.08), the 3x3 weight is (1+2k)^2
+                // and its weighted gray sum is (.75*(1+k)+.25*k)*(1+2k), joined with history weight eight.
+                var k = Math.Exp(d: -4.08);
+                var rowWeight = (1d + (2d * k));
+                var expected = (((8d * 0.749755859375d) + (((0.75d * (1d + k)) + (0.25d * k)) * rowWeight)) / (8d + (rowWeight * rowWeight)));
+
+                Check(color: result, value: ((float)expected), width: width, x: 8, y: 8);
+                var offset = checked((int)(((8 * width) + 8) * 4));
+
+                Assert.Equal(expected: result[offset], actual: result[offset + 1]);
+                Assert.Equal(expected: result[offset], actual: result[offset + 2]);
+            }
 
             var transportBytes = new byte[checked((int)transport.SizeBytes)];
 
             transportReadback.Read(destination: transportBytes);
-            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent)
+            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent && !narrowChromaHistory)
                 ? SdfSurfaceTransport.SampleWord(distance: 0f).Low : 0u);
 
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
@@ -299,7 +369,7 @@ public sealed class SdfResolveDeviceLawTests {
                 Assert.Equal(expected: expectedLow, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: transportBytes.AsSpan(start: offset)));
                 Assert.Equal(expected: 0u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: transportBytes.AsSpan(start: (offset + sizeof(uint)))));
             }
-            return MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
+            return result;
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
             services.Bindings.DestroySampler(samplerHandle: sampler);
