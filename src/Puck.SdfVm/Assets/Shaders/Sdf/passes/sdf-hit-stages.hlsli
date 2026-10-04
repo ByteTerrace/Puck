@@ -21,8 +21,8 @@
 // reactivity (sdfLightStage). A hit's color leaves through the atmosphere's transmittance over its own ray
 // (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the atmosphere's
 // in-scatter, the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's
-// history. A
-// debug view draws the whole pixel, so it covers it and is not fogged. A lane past the render extent returns black,
+// history. A surface debug view draws the whole pixel, so it covers it and is not fogged. Sky cost retains the surface's real
+// coverage so the composite can measure the visible sky. A lane past the render extent returns black,
 // which the caller never stores.
 float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     coverage = 0.0;
@@ -47,7 +47,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         reactivity = max(reactivity, (float)shadowHistory[word + 4u]);
     }
 
-    if (p.viewMode != 0) {
+    if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {
         coverage = 1.0;
 
         return sdfDebugView(p, s, color);

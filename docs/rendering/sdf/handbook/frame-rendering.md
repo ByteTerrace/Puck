@@ -450,8 +450,11 @@ candidate projection is off. An authored fog colour does not read the map.
 Each candidate counts `gpu.environment.projections` and 4,096
 `gpu.environment.projection-texels`; a sub-code candidate also counts
 `gpu.environment.skipped`. A rendered change dispatches the map once and its
-reduction once: 4,096 evaluations per unmasked lit layer, 8,192 map texels and
-nine coefficient texels written. No dispatch runs on a skipped candidate.
+reduction once. An active lit layer counts one evaluation per map direction inside its
+mask and directional domain: stars and clouds exclude the horizon and lower
+hemisphere, and the aurora excludes directions below its lowest possible
+curtain. Every rendered map writes 8,192 map texels and nine coefficient texels.
+No dispatch runs on a skipped candidate.
 The first map texel is integrated analytically as a constant and subtracted
 before quadrature, so a constant sky has exactly zero higher bands.
 

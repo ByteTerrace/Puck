@@ -19,9 +19,9 @@ namespace Puck.World.Tests;
 /// gradient, a four-stop sky with a bright disc and a covering cloud layer, neither of which the map holds, and a tilted
 /// sky frame under a second, turned gradient the lighting alone sees, masked to a cone and multiplied over the first,
 /// two analytic panels, and every lighting-capable procedural kind. The
-/// map counts one sky evaluation a lit layer and two plane texels written per direction, and the reduction nine texels and no
-/// evaluation; two runs on one device write the same bytes. Every binding the kernels do not read holds a filler of its
-/// kind.
+/// map counts one sky evaluation per lit layer inside its mask and the kind's directional domain, plus two plane texels
+/// written per direction, and the reduction nine texels and no evaluation; two runs on one device write the same bytes.
+/// Every binding the kernels do not read holds a filler of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
@@ -44,13 +44,26 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        foreach (var (sky, litLayers) in new[] {
-            (new SdfSky(), 1L), (FourStops(), 1L), (Tilted(), 2L), (Panels(), 3L),
-            (Lit(parameters: new SdfSkyStars { Brightness = 2f, Density = 16f }), 1L),
-            (Lit(parameters: new SdfSkyClouds { Coverage = .6f }), 1L),
-            (Lit(parameters: new SdfSkyAurora { Intensity = 1f }), 1L),
-            (Lit(parameters: new SdfSkyNoise { Coverage = .5f }), 1L),
-            (Lit(parameters: new SdfSkyPattern()), 1L),
+        var tilted = Tilted();
+        var tint = tilted.LayerAt(index: 1);
+        var tiltedUp = SdfSky.FrameOf(up: tilted.FrameUp).Up;
+        var aurora = new SdfSkyAurora { Intensity = 1f };
+        // The octahedron's inner diamond is strictly above the horizon; texel centres on its edge evaluate no stars or
+        // clouds. The aurora's lowest possible curtain and the tint's soft cone similarly bound their evaluations.
+        var upperHemisphere = CountDirections(included: direction => (direction.Y > 0f));
+        var tintDirections = CountDirections(included: direction => (Vector3.Dot(vector1: direction, vector2: tiltedUp) > (tint.MaskBand.W - tint.MaskSoftness)));
+        var auroraDirections = CountDirections(included: direction => (direction.Y > ((aurora.Base - aurora.Fold) - .05f)));
+
+        foreach (var (name, sky, evaluations) in new (string Name, SdfSky Sky, long Evaluations)[] {
+            ("default", new SdfSky(), SdfSkyEnvironment.Texels),
+            ("four stops", FourStops(), SdfSkyEnvironment.Texels),
+            ("tilted cone", tilted, SdfSkyEnvironment.Texels + tintDirections),
+            ("panels", Panels(), 3L * SdfSkyEnvironment.Texels),
+            ("stars", Lit(parameters: new SdfSkyStars { Brightness = 2f, Density = 16f }), upperHemisphere),
+            ("clouds", Lit(parameters: new SdfSkyClouds { Coverage = .6f }), upperHemisphere),
+            ("aurora", Lit(parameters: aurora), auroraDirections),
+            ("noise", Lit(parameters: new SdfSkyNoise { Coverage = .5f }), SdfSkyEnvironment.Texels),
+            ("pattern", Lit(parameters: new SdfSkyPattern()), SdfSkyEnvironment.Texels),
         }) {
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
@@ -76,8 +89,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
             Assert.Equal(actual: second.Map, expected: first.Map);
             Assert.Equal(actual: second.Coefficients, expected: first.Coefficients);
             Assert.Equal(actual: (first.MapTexels, first.ReduceTexels), expected: (8192L, 9L));
-            // One evaluation a lit layer a texel, but where a mask leaves it out.
-            Assert.InRange(actual: first.Evaluations, high: (4096L * litLayers), low: (4096L + ((litLayers - 1L) * 64L)));
+            Assert.True(condition: (first.Evaluations == evaluations), userMessage: $"The {name} map evaluated {first.Evaluations} layers; its directional domains require {evaluations}.");
 
             var map = new Vector3[SdfSkyEnvironment.Texels];
 
@@ -121,6 +133,19 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 Assert.True(condition: (MathF.Max(x: difference.X, y: MathF.Max(x: difference.Y, y: difference.Z)) <= bound), userMessage: $"Coefficient {index} is {actual}; the reference projects {projected[index]}.");
             }
         }
+    }
+    private static long CountDirections(Func<Vector3, bool> included) {
+        var count = 0L;
+
+        for (var y = 0; (y < SdfSkyEnvironment.Size); y++) {
+            for (var x = 0; (x < SdfSkyEnvironment.Size); x++) {
+                if (included(SdfSkyEnvironment.Direction(x: x, y: y))) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
     private static SdfSky Lit<T>(T parameters) where T : unmanaged, ISdfSkyKind {
         var sky = new SdfSky();
