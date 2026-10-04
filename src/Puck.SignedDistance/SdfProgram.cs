@@ -1022,8 +1022,8 @@ public sealed partial class SdfProgram {
         // the program refuses a stream that may carry a moved point into a segment that reads it
         // (RequireSegmentsStartAtTheWorldPoint), so no fold is inherited.
         var foldUnbounded = false;
-        // The open scope's field, as a bound under SdfBoundAlgebra (0 for finite, Unbounded for none), and
-        // whether a shape has joined it. The cap is one scope deep (SdfProgramBuilder.MaxFieldScopeDepth).
+        // Each open field keeps its bound (0 for finite, Unbounded for none) and whether an operand joined it.
+        Span<(float Bound, bool HasShape)> scopes = stackalloc (float, bool)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeBound = 0f;
         var scopeHasShape = false;
 
@@ -1056,7 +1056,7 @@ public sealed partial class SdfProgram {
             // the flat model's 1e30 always-evaluated sentinel. Only the POP's OWN compose blend, acting at the parent
             // depth, can be unmaskable (an intersection-family compose composes the whole scope against the parent).
             if (instruction.Op == SdfOp.PushField) {
-                scopeDepth++;
+                scopes[scopeDepth++] = (scopeBound, scopeHasShape);
                 scopeBound = 0f;
                 scopeHasShape = false;
 
@@ -1071,7 +1071,8 @@ public sealed partial class SdfProgram {
                     throw new InvalidOperationException(message: $"Unbalanced PopField at instruction {index} in the instance range [{first}, {end}): a PopField with no open PushField scope. The builder emits balanced Push/Pop pairs, so this indicates a corrupt instruction stream.");
                 }
 
-                scopeDepth--;
+                var childBound = scopeBound;
+                (scopeBound, scopeHasShape) = scopes[--scopeDepth];
 
                 // The closed scope composes into the instance as one operand: unbounded if the scope's own field is.
                 // Union and subtraction composes both leave the influence where the scope's field is, so an unbounded
@@ -1080,10 +1081,17 @@ public sealed partial class SdfProgram {
                     (scopeDepth == 0) &&
                     (
                         SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend)) ||
-                        SdfBoundAlgebra.IsUnbounded(bound: scopeBound)
+                        SdfBoundAlgebra.IsUnbounded(bound: childBound)
                     )
                 ) {
                     return true;
+                }
+
+                if (scopeDepth > 0) {
+                    scopeBound = scopeHasShape
+                        ? SdfBoundAlgebra.Compose(scopeBound, childBound, (SdfBlendOp)instruction.Blend)
+                        : childBound;
+                    scopeHasShape = true;
                 }
 
                 continue;
@@ -1245,8 +1253,8 @@ public sealed partial class SdfProgram {
     /// <c>[-1, 1]</c>: reach grows by <c>|a|</c> (<c>Data0.y</c>).</description></item>
     /// </list>
     /// Field ops compound within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
-    /// sum inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
-    /// sibling scopes union, so a max over scopes is a sound conservative cover). An unscoped field op never contributes
+    /// sum inside a scope, including later parent operations on a child field. Sibling scopes take the maximum;
+    /// nested fields additionally cover every level and cumulative distance rescale. An unscoped field op never contributes
     /// here — it makes the whole instance unmaskable, so the sentinel bound already covers it. 0 for an instance with no
     /// scoped field op, so its bound is byte-identical.</summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
@@ -1256,13 +1264,14 @@ public sealed partial class SdfProgram {
         var margin = 0.0f;
         var scopeDepth = 0;
         var scopeReach = 0.0f;
+        Span<float> parents = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
 
             if (instruction.Op == SdfOp.PushField) {
-                scopeDepth++;
-                scopeReach = 0.0f; // depth is capped at 1, so a Push always opens a fresh (empty) scope
+                parents[scopeDepth++] = scopeReach;
+                scopeReach = 0.0f;
 
                 continue;
             }
@@ -1273,9 +1282,9 @@ public sealed partial class SdfProgram {
                     y: scopeReach
                 );
 
-                if (scopeDepth > 0) {
-                    scopeDepth--;
-                }
+                // Sibling fields join by their widest reach; subsequent parent modifiers can grow that field again.
+                scopeReach = MathF.Max(scopeReach, parents[--scopeDepth]);
+                if (scopeDepth == 0) { scopeReach = 0f; }
 
                 continue;
             }
@@ -1296,7 +1305,7 @@ public sealed partial class SdfProgram {
             };
         }
 
-        return margin;
+        return (margin * NestedFieldMarginScale(first, end));
     }
     /// <summary>Returns the coupling halo an instance's soft blends need on top of their geometry bound: past it,
     /// evaluating the member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see
@@ -1376,7 +1385,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        return margin;
+        return (margin * NestedFieldMarginScale(first, end));
     }
     // Packs the analysis into the two word-stream tables: the per-shape table (2 uvec4 per INSTRUCTION, only shape
     // records populated) and the segment directory (a count header, then 2 uvec4 per segment).

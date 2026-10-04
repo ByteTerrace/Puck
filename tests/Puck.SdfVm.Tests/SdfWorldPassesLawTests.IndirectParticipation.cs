@@ -12,8 +12,10 @@ public sealed partial class SdfWorldPassesLawTests {
         var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
         builder.BeginInstanceDynamic(0, Vector3.Zero, 1f).ResetPoint().TransformDynamic(0).Sphere(0.5f, material).EndInstance();
         var pose = new DynamicTransform(Vector3.Zero, Quaternion.Identity);
+        var mesh = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
+        var draw = new SdfMeshDraw(mesh, Matrix4x4.Identity, material, "body") { IsDynamic = true, FieldBacked = true };
         var source = Frame() with { Program = builder.Build(), FarDistance = 1f,
-            IndirectTier = SdfIndirectTier.Medium, DynamicTransforms = new[] { pose } };
+            IndirectTier = SdfIndirectTier.Medium, DynamicTransforms = new[] { pose }, MeshDraws = new[] { draw } };
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
             frameSource: new CapturingFrameSource(() => source), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "indirect-participation", pipelines: SdfTestPipelines.Cache(), width: Extent);
@@ -27,7 +29,8 @@ public sealed partial class SdfWorldPassesLawTests {
             building: () => false, reason: () => "The fixed transport demand has not completed.");
         var geometry = tables.LightGeometry;
         var certificate = cache.CertificateRevision;
-        source = source with { DynamicTransforms = new[] { pose with { Position = new Vector3(64f, 0f, 0f) } } };
+        source = source with { DynamicTransforms = new[] { pose with { Position = new Vector3(64f, 0f, 0f) } },
+            MeshDraws = new[] { draw with { ObjectToWorld = Matrix4x4.CreateTranslation(64f, 0f, 0f) } }, MeshDrawsRevision = 1 };
         residency.BeginFrame();
         Assert.True(residency.Prepare(context));
         Assert.True(cache.IsComplete);

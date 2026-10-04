@@ -281,7 +281,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
         );
     }
     /// <summary>Both per-shape and shared scopes retain erosion without eroding a sibling or opening a
-    /// forbidden nested scope. The containing scope owns the noise clamp.</summary>
+    /// separate nested scope. The containing scope owns the noise clamp.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

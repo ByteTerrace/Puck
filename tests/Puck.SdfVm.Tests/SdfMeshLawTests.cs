@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -11,6 +12,23 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfMeshLawTests {
     private static readonly Vector3[] Positions = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY];
     private static readonly uint[] Indices = [0, 1, 2];
+
+    [Fact]
+    public void AMeshPacksItsDynamicAndIndirectPolicyWithoutChangingItsDrawStride() {
+        var mesh = new SdfMesh(indices: Indices, positions: Positions);
+        var draws = new[] {
+            new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "static"),
+            new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "moving") { IsDynamic = true, Indirect = SdfIndirectParticipation.Off },
+        };
+        var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
+        var layout = SdfMeshRegion.Plan(draws, meshes);
+        var words = new uint[layout.Words];
+        SdfMeshRegion.Write(draws, meshes, layout, words);
+        Assert.Equal(41, SdfMeshRegion.DrawWords);
+        Assert.Equal(0u, words[20]);
+        Assert.Equal(0x30000010u, words[41 + 20]);
+        Assert.Equal(0u, words[41 + 16]);
+    }
 
     [Fact]
     public void AMeshCarriesEachAttributeWhole() {

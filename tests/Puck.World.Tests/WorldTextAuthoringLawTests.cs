@@ -2,11 +2,41 @@ using System.Numerics;
 using Puck.World.Authoring;
 using Puck.SignedDistance;
 using Puck.Text;
+using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 public sealed class WorldTextAuthoringLawTests {
+    [Fact]
+    public void AnEngravedMovingCreationKeepsEveryOperandInsideOneIndirectInstance() {
+        var creation = TextCreationWithFrames();
+        var canonical = CreationCanonicalizer.Canonicalize(document: creation.Document with {
+            Shapes = [
+                creation.Document.Shapes![0] with { Dilate = .125f },
+                creation.Document.Shapes[0] with { Id = 2, Group = 1, Position = new Vector3(2f, 0f, 0f) },
+                creation.Document.Shapes[0] with { Id = 3, Group = 1, Blend = SdfBlendOp.Subtraction, Scale = new Vector3(.25f) },
+            ],
+            TextRuns = [creation.Document.TextRuns![0] with { Mode = TextRunDocument.ModeEngrave }],
+        }, source: "engraved-body");
+        creation = creation with { Document = canonical.Document, HashRaw = canonical.Hash };
+        var pool = new WorldStampPool();
+        pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
+            new WorldStampPool.BodyStamp(0, creation, 1f, WorldLook.Implicit, SdfIndirectParticipation.Receive),
+        ]);
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText("Hello") });
+        var builder = new SdfProgramBuilder();
+        pool.Emit(builder, WorldBakedColors.Of(Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
+            slotBase: 0, textCatalog: fonts);
+        var program = builder.Build(buildInstanceGrid: false);
+        var instance = Assert.Single(program.Instances);
+        Assert.True(instance.IsDynamic);
+        Assert.Equal(SdfIndirectParticipation.Receive, instance.Indirect);
+        Assert.True(program.IndirectInstancesComposable);
+        Assert.Equal(3, program.Instructions.Count(instruction => instruction.Op == SdfOp.PushField));
+        Assert.Contains(program.Instructions, instruction => instruction.Op == SdfOp.ShapeBlend && instruction.Blend == (uint)SdfBlendOp.Subtraction);
+    }
+
     private static FontAtlas AtlasForText(string text) => new(
         kind: FontAtlasKind.Sdf,
         imagePath: "memory://world-text",

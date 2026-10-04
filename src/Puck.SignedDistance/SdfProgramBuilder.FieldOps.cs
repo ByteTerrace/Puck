@@ -159,11 +159,11 @@ public sealed partial class SdfProgramBuilder {
     /// SYNC with SDF_OP_POP_FIELD in Assets/Shaders/Sdf/field/sdf-map.hlsli and field/sdf-map-grad.hlsli.</summary>
     /// <exception cref="InvalidOperationException">No field scope is open, or the scope emitted no shape.</exception>
     public SdfProgramBuilder PopField() {
-        if (m_fieldScope is not { } scope) {
+        if (m_fieldScopes is not { Count: > 0 }) {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
-        m_fieldScope = null;
+        var scope = m_fieldScopes.Pop();
 
         if (m_shapeCount == scope.ShapeCountAtOpen) {
             throw new InvalidOperationException(message: "A field scope (PushField/PopField) must contain at least one shape — an empty scope composes SDF_FAR_DISTANCE and would carve nothing.");
@@ -195,7 +195,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="from">The lane threshold for t = 0.</param>
     /// <param name="to">The lane threshold for t = 1.</param>
     public SdfProgramBuilder PopFieldMorph(int laneIndex, float from, float to) {
-        if (m_fieldScope is not { } scope) {
+        if (m_fieldScopes is not { Count: > 0 }) {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
@@ -226,7 +226,8 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        m_fieldScope = (
+        var scope = m_fieldScopes.Pop();
+        m_fieldScopes.Push((
             SdfBlendOp.Morph,
             0f,
             scope.ShapeCountAtOpen,
@@ -237,13 +238,13 @@ public sealed partial class SdfProgramBuilder {
             z: to
         ),
             0f
-        );
+        ));
 
         return PopField();
     }
 
     private SdfProgramBuilder PopFieldStairs(SdfBlendOp blendOp, float radius, int steps) {
-        if (m_fieldScope is not { } scope) {
+        if (m_fieldScopes is not { Count: > 0 }) {
             throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
         }
 
@@ -266,13 +267,14 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        m_fieldScope = (
+        var scope = m_fieldScopes.Pop();
+        m_fieldScopes.Push((
             blendOp,
             radius,
             scope.ShapeCountAtOpen,
             default,
             ((float)steps)
-        );
+        ));
 
         return PopField();
     }
@@ -333,18 +335,13 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        // The depth guard reads MaxFieldScopeDepth (rather than just testing m_fieldScope is not null) so raising the
-        // cap past 1 stays a localized change to this field + guard (see m_fieldScope's doc).
-        var openDepth = ((m_fieldScope is null)
-            ? 0
-            : 1
-        );
+        var openDepth = (m_fieldScopes?.Count ?? 0);
 
         if (openDepth >= MaxFieldScopeDepth) {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        m_fieldScope = (compose, smooth, m_shapeCount, default, 0f);
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((compose, smooth, m_shapeCount, default, 0f));
 
         // A bare marker: the compose blend + smooth ride the POP instruction (a POP is the candidate), so the PUSH
         // carries no data — the shader only saves the accumulator and reseeds. Not routed through Transform() because
@@ -392,16 +389,13 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        var openDepth = ((m_fieldScope is null)
-            ? 0
-            : 1
-        );
+        var openDepth = (m_fieldScopes?.Count ?? 0);
 
         if (openDepth >= MaxFieldScopeDepth) {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        m_fieldScope = (
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((
             SdfBlendOp.Morph,
             0f,
             m_shapeCount,
@@ -412,7 +406,7 @@ public sealed partial class SdfProgramBuilder {
             z: to
         ),
             0f
-        );
+        ));
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: 0,
@@ -449,16 +443,13 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        var openDepth = ((m_fieldScope is null)
-            ? 0
-            : 1
-        );
+        var openDepth = (m_fieldScopes?.Count ?? 0);
 
         if (openDepth >= MaxFieldScopeDepth) {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        m_fieldScope = (
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((
             (subtraction
             ? SdfBlendOp.StairsSubtraction
             : SdfBlendOp.StairsUnion),
@@ -466,7 +457,7 @@ public sealed partial class SdfProgramBuilder {
             m_shapeCount,
             default,
             ((float)steps)
-        );
+        ));
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: 0,

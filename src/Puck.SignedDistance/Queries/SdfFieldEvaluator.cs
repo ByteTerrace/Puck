@@ -1613,8 +1613,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         var distanceScale = FixedQ4816.One;
         var resultDistance = FarDistance;
         var resultMaterial = 0;
-        var savedFieldDistance = FarDistance;
-        var savedFieldMaterial = 0;
+        Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
+        var scopeDepth = 0;
         var cullIndex = 0;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
@@ -1737,13 +1737,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         break;
                     }
                 case SdfOp.PushField: {
-                        savedFieldDistance = resultDistance;
-                        savedFieldMaterial = resultMaterial;
+                        scopes[scopeDepth++] = (resultDistance, resultMaterial);
                         resultDistance = FarDistance;
                         resultMaterial = 0;
                         break;
                     }
                 case SdfOp.PopField: {
+                        var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
                         var candidateDistance = resultDistance;
                         var candidateMaterial = resultMaterial;
 

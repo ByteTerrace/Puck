@@ -69,7 +69,7 @@ void sdfBuildTileTape(uint tileIndex, uint maskBase, float3 origin, float3 direc
         sdfSegmentTapesRW[ball + 3u] = asuint(sdfTapeRadius);
         sdfTapeInterval = float2(SDF_FAR_DISTANCE, SDF_FAR_DISTANCE);
         sdfTapeFieldKnown = true;
-        sdfTapeSavedKnown = true;
+        sdfTapeScopeDepth = 0u;
         sdfTapeUnionStart = 0u;
         mapCore(center, maskBase, false);
         [loop]

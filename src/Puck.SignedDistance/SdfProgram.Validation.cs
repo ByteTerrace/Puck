@@ -361,7 +361,7 @@ public sealed partial class SdfProgram {
         }
     }
     // A PushField/PopField pair saves one accumulator slot in every interpreter. A hand-assembled stream must obey
-    // the same one-deep, balanced, single-owner, shape-bearing discipline as the builder: crossing an instance
+    // the same bounded, balanced, single-owner, shape-bearing discipline as the builder: crossing an instance
     // boundary would let a masked segment observe a save or restore emitted by a different mask bit (or by the
     // unmasked world stream), and an empty pair composes the FarDistance sentinel the push seeded — under an
     // intersection-family compose that sentinel wins the max() and erases every candidate accumulated before it.

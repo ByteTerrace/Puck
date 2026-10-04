@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -139,6 +140,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 /// <param name="SkyQuality">The sky's boot quality tier (<c>world.sky-quality</c>): a layer below it writes no entry, and
 /// below <see cref="WorldSkyTier.High"/> each kind draws its reduced form.</param>
+/// <param name="Indirect">The world's diffuse indirect-light participation defaults.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
@@ -161,7 +163,8 @@ public sealed record WorldRenderDefaults(
     int ShadowFadeSlots = 0,
     uint ShadowFadeTicks = 0,
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
-    WorldSkyTier SkyQuality = WorldSkyTier.High
+    WorldSkyTier SkyQuality = WorldSkyTier.High,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
@@ -193,6 +196,10 @@ public sealed record WorldRenderDefaults(
         });
     }
 }
+/// <summary>The world's diffuse indirect-light participation defaults.</summary>
+/// <param name="Bodies">Default makes moving bodies receive at medium and cast and receive at high. Receive omits
+/// their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.</param>
+public sealed record WorldRenderIndirect([property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>))] SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default);
 /// <summary>The lit path's lights and stylization as world data. Absent renders the pinned sun; present, the list
 /// is exactly the authored direct lights. Ambient comes from the sky through the environment gain. Every field of every light is optional individually and resolves to the engine's pinned default for its
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be

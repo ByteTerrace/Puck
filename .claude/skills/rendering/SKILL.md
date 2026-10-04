@@ -130,6 +130,14 @@ application synchronized. Direct-shadow suppression is independent. Static
 Default casts; moving Default receives at medium and casts at high; explicit
 placement policy wins. Refuse exclusions across dependent root operands and
 name unsupported CPU reference policies rather than evaluating a different field.
+World emission carries `render.indirect.bodies` and `placements[].indirect` through
+the existing frame and instance paths. Paired meshes retain their dynamic flag;
+resolve it with the consuming tier, never an emission-time guessed tier. Pin
+adjacent placement identities with poses. Text-coupled dynamic creations use one
+scoped instance, preserving the engine's independent-operand requirement. The
+existing field stack has two levels: complete-body isolation outside local
+group/shape scopes. Keep scalar, dual, CPU interval, tape and gradient-contributor
+stacks synchronized; nested clamp factors multiply along each path.
 Indirect helpers save and restore both ambient and shadow mask flags. Their
 full-field distance and gradient walks cannot inherit a caller's clipped mask;
 an explicitly masked distance uses only its own gathered indirect mask.

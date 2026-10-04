@@ -116,7 +116,7 @@ public enum SdfOp : uint {
     /// plane is folded onto itself.</summary>
     SymmetryPlane = 26,
     /// <summary>Opens a scoped field accumulator — the first half of the <see cref="PushField"/>/<see cref="PopField"/>
-    /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance into a one-deep slot
+    /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance onto a bounded stack
     /// and reseeds a fresh accumulator (<c>SDF_FAR_DISTANCE</c>), so every accumulator-reading op emitted until the
     /// matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/<see cref="Dilate"/>/
     /// <see cref="Displace"/> field ops — acts on this scope's field alone, not on everything emitted before it. That is

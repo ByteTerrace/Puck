@@ -242,7 +242,7 @@ public sealed partial class SdfProgram {
                 }
             }
         }
-        // Scope validation already forbids nesting and crossing instance ownership, so each compiled scope
+        // Scope validation bounds nesting and forbids crossing instance ownership, so each compiled scope
         // is a complete root operand. Internal cuts and field modifiers remain inside their owning scope.
         return (depth == 0);
     }

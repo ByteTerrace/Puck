@@ -138,7 +138,7 @@ whole accumulator, so it shells the entire scene. Intersecting two shapes deep i
 a populated program has the same problem: intersection deletes everything else.
 
 **Field scopes** are the fix. `PushField` saves the running accumulator into a
-one-deep slot and reseeds a *fresh* empty accumulator; `PopField` composes the
+bounded parent stack and reseeds a *fresh* empty accumulator; `PopField` composes the
 scope's result back into the saved parent as a single candidate, using a blend
 you choose on the pop. Everything between the balanced push and pop—every
 intersection, every `Onion`/`Dilate`/`Displace`—acts on the scope's own shapes
@@ -166,12 +166,14 @@ rule—a scoped field op grows the surface *outward* past the authored geometry
 bound, so the packer inflates the instance's cull bound by that reach (`Onion(t)`
 moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`) or the beam would
 mask away tiles the grown shell reaches and the surface would hole at tile seams.
-Scope depth is capped at one today, which covers "hollow this one object in a full
-scene" without opening the door to arbitrary nesting.
+Scope depth is capped at two. The outer scope can isolate an engraved moving
+creation while the inner scopes keep its groups' cutters and field operations
+local. Nested distance clamps multiply along each parent/child path. The bound
+includes every level's outward reach and soft halo; sibling paths use their maximum.
 
 The public `SdfProgram` constructor enforces that structure even for a
 hand-assembled instruction stream: every push must have one pop, nesting may not
-exceed the one-deep interpreter slot, and a scope may not cross between the
+exceed the two-level interpreter stack, and a scope may not cross between the
 unmasked world stream and an instance-owned slice. A crossing scope would save
 under one mask owner and restore under another, so it is malformed program data,
 not a culling mode.

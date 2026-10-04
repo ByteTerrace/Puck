@@ -68,6 +68,12 @@ public sealed partial class SdfFieldDeviceLawTests {
         Assert.True(condition: (results.Sum(selector: static result => result.W) > 0), userMessage: "the tape pass counted no shape evaluations");
     }
     private static IEnumerable<(string Name, SdfProgram Program)> TapePrograms() {
+        yield return ("nested cut scopes", Pack(emit: static (builder, material) => builder
+            .Sphere(.8f, material).PushField()
+            .ResetPoint().Translate(Vector3.UnitX).Sphere(.75f, material).PushField()
+            .ResetPoint().Translate(Vector3.UnitY).Sphere(.75f, material)
+            .ResetPoint().Sphere(.25f, material, blend: SdfBlendOp.Subtraction).PopField()
+            .ResetPoint().Translate(Vector3.UnitX).Sphere(.25f, material, blend: SdfBlendOp.Subtraction).PopField()));
         yield return ("required shapes inside one scoped segment", Pack(emit: static (builder, material) => {
             builder.PushField().ResetPoint();
             for (var index = 0; (index < 40); index++) {

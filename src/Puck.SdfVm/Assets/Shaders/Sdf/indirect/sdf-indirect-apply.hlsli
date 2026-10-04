@@ -61,7 +61,8 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
     uint source = sdfVisibilitySource(sdfLoadVisibility(record).identity);
     uint policy = SDF_INDIRECT_PARTICIPATION_CAST;
     if (receiver.mesh) {
-        policy = (sdfMeshRegion[sdfMeshRecord(source) + SdfMeshFlagsWord] & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT;
+        uint flags = sdfMeshRegion[sdfMeshRecord(source) + SdfMeshFlagsWord];
+        policy = sdfIndirectPolicy((flags & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, (flags & SdfMeshDynamicFlag) != 0u);
     } else if (source != 0u) {
         policy = sdfInstanceIndirectPolicy(sdfWords[sdfInstanceEntryOffset(sdfInstanceDirectoryOffset(), source - 1u) + 1u]);
     }

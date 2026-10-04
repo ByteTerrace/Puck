@@ -161,7 +161,8 @@ public sealed partial class SdfFieldEvaluator {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
-        var saved = FixedInterval.FromPoint(value: FarDistance);
+        Span<FixedInterval> scopes = stackalloc FixedInterval[SdfProgramBuilder.MaxFieldScopeDepth];
+        var scopeDepth = 0;
 
         var cullIndex = 0;
         var walked = 0;
@@ -282,12 +283,12 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.PushField: {
-                        saved = result;
+                        scopes[scopeDepth++] = result;
                         result = FixedInterval.FromPoint(value: FarDistance);
                         break;
                     }
                 case SdfOp.PopField: {
-                        result = PopFieldBounds(candidate: result, instruction: instruction, saved: saved);
+                        result = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
                         break;
                     }
                 case SdfOp.ShapeBlend: {

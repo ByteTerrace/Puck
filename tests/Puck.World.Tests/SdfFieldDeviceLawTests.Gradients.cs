@@ -124,6 +124,12 @@ public sealed partial class SdfFieldDeviceLawTests {
         return builder;
     });
     private static IEnumerable<SdfFieldLeg> GradientLegs() {
+        yield return GradientLeg(name: "nested parent and child contributors", program: Pack(emit: static (builder, material) => builder
+            .Sphere(.8f, material).PushField(compose: SdfBlendOp.SmoothUnion, smooth: .4f)
+            .ResetPoint().Translate(Vector3.UnitX * .25f).Sphere(.75f, material)
+            .PushField(compose: SdfBlendOp.SmoothUnion, smooth: .3f)
+            .ResetPoint().Translate(Vector3.UnitY * .25f).Sphere(.7f, material)
+            .ResetPoint().Sphere(.2f, material, blend: SdfBlendOp.Subtraction).PopField().PopField()));
         foreach (var blend in Enum.GetValues<SdfBlendOp>()) {
             if (blend is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
                 continue;

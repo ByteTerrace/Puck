@@ -172,20 +172,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
-    // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
-    // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
-    // so it holds exactly ONE parent — the builder's validator rejects nesting past SDF_MAX_FIELD_SCOPE_DEPTH == 1, and
-    // raising that depth would require turning this pair into an indexed array with push/pop-by-depth stack semantics
-    // (SDF_MAX_FIELD_SCOPE_DEPTH is documentation only — nothing here reads it). Untouched by a scope-free program, so
-    // its codegen and render stay byte-identical.
-    float savedFieldDistance = SDF_FAR_DISTANCE;
-    int savedFieldMaterial = 0;
-    float4 savedFieldLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int savedFieldInstance = -1;
-    int savedFieldSlot = SDF_TRANSFORM_SLOT_NONE;
-    float savedFieldBlendWeight = 0.0;
-    int savedFieldBlendOther = 0;
-
+    // Each validated scope saves its immediate parent's complete field and material seam.
+    SdfHit fieldParents[SDF_MAX_FIELD_SCOPE_DEPTH];
+    float fieldBlendWeights[SDF_MAX_FIELD_SCOPE_DEPTH];
+    int fieldBlendOthers[SDF_MAX_FIELD_SCOPE_DEPTH];
+    uint fieldDepth = 0u;
     // Walk ResetPoint segments in directory order, merging world and visible-instance ranges in ascending order.
     // A Union chain can be skipped when its sphere's lower bound cannot beat the running minimum; the next ResetPoint
     // makes its discarded transform state dead. This preserves the field and material winner even if backends choose
@@ -995,19 +986,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
                 case SDF_OP_PUSH_FIELD: {
-                    // Save the parent accumulator into the one-deep slot and reseed a fresh scope. Every accumulator-
-                    // reading op until the matching POP now composes against SDF_FAR_DISTANCE (this scope), not the scene.
-                    savedFieldDistance = result.distance;
+                    fieldParents[fieldDepth] = result;
+                    fieldBlendWeights[fieldDepth] = trackMaterial ? sdfMaterialBlendWeight : 0.0;
+                    fieldBlendOthers[fieldDepth] = trackMaterial ? sdfMaterialBlendOther : 0;
                     if (trackMaterial) {
-                        savedFieldMaterial = result.material;
-                        savedFieldLanes = result.lanes;
-                        savedFieldInstance = result.instanceIndex;
-                        savedFieldSlot = result.frameSlot;
-                        savedFieldBlendWeight = sdfMaterialBlendWeight;
-                        savedFieldBlendOther = sdfMaterialBlendOther;
                         sdfMaterialBlendWeight = 0.0;
                         sdfMaterialBlendOther = 0;
                     }
+                    fieldDepth++;
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
                         result.material = 0;
@@ -1018,6 +1004,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
+                    fieldDepth--;
+                    float savedFieldDistance = fieldParents[fieldDepth].distance;
+                    int savedFieldMaterial = fieldParents[fieldDepth].material;
+                    float4 savedFieldLanes = fieldParents[fieldDepth].lanes;
+                    int savedFieldInstance = fieldParents[fieldDepth].instanceIndex;
+                    int savedFieldSlot = fieldParents[fieldDepth].frameSlot;
+                    float savedFieldBlendWeight = fieldBlendWeights[fieldDepth];
+                    int savedFieldBlendOther = fieldBlendOthers[fieldDepth];
                     SDF_VM_LOAD_DATA1;
                     // The scope's accumulated field IS the candidate — ALREADY in world units (its shapes were
                     // distance-scaled as they blended in), so it is NOT re-multiplied by distanceScale, and the point

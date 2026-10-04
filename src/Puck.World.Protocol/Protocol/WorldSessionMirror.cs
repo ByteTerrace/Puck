@@ -364,10 +364,12 @@ public sealed class WorldSessionMirror : IClientSink {
         );
     }
     /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
-    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
+    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks. Placement identities are
+    /// copied with the poses, so a pinned renderer cannot read a newer body's authored policy.</summary>
     public void CopySnapshotTo(
         bool[] active,
         WorldEntityAddress[] addresses,
+        string?[] placementIds,
         Vector3[] previousPositions,
         Quaternion[] previousOrientations,
         Vector3[] currentPositions,
@@ -393,6 +395,7 @@ public sealed class WorldSessionMirror : IClientSink {
             for (var index = 0; (index < EntityCapacity); index++) {
                 active[index] = IsActive(index: index);
                 addresses[index] = Address(index: index);
+                placementIds[index] = PlacementId(index: index);
                 previousPositions[index] = PreviousPosition(index: index);
                 previousOrientations[index] = PreviousOrientation(index: index);
                 currentPositions[index] = CurrentPosition(index: index);

@@ -14,15 +14,11 @@ public sealed partial class SdfProgramBuilder {
     /// does not actually observe. Refusing the count outright keeps that claim honest without forking the shader's
     /// float arithmetic onto the host.</summary>
     public const int MaxExactFloatSectorCount = (1 << 24);
-    /// <summary>The deepest a <see cref="PushField"/>/<see cref="PopField"/> scope may nest. Depth 1 covers every case
-    /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
-    /// not part of the packed word layout, so raising it never re-gates the stream. But it is not a one-line bump: the
-    /// interpreter holds the parent accumulator in one non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> scalar
-    /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/field/sdf-map.hlsli), and the generated <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> is
-    /// documentation only — no shader expression reads it. Raising this depth means converting that save pair into an
-    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then raising this
-    /// constant and regenerating the kernels' declarations.</summary>
-    public const int MaxFieldScopeDepth = 1;
+    /// <summary>The deepest a <see cref="PushField"/>/<see cref="PopField"/> scope may nest. Two levels allow a
+    /// complete creation to own an engraved field while its groups retain independent cuts and field operations.
+    /// Builder admission, CPU interpreters and generated shader stacks share this bound. Scope instructions retain
+    /// their existing packed layout; each pop composes only into its immediate parent.</summary>
+    public const int MaxFieldScopeDepth = 2;
     /// <summary>The floor <see cref="AxialProfile"/>'s scale profile s(t) clamps against at evaluation time — an admitted
     /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
     /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign. The
@@ -157,14 +153,8 @@ public sealed partial class SdfProgramBuilder {
         ));
     }
 
-    // The one open field scope (a PushField without its PopField yet), or null when none is open: carries the compose
-    // blend + smooth radius PopField bakes onto its instruction, and the ShapeBlend count when it opened (so a
-    // shape-less scope is rejected at close). Null for a scope-free program, so its packed words stay byte-identical.
-    // A single nullable slot, not a list/array — MaxFieldScopeDepth (the depth cap) is 1, so there is never more than
-    // one open scope; every call site below is an is-open/the-open-scope check, never an index. Raising the depth
-    // cap needs converting this to an indexed structure (see MaxFieldScopeDepth's doc) — the depth guard below keeps
-    // reading MaxFieldScopeDepth rather than hardcoding 1, so that conversion stays localized to this field + guard.
-    private (SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)? m_fieldScope;
+    // Allocated only when a scope opens. Each entry owns its pop parameters and empty-scope admission count.
+    private Stack<(SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)>? m_fieldScopes;
     // The SECOND mirror of the shader's parityMaterialDelta slot, and the one the Build()-time refusal below reads.
     // It exists beside m_positionalFold because the two answer different questions: m_positionalFold feeds the
     // material-scope CLAMP, whose repair vocabulary is a fold's per-unit stride, so it deliberately tracks only the two
@@ -286,7 +276,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "BeginInstance/BeginInstanceDynamic was called with an instance already open (nesting is not supported).");
         }
 
-        if (m_fieldScope is not null) {
+        if (m_fieldScopes is { Count: > 0 }) {
             throw new InvalidOperationException(message: "BeginInstance/BeginInstanceDynamic was called with a field scope open (PushField without its PopField). A scope must sit entirely inside one instance or entirely in the world set, never crossing an instance boundary.");
         }
 
@@ -1145,7 +1135,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
 
-        if (m_fieldScope is not null) {
+        if (m_fieldScopes is { Count: > 0 }) {
             throw new InvalidOperationException(message: "Build was called with a field scope still open (PushField without its PopField).");
         }
 

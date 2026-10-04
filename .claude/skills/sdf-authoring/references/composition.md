@@ -128,8 +128,9 @@ for both sides when the band must follow the rendered surface.
 
 ## The three scope rules
 
-The builder allows exactly one level of field scope. Scopes may sequence, never
-nest, and that single depth is what all three rules are competing for.
+The builder allows two levels of field scope. Creation shape and group emission
+uses its existing shared-scope rules below. The extra level isolates a moving
+creation's text and geometry together without flattening its independent groups.
 
 **1. A shape takes its own scope** when it carries any of `dilate`, `onion`,
 `panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
@@ -142,8 +143,8 @@ Shorter steps can affect convergence and the apparent hit threshold; the
 symptom alone does not establish the cause.
 
 **2. A group takes one scope for all its members** when any member wants one.
-Because that consumes the depth, a grouped shape may not carry `panel`, `trims`,
-or `cells`.
+The creation emitter does not lower `panel`, `trims`, or `cells` as grouped
+members, so those combinations remain refused by name.
 
 Only the pooled/body path reads `group` at all. Static emission walks the shape
 list in declaration order and never looks at it, so on a static placement a group
@@ -151,6 +152,9 @@ isolates nothing and every `Subtraction` composes against the whole creation
 accumulator — order each cut to be spatially local instead. `creation stats`
 shows the difference directly: its `static:` line reports one scope over all
 shapes where `pooled:` reports one per group.
+Text-bearing pooled creations wrap those groups and their text in one outer
+scope and one dynamic instance. Engraving therefore cuts the creation, never
+another placement, and a group's cutter still affects only that group.
 
 **3. Static emission takes a creation scope** when it has a `noise` facet, an
 engraved text run, **or any shape blend outside `Union` and `SmoothUnion`**.

@@ -495,13 +495,16 @@ panel's compose bites only this shape, never a sibling occupying the same
 space—`CreationStampEmitter.EmitShapeChain` (static placements) and
 `Client.WorldStampPool.EmitShape` (the animated stamp pool)—and emit the copy
 from its own `ResetPoint` chain rather than after the plate's shape
-instruction, whose emission may leave a persistent `Scale` op behind. Because
-a field scope nests no deeper than 1, a panel is refused by name wherever that
-scope would already be spent: a `Plane` (no meaningful face), a domain-folded
+instruction, whose emission may leave a persistent `Scale` op behind. The
+creation emitter refuses panels outside that independent-shape recipe:
+a `Plane` (no meaningful face), a domain-folded
 shape, a grouped shape (the pool's own group scope), and a creation whose OTHER
 shapes force `CreationStampEmitter.RequiresScope` (a non-Union blend, an
 engraved text run, or a noise facet)—the static path then shares one scope
-across the whole creation, leaving a panel nowhere of its own to nest.
+across the whole creation without lowering per-shape panel copies. The VM's
+second scope level lets a text-bearing moving creation isolate its complete
+field while retaining existing independent group scopes; it does not add new
+panel or trim authoring combinations.
 
 Render-only, like `Domain`: `CreationStampEmitter.EmitFixed`/
 `VisitFixedPrimitiveCopies` never read it, so a panelled solid placement's

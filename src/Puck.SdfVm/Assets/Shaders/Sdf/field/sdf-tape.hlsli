@@ -126,10 +126,11 @@ static float sdfTapeRadius = 0.0;
 static float sdfTapeMagnitude = 0.0;
 static float sdfTapeCentreMagnitude = 0.0;
 static float2 sdfTapeInterval;
-static float2 sdfTapeSavedInterval;
-static uint sdfTapeScopeStart = 0u;
+static float2 sdfTapeSavedIntervals[SDF_MAX_FIELD_SCOPE_DEPTH];
+static uint sdfTapeScopeStarts[SDF_MAX_FIELD_SCOPE_DEPTH];
+static uint sdfTapeScopeDepth = 0u;
 static bool sdfTapeFieldKnown = true;
-static bool sdfTapeSavedKnown = true;
+static bool sdfTapeSavedKnown[SDF_MAX_FIELD_SCOPE_DEPTH];
 static uint sdfTapeUnionStart = 0u;
 static bool sdfTapeSegmentNeeded = false;
 static bool sdfTapeSegmentOmissible = false;
@@ -171,9 +172,9 @@ void sdfTapeEndSegment(uint segment) {
 void sdfTapeForgetField(uint instruction, bool seed) {
     if (!sdfTapeBuilding) { return; }
     if (seed) {
-        sdfTapeSavedInterval = sdfTapeInterval;
-        sdfTapeSavedKnown = sdfTapeFieldKnown;
-        sdfTapeScopeStart = instruction + 1u;
+        sdfTapeSavedIntervals[sdfTapeScopeDepth] = sdfTapeInterval;
+        sdfTapeSavedKnown[sdfTapeScopeDepth] = sdfTapeFieldKnown;
+        sdfTapeScopeStarts[sdfTapeScopeDepth++] = instruction + 1u;
     }
     sdfTapeInterval = seed ? float2(SDF_FAR_DISTANCE, SDF_FAR_DISTANCE) : sdfTapeUnknown();
     sdfTapeFieldKnown = seed;
@@ -229,19 +230,20 @@ SdfTapeBlend sdfTapeBlend(float2 current, float2 candidate, uint blend, float sm
 }
 void sdfTapePop(uint instruction, uint blend, float4 data) {
     if (!sdfTapeBuilding) { return; }
+    uint scope = --sdfTapeScopeDepth;
     float scale = data.y > 0.0 ? data.y : 1.0;
     float2 child = float2(sdfTapeEndpoint(sdfTapeInterval.x) ? -sdfTapeMulUp(-sdfTapeInterval.x, scale) : sdfTapeInterval.x,
         sdfTapeEndpoint(sdfTapeInterval.y) ? sdfTapeMulUp(sdfTapeInterval.y, scale) : sdfTapeInterval.y);
-    SdfTapeBlend composed = sdfTapeBlend(sdfTapeSavedInterval, child, blend, data.x);
+    SdfTapeBlend composed = sdfTapeBlend(sdfTapeSavedIntervals[scope], child, blend, data.x);
     // Independent part marches query each child's full field. Keep those children even when their root union loses.
     if (composed.loses && sdfTapeFieldKnown && sdfProgramLayout.partProgramOffset == 0u) {
-        sdfTapeUnionStart = sdfTapeScopeStart;
+        sdfTapeUnionStart = sdfTapeScopeStarts[scope];
         sdfTapeClearUnionPrefix(instruction);
         uint token = sdfTapeToken(instruction);
         sdfSegmentTapesRW[sdfTapeDecisionBase() + (token >> 5u)] |= 1u << (token & 31u);
     }
     sdfTapeInterval = composed.interval;
-    sdfTapeFieldKnown = sdfTapeFieldKnown && sdfTapeSavedKnown && composed.modeled;
+    sdfTapeFieldKnown = sdfTapeFieldKnown && sdfTapeSavedKnown[scope] && composed.modeled;
     sdfTapeUnionStart = instruction + 1u;
     sdfTapeSegmentOmissible = false;
 }

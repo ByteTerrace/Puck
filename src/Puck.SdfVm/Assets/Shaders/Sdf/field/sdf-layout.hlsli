@@ -1,7 +1,7 @@
 // The field-scope save, the visible instance ranges, the per-invocation program layout and the compiled parts.
 #ifndef FIELD_SDF_LAYOUT_HLSLI
 #define FIELD_SDF_LAYOUT_HLSLI
-// The one-deep scoped-accumulator save slot for the dual walk carries distance, material, and gradient together.
+// Each parent entry in the dual walk's bounded scope stack carries distance, material and gradient together.
 struct SdfFieldSave {
     float distance;
     int material;

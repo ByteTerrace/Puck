@@ -1465,6 +1465,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
+            if (!Enum.IsDefined(placement.Indirect)) { errors.Add($"{path}.indirect must be default, cast, receive or off."); }
             ValidatePlacementSpatial(
                 errors: errors,
                 path: path,

@@ -96,14 +96,9 @@ SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     float3 resultGradient = float3(0.0, 0.0, 0.0);
 
-    // The one-deep scoped-accumulator save slot carries distance, material, lanes, and gradient together.
-    SdfFieldSave saved;
-    saved.distance = SDF_FAR_DISTANCE;
-    saved.material = 0;
-    saved.lanes = float4(0.0, 0.0, 0.0, 0.0);
-    saved.instanceIndex = -1;
-    saved.frameSlot = SDF_TRANSFORM_SLOT_NONE;
-    saved.gradient = float3(0.0, 0.0, 0.0);
+    // Distance, material provenance and gradient follow the same bounded scope stack.
+    SdfFieldSave fieldParents[SDF_MAX_FIELD_SCOPE_DEPTH];
+    uint fieldDepth = 0u;
 
     [loop]
     for (;;) {
@@ -793,17 +788,14 @@ SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float
                 }
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_PUSH_FIELD: {
-                    if (sdfGradientMode == 1u) {
-                        sdfGradientScope = sdfGradientCount;
-                        sdfGradientParentOverflow = sdfGradientOverflow;
-                        sdfGradientOverflow = false;
-                    }
-                    saved.distance = result.distance;
-                    saved.material = result.material;
-                    saved.lanes = result.lanes;
-                    saved.instanceIndex = result.instanceIndex;
-                    saved.frameSlot = result.frameSlot;
-                    saved.gradient = resultGradient;
+                    sdfGradientPushScope();
+                    fieldParents[fieldDepth].distance = result.distance;
+                    fieldParents[fieldDepth].material = result.material;
+                    fieldParents[fieldDepth].lanes = result.lanes;
+                    fieldParents[fieldDepth].instanceIndex = result.instanceIndex;
+                    fieldParents[fieldDepth].frameSlot = result.frameSlot;
+                    fieldParents[fieldDepth].gradient = resultGradient;
+                    fieldDepth++;
                     result.distance = SDF_FAR_DISTANCE;
                     result.material = 0;
                     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
@@ -813,6 +805,7 @@ SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
+                    SdfFieldSave saved = fieldParents[--fieldDepth];
                     // data1.y = the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
                     // in data1.z (KEEP IN SYNC with mapCore's pop and AnalyzeLipschitz).
                     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
@@ -949,7 +942,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     sdfGradientCount = 0u;
     sdfGradientScope = 0u;
     sdfGradientOverflow = false;
-    sdfGradientParentOverflow = false;
+    sdfGradientDepth = 0u;
     sdfGradientSelected = 0.0;
     sdfGradientMode = 1u;
 #ifdef SDF_VM_FULL_GRADIENTS

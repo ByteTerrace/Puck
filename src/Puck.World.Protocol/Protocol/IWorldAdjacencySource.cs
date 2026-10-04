@@ -87,6 +87,9 @@ public interface IWorldAdjacencyNeighbour {
     bool IsEntityActive(int index);
     /// <summary>The durable address of a delivered entity slot.</summary>
     WorldEntityAddress EntityAddress(int index);
+    /// <summary>Gets the authored placement identity from the same delivered entity image as its pose, or null
+    /// for a body without a placement.</summary>
+    string? PlacementId(int index);
     Vector3 PreviousPosition(int index);
     Quaternion PreviousOrientation(int index);
     Vector3 CurrentPosition(int index);

@@ -115,6 +115,12 @@ public static class SdfEncodingProbe {
             Call(name: $"field-scope {compose}", inputs: [0.26f], emit: (b, m, v) => Shape(b: b.ResetPoint().PushField(compose: compose, smooth: v[0]).ResetPoint(), material: m).PopField());
         }
         Call(name: "field-scope morph", inputs: [2f, 0.2f, 0.8f], emit: static (b, m, v) => Shape(b: b.ResetPoint().PushFieldMorph(from: v[1], laneIndex: ((int)v[0]), to: v[2]).ResetPoint(), material: m).PopField());
+        Call(name: "field-scope nested cut", inputs: [.25f, .75f], emit: static (b, m, v) => b
+            .ResetPoint().Sphere(1f, m).PushField()
+            .ResetPoint().Translate(Vector3.UnitX).Sphere(v[1], m).PushField()
+            .ResetPoint().Translate(Vector3.UnitY).Sphere(v[1], m)
+            .ResetPoint().Sphere(v[0], m, blend: SdfBlendOp.Subtraction).PopField()
+            .ResetPoint().Translate(Vector3.UnitX).Sphere(v[0], m, blend: SdfBlendOp.Subtraction).PopField());
         foreach (var subtraction in ((ReadOnlySpan<bool>)[false, true])) {
             Call(name: $"field-scope stairs {(subtraction ? "subtraction" : "union")}", inputs: [0.27f, 4f], emit: (b, m, v) => Shape(b: b.ResetPoint().PushFieldStairs(radius: v[0], steps: ((int)v[1]), subtraction: subtraction).ResetPoint(), material: m).PopField());
         }

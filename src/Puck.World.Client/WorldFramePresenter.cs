@@ -1678,6 +1678,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             IndirectTier = m_settings.IndirectTier,
+            IndirectBodies = m_client.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
             Volumes = m_volumes,
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,

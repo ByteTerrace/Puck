@@ -11,7 +11,7 @@ namespace Puck.SignedDistance;
 /// <param name="BoundRadius">The packed culling radius, including padding or a parked/unmaskable sentinel.</param>
 /// <param name="Halo">Soft-blend and scoped-field outward reach before float-safety padding.</param>
 /// <param name="Unmaskable">Whether no finite bound can mask this instance.</param>
-/// <param name="FieldRescale">The largest factor <c>L</c> by which a field scope of this instance divides its field before
+/// <param name="FieldRescale">The largest product of factors <c>L</c> along a nested scope path dividing its field before
 /// it joins the parent (<see cref="SdfFieldScopeClamp.StepScale"/> is <c>1/L</c>), or 1 when no scope does. The packed bound
 /// contains the instance's surface and its blends' influence whatever this is; the instance's field outside the bound is
 /// at least its distance to the bound divided by this, not the distance itself.</param>
@@ -92,12 +92,11 @@ public sealed partial class SdfProgram {
         }
         var clamps = 0;
 
-        var rescale = 1f;
+        var rescale = FieldScopeExtent(instance.First, instance.End).Rescale;
 
         foreach (var clamp in FieldScopeClamps) {
             if (clamp.InstanceIndex == index) {
                 clamps++;
-                rescale = MathF.Max(x: rescale, y: (1f / clamp.StepScale));
             }
         }
         return new SdfInstanceCost(OwnedWords: checked((vectors * WordsPerVector)), Shapes: shapes, ScopeClamps: clamps,

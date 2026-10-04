@@ -224,7 +224,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "EndInstance was called with no open instance (unbalanced Begin/EndInstance).");
         }
 
-        if (m_fieldScope is not null) {
+        if (m_fieldScopes is { Count: > 0 }) {
             throw new InvalidOperationException(message: "EndInstance was called with a field scope still open (PushField without its PopField). Close every scope opened inside the instance before EndInstance.");
         }
 

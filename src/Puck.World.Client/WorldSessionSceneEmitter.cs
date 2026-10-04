@@ -322,7 +322,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             scaleFor: (probeWorstCase
             ? null
             : index => m_emittedScales[index]),
-            picks: (probeWorstCase ? null : m_picks)
+            picks: (probeWorstCase ? null : m_picks),
+            indirectFor: (probeWorstCase ? null : index => WorldIndirectParticipation.ForPlacement(m_mirror.Definition, m_mirror.PlacementId(index)))
         );
     }
     // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
@@ -557,6 +558,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            IndirectBodies = m_mirror.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
             Lights = environment.Lights,
             ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_mirror.Definition.Render),
             Sky = environment.Sky,

@@ -37,16 +37,15 @@ namespace Puck.World.Client.Sdf;
 /// </para>
 /// <para>
 /// <b>Top-level blend restriction.</b> A document's field-scope depth starts at 0;
-/// <see cref="SdfDocumentOpKind.Push"/> raises it to 1 (refused past 1 — the builder's own
-/// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>) and <see cref="SdfDocumentOpKind.Pop"/> lowers it back to 0. A
+/// <see cref="SdfDocumentOpKind.Push"/> raises it by one (refused past the builder's
+/// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>) and <see cref="SdfDocumentOpKind.Pop"/> lowers it by one. A
 /// shape op's <c>blend</c> at depth 0 must be a union-family value (<see cref="SdfBlendOp.Union"/>/
-/// <see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.ChamferUnion"/>); depth 1 (inside one push/pop pair)
+/// <see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.ChamferUnion"/>); positive depth (inside a push/pop pair)
 /// allows any blend — a document's own field scope is where its subtraction/intersection CSG lives. The same rule
 /// applies to a <see cref="SdfDocumentOpKind.Push"/>'s own <c>blend</c>: it is evaluated at the depth the push itself
 /// sits at (never a fixed depth), because that blend composes the closed scope back into whatever field the push
 /// opened inside — a top-level push is therefore restricted exactly like a top-level shape. Enforced here by
-/// validation (never by host-wrapping, which would spend the builder's one field-scope level and strip every
-/// document of its own intra-document CSG).
+/// validation rather than host-wrapping, which would consume one of the document's bounded scope levels.
 /// </para>
 /// <para>
 /// <b>The fixed prototype reservation</b> (<see cref="MaxOps"/>/<see cref="MaxMaterials"/>/<see cref="MaxDocumentBytes"/>):
@@ -1020,7 +1019,7 @@ public static class SdfDocumentDecoder {
         return kind.ToString();
     }
     // Decision 9: a shape's blend at field-scope depth 0 must be union-family (never host-wrapped — see the type
-    // remarks); depth 1 (inside one push/pop pair) allows any blend, because that scope's field never reaches the
+    // remarks); positive depth (inside a push/pop pair) allows any blend, because that scope's field never reaches the
     // parent except through the union-family compose PushField itself records.
     private static SdfBlendOp ReadBlend(Dictionary<string, JsonElement> members, string context, int depth) {
         var blend = SdfBlendOp.Union;

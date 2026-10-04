@@ -88,12 +88,14 @@ static bool sdfShadowParticipationActive = false;
 
 // Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
 static bool sdfIndirectParticipationActive = false;
-uint sdfInstanceIndirectPolicy(uint4 meta) {
-    uint policy = (meta.w & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT;
+uint sdfIndirectPolicy(uint policy, bool isDynamic) {
     if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
-    if (meta.x != SDF_BOUND_DYNAMIC) { return SDF_INDIRECT_PARTICIPATION_CAST; }
+    if (!isDynamic) { return SDF_INDIRECT_PARTICIPATION_CAST; }
     return passGroup.indirectBodies != SDF_INDIRECT_PARTICIPATION_DEFAULT ? passGroup.indirectBodies :
         passGroup.indirectTier == SDF_INDIRECT_TIER_HIGH ? SDF_INDIRECT_PARTICIPATION_CAST : SDF_INDIRECT_PARTICIPATION_RECEIVE;
+}
+uint sdfInstanceIndirectPolicy(uint4 meta) {
+    return sdfIndirectPolicy((meta.w & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, meta.x == SDF_BOUND_DYNAMIC);
 }
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
@@ -319,12 +321,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // ambient-occlusion field walks in shade/sdf-light-stage.hlsli and surface/sdf-surface.hlsli (eyelids and other small parts still shade and collide, they just
 // cast no shadow and cost no AO tap).
 // SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
-// Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the running accumulator into a one-deep slot and
-// reseeds a fresh scope; POP composes the scope's field back into the saved parent as a candidate (reusing SHAPE's
-// blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads it; the real capacity is
-// the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which holds exactly ONE
-// parent. Raising the depth means making that pair an indexed array with push/pop-by-depth stack semantics HERE, not
-// just raising SdfProgramBuilder.MaxFieldScopeDepth.
+// Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the immediate parent and reseeds a fresh field;
+// POP composes only into that parent. Scalar/dual walks, deferred derivatives and tape certificates use the same
+// bounded SDF_MAX_FIELD_SCOPE_DEPTH stack; the program validator guarantees balanced, single-owner scopes.
 // Gaussian push: Data0=center/push.x, Data1=radii/push.y, header.y=push.z bits.
 // Per-shape lane-driven erosion (SdfOp.LaneErode): ordered immediately before the SdfOp.ShapeBlend it targets.
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,

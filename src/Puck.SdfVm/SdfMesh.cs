@@ -152,9 +152,12 @@ public sealed record SdfMesh {
 /// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
 /// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
-    /// <summary>Gets the draw's whole-placement indirect policy. Default has the static Cast policy; a dynamic
-    /// emitter resolves its body default before declaring its draw. The matching retained SDF uses the same policy.</summary>
+    /// <summary>Gets the draw's whole-placement indirect policy. Default follows <see cref="IsDynamic"/> and the
+    /// consuming residency's body policy, matching the retained SDF at the same tier.</summary>
     public SdfIndirectParticipation Indirect { get; init; }
+    /// <summary>Gets whether the draw belongs to a moving body or animated placement. Its Default indirect policy
+    /// receives at Medium and casts and receives at High, unless the frame overrides that body default.</summary>
+    public bool IsDynamic { get; init; }
     /// <summary>Gets whether this draw is a bake of geometry the same frame also carries in its SDF at the same pose.
     /// Only that emitting seam can certify the conservative field sweep; an independent triangle mesh cannot acquire
     /// this certificate from its bounds or identity. The light camera falls back when any draw is uncertified.</summary>
@@ -235,6 +238,8 @@ public static class SdfMeshRegion {
     /// <summary>The flag a record carries when it is an impostor card (<see cref="SdfMeshDraw.Impostor"/>) whose views the
     /// impostor atlases hold.</summary>
     public const uint ImpostorFlag = 8u;
+    /// <summary>The flag a record carries when <see cref="SdfMeshDraw.IsDynamic"/> is true.</summary>
+    public const uint DynamicFlag = 16u;
 
     /// <summary>Counts the region a list of draws needs.</summary>
     /// <param name="draws">The draws.</param>
@@ -355,7 +360,7 @@ public static class SdfMeshRegion {
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
             record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag)
-                | ((uint)draws[draw].Indirect << SdfProgram.IndirectInstanceShift);
+                | (draws[draw].IsDynamic ? DynamicFlag : 0u) | ((uint)draws[draw].Indirect << SdfProgram.IndirectInstanceShift);
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,

@@ -2,16 +2,18 @@
 #ifndef FIELD_SDF_GRADIENT_PLAN_HLSLI
 #define FIELD_SDF_GRADIENT_PLAN_HLSLI
 
-// Each field and its one saved parent hold at most 32 contributing leaves.
+// Each field and every saved parent hold at most 32 contributing leaves.
 // An overflow stays live until a zero blend weight discards that entire field.
 #define SDF_GRADIENT_CONTRIBUTORS 32u
 static uint sdfGradientMode = 0u; // full dual, collect decisions, replay selected derivatives
-static uint sdfGradientIds[2u * SDF_GRADIENT_CONTRIBUTORS];
-static float sdfGradientWeights[2u * SDF_GRADIENT_CONTRIBUTORS];
+static uint sdfGradientIds[(SDF_MAX_FIELD_SCOPE_DEPTH + 1u) * SDF_GRADIENT_CONTRIBUTORS];
+static float sdfGradientWeights[(SDF_MAX_FIELD_SCOPE_DEPTH + 1u) * SDF_GRADIENT_CONTRIBUTORS];
 static uint sdfGradientCount = 0u;
 static uint sdfGradientScope = 0u;
 static bool sdfGradientOverflow = false;
-static bool sdfGradientParentOverflow = false;
+static uint sdfGradientParentStarts[SDF_MAX_FIELD_SCOPE_DEPTH];
+static bool sdfGradientParentOverflows[SDF_MAX_FIELD_SCOPE_DEPTH];
+static uint sdfGradientDepth = 0u;
 static float3 sdfGradientSelected = 0.0;
 #ifdef SDF_GRADIENT_LAW_REFERENCE
 static uint sdfGradientReferenceShape = 0u;
@@ -36,17 +38,25 @@ void sdfGradientScale(float weight) {
     sdfGradientCount = write;
 }
 
+void sdfGradientPushScope() {
+    if (sdfGradientMode != 1u) return;
+    sdfGradientParentStarts[sdfGradientDepth] = sdfGradientScope;
+    sdfGradientParentOverflows[sdfGradientDepth++] = sdfGradientOverflow;
+    sdfGradientScope = sdfGradientCount;
+    sdfGradientOverflow = false;
+}
+
 void sdfGradientScopeWeights(float parentWeight, float childWeight) {
     if (sdfGradientMode != 1u) return;
-    sdfGradientOverflow = (sdfGradientParentOverflow && parentWeight != 0.0)
+    uint parentStart = sdfGradientParentStarts[--sdfGradientDepth];
+    sdfGradientOverflow = (sdfGradientParentOverflows[sdfGradientDepth] && parentWeight != 0.0)
         || (sdfGradientOverflow && childWeight != 0.0);
-    sdfGradientParentOverflow = false;
-    uint write = 0u;
+    uint write = parentStart;
     [loop]
-    for (uint read = 0u; read < sdfGradientCount; read++) {
+    for (uint read = parentStart; read < sdfGradientCount; read++) {
         float weight = sdfGradientWeights[read] * ((read < sdfGradientScope) ? parentWeight : childWeight);
         if (weight != 0.0) {
-            if (write == SDF_GRADIENT_CONTRIBUTORS) {
+            if (write == parentStart + SDF_GRADIENT_CONTRIBUTORS) {
                 sdfGradientOverflow = true;
                 continue;
             }
@@ -55,7 +65,7 @@ void sdfGradientScopeWeights(float parentWeight, float childWeight) {
         }
     }
     sdfGradientCount = write;
-    sdfGradientScope = 0u;
+    sdfGradientScope = parentStart;
 }
 
 void sdfGradientCompose(float current, float candidate, uint blend, float smooth, uint shapeIndex, bool scope) {

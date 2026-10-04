@@ -76,6 +76,7 @@ public sealed class WorldBodyStampCensus {
                     BodyIndex: index,
                     Creation: creation,
                     Scale: ((placement.Scale * look.Scale) * liveScale),
+                    Indirect: placement.Indirect,
                     Look: look
                 )
                 : null

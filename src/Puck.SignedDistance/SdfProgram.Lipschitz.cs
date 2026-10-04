@@ -38,7 +38,7 @@ public sealed partial class SdfProgram {
     //     1.41421356f in float32), so shallow-chamfer content keeps the step scale it had. Growth starts at the third.
     //   * A chamfer PopField is this same composition, not a program-wide multiply. For one pop against an accumulator
     //     dominating both operands the recurrence gives max(L, L, 2L/√2) = √2·L; it additionally counts repeated pops,
-    //     which MaxFieldScopeDepth = 1 forbids nesting but not sequencing.
+    //     including both nested and sequential scopes.
     // The depth-0 chain with the largest factor: the chain that binds the global step scale below 1 (a scoped chain's
     // factor is clamped to 1 at its pop, see AnalyzeLipschitz). Null when no unscoped chain carries a factor above 1,
     // which is every isometric program. A diagnostic, never an input to the packed words.
@@ -120,9 +120,9 @@ public sealed partial class SdfProgram {
         // the first composition the identity. A shape-free program never leaves 0 and clamps to 1 below, exactly as it
         // did when this pass seeded programLipschitz at 1.
         var accumulator = 0.0f;
-        // The one-deep PushField save (SdfProgramBuilder.MaxFieldScopeDepth == 1), mirroring mapCore's
-        // savedFieldDistance slot. A PUSH reseeds the accumulator to the same constant the program started from.
-        var savedAccumulator = 0.0f;
+        // A push saves the immediate parent's bound before reseeding the child.
+        Span<float> savedAccumulators = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
+        var scopeDepth = 0;
         var cellPointFactors = AnalyzeCellPointFactors(instructions: instructions);
         var chainIndex = 0;
 
@@ -147,7 +147,7 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 case SdfOp.PushField: {
-                        savedAccumulator = accumulator;
+                        savedAccumulators[scopeDepth++] = accumulator;
                         accumulator = 0.0f;
                         break;
                     }
@@ -202,9 +202,8 @@ public sealed partial class SdfProgram {
                                 x: accumulator,
                                 y: 1.0f
                             ),
-                            current: savedAccumulator
+                            current: savedAccumulators[--scopeDepth]
                         );
-                        savedAccumulator = 0.0f;
                         break;
                     }
                 default: {

@@ -208,7 +208,7 @@ public static class CreationStampEmitter {
         ) {
             var panel = shape.Panel;
             // Dilate/Onion need their own scope — unscoped, a field op would inflate or hollow every shape emitted
-            // before it in the whole program, not just this one; inside a caller's scope (one-deep by contract) the
+            // before it in the whole program, not just this one; inside a caller's shared scope the
             // caller's pop already isolates it. KEEP IN SYNC with the static stamper's per-shape probe reservation
             // (Client.WorldPlacementStamper.EmitProbe), which reserves the pair. A panel ALSO needs its own scope: its
             // subtraction/union must bite only this shape's own candidate, never a sibling composed before it —
@@ -663,7 +663,7 @@ public static class CreationStampEmitter {
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
     /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
-    /// whole-creation stamp of <see cref="RequiresScope"/>). A scope nests at most one deep, so a shape whose field
+    /// whole-creation stamp of <see cref="RequiresScope"/>). The creation emitter shares this scope: a shape whose field
     /// op or warp would otherwise open its own scope then rides the caller's instead.</param>
     public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false) {
         ArgumentNullException.ThrowIfNull(builder);

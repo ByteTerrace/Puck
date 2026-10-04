@@ -214,6 +214,7 @@ public sealed class PrototypeMeshLawTests {
         );
 
         var rest = Assert.Single(collection: scene.Frame());
+        Assert.True(rest.IsDynamic);
 
         // Author (0, 1, 0) is engine (0, 1, 0), scaled to (0, 2, 0), lifted by the offset to (0, 3, 0) and carried to
         // the body at (5, 0, 0).
@@ -243,6 +244,7 @@ public sealed class PrototypeMeshLawTests {
         var draw = Assert.Single(collection: draws);
 
         Assert.False(condition: draw.FieldBacked);
+        Assert.False(draw.IsDynamic);
 
         Assert.Equal(expected: 2, actual: draw.Mesh.TriangleCount);
         Assert.Equal(expected: new Vector3(x: -1f, y: 0f, z: 0f), actual: draw.Mesh.Positions.Span[1]);

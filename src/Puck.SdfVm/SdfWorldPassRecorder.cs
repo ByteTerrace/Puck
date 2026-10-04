@@ -578,7 +578,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             // full baked meshes may shorten that field search without becoming a visibility certificate themselves.
             for (var index = 0; (index < count); index++) {
                 m_recorded[index] = draws[index].Impostor is null &&
-                    draws[index].Indirect is SdfIndirectParticipation.Default or SdfIndirectParticipation.Cast;
+                    SdfIndirectPolicy.Resolve(draws[index].Indirect, draws[index].IsDynamic, SdfIndirectTier.Off, tables.LightGeometry.Bodies) == SdfIndirectParticipation.Cast;
             }
         } else { m_lod.Select(
             cameraForward: camera.Forward,

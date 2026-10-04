@@ -19,11 +19,12 @@ static const uint SdfMeshNormalMatrixWord = 22u;
 static const uint SdfMeshVertexWords = 8u;
 // A record's attribute flags: its mesh carries a normal per vertex, a palette entry per triangle, and surface textures
 // the mesh atlases hold (frame/sdf-mesh-textures.hlsli), or it is an impostor card (frame/sdf-mesh-impostor.hlsli). KEEP
-// IN SYNC with SdfMeshRegion.NormalsFlag, MaterialsFlag, TexturesFlag and ImpostorFlag.
+// IN SYNC with SdfMeshRegion.NormalsFlag, MaterialsFlag, TexturesFlag, ImpostorFlag and DynamicFlag.
 static const uint SdfMeshNormalsFlag = 1u;
 static const uint SdfMeshMaterialsFlag = 2u;
 static const uint SdfMeshTexturesFlag = 4u;
 static const uint SdfMeshImpostorFlag = 8u;
+static const uint SdfMeshDynamicFlag = 16u;
 // The bit the view starts at in the index a mesh draw call pushes; the bits below it name the draw. KEEP IN SYNC with
 // SdfWorldInterfaces.MeshViewShift.
 static const uint SdfMeshViewShift = 24u;

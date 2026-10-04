@@ -257,6 +257,11 @@ Each whole instance has an indirect participation policy. `Default` keeps static
 geometry casting and receiving; moving bodies receive at medium and cast and
 receive at high. `Receive` receives without casting, `Cast` does both, and `Off`
 does neither. A placement's explicit policy wins over the frame's body default.
+World authors set that default in `render.indirect.bodies` and the placement
+override in `placements[].indirect`, using `default`, `cast`, `receive` or `off`.
+Local and session bodies read their delivered placement identity; adjacent bodies
+retain it in the same pinned snapshot as their pose. A moving mesh retains a
+dynamic flag so its policy is resolved at the consuming tier, just like its SDF.
 Field queries, paired mesh draws, receiver shading and light views use the same
 policy; direct visibility, collision and direct-shadow policy stay independent.
 Nested indirect distance and gradient queries suspend the caller's ambient and
@@ -264,10 +269,15 @@ shadow masks for their own field scope, then restore both masks. A full-field
 gradient uses the same caster field as a full-field distance query.
 Changing the body policy withdraws transport through the existing geometry queue.
 The policy occupies two existing instance/mesh flag bits and one common pass word.
+The light map's mesh identity includes only actual casters, so moving a
+receiver-only mesh does not schedule a new depth region.
 
 Excluding an instance requires complete independent root operands. Internal CSG
 inside an instance is supported; cross-instance field operations are refused
-when a policy would omit an operand. The CPU irradiance reference currently names
+when a policy would omit an operand. Text-bearing moving creations keep their
+host shapes and engraving inside one existing field scope and one root-bounded
+instance; omitting the placement therefore removes every coupled operand.
+The CPU irradiance reference currently names
 filtered `Receive`/`Off` programs as unsupported rather than reporting ordinary
 collision-field values as an indirect comparison.
 
