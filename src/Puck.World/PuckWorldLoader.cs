@@ -212,6 +212,7 @@ internal static class PuckWorldLoader {
             catalogFingerprint: catalogFingerprint,
             compiled: compiledWorld,
             document: compiled.Document!,
+            sourceCompilation: compiled,
             overrides: overrides,
             path: path,
             reason: out var loadReason

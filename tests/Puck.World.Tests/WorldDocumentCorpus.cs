@@ -197,6 +197,7 @@ internal static class WorldDocumentCorpus {
             admission: out var admission,
             catalog: catalog,
             document: Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString()),
+            sourceCompilation: WorldCompiledSource.From(compilation: compilation),
             path: path,
             reason: out reason
         )) {

@@ -1,5 +1,8 @@
 using System.Text.Json.Nodes;
+using System.Text;
 using Puck.Testing;
+using Puck.World.Transpiler;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
@@ -310,6 +313,37 @@ public sealed class BrowserWorkspaceTests : IDisposable {
         }
 
         Assert.Equal(actual: work.Read(kind: WorldBootWork.Compiles), expected: 1L);
+    }
+    [Fact]
+    public void AnUnsavedCompilationCannotClaimTheDiskSourcesProvenance() {
+        const string Saved = "schema: \"puck.world.definition.v1\"\nhost { width: 320 }";
+        const string Unsaved = "schema: \"puck.world.definition.v1\"\nhost { width: 640 }";
+        var path = m_directory.WriteText(name: "root.puck", text: Saved);
+        var compiled = WorldCompiledSource.From(compilation: WorldCompiler.Compile(source: Unsaved, sourcePath: path));
+        var source = new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: compiled);
+        var work = new WorldBootWork();
+
+        using (WorldBootWork.Attribute(work: work)) {
+            Assert.False(condition: source.RecordInputs(resolvedName: path, content: compiled.Document!));
+        }
+        Assert.Equal(expected: 0L, actual: work.Read(kind: WorldBootWork.Compiles));
+
+        File.WriteAllText(path: path, contents: Unsaved);
+        var saved = WorldCompiledSource.From(compilation: WorldCompiler.CompileFile(path: path));
+
+        Assert.True(condition: new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: saved)
+            .RecordInputs(resolvedName: path, content: saved.Document!));
+    }
+    [Fact]
+    public void SuppliedRootProvenanceMustMatchTheEmittedDocumentBytes() {
+        var path = m_directory.WriteText(name: "root.puck", text: "schema: \"puck.world.definition.v1\"\nhost { width: 320 }");
+        var compiled = WorldCompiledSource.From(compilation: WorldCompiler.CompileFile(path: path));
+        var source = new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: compiled);
+        var different = JsonNode.Parse(utf8Json: compiled.Document!)!.AsObject();
+
+        different["host"]!["width"] = 640;
+        Assert.False(condition: source.RecordInputs(resolvedName: path, content: Encoding.UTF8.GetBytes(s: different.ToJsonString())));
+        Assert.True(condition: source.RecordInputs(resolvedName: path, content: compiled.Document!));
     }
     [Fact]
     public void AtSourceDepthTheLanguageServerRunsNoComposition() {

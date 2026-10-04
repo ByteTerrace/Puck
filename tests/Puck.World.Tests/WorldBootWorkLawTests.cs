@@ -78,6 +78,7 @@ public sealed class WorldBootWorkLawTests {
                     catalog: catalog,
                     catalogFingerprint: catalog.CompositionFingerprint,
                     document: compiled!.Document!,
+                    sourceCompilation: compiled,
                     path: path,
                     reason: out var reason
                 ),
@@ -170,9 +171,10 @@ public sealed class WorldBootWorkLawTests {
         ), userMessage: failure?.Diagnostics.FormatReport(filePath: "lineup.puck"));
 
         // The lineup and its basis are the two sources the boot reads; one load reads the basis, merges both, and
-        // parses, validates and compiles the rules of the one document it admits.
+        // parses, validates and compiles the rules of the one document it admits. The supplied root needs no
+        // second cache ask for provenance; the basis is asked for when read and when its provenance is checked.
         AssertPinned(
-            asks: 4L,
+            asks: 3L,
             compileCeiling: 2L,
             counts: BootLineup(catalog: catalog),
             exact: [

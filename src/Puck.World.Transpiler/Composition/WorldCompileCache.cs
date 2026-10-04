@@ -31,6 +31,46 @@ public sealed record WorldCompiledTest(string Name, string Test, string? Subject
 /// <param name="Tests">The worlds the source's <c>test</c> blocks generate, in written order.</param>
 /// <param name="Inputs">Every file fact the compile read, the source first.</param>
 public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, IReadOnlyList<WorldCompiledWorld> Worlds, string? Schema, IReadOnlyList<WorldCompiledTest> Tests, IReadOnlyList<CompileInput> Inputs) {
+    /// <summary>Snapshots one successful compilation's output bytes and the input facts that produced them.</summary>
+    /// <param name="compilation">The successful compilation.</param>
+    /// <returns>The emitted documents and their provenance, suitable for composition without recompiling.</returns>
+    /// <exception cref="ArgumentNullException">The compilation is null.</exception>
+    /// <exception cref="ArgumentException">The compilation did not succeed.</exception>
+    public static WorldCompiledSource From(WorldCompilation compilation) {
+        ArgumentNullException.ThrowIfNull(argument: compilation);
+        if (!compilation.Success) {
+            throw new ArgumentException(message: "A successful compilation is required.", paramName: nameof(compilation));
+        }
+
+        return new WorldCompiledSource(
+            Document: ((compilation.Json is { } document) ? Encoding.UTF8.GetBytes(s: document.ToJsonString()) : null),
+            EmitsDocument: compilation.EmitsDocument,
+            Inputs: compilation.Inputs,
+            Schema: compilation.Document?.Schema,
+            Tests: [
+                .. compilation.TestWorlds.Select(selector: static test => new WorldCompiledTest(
+                    Json: Encoding.UTF8.GetBytes(s: test.Json.ToJsonString()),
+                    Name: test.Name,
+                    Siblings: [
+                        .. test.Siblings.Select(selector: static sibling => new WorldCompiledWorld(
+                            Entry: false,
+                            Json: Encoding.UTF8.GetBytes(s: sibling.Json.ToJsonString()),
+                            Name: sibling.Name
+                        )),
+                    ],
+                    Subject: test.Subject,
+                    Test: test.Test
+                )),
+            ],
+            Worlds: [
+                .. compilation.Worlds.Select(selector: static world => new WorldCompiledWorld(
+                    Entry: world.Entry,
+                    Json: Encoding.UTF8.GetBytes(s: world.Json.ToJsonString()),
+                    Name: world.Name
+                )),
+            ]
+        );
+    }
     /// <summary>Returns the document names the source emits, relative to its directory
     /// (<see cref="WorldCompilation.EmittedNames"/>).</summary>
     /// <param name="sourcePath">The source's path, spelled as the file system spells its file name.</param>
@@ -249,16 +289,11 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
                 return true;
             }
 
-            var reads = new CompileInputLog();
-            WorldCompilation compilation;
-
-            using (CompileInputs.Record(log: reads)) {
-                compilation = WorldCompiler.CompileFile(
-                    includeTests: includeTests,
-                    allowMultiple: true,
-                    path: fullPath
-                );
-            }
+            var compilation = WorldCompiler.CompileFile(
+                includeTests: includeTests,
+                allowMultiple: true,
+                path: fullPath
+            );
 
             if (!compilation.Success) {
                 compiled = null;
@@ -267,36 +302,7 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
                 return false;
             }
 
-            compiled = new WorldCompiledSource(
-                Document: ((compilation.Json is { } document)
-                    ? Encoding.UTF8.GetBytes(s: document.ToJsonString())
-                    : null),
-                EmitsDocument: compilation.EmitsDocument,
-                Inputs: reads.Inputs,
-                Schema: compilation.Document?.Schema,
-                Tests: [
-                    .. compilation.TestWorlds.Select(selector: static test => new WorldCompiledTest(
-                        Json: Encoding.UTF8.GetBytes(s: test.Json.ToJsonString()),
-                        Name: test.Name,
-                        Siblings: [
-                            .. test.Siblings.Select(selector: static sibling => new WorldCompiledWorld(
-                                Entry: false,
-                                Json: Encoding.UTF8.GetBytes(s: sibling.Json.ToJsonString()),
-                                Name: sibling.Name
-                            )),
-                        ],
-                        Subject: test.Subject,
-                        Test: test.Test
-                    )),
-                ],
-                Worlds: [
-                    .. compilation.Worlds.Select(selector: static world => new WorldCompiledWorld(
-                        Entry: world.Entry,
-                        Json: Encoding.UTF8.GetBytes(s: world.Json.ToJsonString()),
-                        Name: world.Name
-                    )),
-                ]
-            );
+            compiled = WorldCompiledSource.From(compilation: compilation);
             // Only the caller holding this source's lock stores a compile, so the one it stores is the newest.
             m_held[key] = compiled;
             WritePersisted(

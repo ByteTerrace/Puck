@@ -122,7 +122,7 @@ internal static partial class CompileCommand {
         return $"No compiled world for '{CliPaths.ToDisplay(fullPath: besidePath)}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}";
     }
 
-    private static int WriteCompiledWorld(string composeAt, byte[] document, string besidePath, IDictionary<string, string>? written, BakePackPlan? pack) {
+    private static int WriteCompiledWorld(string composeAt, byte[] document, string besidePath, IDictionary<string, string>? written, BakePackPlan? pack, WorldCompiledSource? sourceCompilation = null) {
         var (catalog, fingerprint) = CompiledWorldMachines.Value;
         var destination = CompiledWorld.Beside(documentPath: besidePath);
         var plan = (pack ?? new BakePackPlan(
@@ -141,6 +141,7 @@ internal static partial class CompileCommand {
             catalogFingerprint: fingerprint,
             compiledWorld: out var bytes,
             document: document,
+            sourceCompilation: sourceCompilation,
             path: composeAt,
             reason: out var reason
         )) {

@@ -22,8 +22,9 @@ internal static class DeterminismRecorder {
         (text.Length > 0) &&
         !text.Any(predicate: static character => (char.IsWhiteSpace(c: character) || char.IsControl(c: character)))
     );
-    private static bool TryReadDocument(string path, out byte[] document, out string error) {
+    private static bool TryReadDocument(string path, out byte[] document, out WorldCompiledSource? sourceCompilation, out string error) {
         document = [];
+        sourceCompilation = null;
         error = string.Empty;
 
         if (!path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck")) {
@@ -47,6 +48,7 @@ internal static class DeterminismRecorder {
         }
 
         document = bytes;
+        sourceCompilation = compiled;
 
         return true;
     }
@@ -191,12 +193,13 @@ internal static class DeterminismRecorder {
         var catalog = CliWorldVocabulary.EnsureInstalled();
 
         if (
-            !TryReadDocument(document: out var document, error: out error, path: path) ||
+            !TryReadDocument(document: out var document, sourceCompilation: out var sourceCompilation, error: out error, path: path) ||
             !WorldSourceLoader.TryReadAuthored(
                 authored: out authored,
                 catalog: catalog,
                 catalogFingerprint: catalog.CompositionFingerprint,
                 document: document,
+                sourceCompilation: sourceCompilation,
                 path: path,
                 reason: out error
             ) ||
@@ -205,6 +208,7 @@ internal static class DeterminismRecorder {
                 catalog: catalog,
                 catalogFingerprint: catalog.CompositionFingerprint,
                 document: document,
+                sourceCompilation: sourceCompilation,
                 path: path,
                 reason: out error
             )

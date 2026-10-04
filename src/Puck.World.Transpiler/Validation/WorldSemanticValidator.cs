@@ -95,8 +95,9 @@ public static class WorldSemanticValidator {
     /// resolve relative to its directory.</param>
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns>True if the composed world passed semantic validation without errors.</returns>
-    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") =>
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) =>
         (TryComposeWorld(
             catalogFingerprint: catalogFingerprint,
             composed: out var composed,
@@ -104,6 +105,7 @@ public static class WorldSemanticValidator {
             loweredJson: loweredJson,
             machines: machines,
             sourceMap: sourceMap,
+            sourceCompilation: sourceCompilation,
             sourcePath: sourcePath
         ) && ValidateWorld(
             catalogFingerprint: catalogFingerprint,
@@ -126,8 +128,9 @@ public static class WorldSemanticValidator {
     /// basis nor imports.</param>
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the graph composed.</returns>
-    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") {
+    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -147,6 +150,7 @@ public static class WorldSemanticValidator {
             composed: out var chain,
             reason: out var composeReason,
             rootBytes: rootBytes,
+            sourceCompilation: sourceCompilation,
             rootResolvedPath: sourcePath
         )) {
             var span = (((sourceMap is not null) && sourceMap.TryGetSpan(

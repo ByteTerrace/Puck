@@ -44,6 +44,9 @@ public sealed record WorldCompilation(
     IReadOnlyDictionary<string, HashSet<string>> DiscoveredEmbeddings,
     IReadOnlyList<WorldTestWorld> TestWorlds
 ) {
+    /// <summary>Gets the source content and every file fact this compile depends on. Text supplied by an editor
+    /// records that text's content, so an unsaved buffer cannot stand as the different file on disk.</summary>
+    public IReadOnlyList<CompileInput> Inputs { get; init; } = [];
     /// <summary>Gets every named world emitted by a composition, in declaration order. Empty for a single-document source.</summary>
     public IReadOnlyList<WorldOutput> Worlds { get; init; } = [];
     /// <summary>Gets the asset verification context. An explicit refresh is saved by the caller after validation.</summary>
@@ -167,9 +170,14 @@ public static class WorldCompiler {
         var reads = new CompileInputLog();
         var basisReads = new CompileInputLog();
         using var recording = CompileInputs.Record(log: reads);
+        var inputPath = ((sourcePath is null) ? null : Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourcePath)));
+
+        if (inputPath is not null) {
+            CompileInputs.Note(path: inputPath, content: System.Text.Encoding.UTF8.GetBytes(s: source));
+        }
 
         try {
-            return CompileRecorded(
+            var result = CompileRecorded(
                 allowMultiple: allowMultiple,
                 basePath: basePath,
                 basisReads: basisReads,
@@ -185,6 +193,7 @@ public static class WorldCompiler {
                 updateAssets: updateAssets,
                 vocabulary: vocabulary
             );
+            return result with { Inputs = reads.Inputs };
         } finally {
             var basisPaths = basisReads.Inputs.Select(selector: static input => input.Path).ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -192,6 +201,7 @@ public static class WorldCompiler {
                 amount: (1L + reads.Inputs.LongCount(predicate: input => (
                     (input.Kind == CompileInputKind.Content) &&
                     WorldDocumentName.IsSourceFile(path: input.Path) &&
+                    !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: input.Path)), y: inputPath) &&
                     !basisPaths.Contains(item: input.Path)
                 ))),
                 kind: WorldBootWork.PuckParses
@@ -322,7 +332,10 @@ public static class WorldCompiler {
     ) {
         ArgumentNullException.ThrowIfNull(argument: path);
 
-        return Compile(
+        var fullPath = Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+        var reads = new CompileInputLog();
+        using var recording = CompileInputs.Record(log: reads);
+        var result = Compile(
             includeTests: includeTests,
             allowMultiple: allowMultiple,
             updateAssets: updateAssets,
@@ -330,10 +343,12 @@ public static class WorldCompiler {
             diagnostics: diagnostics,
             embeddings: embeddings,
             imports: imports,
-            source: CompileInputs.ReadAllText(path: path),
+            source: CompileInputs.ReadAllText(path: fullPath),
             sourceMap: sourceMap,
             sourcePath: path
         );
+        // The file reader records its original bytes before decoding, including an encoding's byte-order mark.
+        return result with { Inputs = reads.Inputs };
     }
 
     // The enums a source's basis declares, read from the basis's composed document through the one composer, so the
