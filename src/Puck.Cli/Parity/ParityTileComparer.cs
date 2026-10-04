@@ -10,8 +10,8 @@ namespace Puck.Cli.Parity;
 internal readonly record struct ParityTileMetrics(int TileX, int TileY, double MeanDelta, int MaxDelta);
 /// <summary>A frame pair's per-tile comparison result.</summary>
 /// <param name="Passed">Whether every tile stayed within both thresholds.</param>
-/// <param name="Worst">The tile with the largest mean delta (ties broken by max delta) — reported on failure
-/// and, harmlessly, on success.</param>
+/// <param name="Worst">The failing tile with the largest mean delta (ties broken by max delta), or the largest
+/// such tile overall when every tile passes.</param>
 internal readonly record struct ParityTileComparison(bool Passed, ParityTileMetrics Worst);
 /// <summary>
 /// Per-tile frame comparison — the replacement for the condemned whole-frame mean. A localized defect that a
@@ -143,23 +143,13 @@ internal static class ParityTileComparer {
                     y1: y1
                 );
 
-                if (
-                    !hasWorst ||
-                    IsWorse(
-                    candidate: metrics,
-                    current: worst
-                )
-                ) {
+                var failed = ((metrics.MeanDelta > tileMeanDeltaThreshold) ||
+                    (metrics.MaxDelta > tileMaxDeltaThreshold));
+                if (!hasWorst || (failed && passed) || ((failed == !passed) && IsWorse(candidate: metrics, current: worst))) {
                     worst = metrics;
                     hasWorst = true;
                 }
-
-                if (
-                    (metrics.MeanDelta > tileMeanDeltaThreshold) ||
-                    (metrics.MaxDelta > tileMaxDeltaThreshold)
-                ) {
-                    passed = false;
-                }
+                passed &= !failed;
             }
         }
 
