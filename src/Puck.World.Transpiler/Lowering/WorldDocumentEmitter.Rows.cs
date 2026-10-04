@@ -119,10 +119,13 @@ public static partial class WorldDocumentEmitter {
                 DocumentLowering.AssignOrExtend(
                     placementsObj,
                     prop.Name,
-                    LowerExpression(
-                        prop.Value,
-                        rowScope,
-                        prop.Name
+                    DocumentLowering.LowerMember(
+                        fieldKey: prop.Name,
+                        holder: typeof(WorldPlacementsSection),
+                        holderName: null,
+                        memberName: prop.Name,
+                        scope: rowScope,
+                        value: prop.Value
                     )
                 );
             } else if (stmt is BlockNode { Name: null, Target: null, NameExpression: null } nested) {
