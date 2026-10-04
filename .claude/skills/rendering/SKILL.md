@@ -188,7 +188,11 @@ register.
   six half floats each across `skyUpper0` to `skyUpper2`; the composite applies
   them in authored order between point layers it evaluates itself. Every
   evaluation, hash and texture load counts in its layer's or run's detail row
-  (`SdfSkyDetails`, one set per `SdfWorldPipelineCatalog`, rows only grow). The
+  (`SdfSkyDetails`, one set per `SdfWorldPipelineCatalog`, rows only grow).
+  Every layer label retains its exact identity across edits and reloads; there
+  is no shared overflow row. Counter slots grow only after their submissions
+  complete, through the existing counted allocation and retirement path.
+  Unique labels remain allocated until the composition is disposed. The
   environment map draws the layers the lighting sees, never a disc. Below
   `SdfSkyTier.High` each kind takes its reduced form, and a layer above the
   sky's tier writes no entry.

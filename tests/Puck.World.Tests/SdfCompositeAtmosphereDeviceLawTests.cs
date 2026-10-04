@@ -25,9 +25,9 @@ namespace Puck.World.Tests;
 public sealed class SdfCompositeAtmosphereDeviceLawTests {
     private const uint Width = 16;
     private const uint Height = 8;
-    // The pass, its plain detail, then the shared fixed and layer detail rows at their capacity.
+    // The pass, its plain detail, then the initial shared fixed and layer detail rows, sufficient for this fixture.
     private const int DetailRow = 2;
-    private const int Rows = (DetailRow + SdfSkyDetails.Capacity);
+    private const int Rows = (DetailRow + SdfSkyDetails.InitialCapacity);
     private const int AtmosphereRow = (DetailRow + SdfSkyDetails.AtmosphereRow);
     private const float SurfaceDistance = 20f;
 

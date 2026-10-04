@@ -78,7 +78,7 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         // The pass's row, then a row each of the sky's detail rows: its runs', then its layers'.
-        const int Rows = (1 + SdfSkyDetails.Capacity);
+        const int Rows = (1 + SdfSkyDetails.InitialCapacity);
         // The default look, packed as its tables are: the sky block and the layer table, bound in the World group.
         var skyBlocks = new SdfSkyBlock[1];
         var skyLayers = new SdfSkyLayer[SdfSky.MaxLayers];

@@ -16,8 +16,7 @@ public sealed partial class SdfWorldTables {
     private readonly SkyEnvironmentPass m_skyEnvironment;
 
     // The environment pass's named rows follow the pass rows: its plain row, then one row each of the sky's detail rows
-    // (SdfSkyDetails), at most its capacity, which the counters hold from the start, so a new label never grows them.
-    private const int EnvironmentDetailRows = (1 + SdfSkyDetails.Capacity);
+    // (SdfSkyDetails). Each completed slot grows when the composition has acquired more named layer identities.
     private const uint EnvironmentDetailRow = (EnvironmentPass + 2);
 
     /// <summary>Gets the bytes the sky's environment keeps on the device: the map and its coefficients
@@ -109,7 +108,7 @@ public sealed partial class SdfWorldTables {
                 buffers: gpu.BufferFactory,
                 owner: ObjectOwner,
                 part: "sky-environment-counters",
-                rows: (PassLabelTable.Length + EnvironmentDetailRows),
+                rows: (PassLabelTable.Length + 1 + Math.Max(SdfSkyDetails.InitialCapacity, tables.m_skyDetails.Labels.Count)),
                 slots: FrameRingSize
             ));
             m_frameBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
@@ -159,6 +158,15 @@ public sealed partial class SdfWorldTables {
         // reduction reads it and the coefficients' readers before the reduction writes them, the reduction, both handed to
         // their readers, then the counters' copy.
         public void Record(IGpuRecorder recorder, nint commandBuffer, SdfWorldPipelines pipelines, int slot) {
+            // SubmitUpload has waited and read the preceding upload before this slot can replace its buffers.
+            var rows = checked(PassLabelTable.Length + 1 + m_tables.m_skyDetails.Labels.Count);
+            if (rows > m_counters.RowsOf(slot: slot)) {
+                m_counters.EnsureRows(slot: slot, rows: rows);
+                if (m_written) {
+                    m_tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer,
+                        layout: SdfWorldInterfaces.EnvironmentParameters.Layout, member: ShaderWorkCounters.Buffer, set: m_sets[slot]);
+                }
+            }
             WriteOnce();
             recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: "sky-environment");
             m_counters.RecordClear(commandBuffer: commandBuffer, recorder: recorder, slot: slot);

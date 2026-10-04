@@ -7,7 +7,8 @@ namespace Puck.SignedDistance;
 /// evaluates at a pixel, the view's <c>indirect</c> diagnostic row (<see cref="IndirectRow"/>), then one row a layer label,
 /// in the order labels are first packed. A layer's record names its row (<see cref="SdfSkyLayer.Detail"/>). The
 /// rows only grow, so a node's detail identities never move while its graph lives: a label a sky stops drawing keeps its
-/// row and counts zero. Past <see cref="Capacity"/> rows every new label shares the last, <see cref="Overflow"/>.
+/// row and counts zero. Every distinct label keeps its own row for the composition's lifetime; buffer slots grow after
+/// their previous submissions complete. Live edits and reloads never recycle a retired label's row for another label.
 /// One set of rows serves every residency of a composition (<c>SdfWorldPipelineCatalog</c>), so a view that follows
 /// another residency keeps its rows. Safe on any thread.
 /// </summary>
@@ -25,10 +26,9 @@ public sealed class SdfSkyDetails {
     public const string Indirect = "indirect";
     /// <summary>The rows every set holds ahead of the layers': the runs', atmosphere's and indirect diagnostics'.</summary>
     public const int Fixed = (IndirectRow + 1);
-    /// <summary>The most fixed and layer rows, the last of them <see cref="Overflow"/>.</summary>
-    public const int Capacity = 32;
-    /// <summary>The label every layer shares once the rows are full.</summary>
-    public const string Overflow = "other";
+    /// <summary>The initial fixed and layer row allocation for standalone sky counter buffers. A composition may retain
+    /// more identities; its completed buffer slots grow to hold them.</summary>
+    public const int InitialCapacity = 32;
 
     private readonly Dictionary<string, uint> m_rows = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_gate = new();
@@ -87,16 +87,6 @@ public sealed class SdfSkyDetails {
             }
 
             var labels = m_labels;
-
-            if (labels.Length >= (Capacity - 1)) {
-                if (!m_rows.TryGetValue(key: Overflow, value: out row)) {
-                    row = ((uint)labels.Length);
-                    m_rows.Add(key: Overflow, value: row);
-                    Volatile.Write(location: ref m_labels, value: [.. labels, Overflow]);
-                }
-
-                return row;
-            }
 
             row = ((uint)labels.Length);
             m_rows.Add(key: label, value: row);

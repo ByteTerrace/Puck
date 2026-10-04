@@ -240,7 +240,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
         using var map = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage);
         using var coefficients = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage);
         // Two pass rows, an unused row, then one detail row each of the sky's detail rows.
-        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)((DetailRow + SdfSkyDetails.Capacity) * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
+        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)((DetailRow + SdfSkyDetails.InitialCapacity) * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
         using var mapRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: SdfSkyEnvironment.MapBytes);
         using var coefficientRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: SdfSkyEnvironment.CoefficientBytes);
         using var counterRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: counters.SizeBytes);
@@ -340,7 +340,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
 
             var evaluations = 0L;
 
-            for (var row = DetailRow; (row < (DetailRow + SdfSkyDetails.Capacity)); row++) {
+            for (var row = DetailRow; (row < (DetailRow + SdfSkyDetails.InitialCapacity)); row++) {
                 evaluations += Count(kind: 2, row: row);
             }
 

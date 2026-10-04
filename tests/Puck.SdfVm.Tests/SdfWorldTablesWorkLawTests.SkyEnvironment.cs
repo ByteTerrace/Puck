@@ -192,6 +192,48 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         );
     }
     [Fact]
+    public void NewLayerIdentitiesGrowCompletedEnvironmentSlotsAndRetainEarlierSamples() {
+        using var rig = new Rig(holdFences: true);
+        var reads = new List<(int Slot, int Bytes)>();
+        rig.Render();
+        var oldLabels = rig.Engine.SkyDetails.Labels;
+        for (var index = 0; index < 40; index++) { _ = rig.Engine.SkyDetails.RowOf($"retired-{index}"); }
+        var lastRow = rig.Engine.SkyDetails.RowOf("retired-39");
+        var expectedBytes = (SdfWorldTables.PassLabels.Length + 1 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes;
+        rig.Gpu.WriteReadback = (name, destination) => {
+            if (name.Part != "sky-environment-counters") { return; }
+            reads.Add((name.Index, destination.Length));
+            if (destination.Length != expectedBytes) { return; }
+            var kind = GpuWork.KernelKinds.IndexOf(GpuWork.SkyEvaluations);
+            var passOffset = (3 * GpuKernelCounters.RowBytes) + (kind * sizeof(long));
+            var detailOffset = ((SdfWorldTables.PassLabels.Length + 1 + (int)lastRow) * GpuKernelCounters.RowBytes) + (kind * sizeof(long));
+            BinaryPrimitives.WriteInt64LittleEndian(destination[passOffset..], 70);
+            BinaryPrimitives.WriteInt64LittleEndian(destination[detailOffset..], 70);
+        };
+
+        rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.4f), elevation: 1f, index: 1);
+        rig.Render();
+        var earlier = new GpuWorkSample();
+        Assert.True(rig.Engine.Work.TryReadCompleted(earlier));
+        Assert.Equal(oldLabels, earlier.Details.ToArray().Skip(1).Select(detail => detail.Detail));
+        rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.8f), elevation: 1f, index: 1);
+        rig.Render();
+        rig.Render();
+
+        Assert.Equal(new[] { (0, 5032), (1, expectedBytes), (0, expectedBytes) }, reads);
+        Assert.Equal(oldLabels, earlier.Details.ToArray().Skip(1).Select(detail => detail.Detail));
+        var sample = new GpuWorkSample();
+        Assert.True(rig.Engine.Work.TryReadCompleted(sample));
+        Assert.Equal(3L, sample.Submission);
+        Assert.True(sample.TryGetDetailCount((int)lastRow + 1, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
+        Assert.Equal(70L, evaluations);
+        Assert.Equal("retired-39", sample.Details[(int)lastRow + 1].Detail);
+        Assert.True(sample.TryGetPassCount(3, GpuWork.SubmissionKinds.IndexOf(GpuWork.BufferCopyBytes), out var copiedBytes));
+        Assert.Equal((long)expectedBytes, copiedBytes);
+        Assert.True(sample.TryGetPassCount(3, GpuWork.SubmissionKinds.IndexOf(GpuWork.DescriptorWrites), out var writes));
+        Assert.Equal(1L, writes);
+    }
+    [Fact]
     public void TheEnvironmentKeepsOneMapAndOneSetOfCoefficients() {
         // A 64 by 64 map of four half floats a texel and nine four-float coefficients: one pair a residency, however many
         // views read it.
@@ -200,9 +242,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             expected: (65_536, 144, 65_680)
         );
         // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass, the environment's plain row
-        // and one row each of the sky's detail rows, at their capacity, each row seventeen 64-bit counters, including
+        // and the initial sky detail rows, each row seventeen 64-bit counters, including
         // secondary-shadow pixels, indirect work and primitive evaluations.
-        Assert.Equal(expected: 5_032, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.Capacity) * GpuKernelCounters.RowBytes));
+        Assert.Equal(expected: 5_032, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.InitialCapacity) * GpuKernelCounters.RowBytes));
     }
 
     // The sky evaluations a report's environment line carries.

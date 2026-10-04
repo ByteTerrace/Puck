@@ -9,7 +9,7 @@ namespace Puck.SdfVm.Tests;
 /// <summary>The sky's detail rows (<see cref="SdfSkyDetails"/>) and the packed row address agree with the counted sky kernel
 /// sites, and the shadow pass counts its slots as kinds of its own row. The field runs own the first rows and the
 /// composite's atmosphere and indirect diagnostics the next. Each layer label takes the next row the first time it is
-/// packed and keeps it; rows past the capacity share one.</summary>
+/// packed and keeps it throughout the composition's lifetime.</summary>
 public sealed class SdfWorkDetailLawTests {
     [Fact]
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
@@ -29,12 +29,16 @@ public sealed class SdfWorkDetailLawTests {
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Indirect));
         Assert.True(condition: (SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere")
             && SdfSkyDetails.IsFixed(label: "indirect") && !SdfSkyDetails.IsFixed(label: "gradient")));
-        for (var index = 0; (index < SdfSkyDetails.Capacity); index++) {
-            _ = details.RowOf(label: $"layer{index}");
+        var retained = details.Labels;
+        for (var index = 0; (index < SdfSkyDetails.InitialCapacity); index++) {
+            Assert.Equal(expected: (uint)(7 + index), actual: details.RowOf(label: $"layer{index}"));
         }
-        Assert.Equal(expected: SdfSkyDetails.Capacity, actual: details.Labels.Count);
-        Assert.Equal(expected: SdfSkyDetails.Overflow, actual: details.Labels[^1]);
-        Assert.Equal(expected: ((uint)(SdfSkyDetails.Capacity - 1)), actual: details.RowOf(label: "another"));
+        Assert.Equal(expected: 7 + SdfSkyDetails.InitialCapacity, actual: details.Labels.Count);
+        Assert.Equal(expected: 7, actual: retained.Count);
+        Assert.Equal(expected: retained, actual: details.Labels.Take(retained.Count));
+        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: (uint)details.Labels.Count, actual: details.RowOf(label: "another"));
+        Assert.Equal(expected: "another", actual: details.Labels[^1]);
 
         var block = new byte[SdfFrameBlock.SizeBytes];
 
@@ -54,7 +58,7 @@ public sealed class SdfWorkDetailLawTests {
 
         Assert.Equal(actual: SdfSkyDetails.IndirectRow, expected: 4);
         Assert.Equal(expected: "indirect", actual: before[SdfSkyDetails.IndirectRow]);
-        for (var index = 0; (index < (SdfSkyDetails.Capacity + 1)); index++) {
+        for (var index = 0; (index < (SdfSkyDetails.InitialCapacity + 1)); index++) {
             _ = details.RowOf(label: $"layer{index}");
         }
         Assert.Equal(expected: before, actual: details.Labels.Take(count: before.Length));
