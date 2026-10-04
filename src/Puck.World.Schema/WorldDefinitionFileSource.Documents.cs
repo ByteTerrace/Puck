@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Puck.Assets;
 
 namespace Puck.World;
@@ -57,8 +58,8 @@ public static partial class WorldDefinitionFileSource {
     /// <paramref name="documents"/>, so a source resolves exactly as the document it compiles to would; any other
     /// path is the file as it stands.</summary>
     /// <param name="path">The document path.</param>
-    /// <param name="content">The document's bytes on success; <see langword="null"/> on failure.</param>
-    /// <param name="reason">The one-line refusal (absent, unreadable, or a source the source cannot lower), or empty on
+    /// <param name="content">The non-null document bytes on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line refusal (absent, unreadable, or a source that supplies no document), or empty on
     /// success.</param>
     /// <param name="documents">The source a <c>.puck</c> reads through, or <see langword="null"/> for
     /// <see cref="LocalDocuments"/>.</param>
@@ -66,7 +67,7 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="countsFileRead">Whether a plain file's read counts on the boot ledger; a source's lowering always
     /// does, since it comes through the document source every composition read does.</param>
     /// <returns><see langword="true"/> when the document was read.</returns>
-    public static bool TryReadDocumentFile(string path, out byte[]? content, out string reason, IWorldDocumentSource? documents = null, string? shown = null, bool countsFileRead = false) {
+    public static bool TryReadDocumentFile(string path, [NotNullWhen(returnValue: true)] out byte[]? content, out string reason, IWorldDocumentSource? documents = null, string? shown = null, bool countsFileRead = false) {
         shown ??= path;
         content = null;
 
@@ -93,6 +94,12 @@ public static partial class WorldDefinitionFileSource {
                 resolvedName: out _
             )) {
                 reason = $"cannot read {shown}: {readReason.ReplaceLineEndings(replacementText: " ")}";
+
+                return false;
+            }
+
+            if (lowered is null) {
+                reason = $"cannot read {shown}: the document source returned no content";
 
                 return false;
             }
