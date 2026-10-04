@@ -12,14 +12,14 @@ public sealed class WorldSkyAudition {
     public int Revision { get; private set; }
 
     /// <summary>Reports whether a row is muted.</summary>
-    public bool Muted(int index) => m_muted.Contains(index);
+    public bool Muted(int index) => m_muted.Contains(item: index);
     /// <summary>Reports whether a row contributes, with mute taking precedence over solo.</summary>
-    public bool Includes(int index) => (((m_solo < 0) || (m_solo == index)) && !Muted(index));
+    public bool Includes(int index) => (((m_solo < 0) || (m_solo == index)) && !Muted(index: index));
     /// <summary>Solos a row, or restores the stack with -1.</summary>
     public void SetSolo(int index) { m_solo = index; Revision++; }
     /// <summary>Mutes or restores one row.</summary>
     public void SetMuted(int index, bool muted) {
-        if (muted) { m_muted.Add(index); } else { m_muted.Remove(index); }
+        if (muted) { m_muted.Add(item: index); } else { m_muted.Remove(item: index); }
         Revision++;
     }
 }

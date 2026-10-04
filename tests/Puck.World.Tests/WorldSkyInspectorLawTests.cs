@@ -19,34 +19,34 @@ public sealed class WorldSkyInspectorLawTests {
     public void InspectorSkyIsTheLightingEchoAndIncludesAirAndHeldTimelineWithoutSteadyAllocation() {
         var definition = Fixtures.BuildDocument() with {
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.0125f))),
-            TimelineRaw = new WorldTimelineSection([new WorldClock("day", PeriodSeconds: 1d)]),
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock("day", PeriodSeconds: 1d)]),
         };
-        using var row = HostRow.Build(name: "p18-12-inspector", definition: definition);
-        var registry = new CommandRegistry(modules: [new WorldLightingCommandModule(new Authority(row.Instance))]);
-        var lighting = registry.Submit("world.lighting");
+        using var row = HostRow.Build(definition: definition, name: "p18-12-inspector");
+        var registry = new CommandRegistry(modules: [new WorldLightingCommandModule(new Authority(instance: row.Instance))]);
+        var lighting = registry.Submit(line: "world.lighting");
 
-        Assert.False(lighting.IsError, lighting.Output);
-        var first = lighting.Output!.IndexOf("sky layers=", StringComparison.Ordinal);
-        var last = lighting.Output.IndexOf(" | environment", first, StringComparison.Ordinal);
+        Assert.False(condition: lighting.IsError, userMessage: lighting.Output);
+        var first = lighting.Output!.IndexOf(comparisonType: StringComparison.Ordinal, value: "sky layers=");
+        var last = lighting.Output.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: first, value: " | environment");
         var sky = lighting.Output[first..last];
 
         Assert.Equal(WorldLightingText.DescribeSky(definition.Render.Sky, definition.Render.Atmosphere), sky);
         var mirror = ClientFixtures.StateMirror(row.Server.Definition);
 
-        Assert.True(mirror.ControlClock("day", WorldTimelineOperation.At, 12600, 1d, out var refusal), refusal);
+        Assert.True(condition: mirror.ControlClock(name: "day", operation: WorldTimelineOperation.At, rate: 1d, refusal: out var refusal, tick: 12600), userMessage: refusal);
         var snapshot = new WorldInspectorSnapshot { Definition = row.Server.Definition, Mirror = mirror, ReloadError = "none" };
         var formatter = new WorldInspectorText();
 
-        void Format() { formatter.Format(in snapshot); formatter.Finish(); }
+        void Format() { formatter.Format(snapshot: in snapshot); formatter.Finish(); }
         Format();
-        var text = new string(formatter.Text);
+        var text = new string(value: formatter.Text);
 
-        Assert.Contains("sky layers=default | atmosphere fog=on fogDensity=0.0125", text);
-        Assert.Contains("fog=default", WorldLightingText.DescribeSky(null, null));
-        Assert.Contains("timeline clocks=1", text);
-        Assert.Contains("held=True", text);
-        Assert.Contains("tick=12600+0 phase=0.25", text);
-        Assert.False(formatter.Refused);
+        Assert.Contains(actualString: text, expectedSubstring: "sky layers=default | atmosphere fog=on fogDensity=0.0125");
+        Assert.Contains("fog=default", WorldLightingText.DescribeSky(atmosphere: null, sky: null));
+        Assert.Contains(actualString: text, expectedSubstring: "timeline clocks=1");
+        Assert.Contains(actualString: text, expectedSubstring: "held=True");
+        Assert.Contains(actualString: text, expectedSubstring: "tick=12600+0 phase=0.25");
+        Assert.False(condition: formatter.Refused);
         Assert.Equal(0L, AllocationWindow.Least(Format));
 
         // Replacing only atmosphere must invalidate the shared inspector text as well.
@@ -58,8 +58,8 @@ public sealed class WorldSkyInspectorLawTests {
             },
         };
 
-        formatter.Format(in changed);
+        formatter.Format(snapshot: in changed);
         formatter.Finish();
-        Assert.Contains("fogDensity=0.025", new string(formatter.Text));
+        Assert.Contains("fogDensity=0.025", new string(value: formatter.Text));
     }
 }

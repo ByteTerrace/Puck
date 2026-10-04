@@ -100,15 +100,15 @@ public sealed partial class WorldInspectorText {
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"instances={snapshot.Instances}/{SdfProgramBuilder.MaxInstances} headroom={(SdfProgramBuilder.MaxInstances - snapshot.Instances)}") && Line(text: scratch[..written]));
         _ = Line(text: m_reloadLine, lines: ReloadLines);
-        Environment(snapshot);
+        Environment(snapshot: snapshot);
     }
 
     private void Environment(in WorldInspectorSnapshot snapshot) {
         if (snapshot.Definition is not { } definition) { return; }
-        if ((m_skyText is null) || !ReferenceEquals(m_sky, definition.Render.Sky) || !ReferenceEquals(m_atmosphere, definition.Render.Atmosphere)) {
+        if ((m_skyText is null) || !ReferenceEquals(objA: m_sky, objB: definition.Render.Sky) || !ReferenceEquals(objA: m_atmosphere, objB: definition.Render.Atmosphere)) {
             m_sky = definition.Render.Sky;
             m_atmosphere = definition.Render.Atmosphere;
-            m_skyText = WorldLightingText.DescribeSky(m_sky, m_atmosphere);
+            m_skyText = WorldLightingText.DescribeSky(atmosphere: m_atmosphere, sky: m_sky);
         }
         _ = Line(m_skyText, lines: 4, optional: true);
         var scratch = m_scratch.AsSpan();
@@ -120,8 +120,8 @@ public sealed partial class WorldInspectorText {
             var clock = clocks![index];
             var mirror = snapshot.Mirror;
             var rate = 1d;
-            var held = (mirror?.ClockHeld(clock.Name, out rate) ?? false);
-            var tick = (mirror?.ClockTick(clock.Name) ?? default);
+            var held = (mirror?.ClockHeld(name: clock.Name, rate: out rate) ?? false);
+            var tick = (mirror?.ClockTick(name: clock.Name) ?? default);
             var phase = 0d;
             var available = (mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false);
 

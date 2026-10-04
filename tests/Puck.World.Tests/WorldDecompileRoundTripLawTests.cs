@@ -127,7 +127,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         ).GetAwaiter().GetResult();
 
         Assert.True(condition: (listing.ExitCode == 0), userMessage: $"git ls-files failed: {listing.Stderr}");
-        foreach (var relative in listing.Stdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+        foreach (var relative in listing.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0')) {
             files.Add(item: Path.Combine(path1: root, path2: relative).Replace(newChar: '/', oldChar: '\\'));
         }
 

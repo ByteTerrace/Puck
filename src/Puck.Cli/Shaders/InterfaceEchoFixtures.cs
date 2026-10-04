@@ -7,7 +7,7 @@ namespace Puck.Cli.Shaders;
 /// <summary>Owns the interface-echo canary's model-derived graph blocks, echo sources and capture extents.
 /// Planning the entire family precedes writing any file; no shader compiler or GPU is involved.</summary>
 internal static class InterfaceEchoFixtures {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", WriteIndented = true };
     private static readonly (string Echo, string Package)[] ModelEchoes = [
         ("sdf-world", RenderGraphPackageCatalog.SdfWorld),
         ("indirect", RenderGraphPackageCatalog.Indirect),
@@ -34,7 +34,7 @@ internal static class InterfaceEchoFixtures {
 
             if (member.Length is { } length) {
                 field["length"] = length;
-                field["default"] = new JsonArray(items: [.. Enumerable.Range(start: 0, count: checked((int)length))
+                field["default"] = new JsonArray(items: [.. Enumerable.Range(count: checked((int)length), start: 0)
                     .Select(selector: _ => Zero(type: member.Type.Value))]);
             } else {
                 field["default"] = Zero(type: member.Type.Value);
@@ -83,8 +83,8 @@ internal static class InterfaceEchoFixtures {
     private static Dictionary<string, string> Plan(string directory) {
         var manifest = Read(path: Path.Combine(path1: directory, path2: "canary.json"));
         var fixtures = manifest["fixtures"]!.AsArray().Select(selector: static item => item!.GetValue<string>()).ToHashSet(comparer: StringComparer.Ordinal);
-        var echoes = fixtures.Where(predicate: static file => (file.EndsWith(value: ".echo.hlsl", comparisonType: StringComparison.Ordinal)
-            && !file.EndsWith(value: "-perturbed.echo.hlsl", comparisonType: StringComparison.Ordinal)))
+        var echoes = fixtures.Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".echo.hlsl")
+            && !file.EndsWith(comparisonType: StringComparison.Ordinal, value: "-perturbed.echo.hlsl")))
             .Select(selector: static file => file[..^".echo.hlsl".Length]).Order(comparer: StringComparer.Ordinal).ToArray();
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -122,13 +122,13 @@ internal static class InterfaceEchoFixtures {
                 var shaderInterface = InterfaceOf(name: name, directory: directory, text: Serialize(node: graph));
 
                 if (target is not null) {
-                    RequireSameBlocks(name: name, expected: target, actual: shaderInterface);
+                    RequireSameBlocks(actual: shaderInterface, expected: target, name: name);
                 }
                 if (positive is null) {
                     positive = shaderInterface;
                     width = ShaderInterfaceEcho.Width(shaderInterface: shaderInterface);
                 } else {
-                    RequireSameBlocks(name: name, expected: positive, actual: shaderInterface);
+                    RequireSameBlocks(actual: shaderInterface, expected: positive, name: name);
                 }
                 var dimensions = graph["resources"]!.AsArray().Single(predicate: resource =>
                     (resource!["name"]!.GetValue<string>() == ShaderInterfaceEcho.OutputName))!["dimensions"]!.AsObject();
@@ -140,7 +140,7 @@ internal static class InterfaceEchoFixtures {
                 files[hlslPath] = ((name == echo) ? ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface)
                     : ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: shaderInterface));
             }
-            UpdateCapture(manifest: manifest, echo: echo, width: width);
+            UpdateCapture(echo: echo, manifest: manifest, width: width);
         }
         files["canary.json"] = Serialize(node: manifest);
 

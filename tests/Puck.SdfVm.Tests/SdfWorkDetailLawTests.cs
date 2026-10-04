@@ -52,7 +52,7 @@ public sealed class SdfWorkDetailLawTests {
         var details = new SdfSkyDetails();
         var before = details.Labels.ToArray();
 
-        Assert.Equal(expected: 4, actual: SdfSkyDetails.IndirectRow);
+        Assert.Equal(actual: SdfSkyDetails.IndirectRow, expected: 4);
         Assert.Equal(expected: "indirect", actual: before[SdfSkyDetails.IndirectRow]);
         for (var index = 0; (index < (SdfSkyDetails.Capacity + 1)); index++) {
             _ = details.RowOf(label: $"layer{index}");
@@ -62,7 +62,7 @@ public sealed class SdfWorkDetailLawTests {
         var reads = Source(path: "indirect/sdf-indirect-read.hlsli");
 
         Assert.Equal(expected: 2, actual: Regex.Matches(input: reads, pattern: @"puckCountIndirect\(SDF_SKY_DETAIL_INDIRECT, 0u,").Count);
-        Assert.DoesNotContain(expectedSubstring: "puckCountIndirect(0u,", actualString: reads);
+        Assert.DoesNotContain(actualString: reads, expectedSubstring: "puckCountIndirect(0u,");
     }
     // Every kind counts its own evaluation in its layer's row, each hash at the operation that performs it, and the field
     // runs' texture loads in their runs' rows: the base in the lowest run's, the upper images in their runs'.

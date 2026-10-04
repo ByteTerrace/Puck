@@ -56,7 +56,7 @@ public sealed partial class TemporalShadowCanaryLawTests {
 
         Assert.Contains(collection: placements, filter: static row => (row.GetProperty(propertyName: "id").GetString() == "receiver"));
         Assert.Contains(collection: placements, filter: static row => (row.GetProperty(propertyName: "id").GetString() == "occluder"));
-        Assert.Equal(expected: 8, actual: placements.Count(predicate: static row => row.GetProperty(propertyName: "id").GetString()!.StartsWith(value: "grid-", comparisonType: StringComparison.Ordinal)));
+        Assert.Equal(expected: 8, actual: placements.Count(predicate: static row => row.GetProperty(propertyName: "id").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "grid-")));
         var schedule = json.RootElement.GetProperty(propertyName: "schedule").GetProperty(propertyName: "rows").EnumerateArray().ToArray();
 
         Assert.Contains(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set placements occluder position"));

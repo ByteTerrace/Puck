@@ -43,7 +43,7 @@ public sealed class ShadersInterfaceEchoLawTests {
         };
     }
     private static (int ExitCode, string Error) Run(string directory, bool check) {
-        var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => InterfaceEchoFixtures.Run(directory: directory, check: check));
+        var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => InterfaceEchoFixtures.Run(check: check, directory: directory));
 
         return (exitCode, error);
     }
@@ -68,7 +68,7 @@ public sealed class ShadersInterfaceEchoLawTests {
         foreach (var (echo, package) in Families) {
             var expected = Target(packageId: package).Layout().Groups.Where(predicate: static group => (group.BlockMembers.Count != 0)).ToArray();
             var width = expected.Sum(selector: static group => group.BlockMembers.Count(predicate: static member =>
-                !member.Name.StartsWith(value: "_pad", comparisonType: StringComparison.Ordinal)));
+                !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad")));
 
             foreach (var name in ((string[])[echo, $"{echo}-perturbed"])) {
                 var path = Path.Combine(path1: root.RootPath, path2: $"{name}.graph.json");
@@ -110,6 +110,7 @@ public sealed class ShadersInterfaceEchoLawTests {
 
         root.WriteText(name: "canary.json", text: Manifest().ToJsonString());
         Assert.Equal(expected: (0, ""), actual: Run(directory: root.RootPath, check: false));
+        Assert.Equal(expected: (0, ""), actual: Run(directory: root.RootPath, check: true));
         var names = new[] { "sdf-world.graph.json", "indirect-perturbed.echo.hlsl", "canary.json" };
         var texts = names.ToDictionary(keySelector: static name => name,
             elementSelector: name => File.ReadAllText(path: Path.Combine(path1: root.RootPath, path2: name)), comparer: StringComparer.Ordinal);
@@ -120,12 +121,12 @@ public sealed class ShadersInterfaceEchoLawTests {
 
         manifest["positive"]!["expect"]![0]!["extent"]![0] = 1;
         root.WriteText(name: "canary.json", text: manifest.ToJsonString());
-        var before = Directory.GetFiles(path: root.RootPath).ToDictionary(keySelector: static path => path, elementSelector: File.ReadAllText);
+        var before = Directory.GetFiles(path: root.RootPath).ToDictionary(elementSelector: File.ReadAllText, keySelector: static path => path);
         var check = Run(directory: root.RootPath, check: true);
 
-        Assert.Equal(expected: 1, actual: check.ExitCode);
+        Assert.Equal(actual: check.ExitCode, expected: 1);
         foreach (var name in names) {
-            Assert.Contains(expectedSubstring: name, actualString: check.Error);
+            Assert.Contains(actualString: check.Error, expectedSubstring: name);
         }
         foreach (var (path, text) in before) {
             Assert.Equal(expected: text, actual: File.ReadAllText(path: path));

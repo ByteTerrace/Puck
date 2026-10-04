@@ -14,13 +14,13 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         sky.Block.Ambient = .375f;
         sky.Block.Reflection = .625f;
         sky.Pack(SdfLights.Default(), 40f, new SdfSkyDetails(), out var block, new SdfSkyLayer[SdfSky.MaxLayers]);
-        var bytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref block, 1));
-        var structure = SdfKernelInterfaces.LightAndSkyTables.Single(m => (m.Name == SdfKernelInterfaces.Sky)).Structure!;
+        var bytes = MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: ref block));
+        var structure = SdfKernelInterfaces.LightAndSkyTables.Single(predicate: m => (m.Name == SdfKernelInterfaces.Sky)).Structure!;
 
         Assert.Equal(256u, structure.SizeBytes);
-        Assert.Equal(.375f, BinaryPrimitives.ReadSingleLittleEndian(bytes[((int)structure.Members.Single(m => (m.Name == nameof(SdfSkyBlock.Ambient))).Offset)..]));
-        Assert.Equal(.625f, BinaryPrimitives.ReadSingleLittleEndian(bytes[((int)structure.Members.Single(m => (m.Name == nameof(SdfSkyBlock.Reflection))).Offset)..]));
-        Assert.DoesNotContain(SdfKernelInterfaces.LightAndSkyTables, m => m.Name.Contains("softbox", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(.375f, BinaryPrimitives.ReadSingleLittleEndian(source: bytes[((int)structure.Members.Single(predicate: m => (m.Name == nameof(SdfSkyBlock.Ambient))).Offset)..]));
+        Assert.Equal(.625f, BinaryPrimitives.ReadSingleLittleEndian(source: bytes[((int)structure.Members.Single(predicate: m => (m.Name == nameof(SdfSkyBlock.Reflection))).Offset)..]));
+        Assert.DoesNotContain(collection: SdfKernelInterfaces.LightAndSkyTables, filter: m => m.Name.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "softbox"));
     }
     [Fact]
     public void DefaultLightsContainOnlyTheSunAndAmbientComesFromTheSky() {

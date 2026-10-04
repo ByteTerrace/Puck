@@ -135,7 +135,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
     public void Perturbation_changes_only_the_last_members_first_word_to_the_next_sentinel(string echo) {
         var shaderInterface = EchoPass(echo: echo).Parameters.Interface;
         var members = Blocks(layout: shaderInterface.Layout()).SelectMany(selector: static group => group.BlockMembers
-            .Where(predicate: static member => !member.Name.StartsWith(value: "_pad", comparisonType: StringComparison.Ordinal))
+            .Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))
             .Select(selector: member => (group.Set, Member: member))).ToArray();
         var positive = ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface).Split(separator: '\n');
         var perturbed = ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: shaderInterface).Split(separator: '\n');
@@ -165,7 +165,7 @@ public sealed class InterfaceEchoCanaryFixtureTests {
     public void Each_echo_image_holds_one_pixel_per_member_and_the_canary_captures_that_extent(string echo) {
         var shaderInterface = EchoPass(echo: echo).Parameters.Interface;
         var width = ((uint)Blocks(layout: shaderInterface.Layout()).Sum(selector: static group => group.BlockMembers.Count(predicate: static member =>
-            !member.Name.StartsWith(value: "_pad", comparisonType: StringComparison.Ordinal))));
+            !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))));
 
         Assert.Equal(expected: width, actual: ShaderInterfaceEcho.Width(shaderInterface: shaderInterface));
 

@@ -45,7 +45,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
         lock (m_gate) {
             if (!m_instances.ContainsKey(key: instance)) { return null; }
             if (!m_counters.TryGetValue(key: instance, value: out var counter)) {
-                counter = new CacheCounter(owner: this, instance: instance);
+                counter = new CacheCounter(instance: instance, owner: this);
                 m_counters.Add(key: instance, value: counter);
             }
             return counter;
@@ -120,7 +120,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
             }
         }
 
-        public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Width: width, Height: height);
+        public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Height: height, Width: width);
     }
 
     internal sealed class Built(SdfWorldResidency residency, SdfIndirectCache cache) : IDisposable {

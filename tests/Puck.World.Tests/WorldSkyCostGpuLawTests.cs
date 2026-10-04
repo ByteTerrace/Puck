@@ -20,13 +20,13 @@ public sealed class WorldSkyCostGpuLawTests {
     public void VulkanSkyCostPixelsLoseTheirEvaluationWhenTheGradientIsMuted() {
         using var device = HeadlessVulkanDevice.Create(nameof(WorldSkyCostGpuLawTests));
 
-        Verify(device, ".spv");
+        Verify(device: device, extension: ".spv");
     }
     [Fact]
     public void DirectXSkyCostPixelsLoseTheirEvaluationWhenTheGradientIsMuted() {
         using var device = DirectXTestDevices.Hardware();
 
-        Verify(device, ".dxil");
+        Verify(device: device, extension: ".dxil");
     }
 
     private static void Verify(IGpuDeviceContext device, string extension) {
@@ -41,29 +41,29 @@ public sealed class WorldSkyCostGpuLawTests {
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device }),
             StepTicks: 0, TargetHeight: 32, TargetWidth: 32);
 
-        TestLiveness.Until(step: () => view.Produce(in context), reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
+        TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         byte[] Capture(string name) {
-            var request = new FrameCaptureRequest(files.PathOf(name));
+            var request = new FrameCaptureRequest(files.PathOf(name: name));
 
-            view.CaptureTarget.RequestCapture(request);
+            view.CaptureTarget.RequestCapture(request: request);
             TestLiveness.Until(step: () => {
-                _ = view.Produce(in context);
+                _ = view.Produce(context: in context);
                 device.WaitIdle();
                 return request.Completion.IsCompleted;
             }, reason: () => view.NotReadyReason);
-            Assert.Null(request.Completion.Result.Error);
-            return PngDecoder.Decode(File.ReadAllBytes(request.Path)).RgbaPixels;
+            Assert.Null(@object: request.Completion.Result.Error);
+            return PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: request.Path)).RgbaPixels;
         }
-        var active = Capture("p18-12-active.png");
+        var active = Capture(name: "p18-12-active.png");
 
         source.Sky.ClearLayers();
-        var muted = Capture("p18-12-muted.png");
+        var muted = Capture(name: "p18-12-muted.png");
 
         for (var pixel = 0; (pixel < active.Length); pixel += 4) {
-            Assert.True(((active[pixel] > 0) && (muted[pixel] == 0)), "The sky-cost red channel must lose the muted gradient's evaluation.");
+            Assert.True(condition: ((active[pixel] > 0) && (muted[pixel] == 0)), userMessage: "The sky-cost red channel must lose the muted gradient's evaluation.");
             Assert.Equal(0, active[(pixel + 1)]);
             Assert.Equal(0, muted[(pixel + 1)]);
-            Assert.True(((active[(pixel + 2)] > 0) && (muted[(pixel + 2)] > 0)), "Both pixels read the retained field-run textures.");
+            Assert.True(condition: ((active[(pixel + 2)] > 0) && (muted[(pixel + 2)] > 0)), userMessage: "Both pixels read the retained field-run textures.");
         }
     }
 
@@ -74,7 +74,7 @@ public sealed class WorldSkyCostGpuLawTests {
 
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(
             Program: m_program, ProgramChanged: false, Time: 0f, Views: [new SdfViewSnapshot(
-                Camera: CameraSnapshot.LookAt(new Vector3(0, 0, -5), Vector3.Zero, 1f, width, height),
+                Camera: CameraSnapshot.LookAt(new Vector3(x: 0, y: 0, z: -5), Vector3.Zero, 1f, width, height),
                 Region: new NormalizedRect(Height: 1, Width: 1, X: 0, Y: 0))]) { Sky = Sky, Lights = SdfLights.Default() };
     }
 }

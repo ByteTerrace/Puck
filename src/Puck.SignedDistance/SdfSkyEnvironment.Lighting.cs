@@ -14,13 +14,13 @@ public static partial class SdfSkyEnvironment {
     public static Vector3 Irradiance(ReadOnlySpan<Vector3> coefficients, Vector3 normal) {
         Span<double> basis = stackalloc double[CoefficientCount];
 
-        Basis(direction: normal, basis: basis);
+        Basis(basis: basis, direction: normal);
         var result = Vector3.Zero;
 
         for (var k = 0; (k < CoefficientCount); k++) {
-            result += (coefficients[k] * ((float)(basis[k] * Convolution(k))));
+            result += (coefficients[k] * ((float)(basis[k] * Convolution(band: k))));
         }
-        return Vector3.Max(result, Vector3.Zero);
+        return Vector3.Max(value1: result, value2: Vector3.Zero);
     }
     /// <summary>Returns the largest absolute irradiance difference over all unit normals and RGB channels.
     /// Each channel is a quadratic on the sphere; its extrema are the two trust-region solves.</summary>
@@ -35,7 +35,7 @@ public static partial class SdfSkyEnvironment {
 
         for (var channel = 0; (channel < 3); channel++) {
             for (var k = 0; (k < CoefficientCount); k++) {
-                c[k] = ((((double)coefficients[k][channel]) - other[k][channel]) * Convolution(k));
+                c[k] = ((((double)coefficients[k][channel]) - other[k][channel]) * Convolution(band: k));
             }
             for (var sign = -1; (sign <= 1); sign += 2) {
                 matrix[0] = ((sign * c[8]) * Band2Square);
@@ -49,7 +49,7 @@ public static partial class SdfSkyEnvironment {
                 linear[2] = ((sign * c[2]) * Band1);
                 var constant = (sign * ((c[0] * Band0) - (c[6] * Band2Zonal)));
 
-                maximum = Math.Max(maximum, (constant + QuadraticMaximum(matrix, linear)));
+                maximum = Math.Max(val1: maximum, val2: (constant + QuadraticMaximum(linear: linear, matrix: matrix)));
             }
         }
         return maximum;
@@ -61,21 +61,21 @@ public static partial class SdfSkyEnvironment {
     /// <param name="roughness">The reflection roughness, zero for ambient projection.</param>
     /// <returns>The radiance and coverage.</returns>
     public static Vector4 Panel(in SdfSkyPanel panel, Vector3 direction, float roughness = 0f) {
-        var facing = Vector3.Dot(direction, panel.Direction);
+        var facing = Vector3.Dot(vector1: direction, vector2: panel.Direction);
 
         if (!(facing > 0f) || !(panel.Intensity > 0f)) {
             return Vector4.Zero;
         }
-        var axis = ((MathF.Abs(panel.Direction.Y) < 0.999f) ? Vector3.UnitY : Vector3.UnitZ);
-        var right = Vector3.Normalize(Vector3.Cross(axis, panel.Direction));
-        var up = Vector3.Cross(panel.Direction, right);
-        var angle = Vector2.Abs(new Vector2(MathF.Atan2(Vector3.Dot(direction, right), facing), MathF.Atan2(Vector3.Dot(direction, up), facing)));
-        var width = MathF.Max(panel.Blur, roughness);
-        var extent = (panel.Size + new Vector2(roughness));
-        var alpha = ((1f - Rise((extent.X + width), width, angle.X)) * (1f - Rise((extent.Y + width), width, angle.Y)));
-        var gain = ((panel.Size.X * panel.Size.Y) / MathF.Max((extent.X * extent.Y), 1e-12f));
+        var axis = ((MathF.Abs(x: panel.Direction.Y) < 0.999f) ? Vector3.UnitY : Vector3.UnitZ);
+        var right = Vector3.Normalize(value: Vector3.Cross(vector1: axis, vector2: panel.Direction));
+        var up = Vector3.Cross(vector1: panel.Direction, vector2: right);
+        var angle = Vector2.Abs(value: new Vector2(x: MathF.Atan2(Vector3.Dot(vector1: direction, vector2: right), facing), y: MathF.Atan2(Vector3.Dot(vector1: direction, vector2: up), facing)));
+        var width = MathF.Max(x: panel.Blur, y: roughness);
+        var extent = (panel.Size + new Vector2(value: roughness));
+        var alpha = ((1f - Rise(edge: (extent.X + width), soft: width, value: angle.X)) * (1f - Rise(edge: (extent.Y + width), soft: width, value: angle.Y)));
+        var gain = ((panel.Size.X * panel.Size.Y) / MathF.Max(x: (extent.X * extent.Y), y: 1e-12f));
 
-        return new Vector4((panel.Color * (panel.Intensity * gain)), alpha);
+        return new Vector4(value: (panel.Color * (panel.Intensity * gain)), w: alpha);
     }
 
     private static double Convolution(int band) => ((band == 0) ? Math.PI : ((band < 4) ? ((2d * Math.PI) / 3d) : (Math.PI / 4d)));
@@ -88,12 +88,12 @@ public static partial class SdfSkyEnvironment {
                 for (var q = (p + 1); (q < 3); q++) {
                     var off = matrix[((p * 3) + q)];
 
-                    if (Math.Abs(off) <= 1e-16) {
+                    if (Math.Abs(value: off) <= 1e-16) {
                         continue;
                     }
                     var angle = (0.5d * Math.Atan2((2d * off), (matrix[((q * 3) + q)] - matrix[((p * 3) + p)])));
 
-                    var (sin, cos) = Math.SinCos(angle);
+                    var (sin, cos) = Math.SinCos(x: angle);
                     for (var row = 0; (row < 3); row++) {
                         var a = matrix[((row * 3) + p)];
                         var b = matrix[((row * 3) + q)];
@@ -115,9 +115,9 @@ public static partial class SdfSkyEnvironment {
                 }
             }
         }
-        var top = Math.Max(matrix[0], Math.Max(matrix[4], matrix[8]));
+        var top = Math.Max(val1: matrix[0], val2: Math.Max(val1: matrix[4], val2: matrix[8]));
         var low = top;
-        var high = ((((top + Math.Abs(linear[0])) + Math.Abs(linear[1])) + Math.Abs(linear[2])) + 1d);
+        var high = ((((top + Math.Abs(value: linear[0])) + Math.Abs(value: linear[1])) + Math.Abs(value: linear[2])) + 1d);
 
         for (var iteration = 0; (iteration < 80); iteration++) {
             var middle = ((low + high) * 0.5d);

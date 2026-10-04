@@ -58,7 +58,7 @@ public sealed class SdfShadowAmortizationLawTests {
     [Fact]
     public void DepartingOccludersAreCheckedOutsideTheCurrentGridCandidateWalk() {
         var gather = Source(path: "surface/sdf-shadow-gather.hlsli");
-        var walk = gather.IndexOf(value: "SdfGridWalk walk =", comparisonType: StringComparison.Ordinal);
+        var walk = gather.IndexOf(comparisonType: StringComparison.Ordinal, value: "SdfGridWalk walk =");
 
         Assert.True(condition: (walk >= 0));
         Assert.Matches(actualString: gather[..walk], expectedRegexPattern: @"(?s)if \(sdfShadowMotionActive\).*for \(uint index = lane; index < packedInstanceCount; index \+= SDF_GROUP_SHADOW_LANES\)\s*\{\s*sdfShadowMovedCandidate\(");

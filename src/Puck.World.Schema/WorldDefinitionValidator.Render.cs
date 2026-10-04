@@ -448,10 +448,10 @@ public static partial class WorldDefinitionValidator {
                         JudgeColor(color: panel.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
                         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelIntensity, path: $"{layerPath}.intensity", scalar: panel.Intensity);
                         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelBlur, path: $"{layerPath}.blur", scalar: panel.Blur);
-                        if ((panel.Direction is { } direction) && (!float.IsFinite(direction.X) || !float.IsFinite(direction.Y) || !float.IsFinite(direction.Z) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
+                        if ((panel.Direction is { } direction) && (!float.IsFinite(f: direction.X) || !float.IsFinite(f: direction.Y) || !float.IsFinite(f: direction.Z) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
                             errors.Add(item: $"{layerPath}.direction must be finite and nonzero.");
                         }
-                        if ((panel.Size is { } size) && (!float.IsFinite(size.X) || !float.IsFinite(size.Y) || !(size.X > 0f) || !(size.Y > 0f))) {
+                        if ((panel.Size is { } size) && (!float.IsFinite(f: size.X) || !float.IsFinite(f: size.Y) || !(size.X > 0f) || !(size.Y > 0f))) {
                             errors.Add(item: $"{layerPath}.size must be finite and positive on both axes.");
                         }
                         break;

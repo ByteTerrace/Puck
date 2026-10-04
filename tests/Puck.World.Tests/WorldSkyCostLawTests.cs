@@ -12,7 +12,7 @@ public sealed class WorldSkyCostLawTests {
         public GpuDeviceCapabilities? DeviceCapabilities => null;
         public GpuDeviceIdentity? DeviceIdentity => null;
 
-        public void CopyNodes(List<GpuWorkNode> nodes) => nodes.Add(new GpuWorkNode(Name: "world", Work: source, Lifetime: null));
+        public void CopyNodes(List<GpuWorkNode> nodes) => nodes.Add(item: new GpuWorkNode(Name: "world", Work: source, Lifetime: null));
     }
     private sealed class Readback : IGpuWorkReadback {
         public void AddTo(int slot, Span<long> counts, int rowCount) {
@@ -31,39 +31,39 @@ public sealed class WorldSkyCostLawTests {
         var services = GpuWorkCounting.Wrap(new FakeGpuDevice().Services, ledger);
 
         ledger.Configure(1, ["sdf.world$sky", "sdf.world$composite", "sdf.world$views"]);
-        ledger.ConfigureDetails([new(0, "plain"), new(0, "gradient"), new(0, "clouds"), new(1, "plain"), new(1, "stars")]);
+        ledger.ConfigureDetails(details: [new(Detail: "plain", Pass: 0), new(Detail: "gradient", Pass: 0), new(Detail: "clouds", Pass: 0), new(Detail: "plain", Pass: 1), new(Detail: "stars", Pass: 1)]);
         using var files = new TemporaryDirectory();
         var builder = WorldBootHarness.Compose(files, WorldHostPresentation.None, "tests/Puck.World.Canaries/editor-grid/fixture.world.json");
 
-        builder.Services.AddSingleton<IGpuWorkRegistry>(new Registry(ledger));
-        var host = files.Own(builder.Build());
+        builder.Services.AddSingleton<IGpuWorkRegistry>(implementationInstance: new Registry(source: ledger));
+        var host = files.Own(owner: builder.Build());
 
-        Assert.True(WorldPostBuildWiring.Install(host.Services));
+        Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var registry = host.Services.GetRequiredService<CommandRegistry>();
 
-        Assert.Contains("work unavailable", registry.Submit("world.cost sky").Output);
-        ledger.EnterPass(0);
-        services.Recorder.Dispatch(1, 1, 1, 1);
+        Assert.Contains("work unavailable", registry.Submit(line: "world.cost sky").Output);
+        ledger.EnterPass(pass: 0);
+        services.Recorder.Dispatch(commandBufferHandle: 1, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
         ledger.LeavePass();
-        ledger.SkipPass(1);
-        ledger.EnterPass(2);
-        services.Recorder.Dispatch(1, 1, 1, 1);
+        ledger.SkipPass(pass: 1);
+        ledger.EnterPass(pass: 2);
+        services.Recorder.Dispatch(commandBufferHandle: 1, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
         ledger.LeavePass();
-        ledger.ReadOnCompletion(new Readback(), 0);
-        services.QueueSubmitter.SubmitAndWait([]);
-        var result = registry.Submit("world.cost sky");
+        ledger.ReadOnCompletion(readback: new Readback(), slot: 0);
+        services.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
+        var result = registry.Submit(line: "world.cost sky");
 
-        Assert.False(result.IsError, result.Output);
+        Assert.False(condition: result.IsError, userMessage: result.Output);
         Assert.Contains("work submission=1 revision=1", result.Output);
         Assert.Contains("sky.evaluations=3", result.Output);
-        var clouds = Assert.Single(result.Output!.Split('\n'), line => line.Contains("detail=clouds", StringComparison.Ordinal));
+        var clouds = Assert.Single(collection: result.Output!.Split('\n'), predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds"));
 
-        Assert.Contains("sky.evaluations=2", clouds);
-        Assert.Contains("sky.hashes=64", clouds);
+        Assert.Contains(actualString: clouds, expectedSubstring: "sky.evaluations=2");
+        Assert.Contains(actualString: clouds, expectedSubstring: "sky.hashes=64");
         Assert.Contains("work sdf.world$composite detail=stars skipped\n", result.Output);
         Assert.DoesNotContain("sdf.world$views", result.Output);
         Assert.DoesNotContain("work outside", result.Output);
-        Assert.Equal(result.Output, registry.Submit("world.cost sky").Output);
-        Assert.True(registry.Submit("world.cost sky extra").IsError);
+        Assert.Equal(result.Output, registry.Submit(line: "world.cost sky").Output);
+        Assert.True(condition: registry.Submit(line: "world.cost sky extra").IsError);
     }
 }

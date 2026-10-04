@@ -30,7 +30,7 @@ public static class DebugViewModes {
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
     /// <summary>The sky-cost diagnostic, whose RGB shows evaluations, hashes and texture loads.</summary>
-    public static readonly int SkyCost = Array.IndexOf(Names, "sky-cost");
+    public static readonly int SkyCost = Array.IndexOf(array: Names, value: "sky-cost");
 
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;

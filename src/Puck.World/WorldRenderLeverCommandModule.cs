@@ -362,16 +362,16 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             name: "world.sky-layer",
             description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(CultureInfo.InvariantCulture))} | {string.Join(" | ", Enumerable.Range(0, (server.Definition.Render.Sky?.Layers?.Count ?? 0)).Select(index => $"sky[{index}] muted={settings.SkyLayers.Muted(index)} included={settings.SkyLayers.Includes(index)}"))}]");
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
                 if (args.Count == 0) { return Echo(); }
-                var solo = args.Is(0, "solo");
+                var solo = args.Is(index: 0, value: "solo");
                 var index = -1;
-                var off = (solo && (args.Count == 2) && args.Is(1, "off"));
-                var mute = ((args.Count == 3) ? ParseOnOff(args[2]) : null);
+                var off = (solo && (args.Count == 2) && args.Is(index: 1, value: "off"));
+                var mute = ((args.Count == 3) ? ParseOnOff(token: args[2]) : null);
 
-                if ((!solo && !args.Is(0, "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
+                if ((!solo && !args.Is(index: 0, value: "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
                     (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0))))) {
-                    return CommandResult.Usage("world.sky-layer", "solo <index>|solo off|mute <index> on|off");
+                    return CommandResult.Usage(form: "solo <index>|solo off|mute <index> on|off", verb: "world.sky-layer");
                 }
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
             });

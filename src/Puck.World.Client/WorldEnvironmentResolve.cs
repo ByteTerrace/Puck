@@ -101,7 +101,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         if (
-            moved || !ReferenceEquals(layers, m_layers) || ((layers?.Revision ?? 0) != m_layersRevision) ||
+            moved || !ReferenceEquals(objA: layers, objB: m_layers) || ((layers?.Revision ?? 0) != m_layersRevision) ||
             !ReferenceEquals(
             objA: mirror,
             objB: m_mirror
@@ -615,7 +615,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         for (var index = 0; (index < layers.Count); index++) {
-            if ((m_layers is { } audition) && !audition.Includes(index)) {
+            if ((m_layers is { } audition) && !audition.Includes(index: index)) {
                 m_skyLayerIndex[index] = -1;
                 continue;
             }
@@ -994,7 +994,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     };
     private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, in WorldValueSite site) => new() {
         Direction = (panel.Direction ?? Vector3.UnitY),
-        Size = (panel.Size ?? new Vector2(0.3f)),
+        Size = (panel.Size ?? new Vector2(value: 0.3f)),
         Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
         Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
         Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),

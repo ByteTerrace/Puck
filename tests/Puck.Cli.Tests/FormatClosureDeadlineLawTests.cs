@@ -24,6 +24,7 @@ public sealed class FormatClosureDeadlineLawTests {
         var wait = (OperatingSystem.IsWindows()
             ? "powershell.exe -NoProfile -NonInteractive -Command \"Start-Sleep -Seconds 10\""
             : "sleep 10");
+
         new XDocument(new XElement(name: "Project",
             new XElement(name: "Target", new XAttribute(name: "Name", value: "FindReferenceAssembliesForReferences"),
                 new XElement(name: "WriteLinesToFile",
@@ -57,7 +58,7 @@ public sealed class FormatClosureDeadlineLawTests {
             Assert.Equal(expected: CompileClosure.EvaluationTimeout, actual: clock.Elapsed);
         } finally {
             await cancelled.CancelAsync();
-            try { await run; } catch (Exception error) when (error is TimeoutException or OperationCanceledException) { }
+            try { await run; } catch (Exception error) when ((error is TimeoutException or OperationCanceledException)) { }
             watcher.EnableRaisingEvents = false;
         }
     }

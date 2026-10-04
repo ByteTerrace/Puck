@@ -504,15 +504,15 @@ public static class WorldLightingText {
     /// <param name="atmosphere">The authored atmosphere, or null for its defaults.</param>
     /// <returns>The shared sky and atmosphere text.</returns>
     public static string DescribeSky(WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere) =>
-        AppendSky(CommandEcho.Open("world.lighting"), sky, atmosphere).Close()["[world.lighting: ".Length..^1];
+        AppendSky(CommandEcho.Open(verb: "world.lighting"), sky, atmosphere).Close()["[world.lighting: ".Length..^1];
 
     private static CommandEcho AppendSky(CommandEcho echo, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere) {
-        echo = echo.Head("sky").Field("layers", (sky?.Layers?.Count.ToString(CultureInfo.InvariantCulture) ?? "default"));
+        echo = echo.Head(head: "sky").Field(key: "layers", value: (sky?.Layers?.Count.ToString(provider: CultureInfo.InvariantCulture) ?? "default"));
         if (WorldRenderKeys.Expand(sky: sky)?.Layers is { } layers) {
             for (var index = 0; (index < layers.Count); index++) {
-                echo = DescribeLayer(echo.Segment(), index, layers[index]);
+                echo = DescribeLayer(echo: echo.Segment(), index: index, layer: layers[index]);
             }
         }
-        return DescribeAtmosphere(echo, atmosphere);
+        return DescribeAtmosphere(atmosphere: atmosphere, echo: echo);
     }
 }

@@ -133,7 +133,7 @@ public static partial class SdfSkyEnvironment {
                 z: ((float)(sums[((index * 3) + 2)] * normalization))
             );
         }
-        coefficients[0] += (map[0] * ((float)Math.Sqrt((4d * Math.PI))));
+        coefficients[0] += (map[0] * ((float)Math.Sqrt(d: (4d * Math.PI))));
     }
     /// <summary>Returns the map's colour in a direction: the bilinear filter of the four texels about its point, a tap one
     /// texel past an edge read where the octahedral fold puts it.</summary>
@@ -226,14 +226,14 @@ public static partial class SdfSkyEnvironment {
             if (layer.Kind == SdfSkyLayerKind.Panel) {
                 var value = Panel(panel: SdfSky.PayloadOf<SdfSkyPanel>(layer: ref layer), direction: local);
 
-                radiance = new Vector3(value.X, value.Y, value.Z);
+                radiance = new Vector3(x: value.X, y: value.Y, z: value.Z);
                 weight *= value.W;
             } else if (layer.Kind == SdfSkyLayerKind.Gradient) {
                 radiance = Gradient(direction: local, gradient: SdfSky.PayloadOf<SdfSkyGradient>(layer: ref layer));
             } else {
-                var value = Procedural(ref layer, block, local);
+                var value = Procedural(block: block, direction: local, layer: ref layer);
 
-                radiance = new Vector3(value.X, value.Y, value.Z);
+                radiance = new Vector3(x: value.X, y: value.Y, z: value.Z);
                 weight *= value.W;
             }
 

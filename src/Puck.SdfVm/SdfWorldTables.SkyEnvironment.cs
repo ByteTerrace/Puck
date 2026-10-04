@@ -145,7 +145,7 @@ public sealed partial class SdfWorldTables {
         public long Renders { get; private set; }
 
         // Whether an upload owes a lighting refresh.
-        public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) => m_refresh.Owes(block, layers);
+        public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) => m_refresh.Owes(block: block, layers: layers);
 
         public bool Projected => m_refresh.Projected;
         public bool Skipped => m_refresh.Skipped;

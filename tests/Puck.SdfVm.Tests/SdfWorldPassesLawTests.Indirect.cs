@@ -63,7 +63,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Produce();
         var replacement = residency.Tables.Indirect!;
 
-        Assert.NotSame(expected: original, actual: replacement);
+        Assert.NotSame(actual: replacement, expected: original);
         Assert.Equal(expected: original.Buffer.SizeBytes, actual: replacement.Buffer.SizeBytes);
         Assert.Equal(expected: 24f, actual: replacement.FarDistance);
         Assert.Same(expected: originalFragment, actual: indirect.FragmentOf(instance: residency.IndirectInstanceName));

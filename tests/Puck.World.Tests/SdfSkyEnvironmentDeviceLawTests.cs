@@ -46,11 +46,11 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
     private static void Verify(GpuDeviceServices services, string extension) {
         foreach (var (sky, litLayers) in new[] {
             (new SdfSky(), 1L), (FourStops(), 1L), (Tilted(), 2L), (Panels(), 3L),
-            (Lit(new SdfSkyStars { Brightness = 2f, Density = 16f }), 1L),
-            (Lit(new SdfSkyClouds { Coverage = .6f }), 1L),
-            (Lit(new SdfSkyAurora { Intensity = 1f }), 1L),
-            (Lit(new SdfSkyNoise { Coverage = .5f }), 1L),
-            (Lit(new SdfSkyPattern()), 1L),
+            (Lit(parameters: new SdfSkyStars { Brightness = 2f, Density = 16f }), 1L),
+            (Lit(parameters: new SdfSkyClouds { Coverage = .6f }), 1L),
+            (Lit(parameters: new SdfSkyAurora { Intensity = 1f }), 1L),
+            (Lit(parameters: new SdfSkyNoise { Coverage = .5f }), 1L),
+            (Lit(parameters: new SdfSkyPattern()), 1L),
         }) {
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
@@ -96,10 +96,10 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 var reflectionOffset = ((SdfSkyEnvironment.Texels + texel) * SdfSkyEnvironment.TexelBytes);
 
                 for (var channel = 0; (channel < 3); channel++) {
-                    var actual = ((float)BitConverter.UInt16BitsToHalf(BinaryPrimitives.ReadUInt16LittleEndian(first.Map.AsSpan((reflectionOffset + (channel * 2))))));
+                    var actual = ((float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: first.Map.AsSpan(start: (reflectionOffset + (channel * 2))))));
                     var reference = expectedReflection[texel][channel];
 
-                    Assert.True((MathF.Abs((actual - reference)) <= HalfStep(reference)), $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
+                    Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
                 }
             }
 
@@ -132,8 +132,8 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
     private static SdfSky Panels() {
         var sky = new SdfSky();
 
-        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitY, Size = new Vector2(.2f, .6f), Color = new Vector3(1f, .5f, .2f), Intensity = 2f, Blur = .1f }, "key", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
-        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitZ, Size = new Vector2(.4f, .1f), Color = Vector3.One, Intensity = .5f, Blur = .05f }, "fill", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
+        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitY, Size = new Vector2(x: .2f, y: .6f), Color = new Vector3(x: 1f, y: .5f, z: .2f), Intensity = 2f, Blur = .1f }, "key", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
+        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitZ, Size = new Vector2(x: .4f, y: .1f), Color = Vector3.One, Intensity = .5f, Blur = .05f }, "fill", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
         return sky;
     }
     // A sky of four stops, a bright disc on the default sun and clouds over most of it.

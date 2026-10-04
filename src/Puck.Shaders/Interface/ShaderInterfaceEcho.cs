@@ -186,11 +186,11 @@ public static partial class ShaderInterfaceEcho {
         var word = (member.Offset / 4);
         var generated = Generate(shaderInterface: shaderInterface);
         var lastLine = $"    {OutputName}[uint2({Number(value: (Width(shaderInterface: shaderInterface) - 1))}, 0)] = ";
-        var start = generated.IndexOf(value: lastLine, comparisonType: StringComparison.Ordinal);
+        var start = generated.IndexOf(comparisonType: StringComparison.Ordinal, value: lastLine);
         var expected = $"0x{Sentinel(set: group.Set, word: word).ToString(format: "X8", provider: CultureInfo.InvariantCulture)}u";
-        var at = generated.IndexOf(value: expected, startIndex: start, comparisonType: StringComparison.Ordinal);
+        var at = generated.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: start, value: expected);
         var replacement = $"0x{Sentinel(set: group.Set, word: (word + 1)).ToString(format: "X8", provider: CultureInfo.InvariantCulture)}u";
-        var perturbed = string.Concat(generated[..at], replacement, generated[(at + expected.Length)..]);
+        var perturbed = string.Concat(str0: generated[..at], str1: replacement, str2: generated[(at + expected.Length)..]);
 
         return ($"// The echo pass of shader interface '{shaderInterface.Name}' ({shaderInterface.Hash}), generated with its last member's first word expecting the sentinel of the word after it."
             + perturbed[perturbed.IndexOf(value: '\n')..]);

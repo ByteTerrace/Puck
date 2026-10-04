@@ -200,7 +200,7 @@ public sealed class WorldValueDomainLawTests {
     private static Case Env(Func<BindableScalar, WorldRenderEnvironment> author, Func<WorldResolvedEnvironment, float> present, string member) => new(
         Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Environment = author(s) } },
         Path: $"render.environment.{member}",
-        Present: (definition, mirror, domains) => present(Environment(definition, mirror, domains))
+        Present: (definition, mirror, domains) => present(Environment(definition: definition, domains: domains, mirror: mirror))
     );
     private static Case Lit(Func<BindableScalar, WorldRenderLight> author, Func<WorldResolvedEnvironment, float> present, string member) => new(
         Author: s => Render(lighting: new WorldRenderLighting(Lights: [author(arg: s)])),

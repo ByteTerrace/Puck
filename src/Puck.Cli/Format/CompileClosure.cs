@@ -30,6 +30,7 @@ namespace Puck.Cli.Format;
 // have the same process deadline and disable build servers; a stalled batch never falls back to per-project retries.
 internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string> References, IReadOnlyList<string> Sources, string? Refusal) {
     internal static readonly TimeSpan EvaluationTimeout = TimeSpan.FromMinutes(value: 2);
+
     // The item `EvaluateAll` collects: every reference, compile item and target path, each tagged with its kind.
     private const string ClosureItem = "PuckFormatClosure";
     // Injected into each project through `CustomAfterMicrosoftCommonTargets`: runs the same reference resolution
@@ -292,6 +293,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             : Refuse(reason: $"MSBuild could not evaluate it for {configuration} ({FirstLine(text: result.Stderr)})")
         );
     }
+
     // One runner for pooled and individual queries. The global property reaches the SDK's nested GetTargetFrameworks
     // and GetTargetPath requests; the node limit also bounds custom project targets. A timeout is a refusal, not an empty
     // answer: returning no closures would make the caller repeat the same stalled graph once per project.
@@ -312,6 +314,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
 
         return result;
     }
+
     // Reads a closure from MSBuild's -getItem/-getProperty report: the `TargetPath` property, the reference set under
     // `referenceItem`, and the compile items under `sourceItem`.
     internal static CompileClosure Read(string json, string configuration, string referenceItem, string sourceItem) {

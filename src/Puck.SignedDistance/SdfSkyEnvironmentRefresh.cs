@@ -31,25 +31,25 @@ public sealed class SdfSkyEnvironmentRefresh {
             (block.HazeExtinction > 0f))) {
             return false;
         }
-        if (!m_hasCandidate || !SdfSkyEnvironment.SameMap(block, layers, m_candidateBlock, m_candidateLayers)) {
-            SdfSkyEnvironment.Render(block, layers, m_map);
-            SdfSkyEnvironment.Project(m_map, m_candidate);
+        if (!m_hasCandidate || !SdfSkyEnvironment.SameMap(block: block, layers: layers, otherBlock: m_candidateBlock, otherLayers: m_candidateLayers)) {
+            SdfSkyEnvironment.Render(block: block, layers: layers, map: m_map);
+            SdfSkyEnvironment.Project(coefficients: m_candidate, map: m_map);
             m_candidateBlock = block;
-            layers.CopyTo(m_candidateLayers);
+            layers.CopyTo(destination: m_candidateLayers);
             m_hasCandidate = true;
             Projected = true;
         }
         if (!m_hasRendered) {
             return true;
         }
-        var changed = (SdfSkyEnvironment.IrradianceDifference(m_candidate, m_rendered) >= SdfSkyEnvironment.DisplayCode);
+        var changed = (SdfSkyEnvironment.IrradianceDifference(coefficients: m_candidate, other: m_rendered) >= SdfSkyEnvironment.DisplayCode);
 
         Skipped = (Projected && !changed);
         return changed;
     }
     /// <summary>Records that the last candidate's map and coefficients have been submitted for rendering.</summary>
     public void Rendered() {
-        m_candidate.CopyTo(m_rendered, 0);
+        m_candidate.CopyTo(array: m_rendered, index: 0);
         m_hasRendered = true;
     }
     /// <summary>Invalidates the held projection and rendered sky after a kernel reload.</summary>
