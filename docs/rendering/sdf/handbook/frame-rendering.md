@@ -480,6 +480,10 @@ before quadrature, so a constant sky has exactly zero higher bands.
 The views pass convolves the coefficients by π, 2π/3 and π/4 for bands zero,
 one and two, then applies the existing normal-ladder AO and the
 `render.environment.ambient` gain. A constant radiance C gives irradiance πC.
+The shared `sdfSkyPhysicalIrradiance` helper returns that irradiance before the
+gain; physical diffuse transport divides it by π. `sdfSkyPhysicalRadiance`
+filters the first, full map plane without the reflection gain. Both helpers
+read the same environment and count their own lookup work once.
 Reflections bilinearly sample the panel-free plane and apply the lighting
 panels analytically in their authored order, under the
 `render.environment.reflection` gain. Both gains default to one and zero
