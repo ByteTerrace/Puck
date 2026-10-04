@@ -46,7 +46,6 @@ public sealed class WorldSkyInspectorLawTests {
         Assert.Contains(actualString: text, expectedSubstring: "timeline clocks=1");
         Assert.Contains(actualString: text, expectedSubstring: "held=True");
         Assert.Contains(actualString: text, expectedSubstring: "tick=12600+0 phase=0.25");
-        Assert.False(condition: formatter.Refused);
         Assert.Equal(0L, AllocationWindow.Least(Format));
 
         // Replacing only atmosphere must invalidate the shared inspector text as well.

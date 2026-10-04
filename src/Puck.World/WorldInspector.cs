@@ -24,7 +24,6 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         viewport = view.Region;
         return (seats.InspectorEnabled(slot: slot) ? m_text[slot].Text : []);
     }
-    public bool Refused(int slot) => m_text[slot].Refused;
     public string Describe(int slot) {
         Refresh(slot: slot);
         return new string(value: m_text[slot].Text);

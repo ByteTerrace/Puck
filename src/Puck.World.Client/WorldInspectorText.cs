@@ -13,8 +13,8 @@ namespace Puck.World.Client;
 /// <see cref="InspectorWriter.MaxLineChars"/> characters): a long line wraps onto indented continuation lines up to its
 /// own line budget and elides its end past it, and optional lines (the frame rate, pass times) past the panel's last
 /// line are counted into one closing <c>... n more lines</c> line. A reload diagnostic shows its file and location first,
-/// shortened to the part relative to the world's document directory. The whole panel is refused only when the fixed
-/// lines themselves cannot fit, which the reservation rules out by construction.</remarks>
+/// shortened to the part relative to the world's document directory. The fixed snapshot lines fit the reservation by
+/// construction; later lines share its remaining room and are counted when omitted.</remarks>
 public sealed partial class WorldInspectorText {
     // Display lines a wrapped logical line may take: a reload diagnostic, and a line naming authored identifiers.
     private const int ReloadLines = 5;
@@ -39,8 +39,6 @@ public sealed partial class WorldInspectorText {
     private WorldRenderAtmosphere? m_atmosphere;
     private string? m_skyText;
 
-    /// <summary>Gets whether this snapshot's fixed lines exceeded the editor writer's declared line reservation.</summary>
-    public bool Refused { get; private set; }
     /// <summary>Gets the formatted panel and command text without allocating.</summary>
     public ReadOnlySpan<char> Text => m_chars.AsSpan(length: m_length, start: 0);
 
@@ -66,7 +64,6 @@ public sealed partial class WorldInspectorText {
         m_length = 0;
         m_lines = 0;
         m_omitted = 0;
-        Refused = false;
         ShapeReload(diagnostic: snapshot.ReloadError, root: snapshot.WorldRoot);
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"[world.inspect: seat={(snapshot.Slot + 1)} hit={(surfaced ? "surface" : "none")}") && Line(text: scratch[..written]));
@@ -110,10 +107,10 @@ public sealed partial class WorldInspectorText {
             m_atmosphere = definition.Render.Atmosphere;
             m_skyText = WorldLightingText.DescribeSky(atmosphere: m_atmosphere, sky: m_sky);
         }
-        _ = Line(m_skyText, lines: 4, optional: true);
+        _ = Line(m_skyText, lines: 4);
         var scratch = m_scratch.AsSpan();
 
-        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={(definition.Timeline.Clocks?.Count ?? 0)}", out var written) && Line(scratch[..written], optional: true));
+        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={(definition.Timeline.Clocks?.Count ?? 0)}", out var written) && Line(scratch[..written]));
         var clocks = definition.Timeline.Clocks;
 
         for (var index = 0; (index < (clocks?.Count ?? 0)); index++) {
@@ -126,7 +123,7 @@ public sealed partial class WorldInspectorText {
             var available = (mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false);
 
             _ = (scratch.TryWrite(CultureInfo.InvariantCulture,
-                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : "anchor"))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines, optional: true));
+                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : "anchor"))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines));
         }
     }
 
@@ -135,25 +132,24 @@ public sealed partial class WorldInspectorText {
     /// <param name="slowest">The slowest frame's rate over the same window.</param>
     public void FrameRate(float mean, float slowest) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"fps={mean:0.0} slowest-fps={slowest:0.0}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), optional: true); }
+            handler: $"fps={mean:0.0} slowest-fps={slowest:0.0}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
     }
     /// <summary>Appends an observational completed pass mean.</summary>
     /// <param name="node">The render-graph instance that recorded the pass.</param>
     /// <param name="timing">The pass's completed mean.</param>
     public void Timing(string node, in Puck.Abstractions.Gpu.GpuPassTiming timing) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"{node}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), optional: true); }
+            handler: $"{node}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
     }
     /// <summary>Appends why a render-graph instance refused the pass timing it was asked for.</summary>
     /// <param name="node">The render-graph instance.</param>
     /// <param name="refusal">The instance's named refusal.</param>
     public void TimingRefused(string node, string refusal) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"{node}: gpu-timing refused {refusal}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), lines: NameLines, optional: true); }
+            handler: $"{node}: gpu-timing refused {refusal}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), lines: NameLines); }
     }
     /// <summary>Closes the shared console and panel record, naming the optional lines the panel had no room for.</summary>
     public void Finish() {
-        if (Refused) { return; }
         if ((m_omitted > 0) &&
             m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written, handler: $"... {m_omitted} more lines")) {
             Write(text: m_scratch.AsSpan(length: written, start: 0));
@@ -162,17 +158,12 @@ public sealed partial class WorldInspectorText {
     }
 
     // Appends one logical line, wrapped onto continuation lines up to its budget and elided past it. An optional line
-    // past the panel's last content line is counted instead; a fixed line that cannot fit refuses the panel.
-    private bool Line(ReadOnlySpan<char> text, int lines = 1, bool optional = false) {
-        if (Refused) { return false; }
+    // past the panel's last content line is counted instead; fixed snapshot content fits within this reservation.
+    private bool Line(ReadOnlySpan<char> text, int lines = 1) {
         var remaining = text;
 
         for (var used = 1; ; used++) {
             if (m_lines >= (InspectorWriter.MaxLines - 1)) {
-                if (!optional) {
-                    Refuse();
-                    return false;
-                }
                 m_omitted++;
                 return true;
             }
@@ -206,14 +197,6 @@ public sealed partial class WorldInspectorText {
             m_length += Elision.Length;
         }
         m_lines++;
-    }
-    private void Refuse() {
-        const string Message = "[world.inspect: editor refused text beyond its declared 32-line/96-column reservation]";
-
-        Message.AsSpan().CopyTo(destination: m_chars);
-        m_length = Message.Length;
-        m_lines = 1;
-        Refused = true;
     }
     // Shapes a reload diagnostic once per change: the refusal's wrapper removed, paths under the world's document
     // directory relative to it, line breaks folded, and the first file and location it names leading the line.

@@ -174,7 +174,6 @@ public sealed class WorldInspectorLawTests {
             var result = new string(value: text.Text);
             var lines = result.Split(separator: '\n');
 
-            Assert.False(condition: text.Refused, userMessage: result);
             Assert.InRange(actual: lines.Length, high: InspectorWriter.MaxLines, low: 1);
             Assert.All(collection: lines, action: static line => Assert.InRange(actual: line.Length, high: InspectorWriter.MaxLineChars, low: 0));
             Assert.Contains(collection: lines, filter: line => line.StartsWith(value: leads[index], comparisonType: StringComparison.Ordinal));

@@ -9,10 +9,6 @@ public interface IInspectorSource {
     /// <param name="viewport">The seat's normalized clip rectangle.</param>
     /// <returns>The text shared with the host's inspector command.</returns>
     ReadOnlySpan<char> Read(int slot, out NormalizedRect viewport);
-    /// <summary>Returns whether this seat's formatter refused text beyond the editor channel's reservation.</summary>
-    /// <param name="slot">The zero-based local seat.</param>
-    /// <returns>Whether the writer must attribute an explicit editor refusal.</returns>
-    bool Refused(int slot) => false;
 }
 /// <summary>Draws bounded inspector text on the existing unified overlay, above authored panels.</summary>
 /// <param name="source">The host's shared inspector formatter output.</param>
@@ -30,7 +26,6 @@ public sealed class InspectorWriter(IInspectorSource source, OverlayThemeStore t
             var text = source.Read(slot: slot, viewport: out var viewport);
 
             if (text.IsEmpty || ((viewport.Width * builder.Width) <= 16) || (viewport.Height <= 0)) { continue; }
-            if (source.Refused(slot: slot)) { builder.NoteRefused(elements: 0, textWords: 1); }
             var x = ((viewport.X * builder.Width) + 8);
             var y = ((viewport.Y * builder.Height) + 8);
             var height = OverlayFrameBuilder.CellHeight(sizePx: theme.Current.Type.MicroSize);
