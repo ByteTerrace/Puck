@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldPipelines {
     /// <summary>Builds the cache's optional kernels in the existing reloadable slot table.</summary>
     public async Task BuildIndirectAsync(GpuPassPipelineCache cache, IGpuDeviceContext device, CancellationToken cancellationToken) {
-        await BuildOptionalAsync(kernels: [SdfKernel.IndirectClassify, SdfKernel.IndirectTrace], cache: cache, device: device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        await BuildOptionalAsync(kernels: [SdfKernel.IndirectClassify, SdfKernel.IndirectTrace, SdfKernel.IndirectShade], cache: cache, device: device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Builds the depth-only camera kernels through the same optional reloadable slots.</summary>
     public async Task BuildLightViewsAsync(GpuPassPipelineCache cache, IGpuDeviceContext device, CancellationToken cancellationToken) {

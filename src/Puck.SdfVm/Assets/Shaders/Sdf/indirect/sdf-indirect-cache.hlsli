@@ -221,8 +221,31 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
 
 #ifdef SDF_INDIRECT_PASS
 bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoint) {
-    float3 delta = endpoint - handoff;
-    return dot(delta, direction) > 0.0 && dot(normalize(delta), direction) >= cos(0.5);
+    return dot(endpoint - handoff, direction) > 0.0;
+}
+// IrradianceCacheModel.ReprojectedRay: the original ray must be inside the direction cone; its endpoint must be
+// beyond the handoff. Rank those endpoints as seen from the handoff, while an exit ranks by direction alone.
+int sdfIndirectContinuationRay(float3 position, float3 direction, int3 lattice, uint level, uint index, float3 origin) {
+    uint state = indirectTraceStates[index];
+    uint rays = sdfIndirectRaysPerProbe(passGroup.indirectTier);
+    int best = -1;
+    float bestCosine = -2.0;
+    [loop] for (uint ray = 0u; ray < rays; ray++) {
+        if ((state & (1u << (ray % (rays / 64u)))) == 0u) { continue; }
+        float3 storedDirection = sdfIndirectDirection(lattice, level, ray);
+        float cosine = dot(storedDirection, direction);
+        if (cosine < cos(0.5)) { continue; }
+        uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + (index * rays + ray) * SdfIndirectHitWords;
+        uint terminal = sdfIndirectLoad(address + 3u) & SdfIndirectKindMask;
+        if (terminal == SdfIndirectKindUnresolved) { continue; }
+        if (terminal != SdfIndirectKindExit) {
+            float3 endpoint = origin + storedDirection * asfloat(sdfIndirectLoad(address));
+            if (!sdfIndirectEndpointSupports(position, direction, endpoint)) { continue; }
+            cosine = dot(normalize(endpoint - position), direction);
+        }
+        if (cosine > bestCosine) { best = (int)ray; bestCosine = cosine; }
+    }
+    return best;
 }
 
 // Only traced, non-dormant corners with an endpoint beyond the handoff can support a continuation.
@@ -236,19 +259,7 @@ uint sdfIndirectSupport(float3 position, float3 direction, uint level, uint mask
         int index = sdfIndirectProbeIndex(lattice, level);
         SdfIndirectPlacement probe = sdfIndirectReadProbe(index);
         if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) { continue; }
-        uint state = indirectTraceStates[(uint)index];
-        uint rays = sdfIndirectRaysPerProbe(passGroup.indirectTier);
-        [loop] for (uint ray = 0u; ray < rays; ray++) {
-            if ((state & (1u << (ray % (rays / 64u)))) == 0u) { continue; }
-            float3 storedDirection = sdfIndirectDirection(lattice, level, ray);
-            if (dot(storedDirection, direction) < cos(0.5)) { continue; }
-            uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + ((uint)index * rays + ray) * SdfIndirectHitWords;
-            uint terminal = sdfIndirectLoad(address + 3u) & SdfIndirectKindMask;
-            float distance = asfloat(sdfIndirectLoad(address));
-            if (terminal == SdfIndirectKindUnresolved || distance <= 0.0) { continue; }
-            float3 end = probe.position + storedDirection * distance;
-            if (sdfIndirectEndpointSupports(position, direction, end)) { readable |= 1u << c; break; }
-        }
+        if (sdfIndirectContinuationRay(position, direction, lattice, level, (uint)index, probe.position) >= 0) { readable |= 1u << c; }
     }
     return readable;
 }

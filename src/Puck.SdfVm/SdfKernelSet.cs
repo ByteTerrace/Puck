@@ -80,6 +80,7 @@ public sealed class SdfKernelSet {
         SdfKernel.LightDepth => "sdf-light-depth",
         SdfKernel.IndirectClassify => "sdf-indirect-classify",
         SdfKernel.IndirectTrace => "sdf-indirect-trace",
+        SdfKernel.IndirectShade => "sdf-indirect-shade",
         SdfKernel.Beam => "sdf-beam",
         SdfKernel.Tape => "sdf-tape",
         SdfKernel.InstanceCull => "sdf-instance-cull",
@@ -117,7 +118,7 @@ public sealed class SdfKernelSet {
     /// <returns>The layout.</returns>
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
         kernel switch {
-            SdfKernel.IndirectClassify or SdfKernel.IndirectTrace => SdfWorldInterfaces.IndirectParameters.Layout,
+            SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade => SdfWorldInterfaces.IndirectParameters.Layout,
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,

@@ -1,10 +1,6 @@
 // Generic shading layers. Coordinates arrive in the winning instance frame.
 #ifndef SDF_SHADE_LAYERS_HLSLI
 #define SDF_SHADE_LAYERS_HLSLI
-float sdfWrapDiffuse(float ndotl, float wrap) {
-    return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
-}
-
 // Blends `normal` toward the wide-stencil guide by `soften`, in place: the gradient the soften taps of sdfProbeField
 // measured (SdfSoftenProbeEpsilon, the same tetrahedron at a much larger epsilon, so fine surface detail such as pores,
 // panel seams and wear noise washes out of it, giving a per-part 'guide' normal without a guide shape). soften <= 0 skips

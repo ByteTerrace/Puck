@@ -67,6 +67,8 @@ public sealed class SdfIndirectLayout {
     public const int SourceCount = 5;
     /// <summary>The words in a lighting record: one nonnegative R11G11B10 value per source.</summary>
     public const int RadianceWords = SourceCount;
+    /// <summary>The largest supported probe ray count, bounding a shade group's shared storage.</summary>
+    public const int MaximumRaysPerProbe = 256;
 
     /// <summary>Creates the layout for a tier.</summary>
     /// <param name="tier">The requested cache tier.</param>

@@ -102,7 +102,7 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
                     break;
                 case ProbeMode.EndpointSupport:
                     var fromHandoff = (vector - point);
-                    var supported = ((fromHandoff.X > 0.0) && (fromHandoff.Normalize().X >= Math.Cos(d: 0.5)));
+                    var supported = (fromHandoff.X > 0.0);
                     Assert.True(condition: (supported == (result.W > 0.5f)), userMessage: $"{item.Name}: continuation support {result.W}, expected {supported}");
                     break;
                 case ProbeMode.NormalCodec:

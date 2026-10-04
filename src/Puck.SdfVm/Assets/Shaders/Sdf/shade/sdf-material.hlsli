@@ -1,6 +1,9 @@
 // The material table and the BRDF every shading path reads.
 #ifndef SHADE_SDF_MATERIAL_HLSLI
 #define SHADE_SDF_MATERIAL_HLSLI
+float sdfWrapDiffuse(float ndotl, float wrap) {
+    return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
+}
 // Generic material rows, paired with SdfProgram.Materials.cs.
 struct SdfMaterialData {
     float3 albedo;

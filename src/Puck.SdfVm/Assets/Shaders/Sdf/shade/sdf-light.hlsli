@@ -4,10 +4,13 @@
 // terms after the shade, and the attenuations into one factor on the reflected light.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#ifdef SDF_VIEWS_PASS
+#if defined(SDF_VIEWS_PASS) || defined(SDF_INDIRECT_SHADE)
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
+// The shared area-light response's soft falloff and finite source-distance floor.
+static const float ScreenLightFalloff = 0.28;
+static const float ScreenLightMinDistanceSquared = 1.0e-4;
 
 struct SdfLightSource {
     uint kind;

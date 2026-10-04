@@ -4,6 +4,13 @@
 #include "sdf-indirect-cache.hlsli"
 #include "sdf-indirect-radiance.hlsli"
 
+struct SdfIndirectSources { float3 values[SdfIndirectSourceCount]; };
+float3 sdfIndirectSourceTotal(SdfIndirectSources sources) {
+    float3 total = 0.0;
+    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) { total += sources.values[source]; }
+    return total;
+}
+
 uint sdfIndirectPublicationAddress(uint probe, uint generation) {
     return sdfIndirectPublicationWordOffset(passGroup.indirectTier)
         + generation * sdfIndirectProbeCapacity(passGroup.indirectTier) + probe;
@@ -62,11 +69,11 @@ float sdfIndirectCornerWeight(float3 fraction, uint corner) {
 
 // A proof mask belongs to this exact launched position's cell. Geometry-only proof construction is outside shading.
 bool sdfIndirectIrradianceAt(float3 surfacePoint, float3 launched, float3 normal, uint level, uint mask,
-    uint generation, uint publication, uint source, out float3 irradiance) {
+    uint generation, uint publication, out SdfIndirectSources irradiance) {
     float3 scaled = launched / sdfIndirectSpacing(passGroup.indirectTier, level);
     int3 cell = int3(floor(scaled));
     float3 fraction = frac(scaled);
-    float3 sum = 0.0;
+    irradiance = (SdfIndirectSources)0;
     float total = 0.0;
     [unroll] for (uint corner = 0u; corner < 8u; corner++) {
         if ((mask & (1u << corner)) == 0u) { continue; }
@@ -79,10 +86,14 @@ bool sdfIndirectIrradianceAt(float3 surfacePoint, float3 launched, float3 normal
         float facing = (magnitude > 0.0 ? max(dot(normal, toward / magnitude), 0.0) : 0.0) + 0.01;
         float weight = sdfIndirectCornerWeight(fraction, corner) * facing;
         if (weight <= 0.0) { continue; }
-        sum += sdfIndirectProbeIrradiance((uint)index, generation, normal, source) * weight;
+        [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+            irradiance.values[source] += sdfIndirectProbeIrradiance((uint)index, generation, normal, source) * weight;
+        }
         total += weight;
     }
-    irradiance = total > 0.0 ? sum / total : 0.0;
+    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+        irradiance.values[source] = total > 0.0 ? irradiance.values[source] / total : 0.0;
+    }
     return total > 0.0;
 }
 #endif

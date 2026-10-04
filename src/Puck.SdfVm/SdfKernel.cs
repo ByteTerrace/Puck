@@ -12,6 +12,8 @@ public enum SdfKernel {
     IndirectClassify,
     /// <summary>Residency transport records and visibility proofs.</summary>
     IndirectTrace,
+    /// <summary>Finite lighting of stored transport records into the other radiance and irradiance generation.</summary>
+    IndirectShade,
     /// <summary>The tile prepass, cone-marching each tile's field into its march planes and part bounds.</summary>
     Beam,
     /// <summary>The certified per-tile live-segment mask.</summary>

@@ -28,7 +28,7 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
         new("a segment ending on a surface is blocked", Floor(), ProbeMode.Segment, Vector3.UnitY, Vector3.Zero),
         new("continuation rejects an endpoint behind the handoff", Floor(), ProbeMode.EndpointSupport, Vector3.Zero, new Vector3(x: -2, y: 0, z: 0)),
         new("continuation rejects a perpendicular endpoint", Floor(), ProbeMode.EndpointSupport, Vector3.Zero, new Vector3(x: 0, y: 2, z: 0)),
-        new("continuation rejects an endpoint outside its angle", Floor(), ProbeMode.EndpointSupport, Vector3.Zero, new Vector3(x: 1, y: 1, z: 0)),
+        new("continuation ranks an oblique endpoint beyond the handoff", Floor(), ProbeMode.EndpointSupport, Vector3.Zero, new Vector3(x: 1, y: 1, z: 0)),
         new("continuation accepts a supported endpoint ahead", Floor(), ProbeMode.EndpointSupport, Vector3.Zero, new Vector3(x: 2, y: 0.2f, z: 0)),
         new("an encoded pole remains distinct from no normal", Floor(), ProbeMode.NormalCodec, Vector3.Zero, new Vector3(x: -1.0e-8f, y: -1.0e-8f, z: -1)),
         new("no normal keeps its zero sentinel", Floor(), ProbeMode.NormalCodec, Vector3.Zero, Vector3.Zero),

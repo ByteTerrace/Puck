@@ -17,6 +17,18 @@ public static partial class SdfWorldPackage {
     public const string IndirectTraceCount = "indirectTraceCount";
     /// <summary>Zero places probes; one partitions their cells.</summary>
     public const string IndirectPhase = "indirectPhase";
+    /// <summary>The probes in the current finite shade batch.</summary>
+    public const string IndirectShadeCount = "indirectShadeCount";
+    /// <summary>The completed generation the feedback sweep reads.</summary>
+    public const string IndirectReadGeneration = "indirectReadGeneration";
+    /// <summary>The generation this sweep writes, coarser levels first.</summary>
+    public const string IndirectWriteGeneration = "indirectWriteGeneration";
+    /// <summary>The exact preceding complete sweep's probe stamp; zero disables feedback.</summary>
+    public const string IndirectReadPublication = "indirectReadPublication";
+    /// <summary>The exact stamp this sweep gives each finished probe.</summary>
+    public const string IndirectWritePublication = "indirectWritePublication";
+    /// <summary>The finite solve's feedback gain, zero during its direct sweep.</summary>
+    public const string IndirectFeedback = "indirectFeedback";
     /// <summary>The residency's published buffer version.</summary>
     public const string IndirectCache = "indirectCache";
     /// <summary>The cache as its kernels write it.</summary>
@@ -35,6 +47,8 @@ public static partial class SdfWorldPackage {
     public const string IndirectClassify = "classify";
     /// <summary>The transport dispatch.</summary>
     public const string IndirectTrace = "trace";
+    /// <summary>The finite lighting solve's dispatch.</summary>
+    public const string IndirectShade = "shade";
 
     /// <summary>Gets the indirect kernels' interface members. Every host table is a region.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> IndirectMembers { get; } = [
@@ -45,12 +59,19 @@ public static partial class SdfWorldPackage {
         Value(name: IndirectClassifyCount, type: ShaderValueType.Uint),
         Value(name: IndirectTraceCount, type: ShaderValueType.Uint),
         Value(name: IndirectPhase, type: ShaderValueType.Uint),
+        Value(name: IndirectShadeCount, type: ShaderValueType.Uint),
+        Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
+        Value(name: IndirectWriteGeneration, type: ShaderValueType.Uint),
+        Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
+        Value(name: IndirectWritePublication, type: ShaderValueType.Uint),
+        Value(name: IndirectFeedback, type: ShaderValueType.Float),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint4, name: IndirectUpdates),
         Read(element: ShaderValueType.Float4, name: IndirectDirections),
         Read(element: ShaderValueType.Uint, name: IndirectTraceStates),
         Written(element: ShaderValueType.Uint, name: IndirectCacheWritten),
         ShaderWorkCounters.BufferMember,
+        Read(element: ShaderValueType.Float, name: IndirectLightDepth),
         .. Tables,
     ];
 

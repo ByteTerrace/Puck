@@ -63,8 +63,6 @@ static const int PrimaryRefineSteps = 8;
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
 static const float ScreenGlassBase = 0.85;
 static const float ScreenGlassSunTint = 0.15;
-// Keeps a screen light's inverse-square attenuation finite for a surface point on the emitter's own face.
-static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // One 8-bit display code: a silhouette's sky blend weighing less than it changes no displayed pixel.
 static const float DisplayCode = (1.0 / 255.0);
 // world.debug-view evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
