@@ -54,7 +54,8 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         common.Clear();
         var pinned = (IsShade ? cache.Lighting : null);
         SdfFrameBlock.Write(block: common, tables: pinned?.Values ?? tables.PassValues, frame: pinned?.Frame ?? m_built.Residency.Frame!, view: 0, width: 1, height: 1);
-        SdfFrameBlock.WriteLightViews(common, m_built.Residency.IndirectLightViews, depthCamera: false);
+        SdfFrameBlock.WriteLightViews(common, m_built.Residency.IndirectLightViews, depthCamera: false,
+            geometryOwner: pinned is null ? null : tables, geometry: pinned?.Snapshot?.Geometry ?? default);
         foreach (var (source, destination, length) in FrameCopies) { common.Slice(length: length, start: source).CopyTo(destination: recording.PassBlock.Slice(length: length, start: destination)); }
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectEpoch, value: cache.Epoch);
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectFrame, value: cache.Frame);

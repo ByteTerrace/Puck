@@ -247,7 +247,10 @@ sweep. A completed unchanged solve schedules no further shade dispatch.
 One solve pins its packed program, pose and lighting tables in existing GPU
 regions and binds them through the ordinary World interface. Later source edits
 wait for the finite solve to finish before starting another. The light camera
-uses that same captured light table. Allocation accounting includes the pinned
+uses that same captured light table. A solve accepts its maps only when their
+table owner and uploaded geometry revisions match the pinned source; maps for
+later live poses fall back to bounded rays through the captured World tables.
+Allocation accounting includes the pinned
 regions, their rings and the separate shade-update region; resizing a pinned
 region waits for its previous readers before replacing it.
 

@@ -15,7 +15,13 @@ public static partial class SdfFrameBlock {
     /// <param name="block">The common world pass block.</param>
     /// <param name="views">The residency's map state, or null when indirect lighting is off.</param>
     /// <param name="depthCamera">Whether this pass publishes the one scheduled region.</param>
-    public static void WriteLightViews(Span<byte> block, SdfIndirectLightViews? views, bool depthCamera) {
+    /// <param name="geometryOwner">The pinned source's table allocation, or null for a live geometry reader.</param>
+    /// <param name="geometry">The pinned source's exact revisions when <paramref name="geometryOwner"/> is supplied.</param>
+    public static void WriteLightViews(Span<byte> block, SdfIndirectLightViews? views, bool depthCamera,
+        object? geometryOwner = null, SdfLightGeometry geometry = default) {
+        // A live depth camera can advance while a finite solve still reads captured poses. Incompatible maps
+        // become ordinary map misses, so shade uses its existing bounded ray over the pinned World set.
+        if (geometryOwner is not null && views is not null && !views.MatchesGeometry(geometryOwner, geometry)) { views = null; }
         var records = block.Slice(start: LightMapsOffset, length: (SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows * 16));
         records.Clear();
         WriteUInt32(block: block, offset: LightMapCountOffset, value: ((uint)(views?.MapCount ?? 0)));

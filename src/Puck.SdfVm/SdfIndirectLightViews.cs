@@ -41,6 +41,13 @@ public sealed class SdfIndirectLightViews {
     /// <summary>Gets the projection selected for the sole depth camera.</summary>
     public IrradianceLightProjection? Projection => ((Pending >= 0) ? m_maps[Pending].Projection : null);
 
+    /// <summary>Reports whether these maps describe the exact table allocation and uploaded geometry a reader pinned.</summary>
+    /// <param name="owner">The reader's captured table allocation.</param>
+    /// <param name="geometry">The reader's captured geometry revisions.</param>
+    /// <returns>True when a submitted region may be used by that geometry snapshot.</returns>
+    public bool MatchesGeometry(object owner, SdfLightGeometry geometry) =>
+        ReferenceEquals(m_geometryOwner, owner) && m_geometry == geometry;
+
     /// <summary>Invalidates publications when the graph releases the depth-bank allocation they describe.</summary>
     public void InvalidateStorage() {
         foreach (var map in m_maps) { map.Valid = false; }

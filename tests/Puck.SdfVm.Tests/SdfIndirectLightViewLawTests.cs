@@ -127,6 +127,42 @@ public sealed class SdfIndirectLightViewLawTests {
         Assert.Equal(expected: 0u, actual: BitConverter.ToUInt32(value: block, startIndex: Offset(SdfWorldPackage.LightMapCount)));
     }
 
+    [Fact]
+    public void PinnedGeometryRejectsLaterMapsAndEqualRevisionsFromAnotherAllocation() {
+        var views = new SdfIndirectLightViews();
+        var lights = Lights();
+        var owner = new object();
+        var captured = new SdfLightGeometry(Program: 1, Poses: 2, Mesh: 3, Decals: 4);
+        for (var frame = 0; frame < 4; frame++) {
+            views.Plan(frame, owner, captured, lights, [Region, Region], Region, forceGeometry: false);
+            views.Submitted();
+        }
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        var start = (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.LightMaps);
+        var count = (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.LightMapCount);
+        void Write(object sourceOwner, SdfLightGeometry source) =>
+            SdfFrameBlock.WriteLightViews(block, views, depthCamera: false, geometryOwner: sourceOwner, geometry: source);
+        void AssertFallback() {
+            Assert.Equal(expected: 0u, actual: BitConverter.ToUInt32(block, count));
+            Assert.All(block.AsSpan(start, SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows * 16).ToArray(),
+                value => Assert.Equal(expected: (byte)0, actual: value));
+        }
+        Write(owner, captured);
+        Assert.Equal(expected: 4u, actual: BitConverter.ToUInt32(block, count));
+        Assert.Equal(expected: 1f, actual: BitConverter.ToSingle(block, start + 12));
+
+        var live = captured with { Poses = 5 };
+        views.Plan(4, owner, live, lights, [Region, Region], Region, forceGeometry: false);
+        views.Submitted();
+        Write(owner, captured);
+        AssertFallback();
+        Write(new object(), live);
+        AssertFallback();
+        Write(owner, live);
+        Assert.Equal(expected: 4u, actual: BitConverter.ToUInt32(block, count));
+        Assert.Equal(expected: 1f, actual: BitConverter.ToSingle(block, start + 12));
+    }
+
     private static void Plan(SdfIndirectLightViews views, SdfLights lights, object owner, long frame) =>
         views.Plan(frame: frame, geometryOwner: owner, geometry: default, lights: lights, regions: [Region, Region], casters: Region, forceGeometry: false);
 
