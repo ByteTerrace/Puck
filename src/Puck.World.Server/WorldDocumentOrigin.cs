@@ -92,13 +92,24 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         ));
     }
     /// <summary>Resolves a path exactly like <c>--world</c>: rooted, or relative to the current directory, and naming
-    /// a document that exists, as a file or, for a document path with none, as the <c>.puck</c> source of its name. A path a document authors never reaches here relative; it is resolved beside that document
-    /// first (<see cref="WorldDocumentPaths"/>).</summary>
+    /// a document that exists. A document path with a <c>.puck</c> source of its name resolves to that source,
+    /// which wins over a document file beside it, so a reference and a source boot share one origin. A path a document
+    /// authors never reaches here relative; it is resolved beside that document first (<see cref="WorldDocumentPaths"/>).</summary>
     public static bool TryResolveCanonicalPath(string path, out string resolved) {
         try {
-            var direct = Path.GetFullPath(path: path);
+            var direct = PuckPaths.Normalize(path: Path.GetFullPath(path: path));
 
-            if (WorldDefinitionFileSource.DocumentFileExists(path: direct)) {
+            if (WorldDocumentName.IsDocumentFile(path: direct)) {
+                var source = WorldDocumentName.SourceFile(name: WorldDocumentName.OfDocumentFile(path: direct));
+
+                if (File.Exists(path: source)) {
+                    resolved = source;
+
+                    return true;
+                }
+            }
+
+            if (File.Exists(path: direct)) {
                 resolved = direct;
 
                 return true;
