@@ -220,10 +220,13 @@ public sealed class ShaderBuildTargetsLawTests {
         using var fixture = new Fixture();
 
         fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
+        fixture.Write(path: "Assets/Shaders/conventional.hlsli", text: "conventional declaration");
+        fixture.Write(path: "Shared/outside.hlsli", text: "explicit outside declaration");
         fixture.ShaderProject(body: """
             <ItemGroup>
               <ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" />
               <ShaderInclude Include="Assets/Shaders/*.hlsli" />
+              <ShaderInclude Include="Shared/outside.hlsli" />
             </ItemGroup>
             <Target Name="ResolveProjectReferences">
               <WriteLinesToFile File="Assets/Shaders/generated.hlsli" Lines="generated declaration" WriteOnlyWhenDifferent="true" Overwrite="true" />
@@ -233,6 +236,14 @@ public sealed class ShaderBuildTargetsLawTests {
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         var bytecode = fixture.PathOf(path: "Assets/Shaders/a.comp.spv");
         var settled = File.GetLastWriteTimeUtc(path: bytecode);
+        var sidecar = fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash");
+        var committed = File.ReadAllText(path: sidecar);
+
+        // A fresh no-build evaluation must use the publisher's include order, including the explicit outside row.
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+        Assert.Equal(expected: committed, actual: File.ReadAllText(path: sidecar));
+        Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));
+        Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: bytecode));
 
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));

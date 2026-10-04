@@ -141,8 +141,8 @@
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
     <!-- ResolveProjectReferences can restore a missing generated include after evaluation's glob expanded. Refresh
-         the conventional includes before the incremental check, preserving explicit includes outside this directory. -->
-    <Target Name="RefreshShaderIncludes" BeforeTargets="CompileShaders">
+         before compilation and collection, preserving explicit outside includes and the same hash order in no-build readers. -->
+    <Target Name="RefreshShaderIncludes" BeforeTargets="CompileShaders;CollectShaderBytecode">
         <ItemGroup>
             <_PuckConventionalShaderInclude Include="Assets/Shaders/**/*.hlsli" />
             <ShaderInclude Remove="@(_PuckConventionalShaderInclude)" />

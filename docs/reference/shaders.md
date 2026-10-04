@@ -114,7 +114,10 @@ sidecar fails the build and stays in place.
 A package declaration carries no hashes. The build writes a `<bytecode>.hash`
 sidecar (source-plus-includes hash and bytecode hash) on every recompile and,
 on every build, recomputes both from what is on disk and refuses a stale pair
-(`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). A post-process
+(`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). Collection
+uses the same refreshed include order as compilation, including
+explicit includes outside the conventional shader directory, even when the
+reader skips compilation. A post-process
 package's build therefore checks only that each stage's bytecode for the
 backend exists and is well-formed (`ShaderBytecode.ValidateFormat`); the
 sidecars do not ship, and a runtime re-check would duplicate the build's gate.
