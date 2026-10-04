@@ -6,8 +6,8 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 /// <summary>How a package pass reaches the version bound to one of its ports: the stage and access the planner plans the
-/// port's barrier and layout for, exactly as it plans a shader pass's. An input port reads and an output port
-/// writes.</summary>
+/// port's barrier and layout for, exactly as it plans a shader pass's. An input port reads, optionally updating an
+/// imported buffer in place; an output port writes a version.</summary>
 public enum RenderGraphPortAccess : byte {
     /// <summary>Read by a compute dispatch, as a compute pass reads its inputs: an image shader-readable for the compute
     /// stage.</summary>
@@ -22,6 +22,9 @@ public enum RenderGraphPortAccess : byte {
     /// <see cref="Puck.Abstractions.Gpu.GpuImageLayout.RenderTarget"/> for color-attachment output. Only an image port
     /// takes it.</summary>
     ColorAttachmentWrite = 3,
+    /// <summary>Reads and updates a current imported buffer in place during a compute dispatch. Its contents remain
+    /// owned by the producer; this access creates no output version and cannot target an image or history.</summary>
+    ComputeReadWrite = 4,
 }
 /// <summary>One port of an engine package: what the version a pass binds to it carries, a buffer's storage, and how the
 /// package reaches it. A pass binds a version of the port's kind, and to a buffer port a buffer of the port's stride and
@@ -41,13 +44,13 @@ public sealed record RenderGraphPackagePort(
     IReadOnlyList<ShaderPipelineCountTerm>? Count = null
 ) {
     /// <summary>Gets whether the port reads its version: <see cref="RenderGraphPortAccess.ComputeRead"/> or
-    /// <see cref="RenderGraphPortAccess.FragmentSampled"/>.</summary>
-    public bool Reads => (Access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled);
+    /// <see cref="RenderGraphPortAccess.FragmentSampled"/>, including an in-place buffer update.</summary>
+    public bool Reads => (Access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled or RenderGraphPortAccess.ComputeReadWrite);
     /// <summary>Gets whether the port is well formed: its access is declared, an image port declares no storage, a buffer
-    /// port's stride, when it has one, is a positive multiple of four, and only an image port is a color
-    /// attachment.</summary>
+    /// port's stride, when it has one, is a positive multiple of four, only an image port is a color attachment,
+    /// and only a buffer input can be updated in place.</summary>
     public bool IsValid => (Enum.IsDefined(value: Access) && (Kind switch {
-        ShaderPipelineResourceKind.Image => ((StrideBytes is null) && (Count is null)),
+        ShaderPipelineResourceKind.Image => ((Access != RenderGraphPortAccess.ComputeReadWrite) && (StrideBytes is null) && (Count is null)),
         ShaderPipelineResourceKind.Buffer => (
             (Access != RenderGraphPortAccess.ColorAttachmentWrite) &&
             ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0)))
@@ -162,7 +165,7 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// (<c>RenderGraphPackageRecorderContext.Part</c>) and which names the spliced pass after the pass that runs the
 /// package.</param>
 /// <param name="Inputs">The versions it reads.</param>
-/// <param name="InputAccesses">How it reads each of <paramref name="Inputs"/>, one read access per input.</param>
+/// <param name="InputAccesses">How it reaches each of <paramref name="Inputs"/>, one read or buffer read/write access per input.</param>
 /// <param name="Outputs">The versions it writes, at least one.</param>
 /// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output.</param>
 /// <param name="Dispatch">Its dispatch shape: <see langword="null"/> or <see cref="ShaderPipelineDispatchKind.Extent"/>

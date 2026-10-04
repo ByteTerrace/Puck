@@ -424,7 +424,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
                 var resource = new RuntimeResource(
-                    count: (IsBorrowedStorage(plan: plan, storage: planned) ? 1 : InstancesOf(
+                    count: (m_packages.OwnsBuffer(plan: plan, storage: planned) ? 1 : InstancesOf(
                         inFlight: m_inFlight,
                         storage: planned
                     )),
@@ -536,7 +536,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                         Array.Fill(array: resource.Buffers, value: borrowed);
                         continue;
                     }
-                    if (IsBorrowedStorage(plan: plan, storage: planned)) {
+                    if (m_packages.OwnsBuffer(plan: plan, storage: planned)) {
                         throw new InvalidDataException(message: $"Package-owned buffer '{declaration.Name}' has no allocation.");
                     }
                     for (var i = 0; (i < resource.Count); i++) {
@@ -722,7 +722,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var command = m_slots[slot].Commands!.CommandBufferHandle;
 
         m_gpu.Recorder.BeginCommandBuffer(commandBufferHandle: command);
-
+        ReacquireBorrowedBuffers();
         return command;
     }
     // Records the export's copy and the selected output's presentation at the end of the frame's list.

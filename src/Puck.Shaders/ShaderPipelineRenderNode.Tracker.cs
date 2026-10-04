@@ -18,6 +18,17 @@ public sealed partial class ShaderPipelineRenderNode {
     // downstream reader of a published image, possibly still in flight.
     private static ShaderPipelineAccessState Discarded => ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined);
 
+    // A package-owned published buffer can be updated by an imported ComputeReadWrite port between submissions.
+    // Preserve its contents and reacquire through the existing override on its first actual access, even when earlier
+    // passes stand. Subsequent passes use their precise planned barriers as usual.
+    private void ReacquireBorrowedBuffers() {
+        foreach (var resource in m_resources) {
+            if (resource.Borrowed) {
+                resource.SetOverride(instance: 0, state: ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined));
+            }
+        }
+    }
+
     // History follows its successful writer; other storage follows the submission slot. Host-owned, transient and
     // retained storage each share one instance across slots.
     private static int InstanceIndex(RuntimeResource resource, int slot, bool previous) =>

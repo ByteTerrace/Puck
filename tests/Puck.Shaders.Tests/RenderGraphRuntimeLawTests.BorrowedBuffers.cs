@@ -83,19 +83,21 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private sealed class BorrowedPackage(IGpuBuffer buffer) : IRenderGraphPackageFactory {
         public RenderGraphPackageFragment Fragment { get; set; } = SdfWorldPackage.IndirectFragment(bytes: buffer.SizeBytes);
 
-        public bool OwnsBuffers => true;
+        public bool OwnsBuffers { get; set; } = true;
         public bool Unchanged { get; set; }
+        public bool SkipPlacement { get; set; }
 
         public List<IGpuBuffer> Outputs { get; } = [];
 
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;
         public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) => buffer;
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
-        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this, part: context.Part);
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => Unchanged;
 
-        private sealed class Recorder(BorrowedPackage owner) : IRenderGraphPackageRecorder {
+        private sealed class Recorder(BorrowedPackage owner, string? part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
+            public bool Skips(in FrameContext context) => (owner.SkipPlacement && (part == SdfWorldPackage.IndirectPlace));
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Outputs.Add(item: recording.Outputs[0].Buffer!);
                 return RenderGraphPackageOutcome.Drew;

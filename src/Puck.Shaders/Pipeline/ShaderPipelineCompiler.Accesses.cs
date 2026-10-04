@@ -24,21 +24,21 @@ public sealed partial class ShaderPipelineCompiler {
     // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
     // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
     // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
-    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
         if (pass.DispatchArguments is { } arguments) {
-            yield return (new ResourceReference(Name: arguments), false, true, false);
+            yield return (new ResourceReference(Name: arguments), false, false, true, false);
         }
 
         var inputs = pass.InputReferences;
         var outputs = pass.OutputReferences;
 
         for (var index = 0; (index < inputs.Count); index++) {
-            yield return (inputs[index], false, false, ((package is null)
+            yield return (inputs[index], false, (package?.InputAccess(index: index) == RenderGraphPortAccess.ComputeReadWrite), false, ((package is null)
                 ? pass.IsGraphics
                 : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)));
         }
         for (var index = 0; (index < outputs.Count); index++) {
-            yield return (outputs[index], true, false, ((package is null)
+            yield return (outputs[index], true, false, false, ((package is null)
                 ? pass.IsGraphics
                 : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)));
         }
@@ -178,7 +178,7 @@ public sealed partial class ShaderPipelineCompiler {
             var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
-            foreach (var (reference, write, arguments, graphics) in ReferencesOf(
+            foreach (var (reference, write, mutate, arguments, graphics) in ReferencesOf(
                 package: packages[index],
                 pass: declaration
             )) {
@@ -189,9 +189,9 @@ public sealed partial class ShaderPipelineCompiler {
                     ? ArgumentsUse
                     : UseOf(
                         graphics: graphics,
-                        preserve: (resource.From is not null),
+                        preserve: (mutate || (resource.From is not null)),
                         resource: resource,
-                        write: write
+                        write: (write || mutate)
                     ));
 
                 roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (index, list.Count, use));

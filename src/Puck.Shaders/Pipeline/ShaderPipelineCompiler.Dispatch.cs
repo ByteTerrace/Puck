@@ -7,6 +7,21 @@ namespace Puck.Shaders;
 // stride, or counted by a sum of terms over counts the host resolves. The pipeline node records only extent dispatches
 // over raw fixed buffers, so the other shapes and storages belong to package passes, which record their own work.
 public sealed partial class ShaderPipelineCompiler {
+    // In-place package updates preserve producer-owned current contents. They are never version writers, history
+    // writes, image writes or uploads into the host's mapped region.
+    private static void ValidateMutableInputs(IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
+        foreach (var package in packages) {
+            for (var index = 0; (index < package.Inputs.Count); index++) {
+                if (package.InputAccess(index: index) != RenderGraphPortAccess.ComputeReadWrite) { continue; }
+                var input = package.Inputs[index];
+                var resource = resources[input.Name];
+                if ((resource.Kind == ShaderPipelineResourceKind.Buffer) && resource.IsExternal && !resource.IsHostBuffer &&
+                    !resource.History && !input.PreviousFrame) { continue; }
+                Add(diagnostics, "SHADERPIPE_MUTABLE_INPUT",
+                    $"Package pass '{package.Name}' updates '{input.Name}' in place; only a current external buffer outside host-upload ports can be a mutable input.", input.Name);
+            }
+        }
+    }
     // Everything a pass reads this frame or the previous one: an indirect dispatch's arguments, then its inputs.
     private static IEnumerable<ResourceReference> ReadsOf(ShaderPipelinePass pass) {
         if (pass.DispatchArguments is { } arguments) {

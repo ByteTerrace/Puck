@@ -101,7 +101,10 @@ public sealed partial class RenderGraphRuntime {
                 Resources = [.. fragment.Resources.Where(predicate: resource => !fragment.InputVersions.Contains(value: resource.Name))],
             }),
             Inputs = [.. inputResources.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
-                Access: RenderGraphPortAccess.ComputeRead, StrideBytes: resource.StrideBytes, Count: resource.Count))],
+                Access: (fragment.Passes.Any(predicate: pass => Enumerable.Range(0, pass.Inputs.Count).Any(predicate: index =>
+                    ((pass.Inputs[index].Name == resource.Name) && (pass.InputAccesses[index] == RenderGraphPortAccess.ComputeReadWrite))))
+                    ? RenderGraphPortAccess.ComputeReadWrite : RenderGraphPortAccess.ComputeRead),
+                StrideBytes: resource.StrideBytes, Count: resource.Count))],
         }])).TryCompile(
             definition: definition,
             diagnostics: out var diagnostics,

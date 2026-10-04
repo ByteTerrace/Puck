@@ -31,7 +31,7 @@ public sealed partial class ShaderPipelineRenderNode {
             var canStand = ((pass.Package is not null) && (pass.Outputs.Length > 0));
 
             foreach (var access in pass.Accesses) {
-                if (!access.Use.Writes) {
+                if (!access.Use.Writes || m_resources[access.Storage].Spec.IsExternal) {
                     canStand &= AddCadenceInput(access.Version, access.PreviousFrame, inputs);
                 }
             }

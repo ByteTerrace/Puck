@@ -327,9 +327,9 @@ package's ports, inputs then outputs, in port order. A port
 states its `strideBytes` and `count` as a buffer resource does. The version a
 pass binds must carry what its port carries: its kind, and for a buffer port
 the same stride and count. A port also declares the stage and access its
-package reaches it by (`RenderGraphPortAccess`): an input is a compute read or
-a fragment-sampled read, and an output a compute write or a color-attachment
-write, which only an image port takes. A package compiles no source, so a
+package reaches it by (`RenderGraphPortAccess`): an input is a compute read,
+a fragment-sampled read, or a `ComputeReadWrite` buffer input; an output is a
+compute write or a color-attachment write, which only an image port takes. A package compiles no source, so a
 package reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
 offers:
 
@@ -352,6 +352,17 @@ held image already contains display colors. The host can update the mode and
 divider as pass parameters without rebuilding the graph. See
 [World's editing commands](../../src/Puck.World/README.md#the-world-as-data)
 for the editor commands that hold and compare a frame.
+
+A mutable input preserves and updates the producer's current buffer in place,
+without introducing an output version or transferring allocation ownership.
+Only packages declare it; images, previous-frame reads, owned versions and
+host-upload ports refuse it. Across instances, its edge must reach a package
+that supplies one shared buffer through `OwnsBuffers` and `BorrowedBuffer`.
+The consumer plans read/write barriers, and the producer reacquires all
+intervening accesses before its next actual access, including after skipped
+passes. A fragment cannot update an input its package declared read-only.
+Mutable imports still count as external inputs for cadence, so an unchanged
+package signature alone cannot make their passes stand.
 
 A package may run as a fragment (`RenderGraphPackageFragment`): passes and
 versions of its own, which the graph compiler splices into the graph in place

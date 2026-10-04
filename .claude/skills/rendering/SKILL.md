@@ -57,6 +57,13 @@ complete-field certificate and within half a spacing; do not derive a ball from
 a camera mask or an independent part. Primary publishes zero when no approach
 is certified, leaving the bounded normal-launch fallback to the receiver.
 
+Shared receiver-proof writes use a package `ComputeReadWrite` buffer input.
+Declare the access in both the package and its fragment; never bind a writable
+cache behind a read-only graph edge. The imported current buffer preserves its
+producer's allocation and contents, and the borrowed producer reacquires
+intervening writes through the existing barrier tracker. Previous-frame edges,
+host-upload ports and graph-owned buffer rings cannot serve mutable imports.
+
 The indirect `shade` pass uses `IrradianceSolveSchedule`, the same finite order as
 the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through

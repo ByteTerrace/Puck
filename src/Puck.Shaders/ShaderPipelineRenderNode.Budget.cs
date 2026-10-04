@@ -126,7 +126,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var bytes = 0UL;
 
         foreach (var storage in plan.Storages) {
-            if (IsBorrowedStorage(plan: plan, storage: storage)) { continue; }
+            if (m_packages.OwnsBuffer(plan: plan, storage: storage)) { continue; }
             bytes = checked((bytes + Footprint(
                 count: InstancesOf(
                     inFlight: inFlight,
@@ -150,10 +150,6 @@ public sealed partial class ShaderPipelineRenderNode {
             plan: plan
         )));
     }
-    private bool IsBorrowedStorage(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
-        ((storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer) && plan.Passes.Any(predicate: pass =>
-            ((pass.Package is { } package) && pass.Outputs.Any(predicate: output => storage.Versions.Contains(value: output.Name)) &&
-            m_packages.TryGetFactory(package.Package, out var factory) && factory.OwnsBuffers)));
     // The bytes of the kernel counters of a graph a pass of which counts its kernels' work: per frame slot a counter
     // buffer and a readback buffer, one row a pass each (GpuKernelCounters).
     private static ulong KernelCounterBytes(ShaderPipelinePlan plan, uint inFlight) =>
