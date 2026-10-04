@@ -401,6 +401,13 @@ public class TestLoweringLawTests {
             actual: Canonical(node: OneWorld(source: formatted)["schedule"]!),
             expected: Canonical(node: OneWorld(source: source)["schedule"]!)
         );
+
+        // A lowered test's authored refusal survives decompilation too, including the unqualified refusal.
+        var original = OneWorld(source: source);
+        var decompiled = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: original);
+        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused \"is not disclosed\": world.state armour $value");
+        Assert.Contains(actualString: decompiled, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused: world.state.cell.set armour $value 9");
+        Assert.Equal(actual: Canonical(node: OneWorld(source: decompiled)), expected: Canonical(node: original));
     }
     [Fact]
     public void ATestInsideAnotherConstructIsRefusedByName() => Assert.Contains(

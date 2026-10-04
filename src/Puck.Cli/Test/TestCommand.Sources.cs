@@ -16,8 +16,8 @@ internal static partial class TestCommand {
             return false;
         }
     }
-    // Compiles one `.puck` source and writes each test world its `test` blocks generated. The bytes are canonical,
-    // so two runs over an unchanged source write byte-identical documents.
+    // Compiles one `.puck` source and writes its generated test worlds, or its authored scheduled document carrying
+    // verdict rows. Both use the same staging path, preserving basis resolution outside the temporary directory.
     //
     // A generated world is named for its source's stem and its test's slug, so two sources of one sweep sharing a
     // stem can name the same world. `written` holds every world this run generated and the source it came from:
@@ -59,13 +59,40 @@ internal static partial class TestCommand {
         }
 
         if (compiled!.Tests.Count == 0) {
+            if (compiled.EmitsDocument && (compiled.Document is { } bytes) &&
+                (JsonNode.Parse(utf8Json: bytes) is JsonObject authored) &&
+                (authored["schedule"] is JsonObject) &&
+                (authored["state"]?["world"] is JsonArray rows) &&
+                rows.OfType<JsonObject>().Any(predicate: static row => row["verdict"] is JsonObject)) {
+                var name = Path.GetFileNameWithoutExtension(path: source);
+                if (written.TryGetValue(key: name, value: out var owner)) {
+                    reason = $"{source} and {owner} both generate the test world '{name}' — sources run together need different document names.";
+                    return false;
+                }
+                written[name] = source;
+                if (!WorldStaging.TryWrite(
+                    catalog: CliWorldVocabulary.EnsureInstalled(),
+                    directory: directory,
+                    name: name,
+                    path: out var staged,
+                    reason: out var composeReason,
+                    sourceDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: source)) ?? "."),
+                    world: authored
+                )) {
+                    reason = $"{source} scheduled verdict world does not compose: {composeReason}";
+                    return false;
+                }
+                Console.WriteLine(value: $"test: {name} <- {source} (authored schedule and verdicts)");
+                worlds = [staged];
+                return true;
+            }
             if (!sweeping) {
-                reason = $"{source} authors no test block — puck test runs the worlds a source's `test` blocks generate, so a source without one has nothing for this verb to do.";
+                reason = $"{source} authors no test block or scheduled verdict world — puck test runs generated tests and authored documents carrying both a schedule and verdict rows.";
 
                 return false;
             }
 
-            skipped = $"test: skipped {source} — it authors no test block.";
+            skipped = $"test: skipped {source} — it authors no test block or scheduled verdict world.";
 
             return true;
         }
@@ -122,9 +149,8 @@ internal static partial class TestCommand {
 
         return true;
     }
-    // Every world a path names: a document runs as it stands, a `.puck` source is compiled and its generated test
-    // worlds run instead, and a directory contributes the file carrying each document, recursively, skipping what is
-    // not a test.
+    // Every world a path names: a document runs as it stands, a `.puck` source contributes its generated tests or
+    // authored scheduled verdict document, and a directory recursively skips worlds carrying neither.
     private static bool TryCollectWorlds(string path, string generatedDirectory, out IReadOnlyList<string> worlds, out string? reason) {
         worlds = [];
         reason = null;
@@ -210,7 +236,7 @@ internal static partial class TestCommand {
         }
 
         if (collected.Count == 0) {
-            reason = $"'{path}' holds no test world: no *{WorldDocumentName.DocumentSuffix} document declaring a schedule, and no *{WorldDocumentName.SourceSuffix} source with a test block.";
+            reason = $"'{path}' holds no test world: no *{WorldDocumentName.DocumentSuffix} document declaring a schedule, and no *{WorldDocumentName.SourceSuffix} source with a test block or scheduled verdict world.";
 
             return false;
         }

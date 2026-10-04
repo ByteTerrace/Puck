@@ -473,6 +473,50 @@ public sealed class TestCommandLawTests {
             expectedSubstring: "authors no test block"
         );
     }
+    // Collection runs before artifact admission. An absent artifact fences this witness before any host starts,
+    // including the deliberately stopped schedule, while preserving each authored document's name and rows.
+    [Theory]
+    [InlineData("phase-advance.world.json")]
+    [InlineData("phase-advance-stopped.world.json")]
+    [InlineData("refused-command.world.json")]
+    [InlineData("proofs/expected-outcome.world.json")]
+    [InlineData("proofs/unexpected-outcome.world.json")]
+    public void EveryAuthoredScheduledVerdictSourceIsCollectedWithoutAGeneratedTestBlock(string fixture) {
+        using var scratch = new TemporaryDirectory(prefix: "puck-authored-verdict-collection-");
+        var originalPath = World(name: fixture);
+        Assert.True(condition: WorldDefinitionFileSource.TryReadDocumentFile(path: originalPath,
+            content: out var bytes, reason: out var readReason), userMessage: readReason);
+        var document = Assert.IsType<JsonObject>(@object: JsonNode.Parse(utf8Json: bytes!));
+        var printed = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: document);
+        var recompiled = Puck.World.Transpiler.WorldCompiler.Compile(source: printed,
+            sourcePath: originalPath, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(condition: recompiled.Diagnostics.HasErrors,
+            userMessage: recompiled.Diagnostics.FormatReport(source: printed));
+        Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: recompiled.RequireJson()));
+        document["basis"] = World(name: "phase-fixture").Replace(oldChar: '\\', newChar: '/');
+        var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: fixture));
+        var source = Path.Combine(path1: scratch.RootPath, path2: name + ".puck");
+        File.WriteAllText(path: source, contents: Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: document));
+        var kept = Path.Combine(path1: scratch.RootPath, path2: "kept");
+        var missing = Path.Combine(path1: scratch.RootPath, path2: "absent/Puck.World.dll");
+        var (exit, output) = ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: [
+            "test", source, "--keep", kept, "--world-artifact", missing,
+        ]));
+        Assert.Equal(actual: exit, expected: 2);
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"test: {name} <- {source} (authored schedule and verdicts)");
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "--world-artifact");
+        var staged = Assert.IsType<JsonObject>(@object: JsonNode.Parse(utf8Json: File.ReadAllBytes(
+            path: Path.Combine(path1: kept, path2: "generated", path3: name + ".world.json"))));
+        var stagedRows = staged["state"]!["world"]!.AsArray().OfType<JsonObject>();
+        foreach (var row in document["state"]!["world"]!.AsArray().OfType<JsonObject>()) {
+            var carried = Assert.Single(collection: stagedRows,
+                predicate: candidate => candidate["name"]!.GetValue<string>() == row["name"]!.GetValue<string>());
+            Assert.True(condition: JsonNode.DeepEquals(node1: row, node2: carried));
+        }
+        Assert.True(condition: JsonNode.DeepEquals(node1: document["schedule"], node2: staged["schedule"]));
+        Assert.True(condition: JsonNode.DeepEquals(node1: document["simulation"], node2: staged["simulation"]));
+    }
     [Fact]
     public void AHostThisVerbCannotBootIsRefusedByName() {
         var (exitCode, output) = RunTest(

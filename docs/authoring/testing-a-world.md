@@ -290,11 +290,25 @@ is recorded in a witness row of that kind, `expect$<line>$fixed` or
 not listed, because no verdict row holds text. The generated world is named
 `<source stem>~<test slug>`.
 
+## Authored schedules and verdict rows
+
+A world can author its own `schedule` and named verdict rows through the
+explicit `state { world { row { … } } }` vocabulary. A row's `verdict` names
+its status cell and gate text; its rule effects decide the status. A status
+that no rule firing writes stays never evaluated, including when
+`simulation { rateHz: 0 }` stops the schedule before its export tick.
+`puck test` runs a single-document source carrying both an authored schedule
+and verdict rows, even when it carries no `test` block. A stopped schedule is
+tested by booting the real host and quitting before export; it cannot complete
+an ordinary `puck test` run.
+
+Decompilation keeps those authored row names and sections. Generated
+`expect$N` rows print back as their `test` block, whose refused steps keep their
+`refused` spelling and optional refusal text. A gate compares a `Bool` row to
+`true` or `false`, as in a rule's `when`.
+
 ## What a test cannot say yet
 
-- **A gate compares a `Bool` row to `0` or `1`.** The gate grammar reads `true`
-  and `false` as row names, in a rule's `when` as much as here, so
-  `open == false` is refused and `open == 0` is how it is said.
 - **A far world's own state, driven directly.** A step reaches a world other
   than the booted one only through the verbs whose grammar carries a world
   token, so a claim about a far world is written as a claim about what crossed
@@ -315,7 +329,7 @@ not listed, because no verdict row holds text. The generated world is named
 |---|---|
 | 0 | every verdict passed; with `--reproduce`, both runs also exported identical bytes |
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
-| 2 | usage: a source that does not compile, a source with no test, a `--reproduce` mismatch, a build or boot refusal |
+| 2 | usage: a source that does not compile, a source with neither tests nor a scheduled verdict document, a `--reproduce` mismatch, a build or boot refusal |
 
 Ordinary authoring runs each isolated test world once. `--reproduce` is the
 determinism qualification tier: it runs every world twice into sibling

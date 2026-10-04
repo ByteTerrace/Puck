@@ -1680,10 +1680,13 @@ refused). A directory contributes the file carrying each document name: the
 otherwise, so a document beside the source of its name emitting that name is not
 run. A source carries exactly the names it emits: a module library none, so a
 `*.world.json` named like it runs and the library itself is still swept for its
-tests, and a composition the worlds it declares, so its file runs once. It skips a source that authors no test,
-and refuses two files whose document names differ only in letter case. A source that does not compile is exit 2; so is a single named
-source with no test block, since the verb was asked to run something that is not
-there.
+tests, and a composition the worlds it declares, so its file runs once. A
+single-document source with no test block also runs when its document authors
+both a `schedule` section and verdict rows. It keeps its authored document name
+and is composed and staged through the same path as generated tests. A sweep
+skips other sources and refuses two files whose document names differ only in
+letter case. A source that does not compile is exit 2; so is a single named
+source carrying neither a test block nor a scheduled verdict document.
 
 Four kinds of block reach this verb, and the generated world differs by kind:
 
