@@ -1,6 +1,10 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
 using Puck.Testing;
 using Xunit;
@@ -8,7 +12,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The GPU conservative sweep and projected visibility agree with the existing CPU field reference.
-/// The same subtexel rod must disappear when the sweep alone becomes a point ray.</summary>
+/// The same subtexel rod must disappear when the sweep alone becomes a point ray; a thin nearby caster checks the
+/// finite camera's production near-plane helper while an ordinary-camera control retains its perspective floor.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
@@ -28,6 +33,7 @@ public sealed class SdfIndirectLightDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
+        VerifyNearPlane(services: services, extension: extension);
         const int Resolution = 64;
         var program = IrradianceLightFixture.Program();
         var field = new IrradianceField(program: program);
@@ -41,7 +47,7 @@ public sealed class SdfIndirectLightDeviceLawTests {
             .. receivers.Select(selector: point => Row(point, 0)),
         ];
         var results = SdfIndirectDeviceProbe.Run(services: services, extension: extension, kernel: "sdf-indirect-light-proof.comp",
-            resultRows: receivers.Length, programs: [program, program], rows: rows, cacheWords: (Resolution * Resolution));
+            resultRows: (receivers.Length + 1), programs: [program, program], rows: rows, cacheWords: (Resolution * Resolution), passValues: PassValues(lightCamera: true));
         var answered = 0;
         var missed = 0;
         var widened = 0;
@@ -64,6 +70,38 @@ public sealed class SdfIndirectLightDeviceLawTests {
         Assert.True(condition: (answered > 0));
         Assert.True(condition: (widened > 0));
         Assert.True(condition: (missed > 0), userMessage: $"{extension}: the zero-radius discriminator did not miss the rod.");
+    }
+    private static void VerifyNearPlane(GpuDeviceServices services, string extension) {
+        const int Resolution = 64;
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        builder.Translate(offset: new Vector3(x: 0, y: 0.005f, z: 0));
+        builder.Box(halfExtents: new Vector3(x: 0.01f, y: 0.001f, z: 0.01f), material: material, round: 0);
+        var projection = IrradianceLightProjection.Create(
+            receiverMin: new Double3(X: -0.01, Y: 0, Z: -0.01), receiverMax: new Double3(X: 0.01, Y: 0, Z: 0.01),
+            casterMin: new Double3(X: -0.01, Y: 0.004, Z: -0.01), casterMax: new Double3(X: 0.01, Y: 0.006, Z: 0.01),
+            towardLight: IrradianceLightFixture.Up, penumbraSlope: 0.1, resolution: Resolution);
+        Vector4[] rows = [Row(projection.Origin, projection.SweepRadius), Row(projection.Right, projection.HalfWidth),
+            Row(projection.Up, projection.Near), Row(projection.TowardLight, projection.Far),
+            new Vector4(x: Resolution, y: 1, z: 0, w: 0), Vector4.Zero];
+        var program = builder.Build();
+        Vector4[] Run(bool lightCamera) => SdfIndirectDeviceProbe.Run(services: services, extension: extension,
+            kernel: "sdf-indirect-light-proof.comp", resultRows: 2, programs: [program], rows: rows,
+            cacheWords: (Resolution * Resolution), passValues: PassValues(lightCamera: lightCamera));
+        var light = Run(lightCamera: true);
+        // The box lies directly between the origin receiver and the overhead sun, farther than the comparison bias.
+        // Clamping this finite camera to the perspective minimum starts past the complete box and reports it lit.
+        Assert.Equal(expected: 0f, actual: light[0].X);
+        Assert.Equal(expected: ((float)projection.Near), actual: light[1].X);
+        var ordinary = Run(lightCamera: false);
+        Assert.Equal(expected: SdfWorldPackage.MinimumNear, actual: ordinary[1].X);
+    }
+    private static byte[] PassValues(bool lightCamera) {
+        var parameters = SdfWorldInterfaces.IndirectParameters;
+        var values = new byte[parameters.SizeBytes];
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: values.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightMap))),
+            value: (lightCamera ? 1u : 0u));
+        return values;
     }
     private static Vector4 Row(Double3 point, double value) => new(x: ((float)point.X), y: ((float)point.Y), z: ((float)point.Z), w: ((float)value));
 }

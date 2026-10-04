@@ -89,8 +89,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 
         uint4 instanceMeta = sdfWords[entryBase + 1u];
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        // The per-instance soft-shadow-participation skip — active ONLY inside the soft-shadow march window (the flag is
-        // false for every camera/AO/coverage enumeration and for the beam/cull kernels). A DYNAMIC instance whose packed
+        // The per-instance shadow-participation skip is active in soft-shadow marches and the conservative light-camera
+        // beam and primary sweep; ordinary camera/AO/coverage enumerations leave it off. A DYNAMIC instance whose packed
         // position.w > 0.5 is shadow-suppressed (host encoding: 0 casts / 1 suppressed), so drop its whole segment range
         // from the shadow enumeration — mirroring the parked-radius continue above. Static instances (no dynamic slot)
         // always cast: they never take this branch.

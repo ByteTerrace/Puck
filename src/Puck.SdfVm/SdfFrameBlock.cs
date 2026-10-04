@@ -143,11 +143,12 @@ public static partial class SdfFrameBlock {
     /// <param name="row">The first named detail row.</param>
     public static void WriteWorkCounterDetailRow(Span<byte> block, uint row) =>
         WriteUInt32(block: block, offset: WorkCounterDetailRow, value: row);
-    /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
-    /// <see cref="CameraSnapshot.Near"/>, or <see cref="SdfWorldPackage.MinimumNear"/> when that is nearer. The kernels start every
+    /// <summary>Returns the forward distance of the plane a perspective view's surfaces are rendered from: the larger of
+    /// <see cref="CameraSnapshot.Near"/> and <see cref="SdfWorldPackage.MinimumNear"/>. The kernels start every
     /// surface march where its ray crosses this plane and the mesh pass clips there
     /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which
-    /// the bounded volumes start from, and the kernels apply this floor themselves.</summary>
+    /// the bounded volumes start from, and perspective kernels apply this floor themselves. The scoped orthographic
+    /// light camera uses its finite projection's positive near plane directly.</summary>
     /// <param name="camera">The view's camera.</param>
     /// <returns>The plane's forward distance, in world units; at least <see cref="SdfWorldPackage.MinimumNear"/>.</returns>
     public static float NearOf(in CameraSnapshot camera) =>

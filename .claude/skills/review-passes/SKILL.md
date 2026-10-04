@@ -1,11 +1,11 @@
 ---
 name: review-passes
-description: Decides when a lane gets a cross-family review (by default none; one verify-and-fix pass only for determinism, persisted formats or federation, never a second round) and briefs, runs and closes that pass. Codex reviews Claude-written work; a Claude agent reviews Codex-written work. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Decides when a lane gets a review (by default none; one verify-and-fix pass for determinism, persisted formats, federation or an explicit owner request, never a second round) and briefs, runs and closes that pass. Cross-family review is the default unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
 
-A review pass is one run by the other model family that reads a lane's commits
+A review pass is one run by the selected reviewer that reads a lane's commits
 adversarially, fixes what is local and clear, and reports the rest. This skill
 owns the brief that starts it and the protocol that turns its uncommitted
 output into verified commits. It does not choose the model, effort or
@@ -23,6 +23,9 @@ stale and is corrected in the same change.
   state, fixed-point numerics, replay), a persisted format, or federation
   authority. Codex reviews Claude-written code; a Claude agent reviews
   Codex-written code. The pass verifies and fixes in one run.
+- An explicit owner request also starts a review and takes precedence over the
+  default trigger and cross-family selection. Use the owner's named model and
+  effort, including a same-family reviewer, for both review and local fixes.
 - There is no second round. The lead reads the pass's fix diff and rules on
   anything left: a scoped fix, a recorded open item, or a dismissal with its
   reason.
@@ -40,10 +43,13 @@ stale and is corrected in the same change.
 - Never launch a `--write` pass into a tree a canary, counters or parity run
   builds from: an edit mid-run changes the source state that run reuses. Wait
   for the run to finish or give the pass a separate worktree.
-- For a code pass, restore and build that worktree first so `obj/` and `bin/`
-  exist. The Codex sandbox has no network: fetch corpora and packages before
-  the run, and have the brief tell the pass to build with `--no-restore`, since
-  a restore inside the sandbox fails. A documentation-only pass needs no build unless XML comments change.
+- Start with scoped source inspection and retained successful build evidence;
+  do not repeat a cold build merely to launch the review. The lead schedules
+  any required restore and build after source fixes are ready, using the
+  serialized heavy-work grant and the owner's time budget. Have the brief name
+  available corpora and packages and use `--no-restore` when they are present.
+  Compilation and tests still require the grant, and tests require a successful
+  current build. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).

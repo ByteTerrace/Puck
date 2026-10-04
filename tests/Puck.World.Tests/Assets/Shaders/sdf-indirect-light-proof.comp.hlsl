@@ -5,6 +5,7 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-field.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-light-projection.hlsli"
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-viewport.hlsli"
 
 [[vk::binding(60, 3)]] StructuredBuffer<float4> lightCases : register(t60, space3);
 [[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> lightResults : register(u61, space3);
@@ -24,13 +25,20 @@ void CSMain(uint3 groupThread : SV_GroupThreadID) {
     uint resolution = (uint)lightCases[4].x;
     uint count = (uint)lightCases[4].y;
     float radius = lightProbeIndex.index == 0u ? origin.w : 0.0;
+    ViewportData view = (ViewportData)0;
+    view.position = float4(origin.xyz, 0.0);
+    view.right = right;
+    view.up = float4(up.xyz, 1.0);
+    view.forward = float4(-toward.xyz, 0.0);
+    view.lens = float4(up.w, 0.0, 0.0, toward.w);
+    float start = worldSurfaceNearDistance(view);
+    if (lane == 0u) { lightResults[uint2(lightProbeIndex.index, count)] = float4(start, 0.0, 0.0, 0.0); }
     [loop]
     for (uint texel = lane; texel < resolution * resolution; texel += 64u) {
         uint2 pixel = uint2(texel % resolution, texel / resolution);
-        float2 center = (float2(pixel) + 0.5) * (2.0 / resolution) - 1.0;
-        float3 ray = -toward.xyz;
-        float3 rayOrigin = origin.xyz + right.xyz * center.x * right.w - up.xyz * center.y * right.w;
-        float start = up.w;
+        float2 uv = (float2(pixel) + 0.5) / resolution;
+        float3 ray = cameraRayDirection(view, uv);
+        float3 rayOrigin = cameraRayOrigin(view, uv);
         uint budget = SdfIndirectLightMarchSteps;
         SdfIndirectRay result = sdfIndirectMarch(rayOrigin + ray * start, ray, 0.0, toward.w - start,
             SDF_INSTANCE_MASK_ALL, radius, budget);

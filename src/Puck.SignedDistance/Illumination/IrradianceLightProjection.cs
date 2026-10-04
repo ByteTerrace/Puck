@@ -64,7 +64,7 @@ public readonly record struct IrradianceLightProjection(Double3 Origin, Double3 
             TowardLight: toward, HalfWidth: halfWidth, Near: Near, Far: far, Resolution: resolution);
     }
 
-    /// <summary>Returns the near-plane origin of a map texel's parallel ray.</summary>
+    /// <summary>Returns the camera-plane origin of a map texel's parallel ray, before its near-distance advance.</summary>
     /// <param name="column">The zero-based column.</param>
     /// <param name="row">The zero-based row, increasing down the image.</param>
     /// <returns>The ray's world-space origin.</returns>

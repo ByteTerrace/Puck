@@ -81,12 +81,11 @@ float worldNearDistance(ViewportData view) {
     return view.lens.x;
 }
 
-// The forward distance the view's surfaces are rendered from (SdfFrameBlock.NearOf): the near plane, never nearer than
-// SDF_MINIMUM_NEAR, which the mesh pass's reversed-Z depth needs. The beam's cone entry begins at that ray distance, a
-// conservative start since no ray of the cone meets the plane nearer, sdfPixelAt raises each primary ray's start to the
-// plane itself, and the mesh pass clips there.
+// Perspective surfaces keep SDF_MINIMUM_NEAR for their infinite reversed-Z projection. The scoped light camera has a
+// finite orthographic depth interval and starts at its positive authored near plane: raising that plane can clip a
+// caster the finite projection placed just beyond it. Beam, primary and mesh must use the same plane.
 float worldSurfaceNearDistance(ViewportData view) {
-    return max(worldNearDistance(view), SDF_MINIMUM_NEAR);
+    return passGroup.lightMap != 0u ? worldNearDistance(view) : max(worldNearDistance(view), SDF_MINIMUM_NEAR);
 }
 
 // The ray distance at which a camera ray along the unit `rayDirection` crosses the plane at forward distance

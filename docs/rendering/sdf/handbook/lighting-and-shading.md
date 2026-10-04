@@ -183,8 +183,10 @@ one-eighth-penumbra refresh rule.
 The orthographic camera starts just outside the finite caster volume. Its rays
 run parallel to the light, with zero directional divergence. Each pixel has its
 own nearby plane origin; shrinking the penumbra never moves a virtual eye farther
-away or increases floating-point cancellation. The primary marcher sweeps the
-texel's half-diagonal using the existing certified indirect field walk. The tile
+away or increases floating-point cancellation. Traversal starts at this camera's
+positive near plane; the perspective camera's larger near-plane floor does not
+clip the finite light volume. The primary marcher sweeps the texel's half-diagonal
+using the existing certified indirect field walk. The tile
 mask and beam enclose the tile's parallel columns plus that sweep radius. This
 preserves thin casters while the slope-scaled comparison bias prevents a receiver
 from shadowing itself. Positive penumbra remains an authoring requirement.
@@ -206,7 +208,7 @@ outside the light-view qualification.
 
 Invalid regions, out-of-volume samples and unresolved texels require a bounded
 per-hit SDF ray. The `indirect-light` diagnostic displays valid lit/shadowed regions
-and marks unavailable maps magenta. Applying these maps to indirect radiance is
+and marks unavailable maps blue. Applying these maps to indirect radiance is
 part of the cache solve. The CPU and device laws share the existing subtexel-rod
 fixture, no-false-light condition and two-texel widening bound; the rendering plan
 tracks the outstanding device qualification.
