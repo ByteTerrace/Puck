@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/2855d8cdb4988576a47c6d95e80395c6082e7e98b6004f20e5b04b5c6118aa88). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/569d3ed1a942bef3f6daf241fe7fc440e24cb0e9507b7c22dc9452b085a010a9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -205,8 +205,8 @@ struct SdfResolvePass {
     [[vk::offset(512)]] uint workCounterRow;
     [[vk::offset(516)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa0897E421 : register(b0, space3);
-#define passGroup passGroupIsa0897E421
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa64942EFF : register(b0, space3);
+#define passGroup passGroupIsa64942EFF
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -273,24 +273,20 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
     puckAddWork((row + PuckWorkSkyHashesWord), hashes);
     puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
 }
-// The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
+// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
 void puckCountShadow(uint slot, uint steps) {
-    uint waveSteps = WaveActiveSum(steps);
-
-    if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
+    if (slot < PuckWorkShadowSlots) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
     }
 }
 // One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
 // while its pixel count exposes rejections and reuse even when a march takes zero field samples.
 void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-    puckAddWork((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowPixelsWord, 1u);
-    if (passGroup.workCounterRowDetail != 0u) {
-        uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-        puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-        puckAddWork(row + PuckWorkStepsWord, steps);
-        puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
-    }
+    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+    puckAddWork(row + PuckWorkStepsWord, steps);
+    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

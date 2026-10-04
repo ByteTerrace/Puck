@@ -214,6 +214,8 @@
 #define SDF_VISIBILITY_SOURCE_MASK            0x3FFFFFFFu
 #define SDF_TRANSFORM_SLOT_NONE               -1
 #define SDF_VISIBILITY_BOX_EDGE               8u
+#define SDF_VISIBILITY_AMBIENT_QUERIES_WORD   9u
+#define SDF_VISIBILITY_SHADOW_QUERIES_WORD    10u
 #define SDF_VISIBILITY_CURRENT(pixel, bounds) (((pixel).x >= ((bounds)[0] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y >= ((bounds)[1] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).x < ((bounds)[2] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y < ((bounds)[3] * SDF_VISIBILITY_BOX_EDGE)))
 #define SDF_SHADOW_BITS                       8u
 #define SDF_SHADOW_MASK                       0x000000FFu

@@ -4,6 +4,33 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class TemporalShadowCanaryLawTests {
+    [Fact]
+    public void TheUnamortizedReferenceUsesTheWorldViewInItsOwnScheduledBoot() {
+        var directory = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Canaries/temporal-shadows");
+        var path = Path.Combine(path1: directory, path2: "reference.world.json");
+
+        Assert.True(condition: File.Exists(path: path), userMessage: "The unamortized seat reference is present.");
+        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(path, out var reference, out var reason), userMessage: reason);
+        Assert.False(condition: reference!.Render.ShadowAmortize);
+        Assert.True(condition: reference.Render.Temporal);
+        Assert.Equal(expected: 2, actual: reference.Render.ShadowLights);
+        Assert.Equal(expected: 4, actual: reference.Captures!.Rows.Count);
+        Assert.All(collection: reference.Captures.Rows, action: row => {
+            Assert.Equal(expected: "world", actual: row.Instance);
+            Assert.EndsWith(expectedEndString: "-reference", actualString: row.Station.ToString());
+        });
+        using var manifest = JsonDocument.Parse(File.ReadAllText(path: Path.Combine(path1: directory, path2: "canary.json")));
+
+        foreach (var name in new[] { "positive", "discriminating" }) {
+            var leg = manifest.RootElement.GetProperty(propertyName: name);
+
+            Assert.True(condition: leg.GetProperty(propertyName: "runSchedule").GetBoolean());
+            Assert.Equal(expected: "tests/Puck.World.Canaries/temporal-shadows/reference.world.json", actual: leg.GetProperty(propertyName: "relaunch").GetProperty(propertyName: "sourceWorld").GetString());
+            foreach (var assertion in leg.GetProperty(propertyName: "expect").EnumerateArray().Where(predicate: row => (row.GetProperty(propertyName: "type").GetString() == "imageDifference"))) {
+                Assert.Equal(expected: 2, actual: assertion.GetProperty(propertyName: "maximumMeanCodes").GetInt32());
+            }
+        }
+    }
     [InlineData("fixture.world.json", true)]
     [InlineData("discriminating.world.json", false)]
     [Theory]

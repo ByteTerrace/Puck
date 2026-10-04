@@ -154,63 +154,19 @@
         ]
       },
       "id": "pillar"
-    },
-    {
-      "document": {
-        "behavior": {
-          "faces": [
-            {
-              "defaultSource": null,
-              "name": "display",
-              "shapeId": 0
-            }
-          ]
-        },
-        "frames": [
-          {
-            "name": "idle",
-            "transforms": []
-          }
-        ],
-        "name": "screen",
-        "palette": [
-          {
-            "color": "#DDE8EA"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "panel",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.9,
-              0.6,
-              0.05
-            ],
-            "smooth": 0,
-            "type": "Box"
-          }
-        ]
-      },
-      "id": "screen"
     }
   ],
   "placements": {
-    "policy": { "authoringHeadroomScreens": 0, "authoringHeadroomPlacements": 0, "minPlacementScale": 1, "maxPlacementScale": 1, "candidateRadius": 1, "candidateCap": 1, "previewDeadlineFrames": 1, "derivedFaceScreens": 1 },
+    "policy": {
+      "authoringHeadroomScreens": 0,
+      "authoringHeadroomPlacements": 0,
+      "minPlacementScale": 1,
+      "maxPlacementScale": 1,
+      "candidateRadius": 1,
+      "candidateCap": 1,
+      "previewDeadlineFrames": 1,
+      "derivedFaceScreens": 1
+    },
     "rows": [
       {
         "position": [
@@ -233,26 +189,6 @@
         "scale": 1,
         "id": "occluder",
         "prototypeId": "pillar"
-      },
-      {
-        "id": "reference-screen",
-        "scale": 1,
-        "prototypeId": "screen",
-        "position": [
-          0,
-          1.2,
-          14
-        ],
-        "yawDegrees": 0,
-        "faceSources": [
-          {
-            "face": "display",
-            "source": {
-              "$type": "view",
-              "cameraName": "reference-cam"
-            }
-          }
-        ]
       }
     ]
   },
@@ -263,43 +199,6 @@
       "renderHeight": 128,
       "rig": {
         "name": "court-camera",
-        "version": "puck.camera.program.v1",
-        "operations": [
-          {
-            "$type": "anchor",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                0,
-                5,
-                8
-              ]
-            }
-          },
-          {
-            "$type": "lookAt",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                0,
-                0.5,
-                0
-              ]
-            }
-          },
-          {
-            "$type": "fieldOfView",
-            "fieldOfViewRadians": 0.9
-          }
-        ]
-      }
-    },
-    {
-      "name": "reference-cam",
-      "renderWidth": 128,
-      "renderHeight": 128,
-      "rig": {
-        "name": "reference-cam",
         "version": "puck.camera.program.v1",
         "operations": [
           {
@@ -413,36 +312,10 @@
             "color": "#CCCCCC"
           }
         ],
-        "station": "still-reference",
-        "instance": "reference-cam",
-        "ticks": [
-          63
-        ]
-      },
-      {
-        "palette": [
-          {
-            "material": 0,
-            "color": "#CCCCCC"
-          }
-        ],
         "station": "occluder",
         "instance": "world",
         "ticks": [
           101
-        ]
-      },
-      {
-        "palette": [
-          {
-            "material": 0,
-            "color": "#CCCCCC"
-          }
-        ],
-        "station": "occluder-reference",
-        "instance": "reference-cam",
-        "ticks": [
-          104
         ]
       },
       {
@@ -465,36 +338,10 @@
             "color": "#CCCCCC"
           }
         ],
-        "station": "light-reference",
-        "instance": "reference-cam",
-        "ticks": [
-          144
-        ]
-      },
-      {
-        "palette": [
-          {
-            "material": 0,
-            "color": "#CCCCCC"
-          }
-        ],
         "station": "owner",
         "instance": "world",
         "ticks": [
           181
-        ]
-      },
-      {
-        "palette": [
-          {
-            "material": 0,
-            "color": "#CCCCCC"
-          }
-        ],
-        "station": "owner-reference",
-        "instance": "reference-cam",
-        "ticks": [
-          184
         ]
       }
     ]

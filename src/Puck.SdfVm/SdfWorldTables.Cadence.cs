@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Maths;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -7,8 +8,11 @@ namespace Puck.SdfVm;
 // The cadence: whether a view's latest render stands for the frame the tables hold now. A view stands only when its
 // signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
 //
-// Signature coverage — the tables' signature (TablesSignature) folds in everything every pass of a view reads besides its
-// pass block's view and frame values, and the view's signature (ViewSignature) folds that with the pass block:
+// The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
+// geometry owns the field, poses, mesh, screen mappings and camera; shadow owns directions and reach; lighting owns
+// colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
+// members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
+// Whole-view coverage:
 //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded screen-surface
 //                          table, invariant instance grid) and every kernel reload — bumped by UploadProgram and
 //                          InstallReload.
@@ -30,6 +34,8 @@ namespace Puck.SdfVm;
 //   - m_screenLightScratch : the per-screen glow colors.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
 // Not covered by any packed span — handled conservatively by forcing a render:
+//   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
+//                          the sky and the composite run every frame (ForcesPass) and the whole view never stands.
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
 //                          unseen by any packed span, so any declared ScreenSlab force-renders.
 //   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
@@ -39,20 +45,136 @@ public sealed partial class SdfWorldTables {
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
+    private ulong m_geometrySignature;
+    private ulong m_lightingSignature;
+    private ulong m_shadowSignature;
+    private ulong m_visualSignature;
+
+    private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
+        SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights,
+        SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
+        SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
+        SdfWorldPackage.GridObjectOrigin, SdfWorldPackage.GridObjectPitch, SdfWorldPackage.GridObjectFrame,
+        SdfWorldPackage.GridObjectPatchRadius,
+    ]);
+    private static readonly (int Offset, int Length)[] ShadowValues = Members(members: [
+        SdfWorldPackage.ShadowSlots, SdfWorldPackage.ShadowSlotCount, SdfWorldPackage.ShadowFadeCount,
+        SdfWorldPackage.DisableSoftShadows, SdfWorldPackage.DisableShadowCull, SdfWorldPackage.ShadowDistanceScale,
+        SdfWorldPackage.EnableShadowProxy, SdfWorldPackage.CameraTileShadowMask, SdfWorldPackage.FastSoftShadowMarch,
+    ]);
+
+    /// <summary>Returns the package-owned inputs of a pass group, independent of temporal sampling and graph versions.
+    /// Geometry covers the field and camera, shadow covers selected directions and reach, lighting covers hit shading,
+    /// and visual covers the sky and bounded media. The graph also checks each input's last write.</summary>
+    /// <param name="frame">The packed frame.</param>
+    /// <param name="view">The view index.</param>
+    /// <param name="part">The fragment pass name.</param>
+    /// <returns>The pass group's input identity.</returns>
+    public ulong PassSignature(SdfFrame frame, int view, string part) {
+        var block = m_signatureBlock.AsSpan();
+
+        block.Clear();
+        SdfFrameBlock.Write(block: block, frame: frame, height: 0, tables: PassValues, view: view, width: 0);
+        var lighting = Fnv1aHash.Create();
+
+        lighting.Add(value: m_lightingSignature);
+        lighting.Add(value: m_shadowSignature);
+        lighting.Add(values: block);
+        var shadow = Fnv1aHash.Create();
+
+        shadow.Add(value: m_shadowSignature);
+        AddShadowOwners(hash: ref shadow, slots: frame.Lights.ShadowSlots);
+        AddMembers(block: block, hash: ref shadow, members: ShadowValues);
+        ClearMembers(block: block, members: ShadowValues);
+        ClearMembers(block: block, members: LightingValues);
+        var geometry = Fnv1aHash.Create();
+
+        geometry.Add(value: m_geometrySignature);
+        geometry.Add(values: block);
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: geometry.Value);
+        switch (part) {
+            case SdfWorldPackage.Parts.Shadow:
+                hash.Add(value: shadow.Value);
+                break;
+            case SdfWorldPackage.Parts.Views:
+            case SdfWorldPackage.Resolve:
+                hash.Add(value: lighting.Value);
+                if (part == SdfWorldPackage.Resolve) {
+                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].UpscaleSharpness));
+                }
+                break;
+            case SdfWorldPackage.Parts.Sky:
+            case SdfWorldPackage.Parts.Composite:
+                hash.Add(value: lighting.Value);
+                hash.Add(value: m_visualSignature);
+                break;
+        }
+        return hash.Value;
+    }
+
+    private static (int Offset, int Length)[] Members(string[] members) {
+        var layout = SdfWorldInterfaces.WorldParameters;
+
+        return [.. members.Select(selector: member => {
+            var value = SdfWorldPackage.Values.Single(predicate: value => (value.Name == member));
+
+            return (((int)layout.BlockOffsetOf(member: member)), checked((int)(value.Type!.Value.SizeBytes() * (value.Length ?? 1))));
+        })];
+    }
+    private static void ClearMembers(Span<byte> block, (int Offset, int Length)[] members) {
+        foreach (var member in members) { block.Slice(length: member.Length, start: member.Offset).Clear(); }
+    }
+    private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
+        foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
+    }
 
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
-    /// declared screen slab, whose bound image changes in place, or a carve bake in progress.</summary>
+    /// declared screen slab, whose bound image changes in place, a carve bake in progress, or a sky layer sampling a
+    /// screen (<see cref="ForcesPass"/>).</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
     public bool ForcesRender(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
+        return (ForcesEveryPass(frame: frame) || SkySamplesScreen(sky: frame.Sky));
+    }
+    /// <summary>Returns whether the frame the tables hold forces one pass group to run whatever its signature: every
+    /// group under <see cref="ForcesRender"/>'s whole-view causes, and the sky and the composite while a sky layer (a
+    /// panorama, a textured disc) samples a screen, whose bound image changes in place unseen by any packed span.</summary>
+    /// <param name="frame">The frame the tables packed.</param>
+    /// <param name="part">The fragment pass name.</param>
+    /// <returns><see langword="true"/> when the pass's latest output may not stand for the frame.</returns>
+    public bool ForcesPass(SdfFrame frame, string part) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
         return (
-            !frame.EnableCadenceGate ||
-            m_programDeclaresScreenSlab ||
-            AnyBrickBaking()
+            ForcesEveryPass(frame: frame) ||
+            ((part is SdfWorldPackage.Parts.Sky or SdfWorldPackage.Parts.Composite) && SkySamplesScreen(sky: frame.Sky))
         );
     }
+
+    private bool ForcesEveryPass(SdfFrame frame) => (
+        !frame.EnableCadenceGate ||
+        m_programDeclaresScreenSlab ||
+        AnyBrickBaking()
+    );
+    // Whether any layer of the sky names a screen to sample: a panorama, or a disc with a texture.
+    private static bool SkySamplesScreen(SdfSky sky) {
+        for (var layer = 0; (layer < sky.LayerCount); layer++) {
+            var screen = sky.LayerAt(index: layer).Kind switch {
+                SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
+                SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
+                _ => -1,
+            };
+
+            if (screen >= 0) { return true; }
+        }
+
+        return false;
+    }
+
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
     /// (<see cref="SdfFrameBlock"/>), written with no render extent. A collision would need a
@@ -66,6 +188,7 @@ public sealed partial class SdfWorldTables {
         var block = m_signatureBlock.AsSpan();
         Span<byte> tables = stackalloc byte[sizeof(ulong)];
 
+        block.Clear();
         SdfFrameBlock.Write(
             block: block,
             frame: frame,
@@ -80,10 +203,16 @@ public sealed partial class SdfWorldTables {
         );
         hash.Add(values: tables);
         hash.Add(values: block);
+        AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
+
+        return hash.Value;
+    }
+
+    private static void AddShadowOwners(ref Fnv1aHash hash, SdfShadowSlots slots) {
         Span<int> ownerLength = stackalloc int[1];
 
         for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
-            var owner = frame.Lights.ShadowSlots.Owner(slot: slot);
+            var owner = slots.Owner(slot: slot);
 
             ownerLength[0] = (owner?.Length ?? -1);
             hash.Add(values: MemoryMarshal.AsBytes(span: ownerLength));
@@ -91,9 +220,8 @@ public sealed partial class SdfWorldTables {
                 hash.Add(values: MemoryMarshal.AsBytes(span: owner.AsSpan()));
             }
         }
-
-        return hash.Value;
     }
+
     /// <summary>Folds everything every view reads of the tables besides its pass block into the tables' signature, once
     /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {
@@ -119,6 +247,50 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: m_screenMappingRegion.Contents);
         hash.Add(values: m_screenLightScratch);
         m_tablesSignature = hash.Value;
+
+        var geometry = Fnv1aHash.Create();
+        Span<ulong> geometryValues = [m_programRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, BoundScreenCount()];
+
+        geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
+        geometry.Add(values: m_screenSurfaceRegion.Contents);
+        geometry.Add(values: m_screenMappingRegion.Contents);
+        m_geometrySignature = geometry.Value;
+
+        var lighting = Fnv1aHash.Create();
+
+        lighting.Add(value: m_decalRevision);
+        lighting.Add(values: m_lightRegion.Contents);
+        lighting.Add(values: m_screenLightScratch);
+        lighting.Add(values: m_softboxRegion.Contents);
+        lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
+        ref var sky = ref m_skyRecord[0];
+        Span<float> hitSky = [sky.FogDensity, sky.HorizonLow.X, sky.HorizonLow.Y, sky.HorizonLow.Z, sky.HorizonHigh.X, sky.HorizonHigh.Y, sky.HorizonHigh.Z];
+
+        lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));
+        lighting.Add(value: sky.SoftboxCount);
+        m_lightingSignature = lighting.Value;
+
+        var shadow = Fnv1aHash.Create();
+
+        foreach (var light in m_lightRecords) {
+            if (!light.CastsShadow) { continue; }
+            Span<float> direction = [light.Direction.X, light.Direction.Y, light.Direction.Z, light.Param];
+
+            shadow.Add(values: MemoryMarshal.AsBytes(span: direction));
+        }
+        foreach (var handoff in m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)) {
+            shadow.Add(value: unchecked((uint)handoff.Outgoing));
+            shadow.Add(value: unchecked((uint)handoff.Incoming));
+            shadow.Add(value: unchecked((uint)handoff.Slot));
+        }
+        m_shadowSignature = shadow.Value;
+
+        var visual = Fnv1aHash.Create();
+
+        visual.Add(values: m_skyRegion.Contents);
+        visual.Add(values: m_skyLayerRegion.Contents);
+        visual.Add(values: m_volumeRegion.Contents);
+        m_visualSignature = visual.Value;
     }
 
     // Whether any brick slot is mid-bake: a Baking slot has RecordBrickBakeSlices writing new voxels every upload, so the

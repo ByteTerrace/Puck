@@ -58,7 +58,7 @@ public static partial class SdfWorldPackage {
     }
 
     /// <summary>The reduced render-grid fragment. Traversal and shading use the render extent, and so does the color the
-    /// views pass shades, which the resolve pass reads within the frame: one transient allocation every frame slot
+    /// views pass shades, which the resolve pass reads within the frame: one retained allocation every frame slot
     /// shares. The resolve writes the lit image and each output pixel's surface transport at the output extent, from the
     /// render grid's samples inside the dispatch box, and the sky and the composite run at the output extent over them;
     /// only the published color the composite writes has one image per frame slot. Native views use
@@ -97,11 +97,11 @@ public static partial class SdfWorldPackage {
                             Per = [.. term.Per.Select(selector: static basis => ((basis == ShaderPipelineCountBasis.Extent) ? ShaderPipelineCountBasis.RenderExtent : basis))],
                         })]),
                     }),
-                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, transient: true) with { Dimensions = ShaderPipelineDimensions.Render() },
-                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, transient: true),
+                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, retained: true) with { Dimensions = ShaderPipelineDimensions.Render() },
+                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
                 Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: sizeof(uint)),
                 .. SkyResources.Select(selector: static resource => resource with { Dimensions = ShaderPipelineDimensions.Render() }),
-                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, transient: false),
+                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
             ],
             Passes: [
                 .. NativeFragment.Passes.TakeWhile(predicate: static pass => (pass.Name != Parts.Sky)).Select(selector: static pass => ((pass.Name == Parts.Views)

@@ -24,6 +24,10 @@ public static partial class SdfVisibility {
     public const int KindShift = 30;
     /// <summary>The identity's source field.</summary>
     public const uint SourceMask = ((1U << KindShift) - 1U);
+    /// <summary>The ambient pass's replaceable query tally in the visibility record.</summary>
+    public const uint AmbientQueriesWord = 9;
+    /// <summary>The shadow pass's replaceable query tally in the visibility record.</summary>
+    public const uint ShadowQueriesWord = 10;
     /// <summary>The bits the transform-slot lane carries a slot in: a signed word, whose sign only
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/> uses.</summary>
     public const int TransformSlotLaneBits = 31;

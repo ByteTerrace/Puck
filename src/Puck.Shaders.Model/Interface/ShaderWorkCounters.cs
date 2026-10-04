@@ -11,7 +11,7 @@ namespace Puck.Shaders;
 /// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
 /// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
-/// named row per active invocation, including divergent layer branches, and <c>puckCountShadow(slot, steps)</c> adds a wave's
+/// named row per active invocation, including divergent layer branches, and <c>puckCountShadow(slot, steps)</c> adds an invocation's
 /// march steps for one shadow slot to that slot's column of the pass's row. An interface that declares all
 /// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
 /// generated beside them; any other interface, a document pass's among them, gets them empty. So a kernel counts
@@ -147,24 +147,20 @@ public static class ShaderWorkCounters {
                 puckAddWork((row + PuckWorkSkyHashesWord), hashes);
                 puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
             }
-            // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+            // Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
+            // reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
             void puckCountShadow(uint slot, uint steps) {
-                uint waveSteps = WaveActiveSum(steps);
-
-                if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
-                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u)), waveSteps);
+                if (slot < PuckWorkShadowSlots) {
+                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u)), steps);
                 }
             }
             // One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
             // while its pixel count exposes rejections and reuse even when a march takes zero field samples.
             void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-                puckAddWork((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowPixelsWord, 1u);
-                if (passGroup.{{DetailRow}} != 0u) {
-                    uint row = ((passGroup.{{DetailRow}} + detail) * PuckWorkRowWords);
-                    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-                    puckAddWork(row + PuckWorkStepsWord, steps);
-                    puckAddWork(row + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u), steps);
-                }
+                uint row = ((passGroup.{{DetailRow}} == 0u ? passGroup.{{Row}} : passGroup.{{DetailRow}} + detail) * PuckWorkRowWords);
+                puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+                puckAddWork(row + PuckWorkStepsWord, steps);
+                puckAddWork(row + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u), steps);
             }
             // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
             // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

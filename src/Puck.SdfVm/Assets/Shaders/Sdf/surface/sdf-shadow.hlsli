@@ -108,8 +108,13 @@ void sdfShadowStage(SdfPixel p) {
             sdfSecondaryMarchActive = false;
         }
         if (lit && (decision == SDF_SHADOW_DECISION_REPROJECTED)) { marched = history[shadowSlot]; }
-        puckCountShadow(shadowSlot, (sdfWorkSteps - before));
-        if (lit && secondary) { puckCountShadowDecision(decision, shadowSlot, (sdfWorkSteps - before)); }
+        if (lit && secondary) {
+            puckCountShadowDecision(decision, shadowSlot, (sdfWorkSteps - before));
+            // Named details are added to the pass by GpuWorkLedger; its plain row excludes their work.
+            sdfWorkSteps = before;
+        } else {
+            puckCountShadow(shadowSlot, (sdfWorkSteps - before));
+        }
 
         if (shadowSlot < passGroup.shadowSlotCount) {
             stableVisibility[shadowSlot] = marched;
@@ -122,11 +127,7 @@ void sdfShadowStage(SdfPixel p) {
     if (!p.active) {
         return;
     }
-    if (sdfEvalCount > 0.0) {
-        SdfVisibilitySurface surface = sdfLoadVisibilitySurface(record);
-        surface.queries += sdfEvalCount;
-        sdfStoreVisibilitySurface(record, surface);
-    }
+    sdfStoreVisibilityQueries(record, SDF_VISIBILITY_SHADOW_QUERIES_WORD, sdfEvalCount);
     sdfStoreVisibilityShadows(record, stableVisibility);
     if (amortize && (passGroup.shadowSlotCount > 1u)) {
         uint word = (SDF_SHADOW_HISTORY_WORDS * (((p.viewIndex * passGroup.imageExtent.y + p.pixel.y) * passGroup.imageExtent.x) + p.pixel.x));

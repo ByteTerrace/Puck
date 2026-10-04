@@ -1,5 +1,5 @@
 {
-  "binding": "The converged two-sun court matches its native unamortized camera within two mean eight-bit codes over the receiver strip. A separately placed pillar moves at tick 101; the second light turns along a keyed orbital arc ending at tick 141; its owner changes at tick 181. Each rejection-frame capture matches the settled unamortized camera three ticks later over that same receiver strip. The still leg also requires counted secondary reprojected pixels. The discriminating leg turns amortization off and delays each transition until after its subject capture but before its reference, so the old shadow differs from the new reference and reused pixels are zero. Receiver geometry and camera stay fixed.",
+  "binding": "Both boots capture the world presentation view at full shadow quality through the same court-camera layout. All seat views share WorldFramePresenter settings, so shadowAmortize cannot stay off on a simultaneous reference seat while the subject is on. After the subject captures, a second scheduled boot loads the pristine reference fixture with shadowAmortize false. The reference inherits the scene and captures only reference stations; it uses no restricted camera-view producer. The converged two-sun court and each rejection-frame capture stay within two mean eight-bit codes of the unamortized reference over the fixed receiver strip. The pillar moves before tick 101, the keyed light finishes turning at tick 141, and ownership changes before tick 181; references at 104, 144 and 184 see the same settled state. Still secondary reprojected pixels must be nonzero. The pixel discriminator keeps amortization off and delays the transitions past subject captures, requiring zero reused pixels and differences above the same two-code bound at each transition. A separate withheld-fix shader mutation retaining only receiver rejection proves that stale occluder shadows fail the positive bound; it requires a GPU run. Receiver geometry and camera stay fixed.",
   "bootShape": "offscreen",
   "id": "temporal-shadows",
   "discriminating": {
@@ -132,7 +132,28 @@
     ],
     "script": "capture.script.txt",
     "runSchedule": true,
-    "world": "tests/Puck.World.Canaries/temporal-shadows/discriminating.world.json"
+    "world": "tests/Puck.World.Canaries/temporal-shadows/discriminating.world.json",
+    "relaunch": {
+      "commands": [
+        {
+          "outcome": "accepted",
+          "occurrence": 1,
+          "verb": "world.cadence"
+        },
+        {
+          "outcome": "accepted",
+          "occurrence": 1,
+          "verb": "world.wait"
+        },
+        {
+          "outcome": "accepted",
+          "occurrence": 2,
+          "verb": "world.wait"
+        }
+      ],
+      "script": "reference.script.txt",
+      "sourceWorld": "tests/Puck.World.Canaries/temporal-shadows/reference.world.json"
+    }
   },
   "title": "Secondary K history amortizes two suns and rejects moving occluders, turning lights and new owners",
   "backends": [
@@ -271,7 +292,28 @@
     ],
     "script": "capture.script.txt",
     "runSchedule": true,
-    "world": "tests/Puck.World.Canaries/temporal-shadows/fixture.world.json"
+    "world": "tests/Puck.World.Canaries/temporal-shadows/fixture.world.json",
+    "relaunch": {
+      "commands": [
+        {
+          "outcome": "accepted",
+          "occurrence": 1,
+          "verb": "world.cadence"
+        },
+        {
+          "outcome": "accepted",
+          "occurrence": 1,
+          "verb": "world.wait"
+        },
+        {
+          "outcome": "accepted",
+          "occurrence": 2,
+          "verb": "world.wait"
+        }
+      ],
+      "script": "reference.script.txt",
+      "sourceWorld": "tests/Puck.World.Canaries/temporal-shadows/reference.world.json"
+    }
   },
   "requirements": [
     "gpu"

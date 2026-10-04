@@ -32,6 +32,9 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     }
 
     SdfSurfaceSample s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    if (!worldAoDisabled()) s.surfaceQueries += float(sdfVisibilityRecordBuffer[record + SDF_VISIBILITY_AMBIENT_QUERIES_WORD]);
+    if (!worldSoftShadowsDisabled() && passGroup.shadowSlotCount > 0u) s.surfaceQueries += float(sdfVisibilityRecordBuffer[record + SDF_VISIBILITY_SHADOW_QUERIES_WORD]);
 
     // The query tally the evals heatmap reads, from the marches every stage before this one made.
     sdfEvalCount = s.queries;

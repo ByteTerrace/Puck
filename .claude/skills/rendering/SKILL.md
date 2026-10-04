@@ -1156,7 +1156,7 @@ These are one-line cautions; the owning pages hold the derivations.
   for a fragment stage, `puckCountDetail` (a per-invocation add to one of the
   pass's named detail rows, which the sky, composite and sky-environment kernels
   call for each layer's evaluations, hashes and texture loads) and
-  `puckCountShadow` (a wave sum of one shadow slot's march steps, which the
+  `puckCountShadow` (an invocation's shadow slot march steps, which the
   shadow stage calls for each slot it marches), and `puckCountShadowDecision`
   (one secondary lit pixel plus its march and slot steps in its rejection or
   reprojection row), laid out from
@@ -1187,8 +1187,11 @@ These are one-line cautions; the owning pages hold the derivations.
   binds the buffer at `workCounters` and writes the row into the pass
   block (`workCounterRow`, and `workCounterRowDetail` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
-  every lane that did work. A shadow uses `puckCountShadow` for its slot and
-  `puckCountShadowDecision` for its secondary outcome, and sky
+  every lane that did work. A shadow uses `puckCountShadow` for plain slot work or
+  `puckCountShadowDecision` for its secondary outcome, excluding that outcome's
+  steps from the plain pass accumulator so the ledger counts them once. Slot
+  counting uses per-invocation atomics because a divergent march does not
+  guarantee subgroup reconvergence on Vulkan. Sky
   layers count evaluations, hashes and field-run loads at their own operations.
   A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel

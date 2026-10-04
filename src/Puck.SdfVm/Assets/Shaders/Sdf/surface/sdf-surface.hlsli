@@ -145,7 +145,10 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #ifdef SDF_GROUP_SHADOW_GATHER
     if (!fast) sdfBuildAmbientMask(surfacePoint, lit, lane);
 #endif
-    if (!lit) return; // All lanes have passed the group barriers.
+    if (!lit) {
+        if (active) sdfStoreVisibilityQueries(record, SDF_VISIBILITY_AMBIENT_QUERIES_WORD, 0.0);
+        return;
+    }
     SdfVisibilityNormal surface = sdfLoadVisibilityNormal(record);
     float stepScale = sdfProgramLayout.stepScale * max(surface.gradientMagnitude, GradientMagnitudeFloor);
     uint mask = fast ? cameraMask : SDF_INSTANCE_MASK_ALL;
@@ -160,7 +163,7 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #ifdef SDF_GROUP_SHADOW_GATHER
     sdfAmbientMaskActive = false;
 #endif
-    info.queries += sdfEvalCount - initialQueries;
+    sdfStoreVisibilityQueries(record, SDF_VISIBILITY_AMBIENT_QUERIES_WORD, sdfEvalCount - initialQueries);
     sdfStoreVisibilitySurface(record, info);
 }
 

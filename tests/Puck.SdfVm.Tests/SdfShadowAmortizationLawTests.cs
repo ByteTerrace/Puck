@@ -32,10 +32,11 @@ public sealed class SdfShadowAmortizationLawTests {
             Assert.Contains($"SDF_SHADOW_DECISION_{name.Replace(newChar: '_', oldChar: '-').ToUpperInvariant()}", shadow);
         }
         Assert.Matches(actualString: shadow, expectedRegexPattern: @"(?s)if \(\(passGroup.shadowOwnershipReject & bit\) != 0u\).*else if.*shadowLightReject.*else if.*sdfShadowGatherMoved.*else if \(!receiverValid\).*else if.*historyFrames & 3u");
-        Assert.Contains(actualString: shadow, expectedSubstring: "if (lit && secondary) { puckCountShadowDecision(decision, shadowSlot, (sdfWorkSteps - before)); }");
+        Assert.Matches(actualString: shadow, expectedRegexPattern: @"(?s)if \(lit && secondary\) \{\s*puckCountShadowDecision\(decision, shadowSlot, \(sdfWorkSteps - before\)\);\s*sdfWorkSteps = before;\s*\} else \{\s*puckCountShadow\(");
         var counters = ShaderInterfaceHlsl.Generate(shaderInterface: SdfWorldInterfaces.World);
 
         Assert.Contains(actualString: counters, expectedSubstring: "PuckWorkShadowPixelsWord = 22u");
+        Assert.Contains(actualString: counters, expectedSubstring: "passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail");
         Assert.Contains(actualString: counters, expectedSubstring: "puckAddWork(row + PuckWorkShadowPixelsWord, 1u)");
         Assert.Contains(actualString: counters, expectedSubstring: "puckAddWork(row + PuckWorkStepsWord, steps)");
         Assert.Contains(actualString: counters, expectedSubstring: "puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps)");

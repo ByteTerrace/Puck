@@ -259,6 +259,8 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_VISIBILITY_SOURCE_MASK", value: SdfVisibility.SourceMask);
         declarations.Signed(name: "SDF_TRANSFORM_SLOT_NONE", value: SdfProgram.NoDynamicTransformSlot);
         declarations.Count(name: "SDF_VISIBILITY_BOX_EDGE", value: SdfVisibility.BoxEdgePixels);
+        declarations.Count(name: "SDF_VISIBILITY_AMBIENT_QUERIES_WORD", value: SdfVisibility.AmbientQueriesWord);
+        declarations.Count(name: "SDF_VISIBILITY_SHADOW_QUERIES_WORD", value: SdfVisibility.ShadowQueriesWord);
         declarations.Expression(name: "SDF_VISIBILITY_CURRENT(pixel, bounds)", value: SdfVisibility.CurrencyHlsl);
         declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
         declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);

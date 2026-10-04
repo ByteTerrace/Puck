@@ -11,6 +11,18 @@ namespace Puck.Shaders.Tests;
 /// engine's compute passes and mesh pass, and the placement pass.
 /// </summary>
 public sealed class ShaderWorkCountersLawTests {
+    [Fact]
+    public void ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence() {
+        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
+        var start = generated.IndexOf(comparisonType: StringComparison.Ordinal, value: "void puckCountShadow(");
+        var end = generated.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: start, value: "void puckCountShadowDecision(");
+        var shadow = generated[start..end];
+
+        Assert.DoesNotContain(actualString: shadow, expectedSubstring: "Wave");
+        Assert.Contains(actualString: shadow, expectedSubstring: "if (slot < PuckWorkShadowSlots)");
+        Assert.Contains(actualString: shadow, expectedSubstring: "PuckWorkShadowWord + (slot * 2u)), steps);");
+    }
+
     private static ShaderInterface Interface(params ShaderInterfaceMember[] members) => new(
         members: [
             ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "gain", type: ShaderValueType.Float),
