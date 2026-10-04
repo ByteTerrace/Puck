@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>The GPU conservative sweep and projected visibility agree with the existing CPU field reference.
+/// <summary>The GPU conservative sweep agrees with known CPU visibility and independently bounds every answer.
 /// The same subtexel rod must disappear when the sweep alone becomes a point ray; a thin nearby caster checks the
 /// finite camera's production near-plane helper while an ordinary-camera control retains its perspective floor.</summary>
 [Collection(DebugLayerCollection.Name)]
@@ -49,6 +49,7 @@ public sealed class SdfIndirectLightDeviceLawTests {
         var results = SdfIndirectDeviceProbe.Run(services: services, extension: extension, kernel: "sdf-indirect-light-proof.comp",
             resultRows: (receivers.Length + 1), programs: [program, program], rows: rows, cacheWords: (Resolution * Resolution), passValues: PassValues(lightCamera: true));
         var answered = 0;
+        var cpuAnswered = 0;
         var missed = 0;
         var widened = 0;
         for (var index = 0; (index < receivers.Length); index++) {
@@ -56,18 +57,29 @@ public sealed class SdfIndirectLightDeviceLawTests {
             var expected = cpu.Lit(point: point, normal: IrradianceLightFixture.Up);
             var swept = results[(index * 2)];
             var pointRay = results[((index * 2) + 1)];
-            Assert.Equal(expected: (expected.HasValue ? (expected.Value ? 1f : 0f) : -1f), actual: swept.X);
-            if (expected.HasValue) { answered++; }
+            var inside = projection.Project(point: point, column: out var column, row: out var row, travel: out var travel);
+            var cpuDepth = (inside ? cpu.Depths[((row * Resolution) + column)] : double.NaN);
+            var evidence = $"{extension}: receiver {index} at {point}, CPU visibility {expected?.ToString() ?? "unknown"}, " +
+                $"texel ({column}, {row}), depth {cpuDepth}, travel {travel}; GPU swept {swept}, point ray {pointRay}.";
+            Assert.True(condition: (swept.X is -1f or 0f or 1f), userMessage: evidence);
+            // An unfinished fixed-point certificate is unknown, not a visibility verdict. The floating-point
+            // sweep can finish that certificate; every answer still faces the independent segment and width bounds.
+            if (expected.HasValue) {
+                Assert.True(condition: (swept.X == (expected.Value ? 1f : 0f)), userMessage: evidence);
+                cpuAnswered++;
+            }
+            if (swept.X >= 0f) { answered++; }
             var exact = field.SegmentClear(from: (point + (IrradianceLightFixture.Up * 0.004)), to: (point + (IrradianceLightFixture.Sun * 10)));
-            Assert.False(condition: (swept.X == 1f && !exact), userMessage: $"{extension}: lit through a caster at {point}, result {swept}.");
+            Assert.False(condition: (swept.X == 1f && !exact), userMessage: $"Lit through a caster: {evidence}");
             if (exact && (swept.X == 0f)) {
                 Assert.True(condition: IrradianceLightFixture.NearShadow(point: point, radius: (2 * cpu.TexelSize), sun: IrradianceLightFixture.Sun),
-                    userMessage: $"{extension}: shadowed beyond two texels at {point}, result {swept}.");
+                    userMessage: $"Shadowed beyond two texels: {evidence}");
                 widened++;
             }
             if (!exact && (pointRay.X == 1f)) { missed++; }
         }
         Assert.True(condition: (answered > 0));
+        Assert.True(condition: (cpuAnswered > 0));
         Assert.True(condition: (widened > 0));
         Assert.True(condition: (missed > 0), userMessage: $"{extension}: the zero-radius discriminator did not miss the rod.");
     }
