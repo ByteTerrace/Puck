@@ -190,10 +190,9 @@
 
 // Puck.SignedDistance.SdfLightKind.
 #define SDF_LIGHT_DIRECTIONAL 0u
-#define SDF_LIGHT_HEMISPHERE  1u
-#define SDF_LIGHT_RIM         2u
-#define SDF_LIGHT_POINT       3u
-#define SDF_LIGHT_OCCLUDER    4u
+#define SDF_LIGHT_RIM         1u
+#define SDF_LIGHT_POINT       2u
+#define SDF_LIGHT_OCCLUDER    3u
 
 // Puck.SdfVm.SdfVisibilityKind.
 #define SDF_VISIBILITY_KIND_BACKGROUND 0u

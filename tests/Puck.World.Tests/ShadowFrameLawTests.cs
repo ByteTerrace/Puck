@@ -226,7 +226,7 @@ public sealed class ShadowFrameLawTests {
         var second = Light(mode: WorldShadowMode.Always, name: "second", weight: 1f);
         var automatic = Light("automatic", 4f);
         var never = Light(mode: WorldShadowMode.Never, name: "never", weight: 100f);
-        var ambient = new WorldRenderLight.Hemisphere();
+        var ambient = new WorldRenderLight.Rim();
         var definition = Definition(3, ambient, first, second, automatic, never);
         var mirror = ClientFixtures.StateMirror(definition: definition);
         var policy = new WorldShadowSettings(FadeSlots: 1, FadeTicks: 100UL, Overflow: WorldShadowOverflow.Queue, Slots: 3);
@@ -455,12 +455,12 @@ public sealed class ShadowFrameLawTests {
     }
     [Fact]
     public void DuplicateUnnamedLightsDoNotDisguiseAReplacementAsAReorder() {
-        var definition = Definition(1, new WorldRenderLight.Hemisphere(), new WorldRenderLight.Hemisphere(), Light("old", 1f));
+        var definition = Definition(1, new WorldRenderLight.Rim(), new WorldRenderLight.Rim(), Light("old", 1f));
         var mirror = ClientFixtures.StateMirror(definition: definition);
         using var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         Assert.Equal(expected: 2, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Lights.ShadowSlots[0]);
-        var replacement = Definition(1, new WorldRenderLight.Hemisphere(), Light("new", 2f), Light("old", 1f));
+        var replacement = Definition(1, new WorldRenderLight.Rim(), Light("new", 2f), Light("old", 1f));
         var frame = resolver.Resolve(definition: replacement, revision: 1, mirror: mirror);
 
         Assert.Equal(expected: 1, actual: frame.Lights.ShadowSlots[0]);

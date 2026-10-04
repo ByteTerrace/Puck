@@ -1,14 +1,14 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.SignedDistance;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
-/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
+/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/
 /// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
-/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
-/// strength/radius, the tonemap mode, and the clock and key count of each keyed section; a keyed value reads as its
+/// enrichment, every sky layer, the environment ambient and reflection gains, the tonemap mode, and the clock and key count of each keyed section; a keyed value reads as its
 /// clock, key count and cadence change class. Section keys expand through the same field-key resolver.
 /// The sections are authored through <c>world.row.set render</c>; every field is optional and an
 /// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
@@ -88,7 +88,10 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
     );
     // A layer's fields, then what every layer of the stack carries as the engine resolves it: its blend, opacity,
     // visibility, lowest tier, clock, mask and transform.
+    private static string LayerChange(WorldRenderSkyLayer layer) => (((layer is not WorldRenderSkyLayer.SunDisc) && ((WorldSkyLayers.VisibilityOf(layer: layer) & SdfSkyVisibility.Lighting) != 0)) ? "lighting-visible" : "visual-only");
     private static CommandEcho DescribeLayer(CommandEcho echo, int index, WorldRenderSkyLayer layer) {
+        var change = LayerChange(layer: layer);
+
         echo = DescribeKind(echo: echo.Head(head: $"sky[{index}]").Field(key: "name", value: (layer.LayerName ?? "none")), layer: layer);
 
         if (layer is WorldRenderSkyLayer.Fog) {
@@ -97,14 +100,16 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
 
         return echo
             .Field(key: "blend", value: WorldSkyLayers.BlendOf(layer: layer).ToString().ToLowerInvariant())
-            .Field(key: "opacity", value: ((layer.Opacity is null) ? "1" : Describe(value: layer.Opacity, change: "visual-only")))
+            .Field(key: "opacity", value: ((layer.Opacity is null) ? "1" : Describe(value: layer.Opacity, change: change)))
             .Field(key: "visibility", value: WorldSkyLayers.VisibilityOf(layer: layer).ToString().ToLowerInvariant())
             .Field(key: "tier", value: WorldSkyLayers.TierOf(layer: layer).ToString().ToLowerInvariant())
             .Field(key: "clock", value: (layer.Clock ?? "none"))
             .Field(key: "mask", value: ((layer.Mask?.Band is not null) ? "band" : ((layer.Mask?.Cone is not null) ? "cone" : "none")))
-            .Field(key: "transform", value: ((layer.Transform is { } transform) ? $"{Describe(value: transform.Turn, change: "visual-only")}/{Describe(value: transform.Tilt, change: "visual-only")}" : "none"));
+            .Field(key: "transform", value: ((layer.Transform is { } transform) ? $"{Describe(value: transform.Turn, change: change)}/{Describe(value: transform.Tilt, change: change)}" : "none"));
     }
     private static CommandEcho DescribeKind(CommandEcho echo, WorldRenderSkyLayer layer) {
+        var change = LayerChange(layer: layer);
+
         switch (layer) {
             case WorldRenderSkyLayer.Gradient gradient: {
                     echo = echo.Field(
@@ -116,7 +121,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         for (var stop = 0; (stop < stops.Count); stop++) {
                             echo = echo.Field(
                                 key: $"stop{stop}",
-                                value: $"{Describe(value: stops[stop]?.Elevation, change: "visual-only")}:{Describe(color: stops[stop]?.Color, change: "visual-only")}"
+                                value: $"{Describe(value: stops[stop]?.Elevation, change: change)}:{Describe(color: stops[stop]?.Color, change: change)}"
                             );
                         }
                     }
@@ -146,11 +151,11 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                     )
                         .Field(
                         key: "radius",
-                        value: Describe(value: disc.Radius, change: "visual-only")
+                        value: Describe(value: disc.Radius, change: change)
                     )
                         .Field(
                         key: "intensity",
-                        value: Describe(value: disc.Intensity, change: "visual-only")
+                        value: Describe(value: disc.Intensity, change: change)
                     )
                         .Field(key: "texture", value: ((disc.Texture is { } texture) ? Describe(value: texture.Screen) : "none"));
                 }
@@ -162,11 +167,11 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                     )
                         .Field(
                         key: "density",
-                        value: Describe(value: stars.Density, change: "visual-only")
+                        value: Describe(value: stars.Density, change: change)
                     )
                         .Field(
                         key: "brightness",
-                        value: Describe(value: stars.Brightness, change: "visual-only")
+                        value: Describe(value: stars.Brightness, change: change)
                     )
                         .Field(
                         key: "seed",
@@ -175,7 +180,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         .Field(
                         key: "twinkle",
                         value: ((stars.Twinkle is { } twinkle)
-                        ? $"{Describe(value: twinkle.Share, change: "visual-only")}/{Describe(value: twinkle.Depth, change: "visual-only")}/{Describe(value: twinkle.Rate, change: "visual-only")}"
+                        ? $"{Describe(value: twinkle.Share, change: change)}/{Describe(value: twinkle.Depth, change: change)}/{Describe(value: twinkle.Rate, change: change)}"
                         : "none")
                     );
                 }
@@ -187,15 +192,15 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                     )
                         .Field(
                         key: "coverage",
-                        value: Describe(value: clouds.Coverage, change: "visual-only")
+                        value: Describe(value: clouds.Coverage, change: change)
                     )
                         .Field(
                         key: "softness",
-                        value: Describe(value: clouds.Softness, change: "visual-only")
+                        value: Describe(value: clouds.Softness, change: change)
                     )
                         .Field(
                         key: "scale",
-                        value: Describe(value: clouds.Scale, change: "visual-only")
+                        value: Describe(value: clouds.Scale, change: change)
                     )
                         .Field(
                         key: "seed",
@@ -203,42 +208,42 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                     )
                         .Field(
                         key: "color",
-                        value: Describe(color: clouds.Color, change: "visual-only")
+                        value: Describe(color: clouds.Color, change: change)
                     )
                         .Field(
                         key: "drift",
-                        value: Describe(vector: clouds.Drift)
+                        value: Describe(vector: clouds.Drift, change: change)
                     )
                         .Field(
                         key: "spin",
-                        value: Describe(value: clouds.Spin, change: "visual-only")
+                        value: Describe(value: clouds.Spin, change: change)
                     )
                         .Field(
                         key: "curl",
-                        value: Describe(value: clouds.Curl, change: "visual-only")
+                        value: Describe(value: clouds.Curl, change: change)
                     )
                         .Field(
                         key: "shear",
-                        value: Describe(vector: clouds.Shear)
+                        value: Describe(vector: clouds.Shear, change: change)
                     );
                 }
             case WorldRenderSkyLayer.Aurora aurora: {
                     return echo
                         .Field(key: "type", value: "aurora")
-                        .Field(key: "intensity", value: Describe(value: aurora.Intensity, change: "visual-only"))
-                        .Field(key: "color", value: Describe(color: aurora.Color, change: "visual-only"))
-                        .Field(key: "top", value: Describe(color: aurora.Top, change: "visual-only"))
-                        .Field(key: "base", value: Describe(value: aurora.Base, change: "visual-only"))
-                        .Field(key: "height", value: Describe(value: aurora.Height, change: "visual-only"))
-                        .Field(key: "fold", value: Describe(value: aurora.Fold, change: "visual-only"));
+                        .Field(key: "intensity", value: Describe(value: aurora.Intensity, change: change))
+                        .Field(key: "color", value: Describe(color: aurora.Color, change: change))
+                        .Field(key: "top", value: Describe(color: aurora.Top, change: change))
+                        .Field(key: "base", value: Describe(value: aurora.Base, change: change))
+                        .Field(key: "height", value: Describe(value: aurora.Height, change: change))
+                        .Field(key: "fold", value: Describe(value: aurora.Fold, change: change));
                 }
             case WorldRenderSkyLayer.Noise noise: {
                     return echo
                         .Field(key: "type", value: "noise")
-                        .Field(key: "low", value: Describe(color: noise.Low, change: "visual-only"))
-                        .Field(key: "high", value: Describe(color: noise.High, change: "visual-only"))
-                        .Field(key: "coverage", value: Describe(value: noise.Coverage, change: "visual-only"))
-                        .Field(key: "scale", value: Describe(value: noise.Scale))
+                        .Field(key: "low", value: Describe(color: noise.Low, change: change))
+                        .Field(key: "high", value: Describe(color: noise.High, change: change))
+                        .Field(key: "coverage", value: Describe(value: noise.Coverage, change: change))
+                        .Field(key: "scale", value: Describe(value: noise.Scale, change: change))
                         .Field(key: "octaves", value: Describe(value: noise.Octaves));
                 }
             case WorldRenderSkyLayer.Pattern pattern: {
@@ -247,12 +252,19 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         .Field(key: "shape", value: (pattern.Shape ?? WorldSkyPatternShape.Checker).ToString().ToLowerInvariant())
                         .Field(key: "cells", value: Describe(value: pattern.Cells));
                 }
+            case WorldRenderSkyLayer.Panel panel: {
+                    return echo.Field(key: "type", value: "panel").Field(key: "color", value: Describe(color: panel.Color, change: change))
+                        .Field(key: "intensity", value: Describe(value: panel.Intensity, change: change))
+                        .Field(key: "blur", value: Describe(value: panel.Blur, change: change))
+                        .Field(key: "direction", value: (panel.Direction?.ToString() ?? "default"))
+                        .Field(key: "size", value: (panel.Size?.ToString() ?? "default"));
+                }
             case WorldRenderSkyLayer.Panorama panorama: {
                     return echo
                         .Field(key: "type", value: "panorama")
                         .Field(key: "screen", value: Describe(value: panorama.Screen))
                         .Field(key: "projection", value: (panorama.Projection ?? WorldSkyProjection.Equirect).ToString().ToLowerInvariant())
-                        .Field(key: "intensity", value: Describe(value: panorama.Intensity, change: "visual-only"));
+                        .Field(key: "intensity", value: Describe(value: panorama.Intensity, change: change));
                 }
             default: {
                     return echo.Field(
@@ -295,23 +307,6 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                 .Field(
             key: "shadow",
             value: (directional.Shadow ?? WorldShadowMode.Never).ToString().ToLowerInvariant()
-        ),
-            WorldRenderLight.Hemisphere hemisphere => echo
-                .Field(
-            key: "type",
-            value: "hemisphere"
-        )
-                .Field(
-            key: "color",
-            value: Describe(color: hemisphere.Color)
-        )
-                .Field(
-            key: "base",
-            value: Describe(value: hemisphere.Base)
-        )
-                .Field(
-            key: "gradient",
-            value: Describe(value: hemisphere.Gradient)
         ),
             WorldRenderLight.Rim rim => echo
                 .Field(
@@ -466,20 +461,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
         echo = echo
             .Segment()
             .Head(head: "environment")
-            .Field(
-            key: "softboxes",
-            value: ((environment?.Softboxes is { } softboxes)
-            ? softboxes.Count.ToString(provider: CultureInfo.InvariantCulture)
-            : "default")
-        )
-            .Field(
-            key: "horizonLow",
-            value: Describe(color: environment?.Horizon?.Low)
-        )
-            .Field(
-            key: "horizonHigh",
-            value: Describe(color: environment?.Horizon?.High)
-        )
+            .Field(key: "ambient", value: Describe(value: environment?.Ambient))
+            .Field(key: "reflection", value: Describe(value: environment?.Reflection))
             .Segment()
             .Head(head: "tonemap")
             .Field(
@@ -503,19 +486,13 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
             )
         );
 
-        if (environment?.Softboxes is { } keyedSoftboxes) {
-            for (var index = 0; (index < keyedSoftboxes.Count); index++) {
-                echo = echo.Segment().Head(head: $"softboxes[{index}]")
-                    .Field(key: "color", value: Describe(color: keyedSoftboxes[index].Color));
-            }
-        }
         return echo.Close();
     }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render lighting, sky, environment and tonemap census: lights, named shadow holders, curvature, sky layers, softbox colors and horizon colors. Each keyed value, including a field keyed through a section, reports its clock, key count and cadence class (visual-only, lighting-visible, shadow-direction or geometry-or-camera). An unauthored field reads 'default'. Immediate; the stdin barrier reads settled state after pending mutations.",
+            description: "Reports the render lighting, sky, environment and tonemap census: lights, named shadow holders, curvature, sky layers and ambient/reflection gains. Each keyed value, including a field keyed through a section, reports its clock, key count and cadence class (visual-only, lighting-visible, shadow-direction or geometry-or-camera). Sky fields follow their layer visibility, while discs remain visual-only; environment gains and fog density are lighting-visible. An unauthored field reads 'default'. Immediate; the stdin barrier reads settled state after pending mutations.",
             describe: server => ((DescribeLighting(definition: server.Definition) + " | ") + (shadowReport?.Invoke(server.Definition) ?? "shadowSlots unavailable: no presented frame of this authority")),
             name: "world.lighting"
         );

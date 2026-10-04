@@ -48,6 +48,7 @@
 #define SDF_SKY_KIND_PATTERN 5u
 #define SDF_SKY_KIND_PANORAMA 6u
 #define SDF_SKY_KIND_DISC 7u
+#define SDF_SKY_KIND_PANEL 8u
 
 // Whether a kind is a field kind, evaluated by the sky pass at its field extent and summarized with its run; a point
 // kind is evaluated by the composite at each pixel.
@@ -270,6 +271,24 @@ SdfSkyDisc sdfSkyDiscOf(SdfSkyLayer layer) {
     parameters.Radius = layer.P2.x;
     parameters.Light = asint(layer.P2.y);
     parameters.Screen = asint(layer.P2.z);
+    return parameters;
+}
+
+// The panel kind (SdfSkyPanel), a point kind.
+struct SdfSkyPanel {
+    float3 Direction;
+    float Intensity;
+    float3 Color;
+    float2 Size;
+    float Blur;
+};
+SdfSkyPanel sdfSkyPanelOf(SdfSkyLayer layer) {
+    SdfSkyPanel parameters;
+    parameters.Direction = layer.P0.xyz;
+    parameters.Intensity = layer.P0.w;
+    parameters.Color = layer.P1.xyz;
+    parameters.Size = layer.P2.xy;
+    parameters.Blur = layer.P2.z;
     return parameters;
 }
 

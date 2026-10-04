@@ -39,10 +39,6 @@ public readonly record struct SdfCurvature(float Cavity, float Rim, float Ink, f
 /// table the shadow and views passes read (<see cref="Pack"/>).
 /// </summary>
 public sealed class SdfLights {
-    /// <summary>The pinned ambient floor.</summary>
-    public const float DefaultAmbientBase = 0.25f;
-    /// <summary>The pinned ambient hemisphere gradient.</summary>
-    public const float DefaultAmbientHemisphere = 0.25f;
     /// <summary>The pinned penumbra half-slope.</summary>
     public const float DefaultPenumbraSlope = (1f / 9f);
     /// <summary>The default point-light falloff radius, in world units.</summary>
@@ -98,8 +94,7 @@ public sealed class SdfLights {
     // What a point or occluder light's dynamic slot may be.
     private static string LightSlotRule => $"a point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
 
-    /// <summary>Creates the lights an unauthored world renders: the pinned sun with shadows and the pinned hemisphere
-    /// ambient.</summary>
+    /// <summary>Creates the lights an unauthored world renders: the pinned sun with shadows.</summary>
     /// <returns>The lights.</returns>
     public static SdfLights Default() {
         var lights = new SdfLights();
@@ -115,18 +110,7 @@ public sealed class SdfLights {
                 Shadows: true
             )
         );
-        lights.Set(
-            index: 1,
-            light: new SdfLight(
-                Kind: SdfLightKind.Hemisphere,
-                Direction: Vector3.Zero,
-                Color: Vector3.One,
-                Weight: DefaultAmbientBase,
-                Param: DefaultAmbientHemisphere,
-                Shadows: false
-            )
-        );
-        lights.Count = 2;
+        lights.Count = 1;
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
         lights.ShadowSlots.SetSlot(light: 0, slot: 0);
 

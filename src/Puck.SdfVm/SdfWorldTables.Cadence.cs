@@ -20,8 +20,7 @@ namespace Puck.SdfVm;
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
 //                          render extent, which the scheduler renders a view again for when it moves.
-//   - m_lightRegion, m_skyRegion, m_skyLayerRegion, m_softboxRegion : the lights and the sky with their presented-tick
-//                          bakes (the twinkle phase, the cloud offsets).
+//   - m_lightRegion, m_skyRegion, m_skyLayerRegion : the lights, sky gains, layer stack and its clock bakes.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
@@ -77,6 +76,8 @@ public sealed partial class SdfWorldTables {
         var lighting = Fnv1aHash.Create();
 
         lighting.Add(value: m_lightingSignature);
+        // Submit records the environment before signatures are read; a sub-code candidate keeps this revision.
+        lighting.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         lighting.Add(value: m_shadowSignature);
         lighting.Add(values: block);
         var shadow = Fnv1aHash.Create();
@@ -200,6 +201,7 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
+        hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(values: block);
 
         return hash.Value;
@@ -223,7 +225,6 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: m_lightRegion.Contents);
         hash.Add(values: m_skyRegion.Contents);
         hash.Add(values: m_skyLayerRegion.Contents);
-        hash.Add(values: m_softboxRegion.Contents);
         hash.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenMappingRegion.Contents);
@@ -243,13 +244,24 @@ public sealed partial class SdfWorldTables {
         lighting.Add(value: m_decalRevision);
         lighting.Add(values: m_lightRegion.Contents);
         lighting.Add(values: m_screenLightScratch);
-        lighting.Add(values: m_softboxRegion.Contents);
         lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         ref var sky = ref m_skyRecord[0];
-        Span<float> hitSky = [sky.FogDensity, sky.HorizonLow.X, sky.HorizonLow.Y, sky.HorizonLow.Z, sky.HorizonHigh.X, sky.HorizonHigh.Y, sky.HorizonHigh.Z];
+        Span<float> hitSky = [sky.FogDensity, sky.Ambient, sky.Reflection];
 
         lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));
-        lighting.Add(value: sky.SoftboxCount);
+        // Reflections evaluate panels directly, even when their change is below the map's refresh threshold.
+        var panels = false;
+
+        foreach (ref readonly var layer in m_skyLayerRecords.AsSpan(length: ((int)sky.LayerCount), start: 0)) {
+            if ((layer.Kind != SdfSkyLayerKind.Panel) || ((layer.Visibility & SdfSkyVisibility.Lighting) == 0)) { continue; }
+            lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in layer)));
+            panels = true;
+        }
+        if (panels) {
+            Span<float> axes = [sky.FrameRight.X, sky.FrameRight.Y, sky.FrameRight.Z, sky.FrameUp.X, sky.FrameUp.Y, sky.FrameUp.Z, sky.FrameForward.X, sky.FrameForward.Y, sky.FrameForward.Z];
+
+            lighting.Add(values: MemoryMarshal.AsBytes(span: axes));
+        }
         m_lightingSignature = lighting.Value;
 
         var shadow = Fnv1aHash.Create();

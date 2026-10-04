@@ -197,7 +197,7 @@ gain, and zero architectural disturbance.
 ## Every light answers through one interface
 
 The views pass lights a surface by walking one list of lights: the lights
-table's (directional, hemisphere, point, rim and occluder, in authored order),
+table's (directional, point, rim and occluder, in authored order),
 then every bound screen. Each is one `SdfLightSource`, and one function,
 `sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
 surface: a diffuse term that joins the radiance the material shade lights by, a

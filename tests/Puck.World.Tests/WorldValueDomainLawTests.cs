@@ -48,7 +48,10 @@ public sealed class WorldValueDomainLawTests {
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
         [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
         [WorldValueFields.DirectionalAngularRadius] = Lit(author: s => new WorldRenderLight.Directional(AngularRadius: s), present: static e => MathF.Atan(x: e.Lights[0].Param), member: "angularRadius"),
-        [WorldValueFields.HemisphereBase] = Lit(author: s => new WorldRenderLight.Hemisphere(Base: s), present: static e => e.Lights[0].Weight, member: "base"),
+        [WorldValueFields.EnvironmentAmbient] = Env(s => new WorldRenderEnvironment(Ambient: s), e => e.Sky.Block.Ambient, "ambient"),
+        [WorldValueFields.EnvironmentReflection] = Env(s => new WorldRenderEnvironment(Reflection: s), e => e.Sky.Block.Reflection, "reflection"),
+        [WorldValueFields.PanelIntensity] = Sky(s => new WorldRenderSkyLayer.Panel(Intensity: s), e => e.Sky.First<SdfSkyPanel>().Intensity, "intensity"),
+        [WorldValueFields.PanelBlur] = Sky(s => new WorldRenderSkyLayer.Panel(Blur: s), e => e.Sky.First<SdfSkyPanel>().Blur, "blur"),
         [WorldValueFields.RimWeight] = Lit(author: s => new WorldRenderLight.Rim(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
         [WorldValueFields.RimPower] = Lit(author: s => new WorldRenderLight.Rim(Power: s), present: static e => e.Lights[0].Param, member: "power"),
         [WorldValueFields.PointRadius] = Lit(author: s => new WorldRenderLight.Point(Radius: s), present: static e => e.Lights[0].Param, member: "radius"),
@@ -189,6 +192,11 @@ public sealed class WorldValueDomainLawTests {
         definition: definition,
         mirror: mirror,
         revision: 0
+    );
+    private static Case Env(Func<BindableScalar, WorldRenderEnvironment> author, Func<WorldResolvedEnvironment, float> present, string member) => new(
+        Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Environment = author(s) } },
+        Path: $"render.environment.{member}",
+        Present: (definition, mirror, domains) => present(Environment(definition, mirror, domains))
     );
     private static Case Lit(Func<BindableScalar, WorldRenderLight> author, Func<WorldResolvedEnvironment, float> present, string member) => new(
         Author: s => Render(lighting: new WorldRenderLighting(Lights: [author(arg: s)])),

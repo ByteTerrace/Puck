@@ -11,6 +11,7 @@
 #include "kinds/pattern.hlsli"
 #include "kinds/panorama.hlsli"
 #include "kinds/disc.hlsli"
+#include "kinds/panel.hlsli"
 
 // A layer's colour and alpha at a sample, by its kind's module; a kind the table does not hold draws nothing.
 float4 sdfSkyKindEvaluate(SdfSkyLayer layer, SdfSkySample sample) {
@@ -31,6 +32,8 @@ float4 sdfSkyKindEvaluate(SdfSkyLayer layer, SdfSkySample sample) {
         return sdfSkyPanoramaLayer(sdfSkyPanoramaOf(layer), layer, sample);
     case SDF_SKY_KIND_DISC:
         return sdfSkyDiscLayer(sdfSkyDiscOf(layer), layer, sample);
+    case SDF_SKY_KIND_PANEL:
+        return sdfSkyPanelLayer(sdfSkyPanelOf(layer), layer, sample);
     default:
         return float4(0.0, 0.0, 0.0, 0.0);
     }

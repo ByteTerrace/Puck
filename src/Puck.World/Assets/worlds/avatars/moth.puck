@@ -4527,7 +4527,6 @@ render {
     lights [
       directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
       directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
-      hemisphere(color: "#F1E5DE", base: 0.3, gradient: 0.1)
     ]
   }
   renderScale: 1
@@ -4536,7 +4535,7 @@ render {
   shadows: High
   sky {
     layers [
-      gradient(stops: [
+      gradient(visibility: camera, stops: [
         {
           color: "#8E8AA3"
           elevation: -1
@@ -4555,32 +4554,17 @@ render {
         }
       ]
       )
+      gradient(name: "studio", visibility: lighting, stops: [{ elevation: -1, color: "#151117" }, { elevation: 1, color: "#6E6572" }])
+      panel(name: "panel1", direction: [0.6, 1, -0.5], size: [0.25, 0.5], color: "#FFF1E0", intensity: 1.8, blur: 0.15, visibility: lighting)
+      panel(name: "panel2", direction: [-0.6, 0.75, 0.6], size: [0.24, 0.6], color: "#EEE4FF", intensity: 1, blur: 0.18, visibility: lighting)
       fog(density: 0.012)
     ]
   }
   upscaleSharpness: 0
   tonemap: Filmic
   environment {
-    softboxes [
-      {
-        direction [0.6, 1, -0.5]
-        size [0.25, 0.5]
-        color: "#FFF1E0"
-        weight: 1.8
-        blur: 0.15
-      }
-      {
-        direction [-0.6, 0.75, 0.6]
-        size [0.24, 0.6]
-        color: "#EEE4FF"
-        weight: 1
-        blur: 0.18
-      }
-    ]
-    horizon {
-      low: "#151117"
-      high: "#6E6572"
-    }
+    ambient: 0.4
+    reflection: 1
   }
 }
 

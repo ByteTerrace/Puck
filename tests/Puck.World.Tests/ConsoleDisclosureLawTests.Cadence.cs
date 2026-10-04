@@ -5,6 +5,28 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed partial class ConsoleDisclosureLawTests {
+    [InlineData(null, "lighting-visible")]
+    [InlineData(WorldSkyVisibility.Lighting, "lighting-visible")]
+    [InlineData(WorldSkyVisibility.Both, "lighting-visible")]
+    [InlineData(WorldSkyVisibility.Camera, "visual-only")]
+    [Theory]
+    public void LightingReportsPanelVisibilityAndEnvironmentGainClasses(WorldSkyVisibility? visibility, string change) {
+        var scalar = new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0.1f)]));
+        using var host = new DisclosureHost(Fixtures.BuildDocument() with {
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1d)]),
+            RenderRaw = new WorldRenderDefaults(Environment: new WorldRenderEnvironment(Ambient: scalar, Reflection: scalar),
+                Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Panel(Blur: scalar, Intensity: scalar) { Opacity = scalar, Visibility = visibility }])),
+        });
+        var result = host.Console(line: "world.lighting");
+
+        Assert.False(condition: result.IsError);
+        foreach (var field in new[] { "intensity", "blur", "opacity" }) {
+            Assert.Contains($"{field}={CommandEcho.Quote(value: $"keys(clock: day, 1 keys) class={change}")}", result.Output);
+        }
+        foreach (var field in new[] { "ambient", "reflection" }) {
+            Assert.Contains($"{field}={CommandEcho.Quote(value: "keys(clock: day, 1 keys) class=lighting-visible")}", result.Output);
+        }
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]

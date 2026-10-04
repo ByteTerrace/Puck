@@ -960,9 +960,6 @@
           "shadow": "always"
         },
         {
-          "$type": "hemisphere"
-        },
-        {
           "$type": "point",
           "color": "#29C8FF",
           "position": [
@@ -1039,6 +1036,40 @@
           "spin": 0.2,
           "curl": 0.3,
           "name": "clouds"
+        },
+        {
+          "$type": "panel",
+          "name": "studio-key",
+          "direction": [
+            0.2,
+            1,
+            0.3
+          ],
+          "size": [
+            0.2,
+            0.5
+          ],
+          "color": "#FFF4E8",
+          "intensity": 2,
+          "blur": 0.02,
+          "visibility": "lighting"
+        },
+        {
+          "$type": "panel",
+          "name": "studio-fill",
+          "direction": [
+            -1,
+            0.3,
+            0.5
+          ],
+          "size": [
+            0.4,
+            0.12
+          ],
+          "color": "#BBCDFF",
+          "intensity": 0.6,
+          "blur": 0.02,
+          "visibility": "lighting"
         }
       ],
       "clock": "skyMode",

@@ -111,16 +111,18 @@ pass records no dispatch or barrier and its counter row reads `standing`;
 the next executing reader follows the last actual access through the existing
 resource tracker. A disabled optional pass reads `skipped` instead.
 
-Cloud drift, twinkle, gradient colour and moving bounded media change only
-`sky` and `composite`. Fog density and light colour also change `views` and
-`resolve` when present. A selected shadow direction adds `shadow`; geometry
-or camera changes render every active pass. Any edit to the sky's layer table,
-its quality tier included, changes only `sky` and `composite`. A sky layer that
+Camera-only cloud drift, twinkle, gradient colour and moving bounded media change
+only `sky` and `composite`. Fog density, light colour and the ambient/reflection
+gains also change `views` and `resolve` when present. A lighting-visible sky edit
+refreshes the shared environment at the irradiance threshold described in
+[The environment map](#the-environment-map); the submitted map's
+revision also changes those lighting passes. Lighting-visible panels affect
+analytic reflections directly, so their edits change lighting passes even below
+the map's threshold. A selected shadow direction adds `shadow`; geometry
+or camera changes render every active pass. A sky layer that
 samples a screen (a panorama, a textured disc) runs `sky` and `composite` every
 frame, since the screen's image changes in place where no signature sees it;
-the march passes still stand. The shared environment map keeps
-its own layer refresh, so a gradient change with enabled fog also refreshes
-that map. `world.lighting` reports each keyed value's change class, including
+the march passes still stand. `world.lighting` reports each keyed value's change class, including
 fields keyed through a section.
 
 Temporal sampling renders the geometry again while a sample is owed. Once
@@ -345,35 +347,45 @@ composite passes it through.
 
 ### The environment map
 
-A residency keeps one environment map and its coefficients for its sky, however
-many views read it (`SdfWorldTables.SkyEnvironment.cs`, CPU reference
-`SdfSkyEnvironment`). The map is 64 by 64 texels over the octahedral projection
-the radiance cache uses, the pole at +y, each texel the layers the lighting sees
-(a gradient's by default) composed at its centre's direction as four half floats:
-the sky the fog in-scatters. No body enters it, so a bright sun disc never smears
-into the fog in front of it. The coefficients
-are the map's nine second-order spherical harmonics per colour channel, each
-texel weighted by its solid angle and the sums scaled so the weights total 4π.
+A residency keeps a 64 × 64 octahedral environment and nine second-order
+spherical-harmonic coefficients per colour channel. The first map plane holds
+the lighting-visible stack for fog and projection; the second omits panels for
+reflections, where analytic angular rectangles preserve sharp highlights.
+The planes share one evaluation of each lit layer per texel. Discs never enter
+the environment. The payload is 65,536 bytes of map and 144 of coefficients,
+shared by every view and frame in flight (`SdfWorldTables.SkyEnvironment.cs`).
 
-The residency's upload, the one submission a frame that every view of the
-residency follows, renders both in its `environment` pass
-(`passes/sdf-sky-environment.comp.hlsl`, one invocation a texel, then
-`passes/sdf-sky-environment-reduce.comp.hlsl`, one group summing in a fixed
-order), and only when the frame's lit layers, sky frame or tier differ from
-the ones the map holds while the fog reads it. A still sky renders the map once;
-every later upload records the pass as skipped, with no evaluation and no
-dispatch. A body, every layer only the camera sees (the stars, the twinkle and
-the clouds by default) and the fog's density leave the map as it is. A
-refresh counts 4,096 `gpu.sky.evaluations` a lit layer under the residency's
-`environment` pass. One copy serves every frame in flight, because the views
-that read it are queued before the upload that rewrites it, and that upload's
-first barrier orders their reads before its writes.
+The host projects a changed lighting-visible candidate using the same packed
+layers, half-float map and solid-angle weights as the kernels. It compares the
+candidate with the last rendered coefficients: the largest absolute irradiance
+difference over every normal and RGB channel must reach 1/255 before the map
+and coefficients render again. The maximum is the extremum of each channel's
+quadratic on the unit sphere (`SdfSkyEnvironment.IrradianceDifference`).
+Sub-code changes accumulate against the rendered sky; camera-only changes and
+a still sky perform no projection. A kernel reload invalidates the held result.
+With fog, ambient and reflection all zero, even candidate projection is off.
 
-The composite filters the four texels about the pixel's direction bilinearly,
-reading a tap past an edge from the texel the octahedral fold puts there. It
-reads the default look within half a display code in every direction; a
-gradient whose stops lie closer together than a texel's span, about 2.8°, is
-smoothed over that texel.
+Each candidate counts `gpu.environment.projections` and 4,096
+`gpu.environment.projection-texels`; a sub-code candidate also counts
+`gpu.environment.skipped`. A rendered change dispatches the map once and its
+reduction once: 4,096 evaluations per unmasked lit layer, 8,192 map texels and
+nine coefficient texels written. No dispatch runs on a skipped candidate.
+The first map texel is integrated analytically as a constant and subtracted
+before quadrature, so a constant sky has exactly zero higher bands.
+
+The views pass convolves the coefficients by π, 2π/3 and π/4 for bands zero,
+one and two, then applies the existing normal-ladder AO and the
+`render.environment.ambient` gain. A constant radiance C gives irradiance πC.
+Reflections bilinearly sample the panel-free plane and apply the lighting
+panels analytically in their authored order, under the
+`render.environment.reflection` gain. Both gains default to one and zero
+skips their work. Analytic panels use their layer frame, visibility, opacity,
+mask and blend; roughness widens their angular rectangle and reduces its gain.
+The map supplies the background beneath these reflection panels.
+
+The composite filters the full plane for fog, including lighting panels.
+Octahedral edge taps fold onto the adjoining texels. Queue barriers order all
+views' reads before the next upload's writes; no view owns a second map.
 
 ### Surface transport
 

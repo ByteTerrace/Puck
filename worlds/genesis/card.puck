@@ -242,17 +242,26 @@ render {
   lighting {
     lights [
       directional(direction: [-0.4, 0.7, 1], color: "#FFF3DC", weight: 1.1, angularRadius: 0.15)
-      hemisphere(color: "#E5E9FF", base: 0.6, gradient: 0.05)
+    ]
+  }
+  sky {
+    layers [
+      gradient(visibility: camera, stops: [
+        { elevation: -1, color: "#0A0D12" }
+        { elevation: 1, color: "#1A2133" }
+      ]
+      )
+      gradient(name: "studio", visibility: lighting, stops: [
+        { elevation: -1, color: "#282C38" }
+        { elevation: 1, color: "#9AA1B8" }
+      ]
+      )
+      panel(name: "key", direction: [0.1, 0.25, 1], size: [0.45, 0.5], color: "#FFF4DE", intensity: 0.8, blur: 0.2, visibility: lighting)
     ]
   }
   environment {
-    softboxes [
-      { direction [0.1, 0.25, 1], size [0.45, 0.5], color: "#FFF4DE", weight: 0.8, blur: 0.2 }
-    ]
-    horizon {
-      low: "#282C38"
-      high: "#9AA1B8"
-    }
+    ambient: 0.6
+    reflection: 1
   }
   tonemap: Filmic
 }

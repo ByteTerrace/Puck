@@ -15,6 +15,8 @@ namespace Puck.SdfVm;
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
 // recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part == "views" ? m_view.Residency.SkyDetails.Labels : [];
+
     private const uint WorkgroupEdge = 8;
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.

@@ -33,25 +33,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             revision: revision
         );
     }
-    private static WorldRenderSoftbox Softbox(float x = 1f, float y = 1f, float z = 1f, float width = 0.3f, float height = 0.4f) => new(
-        Direction: new Vector3(
-            x: x,
-            y: y,
-            z: z
-        ),
-        Size: new Vector2(
-            x: width,
-            y: height
-        ),
-        Color: new BindableColor(Raw: "#FFFFFF"),
-        Weight: 0.5f
-    );
     private static WorldRenderLighting SunAndSky(BindableColor? sunColor = null) => new(Lights: [
         new WorldRenderLight.Directional(
             Color: sunColor,
             Shadow: WorldShadowMode.Always, Name: "sun"
         ),
-        new WorldRenderLight.Hemisphere(),
     ]);
     private static WorldRenderSky ThreeStopSky() => new(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [
         new WorldRenderSkyStop(
@@ -86,21 +72,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     ]);
 
     [Fact]
-    public void AbsentEnvironment_ResolvesToNoSoftboxesAndABlackHorizon() {
+    public void AbsentEnvironmentResolvesToUnitGains() {
         var resolved = Resolve(defaults: BaseDefaults());
-
-        Assert.Equal(
-            expected: 0,
-            actual: resolved.Sky.SoftboxCount
-        );
-        Assert.Equal(
-            expected: Vector3.Zero,
-            actual: resolved.Sky.Block.HorizonLow
-        );
-        Assert.Equal(
-            expected: Vector3.Zero,
-            actual: resolved.Sky.Block.HorizonHigh
-        );
+        Assert.Equal(1f, resolved.Sky.Block.Ambient);
+        Assert.Equal(1f, resolved.Sky.Block.Reflection);
     }
     [Fact]
     public void AbsentLightingAndSky_ResolveToThePinnedEnvironmentBitExact() {
@@ -112,7 +87,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: unauthored.Block, actual: resolved.Sky.Block);
         Assert.True(condition: unauthored.Layers.SequenceEqual(other: resolved.Sky.Layers));
         Assert.Equal(
-            expected: 2,
+            expected: 1,
             actual: resolved.Lights.Count
         );
         Assert.Equal(
@@ -128,8 +103,8 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Lights[0].Param
         );
         Assert.Equal(
-            expected: SdfLights.DefaultAmbientBase,
-            actual: resolved.Lights[1].Weight
+            expected: 1f,
+            actual: resolved.Sky.Block.Ambient
         );
         Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
@@ -160,113 +135,14 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void AuthoredEnvironment_SoftboxesAndHorizonThreadThroughAndUnsetFieldsTakeTheirDefaults() {
-        var resolved = Resolve(defaults: BaseDefaults() with {
-            Environment = new WorldRenderEnvironment(
-            Softboxes: [
-                    new WorldRenderSoftbox(
-                    Direction: new Vector3(
-                        x: 0f,
-                        y: 1f,
-                        z: 0f
-                    ),
-                    Size: new Vector2(
-                        x: 0.32f,
-                        y: 0.48f
-                    ),
-                    Color: new BindableColor(Raw: "#FFD9A6"),
-                    Weight: 0.8f,
-                    Blur: 0.1f
-                ),
-                    new WorldRenderSoftbox(
-                    Direction: new Vector3(
-                        x: 1f,
-                        y: 0f,
-                        z: 0f
-                    ),
-                    Size: new Vector2(
-                        x: 0.19f,
-                        y: 0.52f
-                    )
-                ),
-                ],
-            Horizon: new WorldRenderHorizon(
-                Low: new BindableColor(Raw: "#0B0D14"),
-                High: new BindableColor(Raw: "#1B2350")
-            )
-        ),
-        });
-
-        Assert.Equal(
-            expected: 2,
-            actual: resolved.Sky.SoftboxCount
-        );
-
-        var first = resolved.Sky.Softboxes[0];
-        var second = resolved.Sky.Softboxes[1];
-
-        Assert.Equal(
-            expected: new Vector3(
-                x: 0f,
-                y: 1f,
-                z: 0f
-            ),
-            actual: first.Direction
-        );
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0xFF / 255f),
-                y: (0xD9 / 255f),
-                z: (0xA6 / 255f)
-            ),
-            actual: first.Color
-        );
-        Assert.Equal(
-            actual: first.Weight,
-            expected: 0.8f
-        );
-        Assert.Equal(
-            expected: new Vector2(
-                x: 0.32f,
-                y: 0.48f
-            ),
-            actual: first.Size
-        );
-        Assert.Equal(
-            actual: first.Blur,
-            expected: 0.1f
-        );
-
-        // Unset weight/blur/color take their engine defaults (white, weight 1, blur 0), not the previous softbox's.
-        Assert.Equal(
-            expected: Vector3.One,
-            actual: second.Color
-        );
-        Assert.Equal(
-            actual: second.Weight,
-            expected: 1f
-        );
-        Assert.Equal(
-            actual: second.Blur,
-            expected: 0f
-        );
-
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0x0B / 255f),
-                y: (0x0D / 255f),
-                z: (0x14 / 255f)
-            ),
-            actual: resolved.Sky.Block.HorizonLow
-        );
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0x1B / 255f),
-                y: (0x23 / 255f),
-                z: (0x50 / 255f)
-            ),
-            actual: resolved.Sky.Block.HorizonHigh
-        );
+    public void EnvironmentGainsResolveAndAbsentGainsResetToDefaults() {
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
+        var first = Resolve(BaseDefaults() with { Environment = new WorldRenderEnvironment(Ambient: .4f, Reflection: 0f) }, track: track);
+        Assert.Equal(.4f, first.Sky.Block.Ambient);
+        Assert.Equal(0f, first.Sky.Block.Reflection);
+        var second = Resolve(BaseDefaults(), track: track, revision: 1);
+        Assert.Equal(1f, second.Sky.Block.Ambient);
+        Assert.Equal(1f, second.Sky.Block.Reflection);
     }
     [Fact]
     public void AuthoredLights_AreExactlyTheListAuthored_UnsetFieldsTakeTheirKindsDefaults() {
@@ -566,48 +442,6 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void Environment_MoreThanFourSoftboxes_RefusesByName_ControlFourClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-count",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(), Softbox(), Softbox(), Softbox(), Softbox()]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(), Softbox(), Softbox(), Softbox()]) },
-            }))
-        );
-    }
-    [Fact]
-    public void Environment_NonPositiveSoftboxSize_RefusesByName_ControlPositiveClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-size",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(width: 0f)]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(width: 0.1f)]) },
-            }))
-        );
-    }
-    [Fact]
-    public void Environment_ZeroSoftboxDirection_RefusesByName_ControlNonzeroClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-direction",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with {
-                    Environment = new WorldRenderEnvironment(Softboxes: [Softbox(
-                    x: 0f,
-                    y: 0f,
-                    z: 0f
-                )]),
-                },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox()]) },
-            }))
-        );
-    }
-    [Fact]
     public void FiveAuthoredLights_AllFiveReachThePackedLanes_IncludingPastTheFourthSlot() {
         var resolved = Resolve(defaults: BaseDefaults() with {
             Lighting = new WorldRenderLighting(Lights: [
@@ -628,7 +462,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 ),
                 Weight: 0.2f
             ),
-                new WorldRenderLight.Hemisphere(Base: 0.3f),
+                new WorldRenderLight.Point(Weight: 0.3f),
                 new WorldRenderLight.Rim(
                 Weight: 0.4f,
                 Power: 2f
@@ -1083,7 +917,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         // Curvature alone leaves the pinned lights in place.
         Assert.Equal(
-            expected: 2,
+            expected: 1,
             actual: resolved.Lights.Count
         );
     }

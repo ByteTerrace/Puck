@@ -26,8 +26,7 @@ public sealed class SdfSkyClockLawTests {
             block: out _,
             details: new SdfSkyDetails(),
             layers: layers,
-            lights: SdfLights.Default(),
-            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]
+            lights: SdfLights.Default()
         );
 
         var stars = SdfSky.PayloadOf<SdfSkyStars>(layer: ref layers[1]);

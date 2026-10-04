@@ -1,0 +1,11 @@
+world.wait ready 180
+world.screenshot {run}/day.png
+world.wait captures 30
+world.state.cell.set skyMode $value 0.5
+world.wait 12
+world.screenshot {run}/night.png
+world.wait captures 30
+world.state.cell.set skyMode $value 0.5
+world.wait 12
+world.screenshot {run}/day-again.png
+world.wait captures 30

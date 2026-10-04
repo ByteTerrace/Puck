@@ -14,6 +14,7 @@ public static class WorldSkyLayers {
         ArgumentNullException.ThrowIfNull(argument: layer);
 
         return layer switch {
+            WorldRenderSkyLayer.Panel => SdfSkyPanel.Kind,
             WorldRenderSkyLayer.Gradient => SdfSkyGradient.Kind,
             WorldRenderSkyLayer.SunDisc => SdfSkyDisc.Kind,
             WorldRenderSkyLayer.Stars => SdfSkyStars.Kind,
@@ -30,6 +31,7 @@ public static class WorldSkyLayers {
     /// <returns>The class; fog's is <see cref="SdfSkyLayerClass.Field"/>, which nothing reads.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static SdfSkyLayerClass ClassOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
+        SdfSkyLayerKind.Panel => SdfSkyPanel.Class,
         SdfSkyLayerKind.Stars => SdfSkyStars.Class,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Class,
         _ => SdfSkyLayerClass.Field,
@@ -47,7 +49,7 @@ public static class WorldSkyLayers {
             WorldSkyBlend.Add => SdfSkyBlend.Add,
             WorldSkyBlend.Multiply => SdfSkyBlend.Multiply,
             WorldSkyBlend.Screen => SdfSkyBlend.Screen,
-            _ => ((layer is WorldRenderSkyLayer.Stars or WorldRenderSkyLayer.SunDisc or WorldRenderSkyLayer.Aurora) ? SdfSkyBlend.Add : SdfSkyBlend.Over),
+            _ => ((layer is WorldRenderSkyLayer.Panel or WorldRenderSkyLayer.Stars or WorldRenderSkyLayer.SunDisc or WorldRenderSkyLayer.Aurora) ? SdfSkyBlend.Add : SdfSkyBlend.Over),
         };
     }
     /// <summary>Returns who sees a layer: its authored visibility, or its kind's, the camera and the lighting for a
@@ -62,7 +64,7 @@ public static class WorldSkyLayers {
             WorldSkyVisibility.Camera => SdfSkyVisibility.Camera,
             WorldSkyVisibility.Lighting => SdfSkyVisibility.Lighting,
             WorldSkyVisibility.Both => SdfSkyVisibility.Both,
-            _ => ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera),
+            _ => (layer is WorldRenderSkyLayer.Panel ? SdfSkyVisibility.Lighting : ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera)),
         };
     }
     /// <summary>Returns the lowest quality tier a layer draws at: its authored tier, or <see cref="SdfSkyTier.Low"/>.</summary>
@@ -88,6 +90,7 @@ public static class WorldSkyLayers {
     /// <returns>The name, or <see langword="null"/> for fog.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static string? KindNameOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
+        SdfSkyLayerKind.Panel => SdfSkyPanel.Name,
         SdfSkyLayerKind.Gradient => SdfSkyGradient.Name,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Name,
         SdfSkyLayerKind.Stars => SdfSkyStars.Name,

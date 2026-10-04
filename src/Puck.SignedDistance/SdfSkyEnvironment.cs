@@ -20,7 +20,7 @@ namespace Puck.SignedDistance;
 /// the rest. The kernels are <c>shade/sdf-sky-environment.hlsli</c>, <c>passes/sdf-sky-environment.comp.hlsl</c>,
 /// <c>passes/sdf-sky-environment-reduce.comp.hlsl</c> and the composite's lookup in <c>passes/sdf-sky-pass.hlsli</c>.
 /// </summary>
-public static class SdfSkyEnvironment {
+public static partial class SdfSkyEnvironment {
     /// <summary>The map's texels along each axis. KEEP IN SYNC with <c>SdfSkyEnvironmentSize</c> in
     /// <c>shade/sdf-sky-environment.hlsli</c>.</summary>
     public const int Size = 64;
@@ -28,8 +28,8 @@ public static class SdfSkyEnvironment {
     public const int Texels = (Size * Size);
     /// <summary>The bytes one texel takes: four half floats, the colour and a zero.</summary>
     public const int TexelBytes = 8;
-    /// <summary>The bytes the map takes.</summary>
-    public const int MapBytes = (Texels * TexelBytes);
+    /// <summary>The bytes of the full and panel-free map planes.</summary>
+    public const int MapBytes = (2 * Texels * TexelBytes);
     /// <summary>The coefficients per colour channel: the real spherical harmonics of bands zero to two.</summary>
     public const int CoefficientCount = 9;
     /// <summary>The bytes the coefficients take: one four-float record each, the three channels and a zero.</summary>
@@ -110,7 +110,7 @@ public static class SdfSkyEnvironment {
         for (var y = 0; (y < Size); y++) {
             for (var x = 0; (x < Size); x++) {
                 var weight = SolidAngle(x: x, y: y);
-                var color = map[((y * Size) + x)];
+                var color = map[((y * Size) + x)] - map[0];
 
                 Basis(basis: basis, direction: Direction(x: x, y: y));
                 total += weight;
@@ -133,6 +133,7 @@ public static class SdfSkyEnvironment {
                 z: ((float)(sums[((index * 3) + 2)] * normalization))
             );
         }
+        coefficients[0] += map[0] * (float)Math.Sqrt(4d * Math.PI);
     }
     /// <summary>Returns the map's colour in a direction: the bilinear filter of the four texels about its point, a tap one
     /// texel past an edge read where the octahedral fold puts it.</summary>
@@ -176,7 +177,7 @@ public static class SdfSkyEnvironment {
     );
     /// <summary>Renders a sky's map: each texel the layers the lighting sees, composed over black in their authored order
     /// at its centre's direction, as the texel holds it (<see cref="Quantize"/>). A disc never enters it. The reference
-    /// evaluates the gradient kind (<see cref="Gradient"/>) and the stack's composition: the sky frame, each layer's
+    /// evaluates every lighting-capable kind and the stack's composition: the sky frame, each layer's
     /// rotation, mask, opacity and blend.</summary>
     /// <param name="block">The packed sky block.</param>
     /// <param name="layers">Its layer table.</param>
@@ -212,9 +213,6 @@ public static class SdfSkyEnvironment {
             if (!IsLit(layer: in layer)) {
                 continue;
             }
-            if (layer.Kind != SdfSkyLayerKind.Gradient) {
-                throw new NotSupportedException(message: $"The environment's reference evaluates gradient layers; layer {index} is a {layer.Kind} layer the lighting sees.");
-            }
 
             var weight = (layer.Opacity * MaskWeight(direction: sky, layer: in layer));
 
@@ -222,13 +220,25 @@ public static class SdfSkyEnvironment {
                 continue;
             }
 
-            var gradient = SdfSky.PayloadOf<SdfSkyGradient>(layer: ref layer);
+            var local = Rotate(direction: sky, rotation: layer.Rotation);
+            Vector3 radiance;
+            if (layer.Kind == SdfSkyLayerKind.Panel) {
+                var value = Panel(panel: SdfSky.PayloadOf<SdfSkyPanel>(layer: ref layer), direction: local);
+                radiance = new Vector3(value.X, value.Y, value.Z);
+                weight *= value.W;
+            } else if (layer.Kind == SdfSkyLayerKind.Gradient) {
+                radiance = Gradient(direction: local, gradient: SdfSky.PayloadOf<SdfSkyGradient>(layer: ref layer));
+            } else {
+                var value = Procedural(ref layer, block, local);
+                radiance = new Vector3(value.X, value.Y, value.Z);
+                weight *= value.W;
+            }
 
             var (scale, offset) = SdfSkyRuns.Affine(layer: new SdfSkyLayerSample(
                 Alpha: weight,
                 Blend: layer.Blend,
                 Class: SdfSkyLayerClass.Field,
-                Color: Gradient(direction: Rotate(direction: sky, rotation: layer.Rotation), gradient: in gradient)
+                Color: radiance
             ));
 
             color = ((scale * color) + offset);
@@ -297,7 +307,7 @@ public static class SdfSkyEnvironment {
     }
     /// <summary>Returns whether two packed skies draw the same map: the same frame, the same quality tier, and the same
     /// layers the lighting sees, but discs, in the same order. Everything else (the fog's density, every layer only the
-    /// camera sees, a disc, the studio horizon) leaves the map as it is.</summary>
+    /// camera sees, a disc, the environment gains) leaves the map as it is.</summary>
     /// <param name="block">One sky block.</param>
     /// <param name="layers">Its layer table.</param>
     /// <param name="otherBlock">The other sky block.</param>
@@ -331,7 +341,7 @@ public static class SdfSkyEnvironment {
             if (done || otherDone) {
                 return (done && otherDone);
             }
-            if (layers[index] != otherLayers[other]) {
+            if ((layers[index] with { Detail = 0u, Visibility = SdfSkyVisibility.Lighting }) != (otherLayers[other] with { Detail = 0u, Visibility = SdfSkyVisibility.Lighting })) {
                 return false;
             }
 

@@ -62,7 +62,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: resolved.Lights, softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: resolved.Lights);
         Assert.Equal(expected: Vector3.Normalize(value: new Vector3(x: 0f, y: 1f, z: 1f)), actual: block.FrameUp);
         Assert.Equal(actual: block.LayerCount, expected: 6u);
         Assert.Equal(actual: (block.BaseRun, block.UpperRuns), expected: (1u, 1u));
@@ -83,10 +83,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
         Assert.Equal(expected: SdfSkyTier.Low, actual: low.Sky.Quality);
-        low.Sky.Pack(block: out var lowBlock, details: new SdfSkyDetails(), layers: layers, lights: low.Lights, softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        low.Sky.Pack(block: out var lowBlock, details: new SdfSkyDetails(), layers: layers, lights: low.Lights);
         Assert.Equal(actual: lowBlock.LayerCount, expected: 1u);
         Assert.Equal(expected: SdfSkyLayerKind.Gradient, actual: layers[0].Kind);
-        high.Sky.Pack(block: out var highBlock, details: new SdfSkyDetails(), layers: layers, lights: high.Lights, softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        high.Sky.Pack(block: out var highBlock, details: new SdfSkyDetails(), layers: layers, lights: high.Lights);
         Assert.Equal(actual: highBlock.LayerCount, expected: 2u);
         Assert.Equal(expected: SdfSkyLayerKind.Clouds, actual: layers[1].Kind);
     }

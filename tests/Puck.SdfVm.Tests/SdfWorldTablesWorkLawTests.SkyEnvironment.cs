@@ -9,9 +9,9 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 // The sky's environment refreshes only on change: the upload renders the map and its coefficients when the layers its
-// lighting sees move while the fog reads it, and otherwise records nothing, its pass reading skipped. A still sky renders
+// lighting sees move while fog, ambient or reflection reads it, and otherwise records nothing, its pass reading skipped. A still sky renders
 // once; a body, the stars, the twinkle, the fog's density, the clouds and every other layer only the camera sees leave the
-// map as it is; a stop, a lit layer added, and the sky frame render it again; an unfogged sky renders nothing until its fog
+// map as it is; a stop, a lit layer added, and the sky frame render it again; a sky with all consumers disabled renders nothing until a consumer
 // reads the map; an installed kernel reload renders it again; and a refresh never overwrites the counts of the refresh two
 // uploads before it before the ledger reads them.
 public sealed partial class SdfWorldTablesWorkLawTests {
@@ -35,13 +35,12 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
 
         // Everything the lighting does not see: twinkling stars, a disc the lighting sees too (a body never enters the
-        // map), the fog's density, the studio horizon and a cloud layer, covering the sky and drifting.
+        // map), the fog's density, a cloud layer, covering the sky and drifting.
         _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 2f, TwinklePhase = 0.25f });
         _ = sky.Add(blend: SdfSkyBlend.Add, label: "disc", parameters: new SdfSkyDisc { Intensity = 1f, Light = 0 }, visibility: SdfSkyVisibility.Both);
         var clouds = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
 
         sky.Block.FogDensity = (2f * SdfSky.DefaultFogDensity);
-        sky.Block.HorizonLow = Vector3.One;
         rig.Render();
         sky.Parameters<SdfSkyClouds>(index: clouds).DriftOffset = new Vector2(x: 3f, y: 1f);
         rig.Render();
@@ -54,7 +53,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         Assert.Equal(expected: 2L, actual: rig.Engine.SkyEnvironmentRenders);
 
-        // A stop in use beyond the last moves it; one past the stops in use does not.
+        // A stop extending the gradient moves it; one past the stops in use does not.
+        gradient.SetStop(color: new Vector3(x: 0.2f, y: 0.4f, z: 0.9f), elevation: 0f, index: 1);
         gradient.Count = 3u;
         gradient.SetStop(color: Vector3.One, elevation: 1f, index: 2);
         rig.Render();
@@ -63,7 +63,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(expected: 3L, actual: rig.Engine.SkyEnvironmentRenders);
 
         // A layer the lighting sees joins the map; the sky frame turns it.
-        _ = sky.Add(label: "haze", parameters: new SdfSkyNoise(), visibility: SdfSkyVisibility.Lighting);
+        _ = sky.Add(label: "haze", parameters: new SdfSkyNoise { Coverage = 1f, ColorLow = Vector3.Zero, ColorHigh = Vector3.One, Scale = 4f, Gain = 0.5f, Octaves = 4u }, visibility: SdfSkyVisibility.Lighting);
         rig.Render();
         Assert.Equal(expected: 4L, actual: rig.Engine.SkyEnvironmentRenders);
         sky.FrameUp = new Vector3(x: 0.2f, y: 1f, z: 0f);
@@ -72,10 +72,12 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(expected: 5L, actual: rig.Engine.SkyEnvironmentRenders);
     }
     [Fact]
-    public void AnUnfoggedSkyRendersNoEnvironmentUntilItsFogReadsIt() {
+    public void DisabledEnvironmentRendersNothingUntilAConsumerReadsIt() {
         using var rig = new Rig();
 
         rig.Frame.Sky.Block.FogDensity = 0f;
+        rig.Frame.Sky.Block.Ambient = 0f;
+        rig.Frame.Sky.Block.Reflection = 0f;
         rig.Render();
         rig.Render();
         rig.Render();
@@ -170,7 +172,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         // views read it.
         Assert.Equal(
             actual: (SdfSkyEnvironment.MapBytes, SdfSkyEnvironment.CoefficientBytes, SdfWorldTables.SkyEnvironmentBytes),
-            expected: (32_768, 144, 32_912)
+            expected: (65_536, 144, 65_680)
         );
         // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass, the environment's plain row
         // and one row each of the sky's detail rows, at their capacity, each row eleven 64-bit counters, six of them shadow

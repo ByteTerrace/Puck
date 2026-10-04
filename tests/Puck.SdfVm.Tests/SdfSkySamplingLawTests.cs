@@ -70,7 +70,7 @@ public sealed partial class SdfSkySamplingLawTests {
         Assert.DoesNotMatch(actualString: map, expectedRegexPattern: @"\bsdf(SkyCompose|SkyFieldRuns|SkyKindEvaluate)\(");
         Assert.Matches(
             actualString: CodeOf(path: "sky/sdf-sky.hlsli"),
-            expectedRegexPattern: @"float3 sdfSkyEnvironmentColor\(float3 world\) \{[^}]*if \(\(\(layer.Visibility & SDF_SKY_VISIBILITY_LIGHTING\) == 0u\) \|\| \(layer.Kind == SDF_SKY_KIND_DISC\)\) \{\s*continue;"
+            expectedRegexPattern: @"float3 sdfSkyEnvironmentColor\(float3 world, out float3 reflection\) \{[^}]*if \(\(\(layer.Visibility & SDF_SKY_VISIBILITY_LIGHTING\) == 0u\) \|\| \(layer.Kind == SDF_SKY_KIND_DISC\)\) \{\s*continue;"
         );
 
         // The reduction reads the map and evaluates nothing.
