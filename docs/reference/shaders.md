@@ -331,7 +331,7 @@ states its `strideBytes` and `count` as a buffer resource does. The version a
 pass binds must carry what its port carries: its kind, and for a buffer port
 the same stride and count. A port also declares the stage and access its
 package reaches it by (`RenderGraphPortAccess`): an input is a compute read,
-a fragment-sampled read, or a `ComputeReadWrite` buffer input; an output is a
+a fragment-sampled read, a buffer `TransferRead`, or a `ComputeReadWrite` buffer input; an output is a
 compute write or a color-attachment write, which only an image port takes. A package compiles no source, so a
 package reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
 offers:
@@ -366,6 +366,21 @@ intervening accesses before its next actual access, including after skipped
 passes. A fragment cannot update an input its package declared read-only.
 Mutable imports still count as external inputs for cadence, so an unchanged
 package signature alone cannot make their passes stand.
+
+A `TransferRead` input declares a buffer-copy source at the transfer stage.
+The planner orders the copy after the producer's writes; the recorder adds no
+hidden barrier. It accepts current buffers, and refuses images, host-upload
+ports and history. A cross-instance transfer read also refuses a previous-frame
+edge. A package copying two source buffers declares both inputs.
+
+An instance publishes every output of its selected fragment, with the first as
+its default. `RenderGraphRuntimeInput.Output` selects an exported buffer by
+name; null retains the default. Installation and reconfiguration check the
+selected export's kind, stride and size. The runtime binds the allocation from
+the scheduled produced frame, including when the producer stands or a new graph
+is still building. It cannot expose a private intermediate or a new allocation
+that has not produced that frame. A rejected fragment replacement preserves the
+running graph and bindings.
 
 A package may run as a fragment (`RenderGraphPackageFragment`): passes and
 versions of its own, which the graph compiler splices into the graph in place

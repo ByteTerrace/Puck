@@ -64,6 +64,14 @@ producer's allocation and contents, and the borrowed producer reacquires
 intervening writes through the existing barrier tracker. Previous-frame edges,
 host-upload ports and graph-owned buffer rings cannot serve mutable imports.
 
+Finite source copies declare buffer `TransferRead` ports for every source,
+including both environment map and coefficients. Select each exported producer
+buffer with `RenderGraphRuntimeInput.Output`; null keeps the default output.
+The runtime binds the selected produced frame, never a candidate allocation.
+Transfer inputs reject images, host-upload ports and previous-frame/history
+reads. Borrowed shared buffers participate in the existing retained-content
+cadence; no private copy path or second publication mechanism is needed.
+
 The indirect `shade` pass uses `IrradianceSolveSchedule`, the same finite order as
 the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through

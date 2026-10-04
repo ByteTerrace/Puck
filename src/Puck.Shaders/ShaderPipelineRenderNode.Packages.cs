@@ -21,16 +21,16 @@ public sealed partial class ShaderPipelineRenderNode {
     // each frame it produces and every package recording of that frame is handed; null when there are none.
     internal RenderGraphExternalReads? Reads { get; set; }
 
-    // The buffer the published default output holds in the frame slot the node most recently submitted: what a graph
-    // instance's consumers bind when its output is a buffer. Null before the first submission, after a device loss, or
+    // The buffer the selected output holds in the frame slot the node most recently submitted; null selects the default.
+    // Null before the first submission, after a device loss, or
     // when the output is not a buffer the node allocates.
-    internal IGpuBuffer? LatestOutputBuffer() {
+    internal IGpuBuffer? LatestOutputBuffer(string? name = null) {
         if (
             (m_frame == 0) ||
             (m_pipeline is null) ||
             !m_ready ||
             !m_resourceLookup.TryGetValue(
-                key: m_pipeline.Plan.DefaultOutput,
+                key: (name ?? m_pipeline.Plan.DefaultOutput),
                 value: out var resource
             ) ||
             (resource.Buffers is not { } buffers)
@@ -40,6 +40,19 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return buffers[HistoryIndex(previous: false, resource: resource, slot: ((int)((m_frame - 1) % m_inFlight)))];
     }
+
+    // The runtime alternates its two completed-frame arrays. Names and allocations come from this installed graph,
+    // never from a replacement candidate whose buffers have not produced the frame being published.
+    internal BufferOutput[] LatestOutputBuffers(BufferOutput[]? reuse) {
+        if ((m_pipeline is null) || !m_ready || (m_frame == 0)) { return []; }
+        var outputs = m_pipeline.Plan.Outputs;
+        var result = (reuse is not null && reuse.Length == outputs.Count) ? reuse : new BufferOutput[outputs.Count];
+        for (var index = 0; index < outputs.Count; index++) {
+            result[index] = new BufferOutput(Name: outputs[index], Buffer: LatestOutputBuffer(name: outputs[index]));
+        }
+        return result;
+    }
+    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer);
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read
     // on the pool.

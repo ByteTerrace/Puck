@@ -45,12 +45,14 @@ public sealed partial class ShaderPipelineRenderNode {
         // The input this output stands for while the package pass writing it draws nothing.
         public PackageAlias Alias;
 
-        public RuntimeResource(ShaderPipelinePlannedStorage storage, int count) {
+        public RuntimeResource(ShaderPipelinePlannedStorage storage, int count, bool shared) {
             Storage = storage;
             Spec = storage.Declaration;
             Count = count;
             HistoryLatest = (count - 1);
-            Cadence = ((storage.Declaration.Retained || storage.History) ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
+            // Package-owned buffers keep one queue-ordered content identity, like retained storage. Ordinary
+            // per-flight rings have no such identity and must not qualify their outputs to stand across slots.
+            Cadence = ((shared || storage.Declaration.Retained || storage.History) ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
             Initialized = new bool[count];
             HasOverride = new bool[count];
             Override = new ShaderPipelineAccessState[count];

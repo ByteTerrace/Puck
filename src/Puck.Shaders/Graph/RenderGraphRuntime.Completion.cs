@@ -52,9 +52,11 @@ public sealed partial class RenderGraphRuntime {
             ? input.Publication
             : new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount));
 
+        var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
         m_previous[index] = m_current[index];
         m_current[index] = new Output(
             Buffer: node.LatestOutputBuffer(), Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
+            Buffers: buffers,
             StateTick: node.PublishedStateTick,
             Publication: publication,
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),

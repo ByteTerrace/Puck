@@ -21,7 +21,8 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     private void RefreshPackageFragments() {
-        var changed = false;
+        RenderGraphRuntimeGraph?[]? candidate = null;
+        List<(int Index, RenderGraphPackageFragment Fragment)>? changes = null;
 
         for (var index = 0; (index < m_set.Instances.Count); index++) {
             var instance = m_set.Instances[index];
@@ -47,15 +48,20 @@ public sealed partial class RenderGraphRuntime {
                     throw new InvalidDataException(message: $"Instance '{instance.Name}' selected a refused package fragment: {fault}"));
                 m_fragmentGraphs.Add(key: key, value: graph);
             }
-            m_nodes[index]!.Swap(pipeline: graph.Pipeline);
-            m_graphs[index] = graph with { Inputs = factory.InputsOf(instance: instance.Name) };
-            changed = true;
-            m_packageFragments[instance.Name] = fragment;
+            candidate ??= (RenderGraphRuntimeGraph?[])m_graphs.Clone();
+            candidate[index] = graph with { Inputs = factory.InputsOf(instance: instance.Name) };
+            (changes ??= []).Add(item: (index, fragment));
         }
-        if (changed) {
-            if (!TryBindAll(graphs: m_graphs, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
+        if (candidate is not null) {
+            if (!TryBindAll(graphs: candidate, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
                 throw new InvalidDataException(message: refusal.Message);
             }
+            foreach (var (index, _) in changes!) { m_nodes[index]!.RequireSwappable(pipeline: candidate[index]!.Pipeline); }
+            foreach (var (index, fragment) in changes!) {
+                m_nodes[index]!.Swap(pipeline: candidate[index]!.Pipeline);
+                m_packageFragments[m_set.Instances[index].Name] = fragment;
+            }
+            m_graphs = candidate;
             m_inputs = inputs;
         }
     }

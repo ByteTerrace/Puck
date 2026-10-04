@@ -5,8 +5,8 @@ namespace Puck.Shaders;
 
 // Package instances. An external instance whose package neither an external producer nor an upload serves, but a
 // recorder serves and runs as a fragment (RenderGraphPackageFragment), renders through a node like a
-// graph instance, running a graph the runtime makes: one pass running the package, named by its id, whose one output is
-// the instance's, declared as the fragment declares its output version. So an SDF view (sdf.world) is a graph instance
+// graph instance, running a graph the runtime makes: one pass running the package, named by its id, exporting the
+// fragment's outputs with the first as its default. So an SDF view (sdf.world) is a graph instance
 // of its package's passes, planned, allocated and barriered by the one planner, with no graph document of its own.
 //
 // Before each frame is scheduled the runtime asks the package of every instance whose inputs stand unchanged and runs only
@@ -33,64 +33,61 @@ public sealed partial class RenderGraphRuntime {
     );
     // Why an external instance of a package no producer or upload serves cannot run, or null when it runs as a package
     // instance.
-    private static string? PackageRefusal(string package, RenderGraphPackageRecorders packages) {
+    private static string? PackageRefusal(string package, string instance, RenderGraphPackageRecorders packages) {
         if (!packages.Serves(package: package)) {
             return "names a package neither an external producer, an upload nor a recorder serves";
         }
 
+        packages.TryGetFactory(factory: out var factory, package: package);
         _ = PackageGraphOf(
             fault: out var fault,
-            package: package
+            package: package,
+            selected: factory?.FragmentOf(instance: instance)
         );
 
         return fault;
     }
     // Makes the one-pass graph a package instance renders, or returns why the package does not run as an instance: it
-    // is no fragment of the engine's catalog with one output.
+    // is no selected or catalog fragment with an exported output.
     private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null, IReadOnlyList<RenderGraphRuntimeInput>? inputs = null) {
         if (
             !RenderGraphPackageCatalog.Engine.TryGet(
                 id: package,
                 package: out var declared
             ) ||
-            (declared.Fragment is not { } fragment) ||
-            (fragment.OutputVersions.Count != 1)
+            ((selected ?? declared.Fragment) is not { } fragment) ||
+            (fragment.OutputVersions.Count == 0)
         ) {
-            fault = "is served by a recorder, but runs as no fragment with one output";
+            fault = "is served by a recorder, but runs as no fragment with an exported output";
 
             return null;
         }
 
-        fragment = (selected ?? fragment);
-        if (fragment.OutputVersions.Count != 1) {
-            fault = "selected a fragment without exactly one output";
-            return null;
-        }
-        var version = fragment.OutputVersions[0];
-        var output = fragment.Resources.FirstOrDefault(predicate: resource => string.Equals(
-            a: resource.Name,
-            b: version,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (output is null) {
-            fault = $"selected a fragment whose output '{version}' has no resource declaration";
-            return null;
+        var outputs = new ShaderPipelineResource[fragment.OutputVersions.Count];
+        for (var index = 0; index < outputs.Length; index++) {
+            var version = fragment.OutputVersions[index];
+            var output = fragment.Resources.FirstOrDefault(predicate: resource => string.Equals(
+                a: resource.Name, b: version, comparisonType: StringComparison.Ordinal));
+            if (output is null) {
+                fault = $"selected a fragment whose output '{version}' has no resource declaration";
+                return null;
+            }
+            outputs[index] = output with { From = null, Transient = false };
         }
         var inputResources = fragment.InputVersions.Select(selector: name => fragment.Resources.Single(predicate: resource => (resource.Name == name))).ToArray();
 
         var definition = new RenderGraphDefinition(
             Name: package,
-            Outputs: [version],
+            Outputs: fragment.OutputVersions,
             Packages: [
                 new RenderGraphPackagePass(
                     Name: package,
                     Inputs: [.. fragment.InputVersions.Select(selector: name => new ResourceReference(Name: name))],
-                    Outputs: [new ResourceReference(Name: version)],
+                    Outputs: [.. fragment.OutputVersions.Select(static name => new ResourceReference(Name: name))],
                     Package: package
                 ),
             ],
-            Resources: [.. inputResources, output with { From = null, Transient = false }],
+            Resources: [.. inputResources, .. outputs],
             Schema: RenderGraphSchemas.Graph
         );
 
@@ -101,9 +98,10 @@ public sealed partial class RenderGraphRuntime {
                 Resources = [.. fragment.Resources.Where(predicate: resource => !fragment.InputVersions.Contains(value: resource.Name))],
             }),
             Inputs = [.. inputResources.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
-                Access: (fragment.Passes.Any(predicate: pass => Enumerable.Range(0, pass.Inputs.Count).Any(predicate: index =>
-                    ((pass.Inputs[index].Name == resource.Name) && (pass.InputAccesses[index] == RenderGraphPortAccess.ComputeReadWrite))))
-                    ? RenderGraphPortAccess.ComputeReadWrite : RenderGraphPortAccess.ComputeRead),
+                Access: FragmentAccess(fragment: fragment, name: resource.Name, input: true),
+                StrideBytes: resource.StrideBytes, Count: resource.Count))],
+            Outputs = [.. outputs.Select(resource => new RenderGraphPackagePort(Kind: resource.Kind,
+                Access: FragmentAccess(fragment: fragment, name: resource.Name, input: false),
                 StrideBytes: resource.StrideBytes, Count: resource.Count))],
         }])).TryCompile(
             definition: definition,
@@ -124,6 +122,19 @@ public sealed partial class RenderGraphRuntime {
                 shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
             )
         );
+    }
+    private static RenderGraphPortAccess FragmentAccess(RenderGraphPackageFragment fragment, string name, bool input) {
+        var selected = (input ? RenderGraphPortAccess.ComputeRead : RenderGraphPortAccess.ComputeWrite);
+        foreach (var pass in fragment.Passes) {
+            var versions = (input ? pass.Inputs : pass.Outputs);
+            var accesses = (input ? pass.InputAccesses : pass.OutputAccesses);
+            for (var index = 0; index < versions.Count; index++) {
+                if (versions[index].Name != name) { continue; }
+                if (accesses[index] == RenderGraphPortAccess.ComputeReadWrite) { return accesses[index]; }
+                selected = accesses[index];
+            }
+        }
+        return selected;
     }
     // The frame the scheduler reads: the frame as given, with the instances whose packages saw nothing change since their
     // latest render declared unchanged beside any the host declares.

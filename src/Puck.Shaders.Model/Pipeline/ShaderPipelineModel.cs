@@ -572,7 +572,7 @@ public sealed record ShaderPipelinePackagePass(
         (InputAccesses is not null) &&
         (OutputAccesses is not null) &&
         (InputAccesses.Count == Inputs.Count) &&
-        InputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled or RenderGraphPortAccess.ComputeReadWrite)) &&
+        InputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled or RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead)) &&
         (OutputAccesses.Count == Outputs.Count) &&
         OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite))
     );

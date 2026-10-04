@@ -24,9 +24,9 @@ public sealed partial class ShaderPipelineCompiler {
     // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
     // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
     // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
-    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics, bool Transfer)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
         if (pass.DispatchArguments is { } arguments) {
-            yield return (new ResourceReference(Name: arguments), false, false, true, false);
+            yield return (new ResourceReference(Name: arguments), false, false, true, false, false);
         }
 
         var inputs = pass.InputReferences;
@@ -35,12 +35,13 @@ public sealed partial class ShaderPipelineCompiler {
         for (var index = 0; (index < inputs.Count); index++) {
             yield return (inputs[index], false, (package?.InputAccess(index: index) == RenderGraphPortAccess.ComputeReadWrite), false, ((package is null)
                 ? pass.IsGraphics
-                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)));
+                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)),
+                (package?.InputAccess(index: index) == RenderGraphPortAccess.TransferRead));
         }
         for (var index = 0; (index < outputs.Count); index++) {
             yield return (outputs[index], true, false, false, ((package is null)
                 ? pass.IsGraphics
-                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)));
+                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)), false);
         }
     }
     // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
@@ -178,7 +179,7 @@ public sealed partial class ShaderPipelineCompiler {
             var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
 
-            foreach (var (reference, write, mutate, arguments, graphics) in ReferencesOf(
+            foreach (var (reference, write, mutate, arguments, graphics, transfer) in ReferencesOf(
                 package: packages[index],
                 pass: declaration
             )) {
@@ -187,7 +188,8 @@ public sealed partial class ShaderPipelineCompiler {
 
                 var use = (arguments
                     ? ArgumentsUse
-                    : UseOf(
+                    : transfer ? new ShaderPipelineAccessState(Access: GpuAccess.TransferRead,
+                        Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer) : UseOf(
                         graphics: graphics,
                         preserve: (mutate || (resource.From is not null)),
                         resource: resource,

@@ -423,12 +423,14 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         try {
             foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
+                var shared = m_packages.OwnsBuffer(plan: plan, storage: planned);
                 var resource = new RuntimeResource(
-                    count: (m_packages.OwnsBuffer(plan: plan, storage: planned) ? 1 : InstancesOf(
+                    count: (shared ? 1 : InstancesOf(
                         inFlight: m_inFlight,
                         storage: planned
                     )),
-                    storage: planned
+                    storage: planned,
+                    shared: shared
                 );
 
                 storages[planned.Index] = resource;

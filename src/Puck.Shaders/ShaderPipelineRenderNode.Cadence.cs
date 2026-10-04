@@ -1,7 +1,7 @@
 namespace Puck.Shaders;
 
 // Content identities are separate from barrier state. SkipAccesses remains the only standing-pass barrier path.
-// Retained intermediates share one queue-ordered allocation, so their identities describe the latest queued write,
+// Retained intermediates and package-borrowed buffers share one queue-ordered allocation, so their identities describe the latest queued write,
 // independently of the rotating submission slot. Every array below is allocated when the graph installs.
 public sealed partial class ShaderPipelineRenderNode {
     private long m_contentGeneration;
@@ -56,7 +56,7 @@ public sealed partial class ShaderPipelineRenderNode {
         // Previous history feeds a requested write but creates no demand for another one. The package signature
         // states whether a sample is owed. A current read follows the last successful write's content identity.
         if (previous && resource.History) { return true; }
-        if (resource.Spec.IsExternal || (!resource.Spec.Retained && !resource.History)) { return false; }
+        if (resource.Spec.IsExternal || (!resource.Spec.Retained && !resource.History && !resource.Borrowed)) { return false; }
         var version = Array.Find(array: resource.Cadence, match: item => (item.Name == name))!;
 
         if (!inputs.Contains(item: version)) { inputs.Add(item: version); }
