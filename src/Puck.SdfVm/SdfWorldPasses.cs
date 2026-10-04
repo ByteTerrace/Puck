@@ -200,6 +200,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         return (
+            !ReceiversPending(entry) &&
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&

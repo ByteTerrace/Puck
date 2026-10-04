@@ -290,9 +290,19 @@ This adds no launch query, but the primary shape count can increase.
 The views pass applies the complete lighting bank through the same certified
 component proof and irradiance weights as the solve. A missing approach uses
 the bounded normal launch. All views share the tier's finite new-proof allowance;
-its counter resets once through the residency's existing trace pass, including
-frames with no new transport rays. Frozen caches read completed proofs and admit
-none. Material albedo, metallic diffuse exclusion, `receive` and AO apply once
+its admission and deferred counters reset once through the residency's existing
+trace pass, including frames with no new transport rays. Each receiver retains
+its exact launch and completed result in the visibility record, independently
+of shared proof-hash collisions. The complete allocation identity and transport
+revision qualify this certificate; a new primary sample clears it. Completed
+unresolved results also stand, while deferred results remain retryable.
+The existing readback ring copies the actual deferred count and accepts it only
+after its submission fence, for the same allocation, revision and primary write.
+Pending receivers keep Views active without rerunning unchanged Primary; zero
+completes that scope. Frozen caches read completed proofs and admit none.
+The certificate adds 32 bytes per allocated render pixel, and each allocated
+completion-ring slot owns four host-visible bytes, both reported in graph memory.
+Material albedo, metallic diffuse exclusion, `receive` and AO apply once
 after the selected algorithm returns its independent source contributions.
 The `indirect` debug view shows the incident sum before those material factors.
 `SdfFrame.IndirectSources` carries one shared category mask into both the solve

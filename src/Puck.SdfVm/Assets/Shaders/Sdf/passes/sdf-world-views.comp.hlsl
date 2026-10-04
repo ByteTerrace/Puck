@@ -3,8 +3,8 @@
 // one indirect tile box, and the same camera, masks and active-pixel test. Primary also reads the mesh pass's target
 // (sdf-mesh.hlsli). Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources,
 // and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface, ambient and shadow write
-// the visibility records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords
-// (sdf-visibility.hlsli).
+// the visibility records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords and publishes
+// its receiver certificate through a declared preserving output (sdf-visibility.hlsli).
 // Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #ifndef SDF_PRIMARY_PASS

@@ -156,6 +156,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (string.Equals(a: m_part, b: SdfWorldPackage.Parts.Views, comparisonType: StringComparison.Ordinal)) {
                 m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
+                m_pick.ReceiversCompleted = (scope, deferred) => m_owner.CompletedReceivers(m_context.Instance, scope, deferred);
             }
 
             return;
@@ -319,6 +320,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var width = recording.Width;
         var height = recording.Height;
 
+        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Primary) { m_owner.ReceiverSurfaceWritten(m_context.Instance); }
         if (!m_view.LightView) { residency.RequestExtent(height: recording.FrameHeight, width: recording.FrameWidth); }
         SdfFrameBlock.Write(
             block: recording.PassBlock,
@@ -337,7 +339,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
         SdfFrameBlock.WriteLightViews(block: recording.PassBlock,
             views: ((residency.IndirectTier == SdfIndirectTier.Off) ? null : residency.IndirectLightViews), depthCamera: m_view.LightView);
-        SdfFrameBlock.WriteIndirect(recording.PassBlock, BoundIndirect(recording, tables));
+        SdfFrameBlock.WriteIndirect(recording.PassBlock, !m_view.LightView && m_part == SdfWorldPackage.Parts.Primary
+            ? tables.Indirect : BoundIndirect(recording, tables));
         if (m_view.LightView) {
             SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: default, historyFrames: 0, temporal: false);
             SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: default, valid: false);
@@ -367,7 +370,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 cut: frame.Views[view].CutRevision);
             var cachePort = Array.IndexOf(m_inputs, SdfWorldPackage.IndirectCache);
             var pickPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectPick);
-            m_pick.PrepareIndirect(recording.Slot, BoundIndirect(recording, tables),
+            var indirect = BoundIndirect(recording, tables);
+            var receiverScope = indirect is null ? default : m_owner.PrepareReceivers(m_context.Instance, indirect);
+            m_pick.PrepareReceivers(recording.Slot, indirect,
+                cachePort < 0 ? null : recording.Inputs[cachePort].Version, receiverScope);
+            m_pick.PrepareIndirect(recording.Slot, indirect,
                 cachePort < 0 ? null : recording.Inputs[cachePort].Version,
                 pickPort < 0 ? null : recording.Outputs[pickPort].Version, recording.PassBlock);
         }
@@ -856,6 +863,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
+        SdfWorldPackage.IndirectVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasksWritten,

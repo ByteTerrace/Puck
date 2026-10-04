@@ -30,7 +30,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.All(plan.Pipeline.Passes, pass => Assert.True(condition: pass.Package!.CountsKernelWork));
     }
     [Fact]
-    public void AnEnabledViewReadsTheCacheThroughAnExternalBufferEdgeOnlyAtPrimaryAndViews() {
+    public void AnEnabledViewReadsTheCacheOnlyWhileShadingAndPreservesTraversalInItsCertificateVersion() {
         var fragment = SdfWorldPackage.WithIndirect(SdfWorldPackage.NativeFragment, 4096);
 
         Assert.Equal([SdfWorldPackage.IndirectCache], fragment.InputVersions);
@@ -38,7 +38,13 @@ public sealed partial class SdfPassPlanLawTests {
 
         Assert.True(condition: external.IsExternal);
         Assert.Equal(ShaderPipelineResourceKind.Buffer, external.Kind);
-        Assert.Equal([SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Views],
+        Assert.Equal([SdfWorldPackage.Parts.Views],
             fragment.Passes.Where(predicate: pass => pass.Inputs.Any(predicate: input => (input.Name == SdfWorldPackage.IndirectCache))).Select(selector: pass => pass.Name));
+        var certificate = Assert.Single(fragment.Resources, resource => resource.Name == SdfWorldPackage.IndirectVisibility);
+        Assert.Equal(SdfWorldPackage.Parts.ShadowVisibility, certificate.From);
+        Assert.True(certificate.PreservesPredecessor);
+        Assert.Equal(96u, certificate.StrideBytes);
+        var views = Assert.Single(fragment.Passes, pass => pass.Name == SdfWorldPackage.Parts.Views);
+        Assert.Contains(views.Outputs, output => output.Name == SdfWorldPackage.IndirectVisibility);
     }
 }

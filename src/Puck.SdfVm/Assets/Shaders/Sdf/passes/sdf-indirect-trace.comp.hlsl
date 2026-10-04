@@ -10,8 +10,9 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     // One existing transport dispatch resets the allowance shared by all subsequent view consumers, even at rest.
     if (group.x == 0u && lane == 0u) {
         indirectCacheRW[sdfIndirectReceiverProofWordOffset(passGroup.indirectTier)] = 0u;
-        puckCountDetail(4u, 0u, 1u, 0u, 0u, 0u);
-        if (passGroup.workCounterRowDetail == 0u) { puckCountWork(0u, 1u); }
+        indirectCacheRW[sdfIndirectReceiverProofWordOffset(passGroup.indirectTier) + 1u] = 0u;
+        puckCountDetail(4u, 0u, 2u, 0u, 0u, 0u);
+        if (passGroup.workCounterRowDetail == 0u) { puckCountWork(0u, 2u); }
     }
     if (group.x >= passGroup.indirectTraceCount) { return; }
     sdfProgramLayout = sdfLoadProgramLayout();

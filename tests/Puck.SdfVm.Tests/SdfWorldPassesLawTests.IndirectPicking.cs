@@ -46,6 +46,8 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
             return residency.Tables?.Indirect is { LightingComplete: true } && graph.Render.Completion == FrameCompletion.Rendered;
         }, building: () => graph.Node(0).IsBuildingCandidate || graph.Node(1).IsBuildingCandidate, reason: () => graph.Render.Reason);
+        // Warm the independently counted receiver-completion ring before measuring this human pick's new buffers.
+        for (var warm = 0; warm <= SdfWorldTables.FrameRingSize; warm++) { Produce(); }
         var cache = residency.Tables!.Indirect!;
         var picker = views.PickerOf("world");
         var before = graph.Node(0).OwnedBytes;

@@ -136,7 +136,7 @@ variant that supports its operations, reducing shader size and register pressure
 
 The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
-`SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
+`SdfWorldPackage.VisibilityRecordByteLength`, 96 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, primary iteration/evaluation counts, and the
 indirect receiver's certified camera-ray approach in L.y. Surface adds
@@ -146,12 +146,14 @@ to the combined count. Active handoffs add incoming marches, bounded by K + F,
 and write policy-sized retained visibility storage: R8 at F = 1, R8G8 at
 F = 2, absent at F = 0. Each light shades from its own visibility and each
 handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
-record writes before its consumer. Views binds the record read-only, and every hit pass binds the
-beam's tile planes read-only, so a buffer a pass only reads is never held in a
-read-write state. These four dispatches share indirect bounds and live view
+record writes before its consumer. Views reads those rows and, with indirect enabled,
+publishes a preserving version containing its eight-word receiver certificate.
+The certificate retains the launch, clearance, complete allocation identity,
+transport revision and resolved or unresolved outcome. Every hit pass binds the
+beam's tile planes read-only. These dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
+The buffer reserves `renderWidth × renderHeight × 96` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
 changes. It is retained: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
@@ -602,7 +604,9 @@ authority.
 With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
 a 272-byte GPU answer and the probe-state range for a census of the snapshot's
 allocated bricks. It uses the visibility submission's fence and retains its own
-cache epoch, completed lighting source and selected method. Source RGB values
+cache epoch, completed lighting source, selected method and final receiver
+source-enable mask. That mask may differ from the held solve's recursive source
+mask while the replacement solve is incomplete. Source RGB values
 and corner weights are the actual shader results; classifications come from the
 copied probe states. No CPU schedule count stands for a GPU classification.
 The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`

@@ -13,6 +13,31 @@ public sealed class SdfIndirectCacheLawTests {
         Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: 0.1)], WorldMin: Double3.Zero, WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1));
 
     [Fact]
+    public void ReceiverCertificatesFollowTransportButSurviveLightingAndAllowanceOnlySubmissions() {
+        using var rig = new Rig();
+        var before = rig.Cache.CertificateRevision;
+        rig.Cache.Plan(Inputs);
+        Assert.True(rig.Cache.CertificateRevision > before);
+        var planned = rig.Cache.CertificateRevision;
+        rig.Cache.Plan(Inputs);
+        Assert.Equal(planned, rig.Cache.CertificateRevision);
+        rig.Cache.Submitted();
+        for (var frame = 1; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        Assert.True(rig.Cache.IsComplete);
+        var completed = rig.Cache.CertificateRevision;
+        rig.Cache.BeginLighting();
+        for (var batch = 0; batch < 6; batch++) { rig.Cache.PlanLighting(); rig.Cache.SubmittedLighting(); }
+        rig.Cache.AdmitReceivers();
+        rig.Cache.Submitted();
+        rig.Cache.Plan(Inputs with { Cameras = [new Double3(0.01, 0, 0)] });
+        Assert.Equal(completed, rig.Cache.CertificateRevision);
+        rig.Cache.Reset(2);
+        Assert.True(rig.Cache.CertificateRevision > completed);
+        using var other = new Rig();
+        Assert.NotEqual(rig.Cache.History.Allocation, other.Cache.History.Allocation);
+    }
+
+    [Fact]
     public void ReceiverAdmissionCommitsOnceWithoutRepeatingCompletedTransport() {
         using var rig = new Rig();
         for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }

@@ -72,21 +72,29 @@ from geometry trace completion, and retains the published source while a newer
 source is solving. Count the pinned regions and their rings beside the cache.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
-and share one bounded receiver-proof admission counter. Its reset is the existing
-trace pass's one-word work, not another cache or queue. Frozen views admit no
+and share bounded receiver-proof admission and deferred counters. Their reset is
+the existing trace pass's two-word work, requested only by pending view scopes.
+Views publishes its eight-word certificate through an explicit preserving
+visibility version, qualified by the complete allocation identity and transport
+revision. Primary clears it on a new sample; completed unresolved results stand
+and deferred results retry. The fenced deferred count keeps Views active until
+completion without making unchanged Primary read the cache. Frozen views admit no
 new proof. Preserve outer field-mask and secondary-body policy while querying
 the full field from a nested lighting helper.
 
 Indirect inspection extends the existing surface picker. Its 272-byte GPU
 record and full probe-state census share the visibility submission's fence and
-retain that request's allocation, epoch and published source. Do not substitute
+retain that request's allocation, epoch, published source and final receiver
+source-enable mask. The mask can differ from the pinned solve's recursive mask.
+Do not substitute
 host admission for GPU classes, later live lights for captured source, or final
 RGB proportions for independently accumulated categories. The selected method
 labels alternative output; the eight corner records describe its cache fallback.
 Every package readback reports its actual bytes through
 `IRenderGraphPackageReadback.ReadbackBytes`; installed and retired graph accounting
-must both include them. The current bounded proof buckets and uncached normal
-launch still owe the plan's completed-standing zero-work contract.
+must both include them, including the four-byte receiver-completion ring slots.
+Receiver certificates retain both launch results and shared-bucket collision
+outcomes; validation must distinguish completed standing from deferred admission.
 
 ## Changing the instruction set
 
@@ -1546,7 +1554,8 @@ including the shadow-pass skip test and the sun disc's implicit slot 0 binding,
 uses that table. The shadow stage gathers and marches each occupied stable
 slot and each active incoming slot, at most K + F, never a dormant fade slot;
 K = 0 marches nothing. The K row stores four 8-bit visibilities in one word,
-leaving the record at 64 bytes. Shading applies each light's own visibility;
+within the 96-byte record, whose final eight words retain the indirect receiver
+certificate. Shading applies each light's own visibility;
 a directional outside all slots uses surface ambient occlusion. The sunDiffuse
 call supplies 1, preserving its unscaled fallback. During a handoff its outgoing
 light's occlusion deficit scales by `1 - progress` and its incoming light's by

@@ -33,7 +33,7 @@ between them. `world.counters gpu` reports the upload under the residency
 `sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the five per-pixel passes share: one per pixel
-of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
+of each view's render grid, 96 bytes. A view whose render-scale ceiling is below
 native puts the full-output `resolve` pass described under
 [render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
 and the sky, and a view that reconstructs over time does so at any scale
@@ -867,7 +867,7 @@ its own frame wrote, and a pixel outside it answers nothing, as sky. The kernels
 read the same rule through the generated `SDF_VISIBILITY_CURRENT`, and the
 identity's kind and source fields through `SdfVisibility` too.
 
-The 64-byte visibility record keeps the winning shape's exact transform slot in
+The 96-byte visibility record keeps the winning shape's exact transform slot in
 L.x, or `SDF_TRANSFORM_SLOT_NONE` (`SdfProgram.NoDynamicTransformSlot`) for
 static geometry. This slot can differ from an articulated instance's bound slot.
 A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the

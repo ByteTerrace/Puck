@@ -17,6 +17,7 @@ public sealed partial class SdfWorldPasses {
         var tables = view.Residency.Submit(context: in context);
         var frame = view.Residency.Frame!;
 
+        if (part == SdfWorldPackage.Parts.Views && ReceiversPending(entry)) { return null; }
         if (tables.ForcesPass(frame: frame, part: part) || entry.Picker.Pending || (entry.Convergence is { IsActive: true })) { return null; }
         UpdateSurfaceInputs(entry: entry, tables: tables, view: view);
         if (entry.CadenceFrame != m_frame) {

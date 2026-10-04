@@ -32,11 +32,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason), wait: view.Residency.WaitPipelineBuilds);
-        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * 64));
+        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * 96));
         var box = gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // (0.25, 0.75) samples pixel (8, 24).
-        var record = ((((24 * ((int)Extent)) + 8)) * 64);
+        var record = ((((24 * ((int)Extent)) + 8)) * 96);
 
         BinaryPrimitives.WriteSingleLittleEndian(destination: records.AsSpan(start: record), value: 5f);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: records.AsSpan(start: (record + 4)), value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: 1));

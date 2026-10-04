@@ -260,9 +260,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer count in.
     /// KEEP IN SYNC with <c>WorldTileSize</c> in <c>frame/sdf-tile.hlsli</c>.</summary>
     public const uint TileSize = 16;
-    /// <summary>The bytes of one visibility record: the sixteen words in its V, C, L, N, S and K rows that
+    /// <summary>The bytes of one visibility record: the twenty-four words in its V, C, L, N, S, K and I rows that
     /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
-    public const int VisibilityRecordByteLength = (16 * sizeof(uint));
+    public const int VisibilityRecordByteLength = (24 * sizeof(uint));
     /// <summary>The planes the cull buffer holds per tile: the march start, the first exit, the second entry and the far
     /// bound. KEEP IN SYNC with <c>WorldTilePlaneCount</c> in <c>frame/sdf-frame.hlsli</c>.</summary>
     public const uint TilePlaneCount = 4;

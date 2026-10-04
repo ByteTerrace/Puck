@@ -24,13 +24,13 @@ public sealed partial class SdfPassPlanLawTests {
         var bank = Assert.Single(collection: plan.Pipeline.Storages, predicate: storage => storage.Versions.Contains(value: SdfWorldPackage.IndirectLightDepth));
         Assert.Equal(expected: 4_194_304UL, actual: bank.Declaration.ResolveSizeBytes(counts: counts));
         var visibility = Storage(plan: plan.Pipeline, version: "light$visibility");
-        Assert.Equal(expected: 16_777_216UL, actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
+        Assert.Equal(expected: 25_165_824UL, actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
         var total = PlannedBytes(plan: plan, counts: counts);
-        // Visibility64 + mesh16 + hardware depth4 per pixel, then four retained R32 map regions. Count every
+        // Visibility96 + mesh16 + hardware depth4 per pixel, then four retained R32 map regions. Count every
         // additional traversal buffer and all three rings of frame/pass constants in the remaining one-MiB ceiling.
         var blocks = (InFlight * (plan.Pipeline.Passes.Sum(selector: pass => ((long)pass.Parameters.SizeBytes)) +
             plan.Pipeline.Passes.Max(selector: pass => pass.Parameters.FrameBlockSizeBytes)));
-        const ulong DepthAndMaps = (22_020_096UL + 4_194_304UL);
+        const ulong DepthAndMaps = (30_408_704UL + 4_194_304UL);
         Assert.InRange(actual: (total + ((ulong)blocks) - DepthAndMaps), low: 1UL, high: 1_048_576UL);
         var publication = plan.Pipeline.Passes.Single(predicate: pass => (pass.Package!.Part == SdfWorldPackage.LightDepth));
         var visibilityRead = Assert.Single(collection: publication.Accesses, predicate: access => (access.Storage == visibility.Index));

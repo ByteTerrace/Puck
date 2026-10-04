@@ -13,7 +13,7 @@ internal sealed partial class SdfWorldPickReadback {
 
     public ulong ReadbackBytes => m_slots.Aggregate(0UL, static (bytes, slot) => checked(bytes
         + (slot.IdentityBuffer?.SizeBytes ?? 0UL) + (slot.SurfaceBuffer?.SizeBytes ?? 0UL)
-        + (slot.IndirectBuffer?.SizeBytes ?? 0UL) + (slot.ProbeBuffer?.SizeBytes ?? 0UL)));
+        + (slot.IndirectBuffer?.SizeBytes ?? 0UL) + (slot.ProbeBuffer?.SizeBytes ?? 0UL) + (slot.ReceiverBuffer?.SizeBytes ?? 0UL)));
 
     public void PrepareIndirect(int slot, SdfIndirectCache? cache, string? cacheVersion, string? diagnosticVersion, Span<byte> block) {
         var target = m_slots[slot];

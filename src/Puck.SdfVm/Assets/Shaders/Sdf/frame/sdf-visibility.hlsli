@@ -3,7 +3,7 @@
 // and writer goes through the typed load and store functions below and holds only a record address. KEEP IN SYNC with
 // SdfWorldPackage.VisibilityRecordByteLength.
 //
-// A record is sixteen words in six rows:
+// A record is twenty-four words in seven rows:
 // V (4 words): the ray parameter t (Euclidean distance along the normalized camera ray), the identity, the material,
 //    and the march flags (steps in bits 0..7, the saturated query count in bits 8..30).
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
@@ -19,9 +19,12 @@
 //    only kind the ambient pass occludes.
 // K (1 word): four eight-bit stable-slot visibilities, 1 where no shadow was marched. The shadow stage writes it
 //    only when soft shadows are on and K is nonzero; views reads it only then.
+// I (8 words): the receiver's full float3 launch and clearance, full allocation identity (two words), exact transport
+//    certificate revision, then level/mask and completed-valid bit. Primary clears validity when replacing the surface;
+//    views alone fills this row, preserving the traversal and shading rows. A completed unresolved answer has mask zero.
 // V and the identity in it are exact; the packed fields round only presentation values.
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
-// writes K and its query word. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
+// writes K and its query word. Views reads the surface sample and publishes I after completing its receiver proof.
 //
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
 // source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
@@ -29,8 +32,8 @@
 // geometry outside any instance. A mesh hit's source is its draw.
 //
 // The views set binds the one buffer twice: primary, surface, ambient and shadow write it through
-// sdfVisibilityRecordsRW; views only reads it, through sdfVisibilityRecords. Every function below reaches it through sdfVisibilityRecordBuffer, the
-// binding its kernel uses.
+// sdfVisibilityRecordsRW; views reads through sdfVisibilityRecords and writes only I through its declared preserving
+// output. Loads use sdfVisibilityRecordBuffer; stores use the writable binding.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
@@ -45,13 +48,14 @@
 #define sdfVisibilityRecordBuffer sdfVisibilityRecords
 #endif
 
-static const uint SdfVisibilityWords = 16u;
+static const uint SdfVisibilityWords = 24u;
 static const uint SdfVisibilityRowV = 0u;
 static const uint SdfVisibilityRowC = 4u;
 static const uint SdfVisibilityRowL = 7u;
 static const uint SdfVisibilityRowN = 11u;
 static const uint SdfVisibilityRowS = 13u;
 static const uint SdfVisibilityRowK = 15u;
+static const uint SdfVisibilityRowI = 16u;
 static const float SdfVisibilityBlendScale = 32767.0;
 static const uint SdfVisibilityBlendMask = 0x7FFFu;
 static const uint SdfVisibilityBlendOtherShift = 15u;
@@ -265,11 +269,11 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     return sample;
 }
 
-#ifdef SDF_VISIBILITY_WRITABLE
+#if defined(SDF_VISIBILITY_WRITABLE) || defined(SDF_VIEWS_PASS)
 // Writes one word of the pixel's record: every store below goes through it, so a pass that writes any of a pixel's record
 // counts the pixel as a texel it wrote (sdfWorkTexels).
 void sdfVisibilityStoreWord(uint word, uint value) {
-    sdfVisibilityRecordBuffer[word] = value;
+    sdfVisibilityRecordsRW[word] = value;
     sdfWorkTexels = 1u;
 }
 void sdfStoreVisibilityQueries(uint record, uint word, float queries) {
@@ -283,6 +287,7 @@ void sdfVisibilityStoreRow(uint word, uint4 bits) {
 }
 void sdfStoreVisibility(uint record, SdfVisibility visibility) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowV, uint4(asuint(visibility.t), visibility.identity, asuint(visibility.material), visibility.flags));
+    sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u);
 }
 void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
     uint word = (record + SdfVisibilityRowC);

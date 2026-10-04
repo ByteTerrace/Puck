@@ -28,9 +28,9 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
         Assert.Contains(collection: node.Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
-        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * 64));
+        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * 96));
 
-        Assert.Equal(expected: ((24 * 24) * 64), actual: storage.Length);
+        Assert.Equal(expected: ((24 * 24) * 96), actual: storage.Length);
         // No kernel runs on the model, so the frame's dispatch box is written here: the whole grid is current.
         Buffer.BlockCopy(count: BoxBytes, dst: gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes), dstOffset: 0, src: WholeBox, srcOffset: 0);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
@@ -69,7 +69,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: revision, actual: node.WorkRevision);
             // The picker copies one record from the active packed grid, independently of output and allocation size.
             Array.Clear(array: storage);
-            var offset = checked((int)(((((pixels * 3) / 4) * pixels) + (pixels / 4)) * 64));
+            var offset = checked((int)(((((pixels * 3) / 4) * pixels) + (pixels / 4)) * 96));
 
             BitConverter.GetBytes(value: 123f).CopyTo(array: storage, index: offset);
             _ = picker.Demand(x: 0.25f, y: 0.75f);

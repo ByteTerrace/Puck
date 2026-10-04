@@ -141,7 +141,7 @@ The exact winning shape's transform slot is retained in L.x
 instance's bound slot can differ. The answer resolves that slot against the
 transform table of the frame the record was rendered from
 (`SdfPickResult.Transform`). Anonymous lanes are loaded from that transform's
-existing row, preserving the 64-byte visibility record.
+existing row, preserving the 96-byte visibility record.
 
 Free Cam exists as a gameplay mode
 that possesses an authored `camera-seat-<n>` body

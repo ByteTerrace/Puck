@@ -78,6 +78,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public IReadOnlyList<GpuRegion> Regions { get; }
     /// <summary>Gets the current geometry epoch.</summary>
     public uint Epoch { get; private set; }
+    /// <summary>Gets the exact scope of receiver certificates in this allocation. Transport or slot changes advance
+    /// it; lighting sweeps do not. A visibility certificate also carries the full allocation identity.</summary>
+    public uint CertificateRevision { get; private set; } = 1;
     /// <summary>Gets the successful submission generation used by immutable feedback proofs.</summary>
     public uint Frame { get; private set; } = 1;
     /// <summary>Gets the full-ray far distance.</summary>
@@ -138,6 +141,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     }
     /// <summary>Invalidates all slots on a program upload; no old cell or proof remains valid.</summary>
     public void Reset(uint epoch) {
+        CertificateRevision = checked(CertificateRevision + 1u);
         Epoch = epoch;
         Frame = 1;
         InvalidateLighting();
@@ -161,6 +165,10 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public void Plan(IrradianceFrameInputs inputs) {
         if ((m_pending is not null) || Frozen) { return; }
         m_pending = m_schedule.Frame(inputs: inputs);
+        if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Placed.Count != 0 ||
+            m_pending.Classified.Count != 0 || m_pending.Traces.Count != 0) {
+            CertificateRevision = checked(CertificateRevision + 1u);
+        }
         if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Traces.Count != 0) { InvalidateLighting(); }
         foreach (var key in m_pending.Evicted) {
             Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);

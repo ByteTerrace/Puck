@@ -33,7 +33,7 @@ public sealed partial class SdfPassPlanLawTests {
         var counts = new ShaderPipelineStorageCounts(Height: 60, Width: 80) { RenderHeight = 30, RenderWidth = 40, SegmentTapeWords = 33, Viewports = 1 };
         var visibility = plan.Pipeline.Storages.Single(predicate: static storage => (storage.Name == "sdf$visibility"));
 
-        Assert.Equal(expected: ((40UL * 30) * 64), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
+        Assert.Equal(expected: ((40UL * 30) * 96), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
         var output = plan.Pipeline.Storages.Single(predicate: static storage => storage.Versions.Contains(value: SdfWorldPackage.Color));
         var lit = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Lit);
         var transport = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Transport);

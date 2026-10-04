@@ -67,6 +67,15 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
     public bool Take(int slot, int index, out RenderGraphBufferReadback readback) {
         var target = m_slots[slot];
 
+        if (target.ReceiverRecord) {
+            if (index == 0) {
+                target.ReceiverSubmit = true;
+                readback = new RenderGraphBufferReadback(Version: target.ReceiverVersion!, SourceOffsetBytes: target.ReceiverOffset,
+                    SizeBytes: sizeof(uint), Destination: target.ReceiverBuffer!);
+                return true;
+            }
+            index--;
+        }
         if (!target.Record) {
             readback = default;
             return false;
@@ -101,6 +110,11 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
     public void Submitted(int slot, IGpuSubmissionFence fence) {
         var target = m_slots[slot];
 
+        if (target.ReceiverSubmit) {
+            target.ReceiverRecord = false;
+            target.ReceiverSubmit = false;
+            target.ReceiverFence = fence;
+        }
         if (!target.Submit) {
             return;
         }
@@ -108,6 +122,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         target.Fence = fence;
     }
     public void Poll() {
+        PollReceivers();
         foreach (var slot in m_slots) {
             if ((slot.Fence is not { } fence) || !fence.IsSignaled) {
                 continue;
@@ -127,6 +142,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
             slot.SurfaceBuffer?.Dispose();
             slot.IndirectBuffer?.Dispose();
             slot.ProbeBuffer?.Dispose();
+            slot.ReceiverBuffer?.Dispose();
         }
     }
 

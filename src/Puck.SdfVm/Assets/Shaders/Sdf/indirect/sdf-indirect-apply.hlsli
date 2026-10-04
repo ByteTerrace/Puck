@@ -15,6 +15,8 @@ static float3 sdfIndirectReceiverLaunch = 0.0;
 static float sdfIndirectReceiverClearance = 0.0;
 static float3 sdfIndirectReceiverNormal = 0.0;
 
+#include "sdf-indirect-receiver-certificate.hlsli"
+
 void sdfIndirectPickBegin(SdfPixel p) {
     sdfIndirectReceiverStatus = passGroup.indirectTier == SdfIndirectTierOff ? 0u : 5u;
     sdfIndirectPickActive = p.active && passGroup.indirectPickPixel.z != 0u && all(p.pixel == passGroup.indirectPickPixel.xy);
@@ -41,6 +43,7 @@ void sdfIndirectPickFinish() {
         sdfIndirectPickStore(51u + 4u * source, 0u);
     }
     sdfIndirectPickStore(51u, passGroup.indirectMethod);
+    sdfIndirectPickStore(55u, passGroup.indirectSources);
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT, 0u, sdfIndirectPickStores, 0u, 0u, 0u);
     if (passGroup.workCounterRowDetail == 0u) {
         puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkTexelsWord, sdfIndirectPickStores);
@@ -55,7 +58,24 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
     sdfIndirectReceiverStatus = 1u;
     if (passGroup.indirectReadPublication == 0u) { return result; }
     sdfIndirectReceiverStatus = 2u;
-    uint approach = receiver.mesh ? 0u : sdfVisibilityApproach(worldVisibilityRecord(p.pixel, p.viewIndex));
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    uint retainedLevel;
+    uint retainedMask;
+    float3 retainedLaunch;
+    float retainedClearance;
+    if (sdfIndirectReceiverCertificate(record, retainedLevel, retainedMask, retainedLaunch, retainedClearance)) {
+        if (retainedMask != 0u && sdfIndirectIrradianceAt(surfacePoint, retainedLaunch, normal, retainedLevel, retainedMask,
+            passGroup.indirectReadGeneration, passGroup.indirectReadPublication, result)) {
+            sdfIndirectReceiverLevel = (int)retainedLevel;
+            sdfIndirectReceiverMask = retainedMask;
+            sdfIndirectReceiverLaunch = retainedLaunch;
+            sdfIndirectReceiverClearance = retainedClearance;
+            sdfIndirectReceiverStatus = 3u;
+            return sdfIndirectAlternative(p, receiver, retainedLaunch, result);
+        }
+        return result;
+    }
+    uint approach = receiver.mesh ? 0u : sdfVisibilityApproach(record);
     float approachClearance = sdfIndirectApproachClearance(approach);
     [loop] for (uint level = 0u; level < sdfIndirectLevelCount(); level++) {
         float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
@@ -83,10 +103,18 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
         sdfIndirectReceiverLaunch = launched;
         sdfIndirectReceiverClearance = clearance;
         sdfIndirectReceiverStatus = 3u;
+        sdfIndirectStoreReceiverCertificate(record, level, mask, launched, clearance, true);
         result = sdfIndirectAlternative(p, receiver, launched, result);
         return result;
     }
-    if (sdfIndirectReceiverDeferred) { sdfIndirectReceiverStatus = 4u; }
+    if (sdfIndirectReceiverDeferred) {
+        sdfIndirectReceiverStatus = 4u;
+        if (passGroup.indirectReceiverProofs != 0u) {
+            uint ignored;
+            InterlockedAdd(indirectCacheRW[sdfIndirectReceiverProofWordOffset(passGroup.indirectTier) + 1u], 1u, ignored);
+        }
+    }
+    sdfIndirectStoreReceiverCertificate(record, 0u, 0u, 0.0, 0.0, !sdfIndirectReceiverDeferred);
     return result;
 }
 

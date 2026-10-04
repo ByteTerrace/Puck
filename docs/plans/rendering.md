@@ -1318,7 +1318,7 @@ outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 one asynchronous visibility read, with the frame's dispatch box so a pixel the
 frame did not write answers nothing, resolves the winning SDF instance or mesh
 draw through the frame's immutable `WorldPickMapBuilder` map. The
-64-byte visibility record keeps that identity in V and the exact winning
+96-byte visibility record keeps that identity in V and the exact winning
 shape transform slot in L.x; material lanes read the existing transform row.
 The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with
 debug layers, including clear removing the hovered pane's accent border.
@@ -2845,23 +2845,27 @@ slots, never K alone.
 | `room` probes: 12,288 × (128 hits × 16 + two generations of 8×8 irradiance texels × 5 source words × 4 + a 12-byte cell record + 16 bytes of state + two publication words) | 57,065,472 |
 | `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 5 source words × 4, because `room` continues into it) | 39,993,344 |
 | Light-view maps: 2 slots × 2 regions × 512² × 4 | 4,194,304 |
-| Light view's depth-only fragment: the 64-byte visibility record, 16-byte mesh target and 4-byte depth at 512² | 22,020,096 |
+| Light view's depth-only fragment: the 96-byte visibility record, 16-byte mesh target and 4-byte depth at 512² | 30,408,704 |
 | Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
 | Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
 | Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
-| Shared per-frame receiver-proof admission counter | 4 |
-| **Total before qualification** | **≤ 129,040,388** |
+| Shared per-frame receiver-proof admission and deferred counters | 8 |
+| **Total before qualification** | **≤ 137,429,000** |
 
 A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
 height in the terminal word; the view's launch uses the visibility record's
 reserved L word. Each irradiance generation also stamps its probes, so a reused
 brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
-probe and the same full identities require 394,395,652 cache bytes, including
+probe and the same full identities require 394,395,656 cache bytes, including
 proofs, both irradiance generations and the coarser levels' ray radiance. Three
 slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
-total to 424,804,356 bytes. Held fading owners add their explicitly counted map
+total to 433,192,968 bytes. Held fading owners add their explicitly counted map
 regions. The tables and constant rings must satisfy the recorded bounds; these
 are allocation counts, not a claim that the tier has passed hardware qualification.
+The receiver certificate adds 32 bytes per allocated ordinary-view pixel beyond
+its surface fields: 66,355,200 bytes per native 1920×1080 consumer, in addition
+to these residency and light-view totals. Each allocated completion-readback
+slot also owns four host-visible bytes. Graph memory includes both additions.
 
 G2's traced cache uses a 16-byte hit record: full float distance, an octahedral
 normal word, the full material identity and a terminal/proof/launch word. The
@@ -2871,7 +2875,7 @@ Its successful
 proof entries also carry a publication sequence, 28 bytes each. The current raw
 geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
 G4's declared layout retains those records and reserves both lighting generations
-and their stamps, giving 100,728,836 bytes at `medium` and 394,395,652 at `high`,
+and their stamps, giving 100,728,840 bytes at `medium` and 394,395,656 at `high`,
 plus the region rings, counters and descriptors that `world.budget` reports.
 Lighting stores five nonnegative R11G11B10 words per ray or irradiance texel:
 direct, feedback, emission, sky and screens. Contributions are accumulated and
@@ -5443,7 +5447,7 @@ item 2 landed.
     c. Landed, the shadow stage. A `shadow` pass between ambient and views
        (`sdf-world-shadow.comp`, `surface/sdf-shadow.hlsli`) gathers each
        workgroup's shadow candidates and marches each selected light's soft shadow
-       into the record's K row, four 8-bit visibilities within sixteen words (64 bytes a
+       into the record's K row, four 8-bit visibilities within twenty-four words (96 bytes a
        pixel); views reads the row and marches nothing, and holds no
        groupshared mask. Each costed stage is off for a frame whose quality
        levers turn it off: the shadow pass skips a frame whose soft shadows
@@ -6932,7 +6936,7 @@ rows in `src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
   selection in `SdfLights.ShadowSlots`. The shadow stage performs one gather
   and one march per occupied stable slot and active incoming slot, counted
   per slot. Four 8-bit stable visibilities pack into the K row's one word,
-  keeping the record at sixteen words.
+  within the twenty-four-word record, including the indirect receiver certificate.
 - **A shadow slot changes hands by a crossfade on the tick.** A crossing is
   detected at a tick boundary: the slot assignment computed at a delivered tick
   differs from the one at the tick before it, both from tick-state luminance.

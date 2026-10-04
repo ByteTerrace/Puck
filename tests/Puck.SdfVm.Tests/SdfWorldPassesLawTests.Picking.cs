@@ -35,7 +35,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * 64));
+                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * 96));
                 copies++;
             } else if ((bytes == BoxBytes) && (offset == 0)) {
                 boxes++;
@@ -188,7 +188,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                var pixel = (offset / 64UL);
+                var pixel = (offset / 96UL);
 
                 copied.Add(item: (((uint)(pixel % Extent)), ((uint)(pixel / Extent))));
             }

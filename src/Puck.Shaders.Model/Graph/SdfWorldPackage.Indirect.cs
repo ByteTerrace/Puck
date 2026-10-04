@@ -13,6 +13,12 @@ public static partial class SdfWorldPackage {
     public const string IndirectMethod = "indirectMethod";
     /// <summary>The geometry epoch carried by valid probe states.</summary>
     public const string IndirectEpoch = "indirectEpoch";
+    /// <summary>The complete 64-bit identity of the cache allocation qualifying a receiver certificate.</summary>
+    public const string IndirectAllocation = "indirectAllocation";
+    /// <summary>The exact transport and slot revision qualifying a receiver certificate.</summary>
+    public const string IndirectCertificateRevision = "indirectCertificateRevision";
+    /// <summary>The visibility version after views publishes only its receiver-certificate fields.</summary>
+    public const string IndirectVisibility = "indirectVisibility";
     /// <summary>The submitted cache update sequence, for reading only completed proof publications.</summary>
     public const string IndirectFrame = "indirectFrame";
     /// <summary>The scheduled placements at the front of the update region.</summary>
@@ -67,6 +73,8 @@ public static partial class SdfWorldPackage {
     /// <summary>Gets the visible cache publication and receiver allowance carried only by world passes.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> WorldIndirectValues { get; } = [
         Value(name: IndirectEpoch, type: ShaderValueType.Uint),
+        Value(name: IndirectAllocation, type: ShaderValueType.Uint2),
+        Value(name: IndirectCertificateRevision, type: ShaderValueType.Uint),
         Value(name: IndirectFrame, type: ShaderValueType.Uint),
         Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
         Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
@@ -116,7 +124,8 @@ public static partial class SdfWorldPackage {
             new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
-    /// <summary>Adds the cache's buffer edge to a view. Primary reads it; views also publish receiver proofs.</summary>
+    /// <summary>Adds the cache's buffer edge to views, which publishes receiver proofs and a preserving visibility
+    /// version. Primary uses the tier and complete field, without a dependency on mutable cache contents.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>
     /// <param name="bytes">The residency's cache size.</param>
     /// <returns>The view fragment with its external cache dependency.</returns>
@@ -125,12 +134,15 @@ public static partial class SdfWorldPackage {
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
             Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
             new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint))],
-        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is Parts.Primary or Parts.Views) ? pass with {
+                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint)),
+            fragment.Resources.Single(resource => resource.Name == Parts.ShadowVisibility) with {
+                Name = IndirectVisibility, From = Parts.ShadowVisibility, PreservesPredecessor = true,
+            }],
+        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name == Parts.Views) ? pass with {
             Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache)],
-            InputAccesses = [.. pass.InputAccesses, pass.Name == Parts.Views ? RenderGraphPortAccess.ComputeReadWrite : RenderGraphPortAccess.ComputeRead],
-            Outputs = pass.Name == Parts.Views ? [.. pass.Outputs, IndirectPick] : pass.Outputs,
-            OutputAccesses = pass.Name == Parts.Views ? [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite] : pass.OutputAccesses,
+            InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeReadWrite],
+            Outputs = [.. pass.Outputs, IndirectPick, IndirectVisibility],
+            OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
         } : pass))],
     };
 }
