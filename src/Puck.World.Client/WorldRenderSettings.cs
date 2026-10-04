@@ -40,6 +40,7 @@ public sealed partial class WorldRenderSettings {
     private bool m_dynamicResolution;
     private bool m_farBound;
     private SdfIndirectTier m_indirectTier;
+    private SdfIndirectMethod m_indirectMethod;
     private float m_renderScale;
     private int m_revision;
     private float m_shadowCrowdRadius;
@@ -91,13 +92,23 @@ public sealed partial class WorldRenderSettings {
     /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
     /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
-    /// <summary>The residency's trace and partition cache tier. It starts off and remains session state;
-    /// the cache does not yet apply lighting.</summary>
+    /// <summary>The residency's traced, partitioned indirect-light cache tier. It starts off and remains session state.</summary>
     public SdfIndirectTier IndirectTier {
         get => m_indirectTier;
         set {
             if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
             m_indirectTier = value;
+            m_revision++;
+        }
+    }
+    /// <summary>The live per-view indirect comparison method, defaulting to the residency cache. This presentation
+    /// override is read every frame and is never folded into a saved definition or authoritative session lever.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a declared indirect method.</exception>
+    public SdfIndirectMethod IndirectMethod {
+        get => m_indirectMethod;
+        set {
+            if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
+            m_indirectMethod = value;
             m_revision++;
         }
     }

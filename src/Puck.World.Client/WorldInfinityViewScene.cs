@@ -10,7 +10,8 @@ namespace Puck.World.Client;
 /// prototypes of the viewer's own world (<see cref="InfinityViewKind.Far"/>), drawn by an emitter that holds only those. The
 /// frame the emitter dresses is rewritten to the layer's consuming cameras: each takes the fit the presentation
 /// supplied this frame, at the layer's anchor, turned with that viewer, at a quality that leaves
-/// soft shadows and ambient occlusion off unless the view's levers turn them on, and its far distance is the view's own.
+/// soft shadows and ambient occlusion off unless the view's levers turn them on, retains each consuming camera's
+/// indirect comparison method, and its far distance is the view's own.
 /// A frame the view is not visible in keeps the emitter's own view, which the graph does not render.
 /// </summary>
 public sealed class WorldInfinityViewScene : ISdfFrameDresser {
@@ -71,7 +72,7 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
 
         m_fittedViews.Clear();
         foreach (var view in views) {
-            m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) });
+            m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) with { IndirectMethod = view.Quality.IndirectMethod } });
         }
 
         return dressed with {

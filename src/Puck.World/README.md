@@ -1982,6 +1982,14 @@ reports the actual cache slices, upload regions, retiring caches and light-view
 fragment allocations. The fragment total already includes its depth bank and
 regions; their breakdowns are not added a second time.
 
+`world.indirect-method [cache|screen|cone]` reads or selects the live indirect
+comparison method for every consuming view. It starts at `cache`; `screen` and
+`cone` select the engine's comparison paths with the residency cache as their
+fallback. This operator presentation override changes no cache tier, saved
+document or authoritative session state. Camera and session views keep the
+method while applying their quality restrictions, and infinity views retain
+each consuming camera's method alongside the layer's own shading levers.
+
 `world.lighting` appends that same host inventory, including exact allocation,
 epoch, submission and lighting-publication identities, each level's allocated
 and placed bricks and submitted strata, pending host work and valid light maps.

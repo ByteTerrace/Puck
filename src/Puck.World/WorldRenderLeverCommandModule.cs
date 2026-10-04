@@ -15,7 +15,7 @@ namespace Puck.World;
 /// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view
-/// and operator-owned indirect freeze/reset, which control presentation objects through <see cref="WorldRenderProbe"/>.
+/// and operator-owned indirect comparison/freeze/reset, which affect only live presentation settings or objects.
 /// Nothing here needs a window or a
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
@@ -565,6 +565,25 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                 }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Indirect,
                     a: ((int)selected), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-method",
+            description: "Selects the live per-view indirect comparison: world.indirect-method [cache|screen|cone]. Cache is the default; this operator presentation override changes no authoritative state or cache tier.",
+            handler: (_, args) => {
+                CommandResult Echo() => new(Output: $"[world.indirect-method: {settings.IndirectMethod.ToString().ToLowerInvariant()}]");
+                if (args.Count == 0) { return Echo(); }
+                var method = ((args.Count != 1) ? ((SdfIndirectMethod?)null) : args[0] switch {
+                    "cache" => SdfIndirectMethod.Cache,
+                    "screen" => SdfIndirectMethod.Screen,
+                    "cone" => SdfIndirectMethod.Cone,
+                    _ => ((SdfIndirectMethod?)null),
+                });
+                if (method is not { } selected) { return CommandResult.Usage(form: "cache|screen|cone", verb: "world.indirect-method"); }
+                settings.IndirectMethod = selected;
+                return Echo();
             }
         );
         yield return CommandDefinition.WithWireArgs(

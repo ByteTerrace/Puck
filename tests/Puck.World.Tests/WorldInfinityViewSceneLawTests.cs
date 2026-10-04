@@ -4,6 +4,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Xunit;
 
@@ -80,8 +81,8 @@ public sealed class WorldInfinityViewSceneLawTests {
             Up: first.Up, Forward: first.Forward, TanHalfFieldOfView: first.TanHalfFieldOfView, AspectRatio: first.AspectRatio);
         var nested = new SdfSkyViewBinding(Layer: "nested", Producer: "camera$sky$nested", Parameters: default);
         SdfViewSnapshot[] views = [
-            new(Camera: first, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)),
-            new(Camera: second, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { SkyViews = [nested] },
+            new(Camera: first, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Screen } },
+            new(Camera: second, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { SkyViews = [nested], Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Cone } },
         ];
         using var emitter = new WorldSessionSceneEmitter(
             domains: new WorldValueDomainGuard(), effectiveCameraName: null,
@@ -92,6 +93,7 @@ public sealed class WorldInfinityViewSceneLawTests {
 
         Assert.Equal(expected: new[] { first, second }, actual: frame.Views.Select(selector: static view => view.Camera));
         Assert.Equal(expected: nested, actual: Assert.Single(collection: frame.Views[1].SkyViews));
+        Assert.Equal(expected: new[] { SdfIndirectMethod.Screen, SdfIndirectMethod.Cone }, actual: frame.Views.Select(selector: static view => view.Quality.IndirectMethod));
         Assert.All(collection: frame.Views, action: static view => Assert.True(condition: view.Quality.DisableSoftShadows));
     }
     [Fact]
