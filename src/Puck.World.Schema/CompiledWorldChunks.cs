@@ -97,8 +97,8 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
         m_chunks = chunks;
     }
 
-    /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/> and <see cref="AssetChunk"/>.</summary>
-    public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance]);
+    /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
+    public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);
     /// <inheritdoc/>
     public int Count => m_chunks.Length;
 

@@ -8,10 +8,10 @@ namespace Puck.World;
 /// <c>.puck</c> sources compiled and the ones the compile cache answered, the basis-and-imports merges, the strict
 /// parses and validations, and the builds and loads that follow. Each count is a monotonic total over the ledger's
 /// life, never reset; a reader takes a window by reading twice and subtracting. None is part of simulation state:
-/// nothing hashes, exports, or checkpoints them. Every kind is <see cref="WorkClass.Deterministic"/> but the five the
-/// caches split, which are <see cref="WorkClass.Pacing"/>: compiles, <c>.puck</c> parses and cache hits, which depend
-/// on what the per-user compile cache already holds, and compiled-world hits and chunk derivations, which depend on the
-/// compiled worlds a boot finds.
+/// nothing hashes, exports, or checkpoints them. Kinds whose work a cache can answer are
+/// <see cref="WorkClass.Pacing"/>: document reads, compositions and their reuse, source compiles, parses and cache
+/// hits, curve compiles, compiled-world hits and chunk derivations. The remaining kinds are
+/// <see cref="WorkClass.Deterministic"/>.
 /// <para>
 /// The work sites are static paths shared by every host (the boot loader, the composer, <c>world.reload</c>, the
 /// neighbour resolver), so they count into <see cref="Current"/>: the ledger <see cref="Attribute"/> installed for the
@@ -45,13 +45,13 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the documents a load or a composition reads: one per root file and one per
     /// basis or import read through an <see cref="IWorldDocumentSource"/>, whether it arrives as a file's bytes or as
     /// a <c>.puck</c> source lowered to its document.</summary>
-    public static WorkKind DocumentsRead { get; } = new(name: "world.boot.documents-read", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind DocumentsRead { get; } = new(name: "world.boot.documents-read", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting basis-and-imports merges: one per document whose graph was merged, counting
     /// every document a composition walked into.</summary>
-    public static WorkKind Compositions { get; } = new(name: "world.boot.compositions", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the compositions answered from an image already composed in this process
+    public static WorkKind Compositions { get; } = new(name: "world.boot.compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the compositions answered from an image held in memory or on disk
     /// rather than merged again.</summary>
-    public static WorkKind CompositionsShared { get; } = new(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind CompositionsShared { get; } = new(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting <c>.puck</c> compilations that ran: one per source parsed, walked and
     /// lowered, whichever door asked.</summary>
     public static WorkKind Compiles { get; } = new(name: "world.boot.compiles", unit: "count", workClass: WorkClass.Pacing);
@@ -78,7 +78,7 @@ public sealed class WorldBootWork : IWorkCounterSource {
     public static WorkKind NeighbourResolves { get; } = new(name: "world.boot.neighbour-resolves", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting curvature-spline derivations: one per distinct curve shape the process
     /// compiles, since a shape compiled once is shared by every row and instance of it.</summary>
-    public static WorkKind CurveCompiles { get; } = new(name: "world.boot.curve-compiles", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind CurveCompiles { get; } = new(name: "world.boot.curve-compiles", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the signed-distance programs built from a world's shapes: the server's static
     /// solid field and each static scene a frame presenter emits from the prototypes and placements.</summary>
     public static WorkKind ShapeBuilds { get; } = new(name: "world.boot.shape-builds", unit: "count", workClass: WorkClass.Deterministic);

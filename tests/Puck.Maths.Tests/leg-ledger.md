@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1204 | 609 |
-| **total** | | **2351** | **793** |
+| structural | — | 1205 | 610 |
+| **total** | | **2352** | **794** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 652 | 928 | 1080 | 191 |
+| law: Default | 653 | 928 | 1081 | 192 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -337,6 +337,7 @@ adversarial review's job, not this file's.
 | curvature-spline.arc-length-table | law: Default | structural | — | every compiled segment's arc table (panel count adaptively derived, not fixed) is strictly increasing on raws, its last entry equals LengthRaw, segment stations chain exactly from the running total, knot stations strictly increase, and the last knot station equals TotalLength (closing segment covered for a 3-knot open curve) | — | — | — |
 | curvature-spline.arc-length-table | law: Default | classical | — | each segment's compiled arc length (LengthRaw) | Oracles.CurvatureSplineArcLengthByChordSubdivision — an independent 20000-subdivision chord-sum flattening of the compiled Q32 control points in double precision, which sums chords rather than integrating \|B'(t)\| by Simpson's rule the way CurvatureSplineExactMath's arc table does | — | ENVELOPE: agreement is checked at a 1e-6 relative tolerance, frozen with margin over the measured relative error (~1.8e-10) on the battery below; the oracle reads the compiled (post-rounding) control points, so it certifies the arc-length INTEGRATION step rather than independently re-solving the tangent lengths — that independence is curvature-spline.endpoint-curvature-oracle's job |
 | curvature-spline.arc-station-oracle | law: Default | in-tree-independent | — | position at seven requested stations (0, 1/8, 1/4, 1/2, 3/4, 7/8, 1 of TotalLengthRaw) on a small well-conditioned curve and an adversarial large-scale curve (four knots on a circle at 0.9·MaxCoordinate's own radius) | Oracles.CurvatureSplinePositionAtStation — a fine (100000-step) chord-walking inverse lookup over the compiled Q32 control points, a different METHOD from the subject's own composite-Simpson quadrature plus arc-table binary-search inversion, and a fresh numerical search rather than a transcription of it | — | ENVELOPE: agreement is checked at 1e-4 relative (scaled by the larger of 1 and the sampled position's own magnitude, so the large-scale case is not held to an unreachable absolute tolerance), margin over the chord walk's own O(1/steps) discretization error; ArcLengthRelativeErrorShift/ArcLengthMinimumErrorBoundRaw govern how tightly the subject's own arc table converges — a materially looser bound would widen the subject/oracle disagreement this law would then need to catch |
+| curvature-spline.binary-round-trip | law: Default | structural | — | the binary round trip preserves every coefficient, arc table, closure and station exactly for straight, curved, multi-root and closed splines with elevation; evaluations agree at endpoints, adjacent raws, interior stations and both carrier extremes, rewriting reproduces the bytes, and a foreign fingerprint is refused | — | — | — |
 | curvature-spline.carrier-extremes | law: Default | structural | — | knots placed at exactly ±MaxCoordinate with admissible (straight, zero-curvature) geometry compile, and Evaluate stays finite (no MinValue-sentinel component) at every eighth of the arc; one raw past MaxCoordinate refuses KnotOutOfRange by name | — | — | — |
 | curvature-spline.degenerate-branches | law: Default | in-tree-independent | — | five hand-constructed geometries admit: w≠0 with both curvatures zero, w≠0 with only κ0 zero, w≠0 with only κ1 zero, and w=0 with both curvatures nonzero at the correct admitting sign, each compiling to the tangent lengths the branch's own closed form predicts | a per-case hand-derived closed-form (l0, l1) computed independently in double from s0/s1/w — the same formulas CurvatureSplineExactMath's own remarks state, but re-derived from the constructed geometry's tangent yaws and chord rather than read back from any compiled raw | — | ENVELOPE: agreement is checked at 1e-3, comfortably inside the branches' own well-conditioned magnitudes (tangent lengths 0.6-4 over a chord of 5) |
 | curvature-spline.degenerate-branches | law: Default | structural | — | two more geometries refuse TangentCurvatureInconsistent at w=0 with a zero curvature and a nonzero s on either side — one reached immediately (κ0=0, s0≠0), the other only after the OTHER side (κ0=0.2) admits, so the w=0 branch's second half is exercised and not merely its first | — | — | — |
@@ -2605,6 +2606,7 @@ EXCLUDED and live in the canary register above.
 | core.real-quadratic-field-and-conversion | law: Default | 1 |
 | core.rust-port-emitters-are-pure-and-live | law: Default | 3 |
 | core.unsigned-integer-contracts | law: Default | 1 |
+| curvature-spline.binary-round-trip | law: Default | 1 |
 | curvature-spline.carrier-extremes | law: Default | 1 |
 | curvature-spline.deterministic-recompile | law: Default | 1 |
 | curvature-spline.evaluate-continuity-and-totality | law: Default | 1 |

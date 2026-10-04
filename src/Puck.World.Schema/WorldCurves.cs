@@ -171,4 +171,10 @@ public sealed record WorldCurveRow(
 
         return result;
     }
+
+    internal void RestoreCompiled(CompiledCurvatureSpline spline) {
+        var held = CompiledByShape.GetOrAdd(key: new CurveShape(closed: Closed, knots: ToSplineKnots()), value: spline);
+
+        _ = CompiledCache.GetValue(this, _ => new StrongBox<CompiledCurvatureSpline>(value: held));
+    }
 }

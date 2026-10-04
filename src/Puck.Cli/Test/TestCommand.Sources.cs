@@ -33,6 +33,7 @@ internal static partial class TestCommand {
         _ = WorldCompileCache.Shared.TryCompile(
             compiled: out var compiled,
             failure: out var failure,
+            includeTests: true,
             path: source
         );
 

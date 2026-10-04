@@ -1,7 +1,6 @@
 using System.Text;
-using Puck.Assets;
 
-namespace Puck.Transpiler.Modules;
+namespace Puck.Assets;
 
 /// <summary>What a compile learned from one file or directory: that a file was absent, that it existed, its exact
 /// bytes, or which files a directory holds.</summary>

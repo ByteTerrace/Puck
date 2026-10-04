@@ -1,8 +1,8 @@
+using Puck.Assets;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 using Puck.World.Transpiler.Vocabulary;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Lowering;
 

@@ -1,7 +1,7 @@
+using Puck.Assets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Testing;
-using Puck.Transpiler.Modules;
 using Puck.World.Transpiler.Composition;
 using Xunit;
 
@@ -42,6 +42,7 @@ public sealed class WorldCompileCacheLawTests {
 
         stream.Write(buffer: "PUCKWCC3"u8);
         using (var writer = new BinaryWriter(encoding: Encoding.UTF8, leaveOpen: true, output: stream)) {
+            writer.Write(value: FormatLedgerShapes.Of(id: "WorldCompileCache.Magic"));
             writer.Write(value: build);
             writer.Write(value: key);
             writer.Write(value: 1);
@@ -66,6 +67,7 @@ public sealed class WorldCompileCacheLawTests {
         using var reader = new BinaryReader(encoding: Encoding.UTF8, input: new MemoryStream(buffer: File.ReadAllBytes(path: entry)));
 
         _ = reader.ReadBytes(count: 8);
+        _ = reader.ReadString();
 
         return reader.ReadString();
     }
@@ -76,16 +78,17 @@ public sealed class WorldCompileCacheLawTests {
     private static string KeyOf(string path) {
         var full = Path.GetFullPath(path: path).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar);
 
-        return (OperatingSystem.IsWindows()
+        return ((OperatingSystem.IsWindows()
             ? full.ToUpperInvariant()
             : full
-        );
+        ) + "\0document");
     }
     // The key an entry records, the second field after the magic.
     private static string KeyIn(string entry) {
         using var reader = new BinaryReader(encoding: Encoding.UTF8, input: new MemoryStream(buffer: File.ReadAllBytes(path: entry)));
 
         _ = reader.ReadBytes(count: 8);
+        _ = reader.ReadString();
         _ = reader.ReadString();
 
         return reader.ReadString();

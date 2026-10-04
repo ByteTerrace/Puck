@@ -86,6 +86,9 @@ running console reads `.puck` the same way:
   recorded file facts (their bytes, their modules', their locks' and assets',
   every probed path, and the listing and sources of each directory a basis
   name resolved in) moved recompile; an unchanged one is served as held.
+  Boot and composition compile documents without lowering tests. `puck test`
+  explicitly requests test lowering under its own compile-cache key. Composed
+  images persist in that same store against `Puck.Assets.CompileInputs`.
   A re-read that no longer compiles or validates leaves the running world
   untouched. `world.load <path>.puck` reads through the same path.
 - `world.save` to `.puck` uses `WorldSourceSave`: diff the live snapshot against

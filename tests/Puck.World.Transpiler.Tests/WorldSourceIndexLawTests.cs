@@ -1,6 +1,6 @@
+using Puck.Assets;
 using System.Text;
 using Puck.Testing;
-using Puck.Transpiler.Modules;
 using Puck.World.Transpiler.Composition;
 using Xunit;
 

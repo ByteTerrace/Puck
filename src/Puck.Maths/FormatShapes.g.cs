@@ -3,11 +3,11 @@
 // `puck formats --check` fails when this file disagrees with the source.
 #nullable enable
 
-namespace Puck.GamingBricks.Forge {
+namespace Puck.Maths {
     /// <summary>The shape fingerprint of each format this namespace declares: the digest <c>puck formats</c> records for it.
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
-        /// <summary>The shape fingerprint of <c>CartridgeDocument.SchemaId</c>, declared in <c>src/Puck.GamingBricks.Forge/CartridgeDocument.cs</c>.</summary>
-        public const string CartridgeDocumentSchemaId = "e688d04e540f5ea8";
+        /// <summary>The shape fingerprint of <c>CompiledCurvatureSpline.Magic</c>, declared in <c>src/Puck.Maths/FixedPoint/CompiledCurvatureSpline.Binary.cs</c>.</summary>
+        public const string CompiledCurvatureSplineMagic = "bb8bac14778309fd";
     }
 }

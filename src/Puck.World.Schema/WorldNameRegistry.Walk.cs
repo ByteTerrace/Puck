@@ -237,12 +237,10 @@ public static partial class WorldNameRegistry {
 
     private sealed class Walk {
         private readonly IReadOnlyList<WorldNameField> m_fields;
-
         private readonly List<Type> m_stack = [];
-        private readonly JsonSerializerOptions m_options = WorldJsonContext.Default.Options;
 
-        public List<WorldNameSite> Sites { get; } = [];
         public List<(string Path, Type Owner, string Member, string Reason)> Excluded { get; } = [];
+        public List<WorldNameSite> Sites { get; } = [];
         public List<string> Uncovered { get; } = [];
 
         private Walk(IReadOnlyList<WorldNameField> fields) => m_fields = fields;
@@ -371,13 +369,9 @@ public static partial class WorldNameRegistry {
                 return;
             }
 
-            JsonTypeInfo typeInfo;
+            var typeInfo = WorldModelShape.Of(type: type);
 
-            try {
-                typeInfo = m_options.GetTypeInfo(type: type);
-            } catch (Exception exception) when ((exception is NotSupportedException or InvalidOperationException)) {
-                return;
-            }
+            if (typeInfo is not { Described: true }) { return; }
 
             if (m_stack.Contains(item: type)) {
                 Sites.Add(item: new WorldNameSite(
@@ -418,16 +412,14 @@ public static partial class WorldNameRegistry {
 
             switch (typeInfo.Kind) {
                 case JsonTypeInfoKind.Object:
-                    foreach (var property in typeInfo.Properties) {
+                    foreach (var property in typeInfo.Members) {
                         if (
-                            property.IsExtensionData ||
-                            (property.Get is null) ||
-                            (property.Set is null)
+                            (property.Access & (WorldModelAccess.Read | WorldModelAccess.Write | WorldModelAccess.ExtensionData)) != (WorldModelAccess.Read | WorldModelAccess.Write)
                         ) {
                             continue;
                         }
 
-                        var (declaringType, member) = ResolveMember(property: property);
+                        var (declaringType, member) = (property.DeclaringType, property.Member);
                         var childPath = ((path.Length == 0)
                             ? property.Name
                             : $"{path}.{property.Name}"
@@ -437,21 +429,19 @@ public static partial class WorldNameRegistry {
                             path: childPath,
                             declaringType: declaringType,
                             member: member,
-                            propertyType: property.PropertyType
+                            propertyType: property.Type
                         );
                         VisitType(
-                            type: property.PropertyType,
+                            type: property.Type,
                             path: childPath
                         );
                     }
 
-                    if (typeInfo.PolymorphismOptions is { } polymorphism) {
-                        foreach (var derived in polymorphism.DerivedTypes) {
-                            VisitType(
-                                type: derived.DerivedType,
-                                path: $"{path}[{derived.TypeDiscriminator}]"
-                            );
-                        }
+                    foreach (var derived in typeInfo.Arms) {
+                        VisitType(
+                            type: derived.Type,
+                            path: $"{path}[{derived.Discriminator}]"
+                        );
                     }
 
                     break;
