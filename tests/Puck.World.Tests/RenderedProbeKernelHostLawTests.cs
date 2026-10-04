@@ -219,7 +219,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
                     condition: attached.Order.SharedFence,
                     userMessage: $"run {run} keeps the CPU wait: {attached.Order}"
                 );
-                Assert.True(condition: output.TryAcquireLatest(
+                Assert.True(condition: output.TryAcquireLatest(version: out _,
                     fenceValue: out written[run],
                     slot: out var slot
                 ));

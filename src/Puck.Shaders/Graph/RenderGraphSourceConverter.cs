@@ -82,6 +82,9 @@ public sealed class RenderGraphSourceConverter : IDisposable {
     /// <summary>Gets the latest conversion's output, empty before the first and after a device loss, in
     /// <see cref="OutputLayout"/>.</summary>
     public Surface Output => m_output;
+    /// <summary>Gets the latest successful conversion's publication. The node's submission identity survives a
+    /// reset, while a held output keeps its original identity until a conversion actually submits.</summary>
+    public GpuImagePublication Publication { get; private set; }
     /// <summary>Gets the layout the latest conversion's output rests in between submissions.</summary>
     public GpuImageLayout OutputLayout => m_node.PublishedLayout;
     /// <summary>Gets whether the conversion's graph is building on the thread pool
@@ -100,6 +103,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         m_node.OnDeviceLost();
         m_region.OnDeviceLost();
         m_output = default;
+        Publication = default;
         Render = FrameRender.Waiting(reason: "its conversion graph is building");
     }
     /// <summary>Converts one image: writes its planes into the region behind the header and records the conversion.</summary>
@@ -139,6 +143,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         }
 
         m_output = surface;
+        Publication = new GpuImagePublication(Owner: m_node, Sequence: m_node.SubmissionCount);
         Render = FrameRender.Rendered;
 
         return true;
@@ -190,6 +195,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         }
 
         m_output = surface;
+        Publication = new GpuImagePublication(Owner: m_node, Sequence: m_node.SubmissionCount);
         Render = FrameRender.Rendered;
 
         return true;

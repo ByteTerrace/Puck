@@ -13,7 +13,11 @@ public readonly record struct ShaderPipelineExternalImage(
     uint Width,
     uint Height,
     GpuPixelFormat Format,
-    GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly);
+    GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly) {
+    /// <summary>Gets the actual image publication acquired with its lease and fence, retained when a pass forwards
+    /// this image without drawing.</summary>
+    public GpuImagePublication Publication { get; init; }
+}
 /// <summary>
 /// The node that renders one render graph instance: an ordered multi-pass shader graph and its package passes. All passes are recorded before one queue submission;
 /// frame-slot fences protect command buffers and descriptors, and every inter-pass image transition is explicit.

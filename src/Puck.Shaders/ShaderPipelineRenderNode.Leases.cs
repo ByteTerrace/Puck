@@ -104,7 +104,8 @@ public sealed partial class ShaderPipelineRenderNode {
     /// frame only. The frame that records holds <paramref name="lease"/> and retires it once that submission's fence
     /// has signaled, on device loss or at disposal; a frame that records nothing retires it at once, and so does a
     /// newer binding of the same name made before any frame recorded. A frame recorded without a newer binding is
-    /// refused. The image must have the declared format and may have any extent.</summary>
+    /// refused. The image must have the declared format and may have any extent. Its publication comes from the same
+    /// acquisition as the lease, including when that acquisition needs no retirement.</summary>
     /// <param name="name">The name of a declared external image.</param>
     /// <param name="image">The image, in the layout its producer leaves it in, which the frame hands it back in.</param>
     /// <param name="lease">The producer's acquisition of the image; one that requires no retirement binds as
@@ -114,7 +115,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// image handle is zero.</exception>
     public void BindImage(string name, ShaderPipelineExternalImage image, GpuImageLease lease) {
         BindImage(
-            image: image,
+            image: image with { Publication = lease.Publication },
             name: name
         );
 
@@ -189,7 +190,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         ClearLease(name: name);
-        m_externalImages[name] = image;
+        m_externalImages[name] = image with { Publication = lease.Publication };
         HoldBinding(
             lease: lease,
             name: name

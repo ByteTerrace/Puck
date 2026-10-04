@@ -693,8 +693,7 @@ submission finished, or until a device loss or disposal. An external producer
 reads images, never a buffer: its own output and any instance's previous frame
 among them, and any instance may read an external producer's previous frame.
 Before it produces, the runtime binds each read to the latest completed output
-of the instance read (an external producer's under the lease its acquisition
-returns, a graph instance's unleased), so a read of its own output binds the
+of the instance read under its image lease, so a read of its own output binds the
 output it completed before this frame, in a
 `RenderGraphExternalReads` it hands to `Produce`. The producer takes the leases
 its submission samples (`Take`) and retires them after that submission's
@@ -708,6 +707,15 @@ instance's. A frame may declare instances unchanged since their latest render
 (`RenderGraphFrame.Unchanged`): such an instance is not due by its refresh, so
 its latest output stands, and it renders only when it never has, when the frame
 names it to render again, or when it is demanded at another extent.
+
+Each acquired image also carries its actual publication through bindings and
+`RenderGraphExternalReads`. A graph write uses its node's successful submission
+sequence, which survives a presentation-counter reset. A conversion advances
+only after it submits. A pass that draws nothing forwards the bound image's
+publication, and a standing chain resolves the original producer's publication;
+neither invents a write for the consumer. Readers can therefore refresh derived
+image data when the sampled content changes while retaining it across repeated
+acquisitions of the same completed write.
 
 Every SDF view is a package instance of `sdf.world`. Its factory,
 `SdfWorldPasses` in `Puck.SdfVm`, resolves each instance to a view of a

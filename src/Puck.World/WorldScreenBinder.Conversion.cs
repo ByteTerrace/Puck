@@ -110,6 +110,7 @@ internal sealed partial class WorldScreenBinder {
 
             return new GpuImageLease(
                 ImageViewHandle: shown.Converter.ImageViewHandle,
+                Publication: shown.Converter.Publication,
                 Release: m_release,
                 ReleaseToken: shown.Token
             );

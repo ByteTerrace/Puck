@@ -13,7 +13,10 @@ namespace Puck.Hosting;
 /// <param name="Lease">The acquisition that keeps the image alive; handle-only for an instance that needs none.</param>
 /// <param name="Tainted">Whether the image holds external content the capture gate did not fill
 /// (<see cref="RenderGraphExternalOutput.Tainted"/>).</param>
-public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted);
+public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted) {
+    /// <summary>Gets the bound image's actual publication, under the same lease that protects its pixels.</summary>
+    public GpuImagePublication Publication => Lease.Publication;
+}
 /// <summary>The images one external producer reads in one produced frame, in the order its instance declares the reads.
 /// The render-graph runtime binds each read's latest completed output and hands the list to
 /// <see cref="IRenderGraphExternalProducer.Produce"/>; the producer takes the leases of the images its submission

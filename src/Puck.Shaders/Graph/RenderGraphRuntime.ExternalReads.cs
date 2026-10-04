@@ -4,7 +4,7 @@ namespace Puck.Shaders;
 
 // The images an external producer reads (the set refuses its buffer reads): before it produces, the runtime binds each
 // read to the latest completed output of the instance read, an external producer's under the lease its acquisition
-// returns and a graph instance's unleased, and hands the list to Produce. A read of the producer's own output therefore
+// returns and a graph instance's under its image-table lease, and hands the list to Produce. A read of the producer's own output therefore
 // binds the output it completed before this frame. On a capture frame a previous-frame read of a tainted output binds
 // nothing (Withholds). The producer takes the leases its submission samples; the rest are retired once Produce returns.
 // A graph instance's reads that its graph binds to no version (an SDF view's screens) are bound the same way, after its
@@ -195,7 +195,7 @@ public sealed partial class RenderGraphRuntime {
                     image: completed.Image,
                     index: position,
                     layout: completed.Layout,
-                    lease: LeaseOf(image: completed.Image),
+                    lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication },
                     tainted: completed.Tainted
                 );
             } else if (!completed.Image.IsSameDeviceImage) {

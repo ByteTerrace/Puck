@@ -459,6 +459,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Layout: GpuImageLayout.ShaderReadOnly,
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
+                    Publication: new GpuImagePublication(Owner: this, Sequence: Produced),
                     Release: _ => Released++
                 ),
                 Tainted: false
@@ -478,6 +479,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public string? PendingCapturePath => null;
 
         public List<(string Producer, nint ImageView)> Seen { get; } = [];
+        public List<GpuImagePublication> Publications { get; } = [];
 
         public bool Takes { get; set; }
         public bool Throws { get; set; }
@@ -491,9 +493,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public void OnDeviceLost() { }
         public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             Seen.Clear();
+            Publications.Clear();
 
             for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
                 Seen.Add(item: (reads![index].Producer, reads[index].Image.ImageViewHandle));
+                Publications.Add(item: reads[index].Publication);
 
                 if (Takes) {
                     Held.Hold(lease: reads.Take(index: index));

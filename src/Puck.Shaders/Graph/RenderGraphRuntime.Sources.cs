@@ -354,6 +354,7 @@ public sealed partial class RenderGraphRuntime {
             Image: surface,
             Layout: node.PublishedLayout,
             StateTick: node.PublishedStateTick,
+            Publication: new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount),
             StandsFor: Standing.Own,
             Tainted: false
         );

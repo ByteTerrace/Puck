@@ -48,10 +48,15 @@ public sealed partial class RenderGraphRuntime {
         m_historyPrior = null;
     }
     private void RememberOutput(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
+        var publication = ((node.PublishedBinding is { } binding) && node.TryGetBoundImage(name: binding, image: out var input)
+            ? input.Publication
+            : new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount));
+
         m_previous[index] = m_current[index];
         m_current[index] = new Output(
             Buffer: node.LatestOutputBuffer(), Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
             StateTick: node.PublishedStateTick,
+            Publication: publication,
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
             Tainted: (m_taintedReads[index] is not null));
     }

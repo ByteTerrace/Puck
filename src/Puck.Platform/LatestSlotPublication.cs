@@ -8,6 +8,7 @@ namespace Puck.Platform;
 /// completed before it was published.</summary>
 public sealed class LatestSlotPublication : ISharedSlotRing {
     private ulong[]? m_fenceValues;
+    private long[]? m_versions;
     private volatile int m_latestSlot = -1;
     private ulong m_nextFenceValue;
     private int[]? m_readers;
@@ -38,6 +39,7 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             location1: ref m_fenceValues,
             value: new ulong[targetCount]
         );
+        _ = Interlocked.CompareExchange(comparand: null, location1: ref m_versions, value: new long[targetCount]);
 
         var existing = Interlocked.CompareExchange(
             comparand: null,
@@ -78,7 +80,10 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             throw new InvalidOperationException(message: $"slot {slot} is not writable");
         }
 
-        // Written before the slot is published: a consumer that acquires the slot reads it after the volatile read.
+        // Both belong to this write, before the release publication. A consumer must not pair an acquired slot
+        // with the global Version, which may already describe a different slot when it reads it.
+        var version = checked(Interlocked.Read(location: ref m_version) + 1L);
+        Volatile.Write(location: ref m_versions![slot], value: version);
         Volatile.Write(
             location: ref m_fenceValues![slot],
             value: fenceValue
@@ -88,7 +93,7 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             location1: ref m_timestamp,
             value: Stopwatch.GetTimestamp()
         );
-        _ = Interlocked.Increment(location: ref m_version);
+        _ = Interlocked.Exchange(location1: ref m_version, value: version);
     }
     /// <summary>Releases a slot acquired with <see cref="TryAcquireLatest"/>.</summary>
     /// <param name="slot">The acquired slot.</param>
@@ -112,11 +117,13 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
     /// <param name="slot">When this returns <see langword="true"/>, the stable slot to consume.</param>
     /// <param name="fenceValue">When this returns <see langword="true"/>, the shared-fence value the slot's write
     /// signals, or zero when it completed before publication.</param>
+    /// <param name="version">The acquired slot's publication sequence, protected by the same acquisition.</param>
     /// <returns>Whether a frame has been published.</returns>
-    public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
+    public bool TryAcquireLatest(out int slot, out ulong fenceValue, out long version) {
         var readers = Volatile.Read(location: ref m_readers);
 
         fenceValue = 0UL;
+        version = 0L;
 
         if (readers is null) {
             slot = -1;
@@ -138,6 +145,7 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             if (latest == m_latestSlot) {
                 slot = latest;
                 fenceValue = Volatile.Read(location: ref m_fenceValues![latest]);
+                version = Volatile.Read(location: ref m_versions![latest]);
 
                 return true;
             }

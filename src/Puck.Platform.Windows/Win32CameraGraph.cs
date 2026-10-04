@@ -187,8 +187,9 @@ internal sealed class Win32SharedStream(CameraSensor sensor, int width, int heig
             throw new InvalidOperationException(message: $"the {sensor} stream already started");
         }
     }
-    public bool TryAcquireLatest(out int slot, out ulong fenceValue) => Slots.TryAcquireLatest(
+    public bool TryAcquireLatest(out int slot, out ulong fenceValue, out long version) => Slots.TryAcquireLatest(
         fenceValue: out fenceValue,
-        slot: out slot
+        slot: out slot,
+        version: out version
     );
 }

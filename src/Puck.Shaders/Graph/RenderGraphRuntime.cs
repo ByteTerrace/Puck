@@ -906,7 +906,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         Layout: output.Layout,
                         Width: output.Image.Width
                     ),
-                    lease: LeaseOf(image: output.Image),
+                    lease: LeaseOf(image: output.Image) with { Publication = output.Publication },
                     name: binding.Version
                 );
             } else {
@@ -1553,7 +1553,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, whether it was rendered from a tainted input, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null) {
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null, GpuImagePublication Publication = default) {
         public static Output None => new(
             Buffer: null,
             Frame: -1,

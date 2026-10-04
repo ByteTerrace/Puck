@@ -1688,7 +1688,8 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 m_retired ||
                 !m_stream.TryAcquireLatest(
                     fenceValue: out var fenceValue,
-                    slot: out var slot
+                    slot: out var slot,
+                    version: out var version
                 )
             ) {
                 frame = default;
@@ -1718,6 +1719,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             // on the GPU. Zero means the write finished before publication.
             frame = new GpuImageLease(
                 ImageViewHandle: handle,
+                Publication: new GpuImagePublication(Owner: m_stream, Sequence: version),
                 Release: m_release,
                 ReleaseToken: slot,
                 Wait: ((0UL != fenceValue)

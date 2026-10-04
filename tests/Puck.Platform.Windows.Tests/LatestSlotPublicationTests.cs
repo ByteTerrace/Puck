@@ -54,8 +54,8 @@ public sealed class LatestSlotPublicationTests {
 
         publication.Configure(targetCount: 2);
         publication.Publish(fenceValue: 0UL, slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var first));
-        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var second));
+        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var first));
+        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var second));
         Assert.Equal(
             actual: second,
             expected: first
@@ -81,15 +81,15 @@ public sealed class LatestSlotPublicationTests {
 
         publication.Configure(targetCount: 3);
         publication.Publish(fenceValue: 0UL, slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var firstLease));
+        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var firstLease));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var second));
         publication.Publish(fenceValue: 0UL, slot: second);
-        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var secondLease));
+        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var secondLease));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var third));
         publication.Publish(fenceValue: 0UL, slot: third);
-        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var thirdLease));
+        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var thirdLease));
         Assert.False(condition: publication.TryReserveWriteSlot(slot: out _));
 
         publication.Release(slot: firstLease);
@@ -132,7 +132,7 @@ public sealed class LatestSlotPublicationTests {
                 );
             }
 
-            Assert.True(condition: publication.TryAcquireLatest(
+            Assert.True(condition: publication.TryAcquireLatest(version: out _,
                 fenceValue: out var fenceValue,
                 slot: out var leased
             ));
@@ -161,7 +161,7 @@ public sealed class LatestSlotPublicationTests {
             fenceValue: 7UL,
             slot: first
         );
-        Assert.True(condition: publication.TryAcquireLatest(
+        Assert.True(condition: publication.TryAcquireLatest(version: out var firstVersion,
             fenceValue: out var firstValue,
             slot: out var firstLease
         ));
@@ -170,7 +170,7 @@ public sealed class LatestSlotPublicationTests {
             fenceValue: 0UL,
             slot: second
         );
-        Assert.True(condition: publication.TryAcquireLatest(
+        Assert.True(condition: publication.TryAcquireLatest(version: out var secondVersion,
             fenceValue: out var secondValue,
             slot: out var secondLease
         ));
@@ -179,6 +179,10 @@ public sealed class LatestSlotPublicationTests {
             actual: (firstLease, firstValue, secondLease, secondValue),
             expected: (first, 7UL, second, 0UL)
         );
+        Assert.Equal(expected: (1L, 2L), actual: (firstVersion, secondVersion));
+        Assert.True(condition: publication.TryAcquireLatest(version: out var repeatedVersion, fenceValue: out _, slot: out var repeatedLease));
+        Assert.Equal(expected: secondVersion, actual: repeatedVersion);
+        publication.Release(slot: repeatedLease);
 
         publication.Release(slot: firstLease);
         publication.Release(slot: secondLease);

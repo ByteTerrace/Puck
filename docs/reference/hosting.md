@@ -373,7 +373,11 @@ starts through the synchronous overload.
 
 A node that samples an image another producer keeps writing, such as a camera
 ring slot or a HUD frame, receives it as a `GpuImageLease`: an image-view
-handle with an optional release callback and token. The node holds each such
+handle with an optional release callback and token. Its `Publication` identifies
+the actual writing stream by object identity and one successful write by a
+monotonic sequence. The producer supplies that pair with the acquired slot and
+fence; another acquisition or a standing image keeps the pair, and a storage
+handle or release token cannot replace it. The node holds each such
 lease in a `LeaseRetireList` until a fence wait proves the submission that
 sampled it has finished, then retires the list, which runs every release once
 in the order the leases were held. A node with frames in flight keeps one list

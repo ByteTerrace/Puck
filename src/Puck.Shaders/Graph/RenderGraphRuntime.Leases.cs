@@ -70,7 +70,7 @@ public sealed partial class RenderGraphRuntime {
                 Layout: latest.Layout,
                 Width: latest.Image.Width
             ),
-            lease: LeaseOf(image: latest.Image),
+            lease: LeaseOf(image: latest.Image) with { Publication = latest.Publication },
             tick: latest.StateTick
         );
     }
