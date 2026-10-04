@@ -14,7 +14,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var current = Frame();
 
         current = current with { Views = [current.Views[0] with { RenderScale = 0.75f, ResolvedRenderScale = 0.5f, UpscaleSharpness = 0.4f }] };
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));

@@ -14,7 +14,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new UploadModelGpu();
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
         var current = ShadowFrame(active: false, capacity: 0, weight: 0f);
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));

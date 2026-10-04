@@ -66,7 +66,7 @@ public sealed class WorldCounterUploadLawTests {
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var gpu = new UploadModelGpu();
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
-        using var view = new SdfTestView(device: gpu, extent: 64, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: 64, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: presenter, height: 64,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: 64));

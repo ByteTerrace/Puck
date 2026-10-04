@@ -35,7 +35,7 @@ public sealed class WorldSkyEditGpuLawTests {
         using var session = new WorldSkyEditLawTests.Session();
         var cache = new GpuPassPipelineCache();
         var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: cache), new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: cache));
-        using var view = new SdfTestView(new SdfWorldResidency(pipelines, new Source(session: session), pipelines.LoadDeployed(bytecodeExtension: extension), SdfTestView.Instance, 32, 32, brickPoolVoxelCapacity: 0), pipelines, device, 32);
+        using var view = new SdfTestView(new SdfWorldResidency(pipelines, new Source(session: session), pipelines.LoadDeployed(bytecodeExtension: extension), SdfTestView.Instance, 32, 32, brickPoolVoxelCapacity: 0), pipelines, device, 32, hostsOnDirectX: (extension == ".dxil"));
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device }),
             StepTicks: 0, TargetHeight: 32, TargetWidth: 32);

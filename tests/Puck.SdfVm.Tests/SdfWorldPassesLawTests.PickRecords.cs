@@ -24,7 +24,7 @@ public sealed partial class SdfWorldPassesLawTests {
             new(Lanes: new Vector4(value: 4f), Orientation: Quaternion.Identity, Position: new Vector3(x: 1f, y: 2f, z: 3f)),
         ];
         var current = Frame() with { DynamicTransforms = rendered, Program = builder.Build() };
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));

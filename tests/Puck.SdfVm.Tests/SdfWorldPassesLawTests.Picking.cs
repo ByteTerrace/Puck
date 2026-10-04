@@ -21,7 +21,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
@@ -102,7 +102,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         var captured = current.Views[0].Camera;
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
@@ -174,7 +174,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
@@ -239,7 +239,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
@@ -274,7 +274,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));

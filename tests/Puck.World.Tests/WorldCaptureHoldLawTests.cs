@@ -148,6 +148,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             View = new SdfTestView(
                 device: gpu,
                 extent: Extent,
+                hostsOnDirectX: false,
                 pipelines: pipelines,
                 residency: new SdfWorldResidency(
                     brickPoolVoxelCapacity: 0,

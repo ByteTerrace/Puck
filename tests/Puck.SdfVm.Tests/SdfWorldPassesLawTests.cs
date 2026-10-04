@@ -32,6 +32,7 @@ public sealed partial class SdfWorldPassesLawTests {
         using var view = new SdfTestView(
             device: gpu,
             extent: Extent,
+            hostsOnDirectX: false,
             pipelines: pipelines,
             residency: new SdfWorldResidency(
                 brickPoolVoxelCapacity: 0,
