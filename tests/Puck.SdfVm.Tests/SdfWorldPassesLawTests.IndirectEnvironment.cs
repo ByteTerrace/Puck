@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -103,5 +104,26 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Same(second, cache.PublishedLightingSource);
         Assert.Equal(2, copies.Count(bytes => bytes == (ulong)SdfSkyEnvironment.MapBytes));
 
+        // A capture must solve its source from cold radiance even when the prior completed lighting is current.
+        // Its transport and allocation remain reusable: only a newly completed source may release the capture gate.
+        var transport = cache.Buffer;
+        var allocation = cache.History.Allocation;
+        var capture = new RenderGraphConvergence(new FrameCaptureRequest("unused-cold-capture.png"));
+        views.BeginConvergence("world", capture);
+        Assert.False(residency.IsIndirectReady);
+        views.BeginFrame(context);
+        Assert.True(cache.IsComplete);
+        Assert.Same(transport, cache.Buffer);
+        Assert.Equal(allocation, cache.History.Allocation);
+        Assert.Equal(0u, cache.PublishedStamp);
+        Assert.Null(cache.PublishedLightingSource);
+        Assert.False(views.CaptureReadinessOf("world").IsRendered);
+        Until(() => residency.IsIndirectReady, complete: true);
+        Assert.NotSame(second, cache.PublishedLightingSource);
+        Assert.True(cache.PublishedLightingSource!.Sequence > second.Sequence);
+        Assert.Equal(3, copies.Count(bytes => bytes == (ulong)SdfSkyEnvironment.MapBytes));
+        Assert.Equal(3, copies.Count(bytes => bytes == (ulong)SdfScreenEmission.Bytes));
+        Assert.Same(transport, cache.Buffer);
+        Assert.True(views.CaptureReadinessOf("world").IsRendered);
     }
 }

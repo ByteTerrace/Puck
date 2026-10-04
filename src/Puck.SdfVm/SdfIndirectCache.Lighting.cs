@@ -100,4 +100,12 @@ public sealed partial class SdfIndirectCache {
         PublishedLightingSource = null;
         LightingPublication++;
     }
+
+    // Capture restarts radiance from direct sources without evicting any reusable transport. Publication stamps
+    // prevent either old bank from being read before the new whole sweep overwrites and publishes its payload.
+    internal void ResetLightingForCapture() {
+        InvalidateLighting();
+        Lighting?.InvalidateSource();
+        m_completedLighting = default;
+    }
 }

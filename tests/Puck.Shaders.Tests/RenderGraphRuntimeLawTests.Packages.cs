@@ -464,6 +464,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public long Revision { get; set; }
         public bool SamplesReads { get; set; }
         public bool Unchanged { get; set; }
+        public bool RetainedTainted { get; set; }
+        public FrameRender CaptureState { get; set; } = FrameRender.Rendered;
+        public bool TaintedOf(string instance) => RetainedTainted;
+        public FrameRender CaptureReadinessOf(string instance) => CaptureState;
         // The unread frames each cadence question and each recording carried, in order.
         public List<long> AskedUnread { get; } = [];
         public List<long> RecordedUnread { get; } = [];

@@ -37,6 +37,16 @@ public sealed partial class RenderGraphRuntime {
             m_taintedReads[index] = producer;
         }
     }
+    private void NotePackageTaint(int index) {
+        if (m_graphs[index] is not { } graph) { return; }
+        var name = m_set.Instances[index].Name;
+        foreach (var pass in graph.Pipeline.Plan.Passes) {
+            if (pass.Package is { } step && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(name)) {
+                NoteTaint(index, $"{name}'s retained package state", true);
+                return;
+            }
+        }
+    }
     // Why a capture of an instance waits on taint, or null when it does not. Outside a capture frame a tainted instance is
     // expected; the capture frame renders it again, so only a taint that frame could not clear keeps a capture waiting.
     private string? TaintReasonOf(int index, string name) => ((m_capturing && (m_taintedReads[index] is { } tainting))

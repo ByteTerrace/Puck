@@ -11,7 +11,8 @@ bool sdfIndirectReadContinuation(float3 position, float3 direction, uint termina
     float3 scaled = position / sdfIndirectSpacing(passGroup.indirectTier, level);
     int3 cell = int3(floor(scaled));
     float total = 0.0;
-    [unroll] for (uint corner = 0u; corner < 8u; corner++) {
+    // Keep one directional-search body; corners still accumulate in ascending order with every read counted.
+    [loop] for (uint corner = 0u; corner < 8u; corner++) {
         if ((mask & (1u << corner)) == 0u) { continue; }
         int3 lattice = cell + sdfIndirectCorner(corner);
         int index = sdfIndirectProbeIndex(lattice, level);

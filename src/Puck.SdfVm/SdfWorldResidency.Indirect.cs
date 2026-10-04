@@ -6,6 +6,7 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldResidency {
     private readonly WorkCounterSet m_indirectWork = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
     private int m_indirectResetRequested;
+    private bool m_captureLightingReset;
 
     /// <summary>Gets the deterministic schedule counters retained across cache rebuilds.</summary>
     public IWorkCounterSource IndirectWork => m_indirectWork;
@@ -26,7 +27,7 @@ public sealed partial class SdfWorldResidency {
     /// <remarks>Read on the render/console owner thread after frame preparation. This starts no work and allocates
     /// no readback. It describes the shared cache, not every view's receiver-certificate admission; an absent or off
     /// cache, pending reset, or frame waiting for packing is not ready.</remarks>
-    public bool IsIndirectReady => !IndirectResetPending && m_packed && m_renders && m_pendingFrame is null &&
+    public bool IsIndirectReady => !IndirectResetPending && !m_captureLightingReset && m_packed && m_renders && m_pendingFrame is null &&
         !m_programPending && m_frame is { } frame && ReferenceEquals(frame, m_packedFrame) &&
         m_tables?.Indirect is { } cache && cache.Layout.Tier == IndirectTier && cache.IsReadyFor(frame);
     /// <summary>Queues a presentation-cache reset for the next renderable frame. It changes no authoritative world
@@ -38,6 +39,11 @@ public sealed partial class SdfWorldResidency {
         if (tables.Indirect is { } cache) { cache.Frozen = IndirectFrozen; }
     }
     private void ApplyIndirectReset(SdfWorldTables tables) {
+        if (m_captureLightingReset) {
+            m_captureLightingReset = false;
+            tables.Indirect?.ResetLightingForCapture();
+            Array.Clear(m_renderedSignatures);
+        }
         if (Interlocked.Exchange(ref m_indirectResetRequested, 0) == 0) { return; }
         tables.ResetIndirectPresentation();
         IndirectLightViews.InvalidateStorage();

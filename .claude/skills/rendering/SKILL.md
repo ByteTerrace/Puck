@@ -134,6 +134,10 @@ with that exact already-launched origin and direction, one through 256 paths and
 zero through nine later reflections. It shares the independent reference's
 attributed path fold; do not substitute a new receiver hemisphere, GPU cache
 colour, or the renderer's twelve-query budget for the physical answer.
+Keep the continuation's outer eight-corner loop rolled: each corner invokes the
+complete directional-ray search. Preserve ascending accumulation, every source
+load and its counter; do not clone that search through forced unrolling or reduce
+its ray bound to shorten shader compilation.
 
 `SdfIndirectParticipation` owns whole-instance casting and receiving. Keep its
 packed instance and mesh bits, frame body default, field queries and receiver
@@ -2671,6 +2675,15 @@ how something renders is unverified until a capture has been inspected on both
 backends.
 
 ## Converging captures
+
+Every capture, including `converge: 0`, notifies its existing dependency closure
+through `BeginConvergence`. SDF views reset radiance publication and temporal
+history while retaining geometry transport. The package's `CaptureReadinessOf`
+waits for the exact filled-source finite solve and its completed view fence;
+an indirect-frozen control refuses by name without thawing or altering its
+bank. `TaintedOf` carries actual retained-bank and history taint independently
+of current graph inputs. Do not count convergence or forward a capture while
+the retained source still waits, and do not require a lighting fence at Off.
 
 A scheduled capture may author `converge: N` (1 through 256). The graph runtime
 renders its dependencies through one frozen presentation snapshot, delays the

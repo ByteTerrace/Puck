@@ -4,6 +4,7 @@
 #define SDF_INDIRECT_ALTERNATIVES_HLSLI
 #include "sdf-indirect-diffuse.hlsli"
 #include "sdf-indirect-light.hlsli"
+#include "sdf-indirect-screen.hlsli"
 #include "../shade/sdf-light.hlsli"
 #include "../isa/sdf-sky-kinds.hlsli"
 #include "../shade/sdf-sky-lighting.hlsli"
@@ -49,8 +50,9 @@ bool sdfIndirectAlternativeProject(ViewportData view, float3 position, out uint2
 }
 
 bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out SdfIndirectSources sources,
-    inout uint samples) {
+    out bool screenTerminal, inout uint samples) {
     sources = (SdfIndirectSources)0;
+    screenTerminal = false;
     float reach = min(SdfIndirectAlternativeReach, p.farDistance);
     float previous = 0.0;
     [loop] for (uint step = 1u; step <= SdfIndirectAlternativeScreenSteps; step++) {
@@ -62,8 +64,8 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
         SdfSurfaceSample visible = sdfLoadSurfaceSample(record);
         samples++;
         if (!visible.hit) { previous = travel; continue; }
-        // Mesh atlas emission and screen texels have separate source contracts; an unsupported hit keeps fallback.
-        if (visible.mesh || visible.material < 0 || visible.material >= SDF_SCREEN_MATERIAL) { return false; }
+        // Mesh atlas emission has a separate source contract; an unsupported hit keeps fallback.
+        if (visible.mesh || visible.material < 0) { return false; }
         float2 uv = ((float2)pixel + 0.5) / (float2)worldViewDims(p.view);
         float3 ray = cameraRayDirection(p.view, uv);
         float3 surfacePoint = cameraRayOrigin(p.view, uv) + ray * visible.t;
@@ -73,6 +75,13 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
         if (along <= radius || along < previous - radius || along > travel + radius ||
             length(delta - direction * along) > radius) { previous = travel; continue; }
         if (dot(visible.normal, -direction) <= 0.0) { return false; }
+        float3 screenEmission;
+        if (sdfIndirectScreenEmission(visible.material, surfacePoint, direction, screenEmission)) {
+            sources.values[SdfIndirectSourceScreens] = screenEmission;
+            screenTerminal = true;
+            return true;
+        }
+        if (visible.material >= SDF_SCREEN_MATERIAL) { return false; }
         float4 shadows = worldSoftShadowsDisabled() ? 1.0 : sdfLoadVisibilityShadows(record);
         float2 incoming = 1.0;
 #if SDF_SHADOW_FADE_SLOTS > 0
@@ -93,9 +102,10 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
 // Cone clearance follows the existing full-field ball certificate. A hit still requires absolute acceptance and
 // a sign witness; a small conservative distance or an exhausted budget supplies no fabricated bounce.
 bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndirectSources fallback,
-    out SdfIndirectSources sources, out bool hitSurface, inout uint samples) {
+    out SdfIndirectSources sources, out bool hitSurface, out bool screenTerminal, inout uint samples) {
     sources = fallback;
     hitSurface = false;
+    screenTerminal = false;
     float travel = 0.0;
     float reach = min(SdfIndirectAlternativeReach, p.farDistance);
     float visibility = 1.0;
@@ -116,7 +126,16 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
             SdfHit witness = sdfIndirectSample(position + normal * offset, SDF_INSTANCE_MASK_ALL);
             samples++;
             bool bracket = isfinite(witness.distance) && (hit.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0);
-            if (!bracket || hit.material < 0 || hit.material >= SDF_SCREEN_MATERIAL) { return false; }
+            if (!bracket || hit.material < 0) { return false; }
+            float3 screenEmission;
+            if (sdfIndirectScreenEmission(hit.material, position, direction, screenEmission)) {
+                sources = (SdfIndirectSources)0;
+                sources.values[SdfIndirectSourceScreens] = screenEmission;
+                hitSurface = true;
+                screenTerminal = true;
+                return true;
+            }
+            if (hit.material >= SDF_SCREEN_MATERIAL) { return false; }
             float4 shadows = 1.0;
             float2 incoming = 1.0;
             [loop] for (uint slot = 0u; slot < passGroup.shadowSlotCount; slot++) {
@@ -173,19 +192,21 @@ SdfIndirectSources sdfIndirectAlternative(SdfPixel p, SdfSurfaceSample receiver,
         float3 direction = sdfIndirectAlternativeDirection(receiver.normal, ray, phase);
         SdfIndirectSources incoming;
         bool hitSurface = false;
+        bool screenTerminal;
         bool answered;
         if (passGroup.indirectMethod == SdfIndirectMethodScreen) {
-            answered = sdfIndirectScreenBounce(p, launched, direction, incoming, samples);
+            answered = sdfIndirectScreenBounce(p, launched, direction, incoming, screenTerminal, samples);
             hitSurface = answered;
         } else {
-            answered = sdfIndirectConeBounce(p, launched, direction, fallback, incoming, hitSurface, samples);
+            answered = sdfIndirectConeBounce(p, launched, direction, fallback, incoming, hitSurface, screenTerminal, samples);
         }
         if (!answered) { incoming = fallback; unresolved++; }
         else if (hitSurface) {
             hits++;
             // A secondary surface has no certified sky hemisphere. The cache owns this component until a
             // visibility-weighted secondary integral replaces it; raw harmonic ambient would leak through walls.
-            incoming.values[SdfIndirectSourceSky] = fallback.values[SdfIndirectSourceSky];
+            // A screen is an emission terminal, including a valid dark answer; no cached sky passes through it.
+            if (!screenTerminal) { incoming.values[SdfIndirectSourceSky] = fallback.values[SdfIndirectSourceSky]; }
         }
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) { total.values[source] += incoming.values[source] / (float)SdfIndirectAlternativeRays; }
     }

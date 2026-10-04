@@ -783,6 +783,13 @@ it produces, under the same requirement for its inputs. Until then
 `UnservedCaptureReasonOf` names why. The root may be the world's own instance,
 when nothing is drawn over its output. Each instance counts its own passes.
 
+Every capture notifies the existing dependency closure through `BeginConvergence`,
+including a request with no extra convergence samples. A package's
+`CaptureReadinessOf` keeps forwarding and sample counting behind its actual
+finite-source completion; a refusal fails the request by name. `TaintedOf`
+also joins the graph's acquired-input taint, so an older retained result or
+history cannot become clean merely because a newer input is clean.
+
 ### The default root graph
 
 The main view runs through the runtime. A world that authors no `views.root`

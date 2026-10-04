@@ -12,7 +12,7 @@ public sealed partial class RenderGraphRuntime {
     // An encoder already owns the Nth image. Keep its existing dependency closure frozen across index changes,
     // without restarting the samples or transferring that request to the new display root.
     private void RemapForwardedConvergence(Puck.Hosting.RenderGraphInstanceSet set) {
-        if (m_convergence is not { IsActive: true }) { return; }
+        if (m_convergence is not { Request.Completion.IsCompleted: false }) { return; }
         var retained = m_convergenceInstances.Select(selector: index => set.IndexOf(name: m_set.Instances[index].Name))
             .Where(predicate: index => (index >= 0)).ToArray();
 
@@ -25,10 +25,6 @@ public sealed partial class RenderGraphRuntime {
         m_convergence = convergence;
         m_convergenceContext = null;
         m_convergenceInstances.Clear();
-        if (request.Converge == 0) {
-            return;
-        }
-
         var pending = new Stack<int>();
 
         pending.Push(item: captured);
@@ -36,8 +32,13 @@ public sealed partial class RenderGraphRuntime {
             if (!m_convergenceInstances.Add(item: index)) {
                 continue;
             }
+            var packages = new HashSet<string>(comparer: StringComparer.Ordinal);
+            if (m_set.Instances[index].ExternalPackage is { } declared &&
+                m_packages.TryGetFactory(declared, out var declaredFactory)) {
+                packages.Add(declared);
+                declaredFactory.BeginConvergence(m_set.Instances[index].Name, convergence);
+            }
             if (m_graphs[index] is { } graph) {
-                var packages = new HashSet<string>(comparer: StringComparer.Ordinal);
 
                 foreach (var pass in graph.Pipeline.Plan.Passes) {
                     if ((pass.Package is { } step) && packages.Add(item: step.Package) &&
@@ -52,7 +53,7 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     private Puck.Hosting.FrameContext ConvergenceContext(in Puck.Hosting.FrameContext context) {
-        if (m_convergence is not { IsActive: true }) {
+        if (m_convergence is not { Request.Completion.IsCompleted: false }) {
             return context;
         }
         m_convergenceContext ??= context with { FrameDeltaTicks = 0, DeltaTicks = 0 };
@@ -62,5 +63,24 @@ public sealed partial class RenderGraphRuntime {
         ((m_convergence is { IsActive: true }) && m_convergenceInstances.Contains(item: index));
 
     private bool CanServeConvergence =>
+        CaptureReadiness.IsRendered &&
         ((m_convergence is not { Request.Converge: > 0 } convergence) || (convergence.Samples >= (convergence.Request.Converge - 1)));
+
+    private Puck.Hosting.FrameRender CaptureReadiness {
+        get {
+            if (m_convergence is not { Request.Completion.IsCompleted: false }) { return Puck.Hosting.FrameRender.Rendered; }
+            var result = Puck.Hosting.FrameRender.Rendered;
+            foreach (var index in m_convergenceInstances) {
+                if (m_graphs[index] is not { } graph) { continue; }
+                var name = m_set.Instances[index].Name;
+                foreach (var pass in graph.Pipeline.Plan.Passes) {
+                    if (pass.Package is not { } step || !m_packages.TryGetFactory(step.Package, out var factory)) { continue; }
+                    var readiness = factory.CaptureReadinessOf(name);
+                    if (readiness.Completion == Puck.Hosting.FrameCompletion.Refused) { return readiness; }
+                    if (!readiness.IsRendered) { result = readiness; }
+                }
+            }
+            return result;
+        }
+    }
 }

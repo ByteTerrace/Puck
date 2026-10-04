@@ -233,6 +233,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         entry.Convergence = convergence;
         entry.Temporal.Reset();
+        entry.HistoryTainted = false;
         foreach (var residency in m_residencies.Keys) {
             residency.BeginConvergence(request: convergence.Request);
         }
@@ -406,7 +407,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
     // Starts a residency's frame the first time the package meets it in this frame.
     internal void Begin(SdfWorldResidency residency) {
-        if (m_convergence is { IsActive: true } convergence) {
+        if (m_convergence is { Request.Completion.IsCompleted: false } convergence) {
             residency.BeginConvergence(request: convergence.Request);
         }
         if (residency.PackageFrame != m_frame) {

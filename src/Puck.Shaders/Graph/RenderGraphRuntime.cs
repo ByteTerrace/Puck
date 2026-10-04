@@ -1037,6 +1037,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private string? ReasonOf(int index) {
         var name = m_set.Instances[index].Name;
 
+        if (index == m_captureInstance && CaptureReadiness is { IsRendered: false } readiness) { return readiness.Reason; }
+
         if (m_producers[index] is { } producer) {
             return ((producer.NotReadyReason is { } reason)
                 ? $"the instance '{name}' has produced no output: {reason}"
@@ -1271,6 +1273,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 if (
                     (index == m_captureInstance) &&
                     (m_capture.PendingPath is not null) &&
+                    CaptureReadiness.IsRendered &&
                     (m_taintedReads[index] is null) &&
                     !MarkReadStale(index: index, schedule: schedule)
                 ) {
@@ -1361,6 +1364,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 index: index,
                 schedule: schedule
             );
+            NotePackageTaint(index);
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
             if (
                 (source is null) &&
@@ -1442,6 +1446,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             // A sample rendered at an extent the node was not asked for is one its capture never reads.
             if ((node.FrameCounter != rendered) && (index == m_captureInstance) && IsConverging(index: index) &&
+                CaptureReadiness.IsRendered &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
                 m_convergence!.Count();
             }

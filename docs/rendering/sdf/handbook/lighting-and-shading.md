@@ -432,8 +432,13 @@ load and every written record is counted. The 8,704-byte residency buffer is
 shared by all views, with one further immutable copy per finite solve.
 Source owner, sequence and taint travel with that copy. The CPU explanation
 continues to refuse screen transport because it has no captured GPU pixels.
-Finite portal-closure iterations and capture reset ordering remain implementation
-work; previous-frame image dependencies alone do not provide that policy.
+Every capture resets radiance publication and view history, retaining reusable
+geometry transport, then waits for a fresh finite solve of its capture-filled
+sources and that solve's exact completed fence. An older tainted bank keeps its
+taint even after clean image reductions arrive. A frozen indirect control
+refuses the cold capture without changing its retained bank.
+Finite portal-closure iterations remain implementation work; previous-frame
+image dependencies alone do not provide that policy.
 
 An existing surface-picker request also copies a 272-byte receiver record and
 the allocated probe-state range under the visibility copy's fence. The answer
@@ -466,9 +471,11 @@ directional shadow fallbacks retain their own bounds. Views attribute those
 light queries and every field step once to their reserved indirect row; the
 finite cache solve retains its separate map and fallback rows. A certified
 secondary hit uses the shared explicit diffuse source fold; its result replaces
-a sample rather than adding another bounce. A local
-clear interval cannot declare a sky exit, and a hit's unproved sky hemisphere
-retains the cache sky contribution. Both methods return independent categories
+a sample rather than adding another bounce. A screen hit instead reads the same
+pinned acquired-image emission as the cache and Near. It terminates the sample,
+including a valid dark answer, without passing cached sky through the screen.
+A local clear interval cannot declare a sky exit, and an ordinary hit's unproved
+sky hemisphere retains the cache sky contribution. Both methods return independent categories
 before the receiver's material response. Their device laws and measured
 comparison remain open qualification work in the rendering plan.
 

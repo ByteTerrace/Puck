@@ -101,6 +101,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool[] m_recorded = [];
 
     private bool m_disposed;
+    private bool m_sourceTainted;
+    private bool m_readsHistory;
 
     private readonly SdfWorldPickReadback? m_pick;
 
@@ -298,6 +300,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
     public void Submitted() {
+        if (m_part == SdfWorldPackage.Parts.Views && !m_view.LightView) {
+            m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
+        }
         if (m_part == SdfWorldPackage.LightDepth) { m_view.Residency.SubmitLightView(); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
         if (m_part == SdfWorldPackage.Parts.Shadow) {
@@ -334,6 +339,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var temporal = m_owner.TemporalOf(
             instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: width, renderHeight: height
         );
+
+        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Views) {
+            m_sourceTainted = SdfWorldPasses.SourceTainted(tables, frame) || recording.Reads is { Tainted: true };
+            m_readsHistory = m_temporal && temporal.HasPreviousView;
+        }
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);

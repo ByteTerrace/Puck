@@ -672,13 +672,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
-    /// <summary>Freezes the presentation source for a converging capture.</summary>
+    /// <summary>Freezes the presentation source and restarts radiance for a capture, retaining reusable transport.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         if (!ReferenceEquals(objA: m_convergence, objB: request)) {
             m_convergence = request;
             m_frozenFrame = null;
+            m_captureLightingReset = !IndirectFrozen;
             m_frameSource.BeginConvergence(request: request);
         }
     }

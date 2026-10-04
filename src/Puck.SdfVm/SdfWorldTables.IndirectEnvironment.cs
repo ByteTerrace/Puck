@@ -15,6 +15,13 @@ public sealed partial class SdfWorldTables {
         public IGpuBuffer? ScreenEmission { get; private set; }
         public bool AwaitingEnvironment { get; private set; }
 
+        public void InvalidateSource() {
+            AwaitingEnvironment = false;
+            m_environment = default;
+            m_screens = default;
+            Snapshot = null;
+        }
+
         // These are the existing source snapshot's GPU-written regions. They need no CPU shadow or readback, and
         // their lifetime and bytes follow the same retained cache as the host-written source regions.
         public void EnsureEnvironmentBuffers() {

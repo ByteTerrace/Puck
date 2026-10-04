@@ -48,6 +48,7 @@ public sealed partial class RenderGraphRuntime {
         m_historyPrior = null;
     }
     private void RememberOutput(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
+        NotePackageTaint(index);
         var publication = ((node.PublishedBinding is { } binding) && node.TryGetBoundImage(name: binding, image: out var input)
             ? input.Publication
             : new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount));
@@ -222,6 +223,9 @@ public sealed partial class RenderGraphRuntime {
     }
     // Decides the frame's completion from the root's standing.
     private void Complete() {
+        if (m_capture.PendingPath is not null && CaptureReadiness is { Completion: FrameCompletion.Refused } readiness) {
+            m_capture.Refuse(error: new InvalidOperationException(message: readiness.Reason));
+        }
         // A capture waiting here has not reached a node's readback. A refused dependency cannot become current by
         // composing another frame, so report its refusal instead of keeping the capture's host clock held.
         if ((m_capture.PendingPath is not null) && m_staleRefused[m_captureInstance] &&

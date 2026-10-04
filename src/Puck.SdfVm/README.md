@@ -566,6 +566,16 @@ capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
+A capture freezes its dependency closure even when it requests no additional
+convergence samples. Each participating residency discards old radiance
+publications and view history, retains reusable transport, and pins the
+capture-filled source for a fresh finite solve. The runtime waits for that
+exact source's completed view fence before forwarding the capture or counting
+samples. A frozen indirect control refuses this cold solve by name without
+thawing or changing its retained bank; an off tier needs no lighting fence.
+Retained source and temporal-history taint remain independent of newer clean
+graph inputs.
+
 A readback `DeviceLostException` completes the request with that failure and
 is then rethrown so the host can rebuild the graphics device. Ordinary PNG or
 filesystem failures remain result data and do not interrupt rendering.

@@ -258,6 +258,16 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     string? RefusalOf(string instance) => null;
+    /// <summary>Returns whether the instance consumes retained package state containing unfilled external pixels.
+    /// This joins the current graph inputs' taint; replacing those inputs cannot relabel an older retained result.</summary>
+    /// <param name="instance">The instance whose next output is being prepared or whose recording just submitted.</param>
+    /// <returns>Whether retained source state or history contributes external content.</returns>
+    bool TaintedOf(string instance) => false;
+    /// <summary>Answers whether an armed capture may consume this instance's current retained state. A finite producer
+    /// waits until its exact capture source has completed; a permanent refusal preserves its named refusal.</summary>
+    /// <param name="instance">An instance in the capture's existing dependency closure.</param>
+    /// <returns>The capture readiness of the package-owned state. Ordinary rendering continues while it waits.</returns>
+    FrameRender CaptureReadinessOf(string instance) => FrameRender.Rendered;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }
@@ -270,7 +280,8 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
-    /// <summary>Starts a frozen convergence epoch for a captured instance or one of its dependencies. A package that
+    /// <summary>Starts a frozen capture epoch for a captured instance or one of its dependencies, including a capture
+    /// requesting no additional convergence samples. A package that
     /// samples on the capture's behalf takes each render's sample index from the convergence's counted samples
     /// (<see cref="RenderGraphConvergence.Samples"/>), so a frame the runtime does not count renders the same sample
     /// again.</summary>
