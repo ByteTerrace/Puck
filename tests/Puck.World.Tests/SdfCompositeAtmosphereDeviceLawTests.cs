@@ -22,7 +22,7 @@ namespace Puck.World.Tests;
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
-public sealed class SdfCompositeAtmosphereDeviceLawTests {
+public sealed partial class SdfCompositeAtmosphereDeviceLawTests {
     private const uint Width = 16;
     private const uint Height = 8;
     // The pass, its plain detail, then the initial shared fixed and layer detail rows, sufficient for this fixture.
@@ -51,13 +51,13 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
         var fog = (SdfAtmosphere.None with { FogDensity = 0.05f });
         var every = (fog with { HazeAmount = 0.3f, MediumColor = new Vector3(x: 0f, y: 0.2f, z: 0.3f), MediumExtinction = 0.4f, MediumSurface = 0f });
 
-        Assert.Equal(expected: (Atmosphere: 0L, Layers: 0L), actual: Run(atmosphere: SdfAtmosphere.None, extension: extension, lights: lights, services: services));
-        Assert.Equal(expected: (Atmosphere: 128L, Layers: 0L), actual: Run(atmosphere: fog, extension: extension, lights: lights, services: services));
-        Assert.Equal(expected: (Atmosphere: 384L, Layers: 0L), actual: Run(atmosphere: every, extension: extension, lights: lights, services: services));
+        Assert.Equal(expected: (Atmosphere: 0L, Layers: 0L), actual: Run(atmosphere: SdfAtmosphere.None, extension: extension, lights: lights, services: services).Counts);
+        Assert.Equal(expected: (Atmosphere: 128L, Layers: 0L), actual: Run(atmosphere: fog, extension: extension, lights: lights, services: services).Counts);
+        Assert.Equal(expected: (Atmosphere: 384L, Layers: 0L), actual: Run(atmosphere: every, extension: extension, lights: lights, services: services).Counts);
     }
     // Runs the composite once over a wholly covered lit image whose every pixel's surface lies SurfaceDistance along its
     // ray, through the atmosphere, and returns its counted atmosphere evaluations and its sky layers' evaluations.
-    private static (long Atmosphere, long Layers) Run(GpuDeviceServices services, string extension, SdfAtmosphere atmosphere, SdfLights lights) {
+    private static CompositeResult Run(GpuDeviceServices services, string extension, SdfAtmosphere atmosphere, SdfLights lights, CoverageProbe? coverageProbe = null) {
         var parameters = SdfWorldInterfaces.SkyParameters;
         var block = new byte[parameters.SizeBytes];
 
@@ -75,21 +75,35 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
         var forward = Vector3.Normalize(value: new Vector3(x: 0f, y: -1f, z: -1f));
         var up = Vector3.Normalize(value: new Vector3(x: 0f, y: 1f, z: -1f));
 
+        if (coverageProbe is not null) { forward = -Vector3.UnitZ; up = Vector3.UnitY; }
+
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);
+        Word(member: SdfWorldPackage.GeometryOnly, value: ((coverageProbe?.GeometryOnly == true) ? 1u : 0u));
         Word(member: ShaderWorkCounters.DetailRow, value: DetailRow);
         Vector(member: SdfWorldPackage.ViewPosition, value: new Vector3(x: 0f, y: 2f, z: 0f));
         Vector(member: SdfWorldPackage.ViewRight, value: Vector3.UnitX);
         Vector(member: SdfWorldPackage.ViewUp, value: up);
         Vector(member: SdfWorldPackage.ViewForward, value: forward);
-        Float(member: SdfWorldPackage.TanHalfFieldOfView, value: 0.1f);
+        Float(member: SdfWorldPackage.TanHalfFieldOfView, value: ((coverageProbe is null) ? 0.1f : 0.5f));
         Float(member: SdfWorldPackage.AspectRatio, value: (Width / ((float)Height)));
         Float(member: SdfWorldPackage.FarDistance, value: SdfFrame.DefaultFarDistance);
 
         var sky = default(SdfSkyBlock);
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
         SdfSky.PackAtmosphere(atmosphere: in atmosphere, block: ref sky, farDistance: SdfFrame.DefaultFarDistance, lights: lights);
+        if (coverageProbe is not null) {
+            coverageProbe.Sky.Pack(lights: lights, farDistance: SdfFrame.DefaultFarDistance, details: new SdfSkyDetails(), block: out sky, layers: layers);
+            for (var index = 0; index < sky.LayerCount; index++) {
+                if (layers[index].Kind != SdfSkyLayerKind.View) { continue; }
+                var fitted = SdfSky.PayloadOf<SdfSkyView>(layer: ref layers[index]);
+
+                MemoryMarshal.AsBytes(span: new[] { fitted }.AsSpan()).CopyTo(destination: block.AsSpan(
+                    start: (((int)parameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews)) + (index * SdfWorldPackage.SkyViewRows * 16))));
+            }
+        }
         var skyBytes = MemoryMarshal.AsBytes(span: new[] { sky }.AsSpan()).ToArray();
         // Every pixel one render sample copied whole: its surface's ray distance under the sample bit.
         var transport = new byte[((Width * Height) * 8)];
@@ -114,15 +128,22 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         using var skyBuffer = services.BufferFactory.CreateHostVisible(data: skyBytes, name: default, usage: GpuBufferUsage.Storage);
+        using var layerBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: layers.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         using var transportBuffer = services.BufferFactory.CreateHostVisible(data: transport, name: default, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         using var output = services.ImageFactory.Create(format: RenderGraphPackageCatalog.WorkingFormat, height: Height, name: default, usage: GpuImageUsage.Storage, width: Width);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
         using var counted = services.BufferFactory.CreateReadback(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)));
         using var upload = services.SurfaceTransferFactory.CreateUpload();
-        var litView = upload.Upload(pixels: lit, format: GpuPixelFormat.R8G8B8A8Unorm, width: Width, height: Height);
+        var litView = upload.Upload(pixels: ((coverageProbe is null) ? lit : MemoryMarshal.AsBytes(span: coverageProbe.Lit.AsSpan()).ToArray()),
+            format: ((coverageProbe is null) ? GpuPixelFormat.R8G8B8A8Unorm : GpuPixelFormat.R16G16B16A16Float), width: Width, height: Height);
         using var fillerUpload = services.SurfaceTransferFactory.CreateUpload();
         var fillerSampled = fillerUpload.Upload(pixels: new byte[4], format: GpuPixelFormat.R8G8B8A8Unorm, width: 1, height: 1);
+        using var viewUpload = services.SurfaceTransferFactory.CreateUpload();
+        var viewImage = ((coverageProbe?.ViewImage is { } viewPixels)
+            ? viewUpload.Upload(pixels: MemoryMarshal.AsBytes(span: viewPixels.AsSpan()).ToArray(), format: GpuPixelFormat.R16G16B16A16Float, width: Width, height: Height)
+            : fillerSampled);
+        using var readback = services.SurfaceTransferFactory.CreateReadback();
         var sampler = services.Bindings.CreateSampler();
         using var commands = services.CommandPoolFactory.Create(name: default);
         var pool = services.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups));
@@ -142,10 +163,12 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
             var images = new Dictionary<(uint, uint), nint> {
                 [At(member: SdfWorldPackage.LitImage)] = litView,
                 [At(member: SdfWorldPackage.Output)] = output.ImageViewHandle,
+                [At(member: SdfWorldPackage.SkyViewImages)] = viewImage,
             };
             var buffers = new Dictionary<(uint, uint), IGpuBuffer> {
                 [At(member: ShaderWorkCounters.Buffer)] = counters,
                 [At(member: SdfKernelInterfaces.Sky)] = skyBuffer,
+                [At(member: SdfKernelInterfaces.SkyLayers)] = layerBuffer,
                 [At(member: SdfWorldPackage.TransportRead)] = transportBuffer,
             };
             var sets = new List<(uint Group, nint Set)>();
@@ -195,6 +218,11 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
                     sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
                     destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader, newLayout: GpuImageLayout.General);
             }
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle, sizeBytes: fillerBuffer.SizeBytes);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
             recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle, sizeBytes: counters.SizeBytes);
@@ -216,13 +244,21 @@ public sealed class SdfCompositeAtmosphereDeviceLawTests {
 
             counted.Read(destination: words);
             long Count(int row, int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((row * GpuKernelCounters.RowBytes) + ((kind * GpuKernelCounters.CountWords) * sizeof(uint)))));
-            var layers = Count(kind: 2, row: 0);
+            var layerCount = Count(kind: 2, row: 0);
 
             for (var row = DetailRow; (row < Rows); row++) {
-                if (row != AtmosphereRow) { layers += Count(kind: 2, row: row); }
+                if (row != AtmosphereRow) { layerCount += Count(kind: 2, row: row); }
             }
 
-            return (Atmosphere: Count(kind: 2, row: AtmosphereRow), Layers: layers);
+            Half[] color = [];
+
+            if (coverageProbe is not null) {
+                var pixels = readback.Read(bytesPerPixel: 8, format: RenderGraphPackageCatalog.WorkingFormat, height: Height, width: Width,
+                    sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
+
+                color = MemoryMarshal.Cast<byte, Half>(span: pixels.Span).ToArray();
+            }
+            return new CompositeResult(Counts: (Atmosphere: Count(kind: 2, row: AtmosphereRow), Layers: layerCount), Color: color);
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
             services.Bindings.DestroySampler(samplerHandle: sampler);

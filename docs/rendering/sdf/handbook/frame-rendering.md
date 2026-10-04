@@ -349,6 +349,11 @@ world, and `far`, only named prototypes of this one) is a second `sdf.world` ins
 at the tangent each pixel's direction has on the viewer's basis, inside the rectangle of the camera plane the layer's
 cone covers; before the instance has an image the layer draws its fallback colour, and either way a pixel counts a
 shown texel in the layer's detail row, which demands the instance's next frame.
+A `far` instance publishes only geometry: premultiplied color and coverage in
+alpha, with no background sky or air on uncovered rays. Its covered surface
+still takes the normal atmosphere and bounded media. The consuming layer filters
+color and coverage together, then unpremultiplies before the existing layer blend
+applies coverage once. Another world's whole view remains opaque.
 The binder reads the authority's existing named-layer observation and gives each
 planned layer one scene and residency. Each consuming camera fits its own output
 after its frame's cameras and sky quality resolve; a second camera shares the

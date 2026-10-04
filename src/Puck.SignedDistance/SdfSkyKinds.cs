@@ -378,8 +378,8 @@ public record struct SdfSkyDisc : ISdfSkyKind {
 /// rectangle of the viewer's camera plane its layer's mask covers (<see cref="Rect"/>, in tangent space), so a pixel
 /// samples it at the tangent its world direction has on the viewer's basis (<see cref="Right"/>, <see cref="Up"/>,
 /// <see cref="Forward"/>), with no sky frame in between. The consumer's image binding is selected by
-/// <see cref="ImageSlot"/>; before the instance has an image, or where it renders nothing, the layer draws
-/// <see cref="Fallback"/>. Either way the pixel counts a shown texel, which is what demands the instance's next frame.
+/// <see cref="ImageSlot"/>; before the instance has an image, the layer draws <see cref="Fallback"/>. A completed far
+/// image leaves uncovered directions transparent. Either way the pixel counts a shown texel, which is what demands the instance's next frame.
 /// Each consuming view supplies its own fit.</summary>
 [StructLayout(LayoutKind.Explicit, Size = 80)]
 public record struct SdfSkyView : ISdfSkyKind {
@@ -394,8 +394,8 @@ public record struct SdfSkyView : ISdfSkyKind {
     [FieldOffset(28)] public int ImageSlot;
     /// <summary>The viewer's camera forward axis.</summary>
     [FieldOffset(32)] public Vector3 Forward;
-    /// <summary>One when the image's alpha is its coverage (far geometry, which leaves the rest of the sky showing), zero
-    /// when the image is opaque (another world's whole frame).</summary>
+    /// <summary>One when the image's color is premultiplied and its alpha is coverage (far geometry, which leaves the
+    /// rest of the sky showing). Filtering precedes unpremultiplication. Zero means an opaque image of another world's whole frame.</summary>
     [FieldOffset(44)] public uint Coverage;
     /// <summary>The rectangle the instance renders on the viewer's camera plane, <c>(minX, minY, maxX, maxY)</c> in
     /// tangent space (<c>InfinityViewFrame.Rect</c>).</summary>

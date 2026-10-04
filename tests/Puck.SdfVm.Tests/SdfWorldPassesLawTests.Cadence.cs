@@ -38,6 +38,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("medium", false)]
     [InlineData("light-color", false)]
     [InlineData("indirect-method", false)]
+    [InlineData("geometry-only", false)]
     [InlineData("shadow-direction", false)]
     [InlineData("camera", false)]
     [InlineData("drift", true)]
@@ -46,6 +47,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("medium", true)]
     [InlineData("light-color", true)]
     [InlineData("indirect-method", true)]
+    [InlineData("geometry-only", true)]
     [InlineData("shadow-direction", true)]
     [InlineData("camera", true)]
     [Theory]
@@ -55,6 +57,10 @@ public sealed partial class SdfWorldPassesLawTests {
         string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
 
         switch (change) {
+            case "geometry-only":
+                frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { GeometryOnly = true } }] };
+                executed = [SdfWorldPackage.Parts.Composite];
+                break;
             case "drift": frame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
             case "twinkle": frame.Sky.First<SdfSkyStars>().TwinklePhase = 0.37f; break;
             case "fog-color": frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(x: 0.2f, y: 0.1f, z: 0.3f), elevation: -1f, index: 0); break;

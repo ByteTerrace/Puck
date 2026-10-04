@@ -12,6 +12,7 @@ namespace Puck.World.Client;
 /// supplied this frame, at the layer's anchor, turned with that viewer, at a quality that leaves
 /// soft shadows and ambient occlusion off unless the view's levers turn them on, retains each consuming camera's
 /// indirect comparison method, and its far distance is the view's own.
+/// A far view publishes premultiplied geometry with its coverage, leaving uncovered directions transparent.
 /// A frame the view is not visible in keeps the emitter's own view, which the graph does not render.
 /// </summary>
 public sealed class WorldInfinityViewScene : ISdfFrameDresser {
@@ -76,7 +77,10 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
 
         m_fittedViews.Clear();
         foreach (var view in views) {
-            m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) with { IndirectMethod = view.Quality.IndirectMethod } });
+            m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) with {
+                IndirectMethod = view.Quality.IndirectMethod,
+                GeometryOnly = (m_spec.Kind == InfinityViewKind.Far),
+            } });
         }
         FitSkyViews?.Invoke(m_fittedViews, dressed.Sky, width, height);
 

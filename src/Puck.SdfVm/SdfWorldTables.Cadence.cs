@@ -52,6 +52,7 @@ public sealed partial class SdfWorldTables {
     private ulong m_shadowSignature;
     private ulong m_visualSignature;
 
+    private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectMethod,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
@@ -77,6 +78,10 @@ public sealed partial class SdfWorldTables {
 
         block.Clear();
         SdfFrameBlock.Write(block: block, frame: frame, height: 0, tables: PassValues, view: view, width: 0);
+        var composite = Fnv1aHash.Create();
+
+        AddMembers(block: block, hash: ref composite, members: CompositeValues);
+        ClearMembers(block: block, members: CompositeValues);
         var lighting = Fnv1aHash.Create();
 
         lighting.Add(value: m_lightingSignature);
@@ -113,6 +118,7 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.Composite:
                 hash.Add(value: lighting.Value);
                 hash.Add(value: m_visualSignature);
+                if (part == SdfWorldPackage.Parts.Composite) { hash.Add(value: composite.Value); }
                 break;
         }
         return hash.Value;

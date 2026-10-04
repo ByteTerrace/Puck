@@ -19,6 +19,8 @@
 //   sky share's at the far distance, from the camera's near plane, so a medium never paints through solid geometry,
 //   even at an edge whose samples it lies behind.
 // A debug view's lit image is its whole picture, so it passes through.
+// A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
+// covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
 
@@ -30,6 +32,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
+    bool geometryOnly = (passGroup.geometryOnly != 0u);
 
     if ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost)) {
         ViewportData view = sdfSkyPassView();
@@ -45,7 +48,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         skyAir.transmittance = 1.0;
         skyAir.weights = float3(0.0, 0.0, 0.0);
         sdfSkyPassSurface(id.xy, coverage, origin, direction, weights, t);
-        if ((coverage < 1.0) && sdfAirBeforeSky()) {
+        if (!geometryOnly && (coverage < 1.0) && sdfAirBeforeSky()) {
             skyAir = sdfAirAlong(origin, direction, worldFarDistance(view), false);
         }
 
@@ -66,7 +69,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
             surface += (sdfSky[0].MediumColor * weights.z);
         }
-        if (coverage < 1.0) {
+        if (!geometryOnly && (coverage < 1.0)) {
             float3 base;
             float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS];
             float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
@@ -82,7 +85,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float far = worldFarDistance(view);
         float covered;
 
-        color = shadeVolumes(surface, coverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
+        color = float3(0.0, 0.0, 0.0);
+        if (!geometryOnly || (coverage > 0.0)) {
+            // The far layer has no background share. Integrate the surface through the existing volume helper, then
+            // restore its premultiplication; a missing surface integrates nothing, including bounded media.
+            float3 volumeSurface = (geometryOnly ? (surface / coverage) : surface);
+            float volumeCoverage = (geometryOnly ? 1.0 : coverage);
+
+            color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
+            if (geometryOnly) { color *= coverage; }
+        }
         if (passGroup.debugMode == DebugViewModeSkyCost) {
             // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.
             color = saturate(sdfSkyCost / float3(4.0, 64.0, 16.0));
@@ -90,7 +102,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     // The float working color; the display encode dithers and quantizes it.
-    output[id.xy] = float4(color, 1.0);
+    output[id.xy] = float4(color, (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

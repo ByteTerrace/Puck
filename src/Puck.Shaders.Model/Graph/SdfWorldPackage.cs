@@ -154,6 +154,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
+    /// <summary>The pass-group value set to one to publish premultiplied geometry color and coverage without background sky
+    /// (<c>uint</c>), for a far sky layer.</summary>
+    public const string GeometryOnly = "geometryOnly";
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -359,6 +362,7 @@ public static partial class SdfWorldPackage {
         Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
+        Value(name: GeometryOnly, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];

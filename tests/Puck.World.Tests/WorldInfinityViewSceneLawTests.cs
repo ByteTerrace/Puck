@@ -72,6 +72,7 @@ public sealed class WorldInfinityViewSceneLawTests {
         Assert.Equal(expected: fitted.Camera, actual: view.Camera);
         Assert.Equal(expected: spec.Anchor, actual: view.Camera.Position);
         Assert.Equal(expected: 777f, actual: frame.FarDistance);
+        Assert.False(condition: view.Quality.GeometryOnly);
     }
     [Fact]
     public void TwoFittedConsumersShareOneSceneAndKeepTheirNestedSkyBindings() {
@@ -145,5 +146,12 @@ public sealed class WorldInfinityViewSceneLawTests {
         Assert.Single(collection: moonOnly.Program.Instances);
         Assert.NotEqual(expected: ballOnly.Program.Instances[0].Center, actual: moonOnly.Program.Instances[0].Center);
         Assert.Empty(collection: neither.Program.Instances);
+        foreach (var frame in new[] { everything, ballOnly, moonOnly, neither }) {
+            var quality = Assert.Single(collection: frame.Views).Quality;
+
+            Assert.True(condition: quality.GeometryOnly);
+            Assert.True(condition: quality.Restrict(other: default).GeometryOnly);
+        }
+        Assert.False(condition: default(SdfViewQuality).Restrict(other: new SdfViewQuality { GeometryOnly = true }).GeometryOnly);
     }
 }

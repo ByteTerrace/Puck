@@ -69,6 +69,9 @@ public readonly record struct SdfViewQuality {
     /// <summary>The per-view method used by the counted indirect comparison. The default uses the residency cache.
     /// Quality restrictions retain the consumer's method; this selector changes no simulation or cache geometry.</summary>
     public SdfIndirectMethod IndirectMethod { get; init; }
+    /// <summary>Publishes only geometry, with premultiplied color and its coverage in alpha, for a far sky layer.
+    /// The composite omits background sky and air on uncovered rays. Restrictions retain the consumer's output form.</summary>
+    public bool GeometryOnly { get; init; }
     /// <summary>Gets whether the view skips ambient occlusion: occlusion reads 1, so creases read brighter, and the
     /// ambient pass does not run. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
     public bool DisableAmbientOcclusion { get; init; }
@@ -111,6 +114,7 @@ public readonly record struct SdfViewQuality {
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
         IndirectMethod = IndirectMethod,
+        GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableFarBound = (DisableFarBound || other.DisableFarBound),
         DisableSoftShadows = (DisableSoftShadows || other.DisableSoftShadows),

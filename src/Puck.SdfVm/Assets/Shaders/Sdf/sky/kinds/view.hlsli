@@ -6,7 +6,8 @@
 // The image is clamped half a source pixel inside its extent; an instance with no completed image draws the layer's
 // fallback colour instead. Either way the evaluation counts one shown texel, which is what
 // the host reads back to demand the instance's next frame; a pass that binds no infinity images (the environment map's) draws
-// nothing and counts nothing. Opaque unless the layer is far geometry, whose image alpha is its coverage. One evaluation
+// nothing and counts nothing. Opaque unless the layer is far geometry, whose image alpha is its coverage and whose RGB
+// is premultiplied. Unpremultiply after filtering so the layer blend applies coverage once, including at edges. One evaluation
 // and one texel a sample.
 #ifndef SKY_KINDS_VIEW_HLSLI
 #define SKY_KINDS_VIEW_HLSLI
@@ -63,7 +64,12 @@ float4 sdfSkyViewLayer(SdfSkyView view, SdfSkyLayer layer, SdfSkySample sample) 
     float2 source = clamp(uv, inset, (1.0 - inset));
     float4 sampled = skyViewImages[image].SampleLevel(samplers[SDF_FILTER_LINEAR], source, 0.0);
 
-    return float4((sampled.rgb * view.Intensity), ((view.Coverage != 0u) ? sampled.a : 1.0));
+    if (view.Coverage != 0u) {
+        float3 color = ((sampled.a > 0.0) ? (sampled.rgb / sampled.a) : float3(0.0, 0.0, 0.0));
+
+        return float4((color * view.Intensity), sampled.a);
+    }
+    return float4((sampled.rgb * view.Intensity), 1.0);
 #else
     return float4(0.0, 0.0, 0.0, 0.0);
 #endif
