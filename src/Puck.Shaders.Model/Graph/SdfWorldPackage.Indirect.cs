@@ -71,16 +71,20 @@ public static partial class SdfWorldPackage {
     public const string IndirectShade = "shade";
 
     /// <summary>Gets the visible cache publication and receiver allowance carried only by world passes.</summary>
-    public static IReadOnlyList<ShaderInterfaceMember> WorldIndirectValues { get; } = [
-        Value(name: IndirectEpoch, type: ShaderValueType.Uint),
-        Value(name: IndirectAllocation, type: ShaderValueType.Uint2),
-        Value(name: IndirectCertificateRevision, type: ShaderValueType.Uint),
-        Value(name: IndirectFrame, type: ShaderValueType.Uint),
-        Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
-        Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
-        Value(name: IndirectReceiverProofs, type: ShaderValueType.Uint),
-        Value(name: IndirectPickPixel, type: ShaderValueType.Uint4),
-    ];
+    public static IReadOnlyList<ShaderInterfaceMember> WorldIndirectValues => WorldIndirectInterface.Values;
+
+    private static class WorldIndirectInterface {
+        internal static readonly IReadOnlyList<ShaderInterfaceMember> Values = [
+            Value(name: IndirectEpoch, type: ShaderValueType.Uint),
+            Value(name: IndirectAllocation, type: ShaderValueType.Uint2),
+            Value(name: IndirectCertificateRevision, type: ShaderValueType.Uint),
+            Value(name: IndirectFrame, type: ShaderValueType.Uint),
+            Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
+            Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
+            Value(name: IndirectReceiverProofs, type: ShaderValueType.Uint),
+            Value(name: IndirectPickPixel, type: ShaderValueType.Uint4),
+        ];
+    }
 
     /// <summary>Gets the indirect kernels' interface members. Every host table is a region.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> IndirectMembers { get; } = [
