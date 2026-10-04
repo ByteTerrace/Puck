@@ -19,6 +19,7 @@ static float3 sdfIndirectReceiverNormal = 0.0;
 
 void sdfIndirectPickBegin(SdfPixel p) {
     sdfIndirectNearOutcome = SdfIndirectNearOutcomeNotAttempted;
+    sdfIndirectNearDirection = 0.0;
     sdfIndirectReceiverStatus = passGroup.indirectTier == SdfIndirectTierOff ? 0u : 5u;
     sdfIndirectPickActive = p.active && passGroup.indirectPickPixel.z != 0u && all(p.pixel == passGroup.indirectPickPixel.xy);
     if (sdfIndirectPickActive) { sdfIndirectPickClearCorners(); }
@@ -46,6 +47,10 @@ void sdfIndirectPickFinish() {
     sdfIndirectPickStore(51u, passGroup.indirectMethod);
     sdfIndirectPickStore(55u, passGroup.indirectSources);
     sdfIndirectPickStore(59u, sdfIndirectNearOutcome);
+    [unroll] for (uint lane = 0u; lane < 3u; lane++) {
+        sdfIndirectPickStore(68u + lane, asuint(sdfIndirectNearDirection[lane]));
+    }
+    sdfIndirectPickStore(71u, passGroup.indirectPreviousPublication);
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT, 0u, sdfIndirectPickStores, 0u, 0u, 0u);
     if (passGroup.workCounterRowDetail == 0u) {
         puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkTexelsWord, sdfIndirectPickStores);

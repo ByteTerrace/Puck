@@ -1,0 +1,30 @@
+schema: "puck.world.definition.v1"
+basis: "../indirect-cadence/fixture"
+documentId: "indirect-orbit-relight"
+render {
+  farDistance: 12
+  ambientOcclusion: false
+  temporal: false
+  dynamicResolution: false
+  environment { ambient: 0, reflection: 0 }
+  sky { layers [gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])] }
+  atmosphere { fog { density: 0 } }
+  lighting {
+    clock: change
+    lights [directional(name: "sun", direction: [0, 1, 0], color: "#FFFFFF", weight: 1, shadow: Never, bounce: 1)]
+    keys [
+      { at: 0, lights { sun: directional(direction: [0, 1, 0]) } }
+      { at: 0.5, lights { sun: directional(direction: [1, 1, 0]) } }
+    ]
+  }
+}
+placements { placement "floor" { prototype: "floor", position [0, 0, 0] } }
+prototypes {
+  prototype "floor" { document {
+    schema: "puck.creation.v1"
+    name: "floor"
+    palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
+    shape Box "receiver" { material: 0, position [0, -0.05, 0], scale [5, 0.05, 5] }
+  } }
+}
+timeline { clocks [{ name: "change", periodSeconds: 2 }] }

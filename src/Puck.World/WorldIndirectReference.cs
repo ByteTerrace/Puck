@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>Runs the existing independent CPU irradiance reference once for an explicitly requested fenced pick.
 /// It reads that publication's source and depth; it never samples a later live frame or infers GPU classifications.</summary>
 public static class WorldIndirectReference {
-    /// <summary>Estimates a captured cache receiver with independently attributed Halton paths.</summary>
+    /// <summary>Estimates a captured cache receiver or exact sampled Near incoming ray with independent finite paths.</summary>
     /// <param name="pick">The actual fenced receiver answer.</param>
     /// <param name="paths">The bounded path count, from one through 256; the default is 64.</param>
     /// <returns>The estimate and work, or a named unsupported source without numeric divergence.</returns>
@@ -24,11 +24,14 @@ public static class WorldIndirectReference {
         IrradianceField? field = null;
         WorldIndirectReferenceResult Refused(string reason) => new(null, reason, field?.Samples ?? 0,
             field?.Casts ?? 0, depth, sequence, null);
-        if (pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation) {
+        var near = pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation;
+        var capturedSource = near ? pick.NearSource : pick.LightingSource;
+        if (near && (capturedSource is null || !ReferenceEquals(capturedSource, pick.LightingSource) ||
+            !Finite(pick.NearDirection) || pick.NearDirection.LengthSquared() < 1e-12f || !Finite(pick.Launched))) {
             return Refused($"Near {pick.Near} reference needs its sampled direction and incoming source; the cache estimate cannot supply it.");
         }
         if (pick.Method != SdfIndirectMethod.Cache) { return Refused($"{pick.Method} reference needs its rendered-frame source; the cache publication cannot supply it."); }
-        if (pick.Status != SdfIndirectPickStatus.Resolved || pick.LightingSource is not { } source ||
+        if (pick.Status != SdfIndirectPickStatus.Resolved || capturedSource is not { } source ||
             pick.Cache is not { PublishedSweeps: > 0 }) { return Refused($"Receiver is {pick.Status}; no complete captured lighting answer is available."); }
         if (pick.Publication != pick.Cache.PublishedStamp || pick.Generation != (uint)pick.Cache.PublishedGeneration) {
             return Refused("Receiver and captured cache publication identities disagree.");
@@ -60,8 +63,10 @@ public static class WorldIndirectReference {
                 sky: direction => ToDouble(SdfSkyEnvironment.Sample(sky, ToVector(direction))),
                 reflection: (position, normal, material) => Material(material) * lighting.Attenuation(position, normal));
             var reference = new IrradianceReference(field, surfaces, frame.FarDistance);
-            var sourceEstimate = reference.EstimateSources(ToDouble(pick.Position), ToDouble(Vector3.Normalize(pick.Normal)),
-                (frame.IndirectSources & SdfIndirectSources.Feedback) != 0 ? depth : 0, paths);
+            var feedbackDepth = (frame.IndirectSources & SdfIndirectSources.Feedback) != 0 ? depth : 0;
+            var sourceEstimate = near
+                ? reference.EstimateIncidentSources(ToDouble(pick.Launched), ToDouble(pick.NearDirection), feedbackDepth, paths)
+                : reference.EstimateSources(ToDouble(pick.Position), ToDouble(Vector3.Normalize(pick.Normal)), feedbackDepth, paths);
             var estimate = new IrradianceEstimate(sourceEstimate.Contributions.Select(pick.SourcesEnabled), paths, sourceEstimate.Unresolved);
             if (estimate.Unresolved != 0) {
                 return new(estimate, $"CPU reference has {estimate.Unresolved}/{paths} unresolved paths.", field.Samples, field.Casts, depth, sequence, null);

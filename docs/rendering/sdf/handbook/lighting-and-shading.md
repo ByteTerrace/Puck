@@ -440,7 +440,7 @@ refuses the cold capture without changing its retained bank.
 Finite portal-closure iterations remain implementation work; previous-frame
 image dependencies alone do not provide that policy.
 
-An existing surface-picker request also copies a 272-byte receiver record and
+An existing surface-picker request also copies a 288-byte receiver record and
 the allocated probe-state range under the visibility copy's fence. The answer
 retains its cache epoch and published lighting source across later resets. Its
 eight corners carry actual classifications, stamps and normalized weights; its
@@ -450,11 +450,14 @@ The whole-cache census counts only the captured brick inventory at that epoch.
 Graph accounting includes the declared receiver record and every live or retiring
 readback slot, including the census buffer.
 
-Receiver GPU qualification remains open. The current eight proof buckets per
-cell can collide permanently, and normal-launch fallback has no retained launch
-certificate. Completed standing receivers therefore do not yet satisfy the
-plan's zero-new-proof-work requirement; those storage gaps remain implementation
-work rather than qualified exceptions.
+An answered Near replacement also retains its sampled direction and exact
+same-source predecessor stamp in that record. Its incoming source is admitted
+only when the captured High cache method, current bank and predecessor agree.
+The World reference follows this exact first ray, then independent finite paths;
+missing provenance supplies no numerical divergence. Normal launches and
+completed receiver connectivity are retained in the visibility record, separate
+from the cache's finite proof buckets. Current GPU qualification must still
+measure standing receivers' zero-new-proof-work behavior.
 
 The counted comparison has a per-view SdfIndirectMethod selector: the ordinary
 cache, current screen-space visibility, or one-bounce field cones. Its pass value

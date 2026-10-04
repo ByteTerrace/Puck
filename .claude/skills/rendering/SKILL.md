@@ -157,7 +157,7 @@ Indirect helpers save and restore both ambient and shadow mask flags. Their
 full-field distance and gradient walks cannot inherit a caller's clipped mask;
 an explicitly masked distance uses only its own gathered indirect mask.
 
-Indirect inspection extends the existing surface picker. Its 272-byte GPU
+Indirect inspection extends the existing surface picker. Its 288-byte GPU
 record and full probe-state census share the visibility submission's fence and
 retain that request's allocation, epoch, published source and final receiver
 source-enable mask. The mask can differ from the pinned solve's recursive mask.
@@ -165,6 +165,9 @@ Do not substitute
 host admission for GPU classes, later live lights for captured source, or final
 RGB proportions for independently accumulated categories. The selected method
 labels alternative output; the eight corner records describe its cache fallback.
+Near direction and predecessor share that fence. Admit its current immutable
+source only against the captured High cache method and exact bank/predecessor;
+use the independent fixed-first-ray entry, never a new receiver hemisphere.
 Every package readback reports its actual bytes through
 `IRenderGraphPackageReadback.ReadbackBytes`; installed and retired graph accounting
 must both include them, including the four-byte receiver-completion ring slots.

@@ -3,8 +3,8 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The selected receiver's header, eight corner records and five independent RGB source records.</summary>
-    public const int IndirectPickWords = 68;
+    /// <summary>The selected receiver's header, eight corners, five RGB sources and captured Near direction/predecessor.</summary>
+    public const int IndirectPickWords = 72;
     /// <summary>The selected indirect cache tier, zero disabling every cache read.</summary>
     public const string IndirectTier = "indirectTier";
     /// <summary>The enabled source-category bits, shared by the solve and every receiver algorithm.</summary>

@@ -35,17 +35,19 @@ public readonly record struct SdfIndirectPickCorner(int Index, IrradianceProbeCl
 /// <param name="Unpublished">Allocated probes whose state has not been written at this epoch.</param>
 public readonly record struct SdfIndirectCensus(int Active, int Relocated, int Inactive, int Dormant, int Unpublished);
 
-/// <summary>The selected receiver's independently accumulated incident linear RGB contributions. These are decoded
-/// from the actual quantized lighting generations, never inferred from the final shaded color.</summary>
-/// <param name="Direct">Direct-light contributions at stored hits.</param>
+/// <summary>The selected receiver's independently accumulated incident linear RGB contributions. Cache reads decode
+/// the actual quantized lighting generations; an answered Near ray or alternative reports its replacement sources.
+/// These categories are never inferred from the final shaded color.</summary>
+/// <param name="Direct">Direct-light contributions at sampled hits.</param>
 /// <param name="Feedback">Contributions from preceding complete feedback sweeps.</param>
-/// <param name="Emission">Material emission at stored hits.</param>
+/// <param name="Emission">Material emission at sampled hits.</param>
 /// <param name="Sky">Sky exit contributions.</param>
 /// <param name="Screens">Screen and portal contributions.</param>
 public readonly record struct SdfIndirectPickSources(Vector3 Direct, Vector3 Feedback, Vector3 Emission, Vector3 Sky, Vector3 Screens);
 
 /// <summary>A selected receiver answer copied under the same fence as its visibility and cache census. The immutable
-/// source is the solve that produced the cache fallback generation; a later live frame cannot relabel that source.
+/// source is the solve that produced the cache fallback generation. An answered Near ray retains that same exact
+/// current source and its sampled direction; a later live frame cannot relabel either answer.
 /// Alternative output uses its rendered frame and cannot use this cache source as a CPU reference.</summary>
 /// <param name="Status">The GPU lookup outcome.</param>
 /// <param name="Tier">The tier the selected view used.</param>
@@ -73,6 +75,14 @@ public sealed record SdfIndirectPick(SdfIndirectPickStatus Status, SdfIndirectTi
     /// <summary>Gets the actual bounded Near replacement outcome. Corners still describe the cache fallback;
     /// Sources contains the incoming Near answer only when this outcome is Hit or Continuation.</summary>
     public SdfIndirectNearOutcome Near { get; init; }
+    /// <summary>Gets the actual selected Near direction, copied under this pick's fence; zero without an attempt.</summary>
+    public Vector3 NearDirection { get; init; }
+    /// <summary>Gets the exact same-source predecessor stamp available to Near feedback. It is zero when Near is
+    /// not admitted for the view or no preceding bank exists; an unselected pixel does not consume that bank.</summary>
+    public uint NearPreviousPublication { get; init; }
+    /// <summary>Gets Near's immutable current source only when its captured tier, method, bank and predecessor
+    /// identities agree with the fenced record. A later live frame cannot supply or relabel this source.</summary>
+    public SdfIndirectLightingSnapshot? NearSource { get; init; }
     /// <summary>Gets the source categories enabled by the rendered receiver, independently of the earlier solve's
     /// source mask. A CPU reference preserves that solve's recursive transport, then masks its final categories
     /// with this captured receiver selection.</summary>

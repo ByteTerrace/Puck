@@ -1,21 +1,21 @@
-# Data-only preparation: executable assertions wait for the production G9 counters and reference read-back.
-world.cadence on
+# Data-only preparation: executable G1 Near assertions await the sampled transport source and direction.
+world.cadence off
 world.quality high
 world.indirect high
 world.wait ready 180
-world.wait 600
+world.wait indirect 180
 world.screenshot {run}/near-high.png
 world.wait captures 30
 world.counters gpu
 world.state.cell.set scene $value 1
 world.wait ready 180
-world.wait 600
+world.wait indirect 180
 world.screenshot {run}/furnace-high.png
 world.wait captures 30
 world.counters gpu
 world.state.cell.set scene $value 2
 world.wait ready 180
-world.wait 600
+world.wait indirect 180
 world.screenshot {run}/sealed-high.png
 world.wait captures 30
 world.counters gpu

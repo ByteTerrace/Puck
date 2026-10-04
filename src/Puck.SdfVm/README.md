@@ -616,12 +616,16 @@ for 96 bytes per render pixel. Nothing in this picker enters simulation input or
 authority.
 
 With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
-a 272-byte GPU answer and the probe-state range for a census of the snapshot's
+a 288-byte GPU answer and the probe-state range for a census of the snapshot's
 allocated bricks. It uses the visibility submission's fence and retains its own
 cache epoch, completed lighting source, selected method and final receiver
 source-enable mask. That mask may differ from the held solve's recursive source
 mask while the replacement solve is incomplete. Source RGB values
-and corner weights are the actual shader results; classifications come from the
+and corner weights are the actual shader results. An answered Near replacement
+also captures its sampled direction and exact predecessor. Its current immutable
+source is retained only when the fenced High cache method and publication
+identities agree, so the independent reference follows that exact first ray.
+Classifications come from the
 copied probe states. No CPU schedule count stands for a GPU classification.
 The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`
 accounts for the actual lazy readback rings until their recorder retires.

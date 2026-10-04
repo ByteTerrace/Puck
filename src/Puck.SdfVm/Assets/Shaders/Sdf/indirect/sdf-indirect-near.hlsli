@@ -6,6 +6,7 @@
 #include "sdf-indirect-alternatives.hlsli"
 
 static uint sdfIndirectNearOutcome = SdfIndirectNearOutcomeNotAttempted;
+static float3 sdfIndirectNearDirection = 0.0;
 
 #ifdef __spirv__
 [noinline]
@@ -18,6 +19,7 @@ SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3
     uint visit = passGroup.historyFrames / SdfIndirectNearPhases;
     float3 direction = sdfIndirectAlternativeDirection(receiver.normal, visit % SdfIndirectAlternativeRays,
         (visit / SdfIndirectAlternativeRays) % SdfIndirectAlternativePhases);
+    sdfIndirectNearDirection = direction;
     bool previousSecondary = sdfSecondaryMarchActive;
     bool previousShadow = sdfShadowParticipationActive;
     bool previousPermit = sdfIndirectReceiverPermit;

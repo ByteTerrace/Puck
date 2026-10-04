@@ -55,7 +55,11 @@ public sealed class WorldIndirectPickText {
         text.Append(CultureInfo.InvariantCulture,
             $"sources direct={Vector(sources.Direct)} emission={Vector(sources.Emission)}\nsources sky={Vector(sources.Sky)} screens={Vector(sources.Screens)}\nsources feedback={Vector(sources.Feedback)}\n");
         text.Append(CultureInfo.InvariantCulture,
-            $"source-sequence={(pick.LightingSource?.Sequence ?? 0)} source-role={(pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation ? "cache-fallback-not-near-reference" : pick.Method == SdfIndirectMethod.Cache ? "visible-cache-publication" : "cache-fallback-not-alternative-reference")}\n");
+            $"source-sequence={(pick.LightingSource?.Sequence ?? 0)} source-role={(pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation ? (pick.NearSource is null ? "cache-fallback-not-near-reference" : "current-near-publication") : pick.Method == SdfIndirectMethod.Cache ? "visible-cache-publication" : "cache-fallback-not-alternative-reference")}\n");
+        if (pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation) {
+            text.Append(CultureInfo.InvariantCulture,
+                $"near-direction={Vector(pick.NearDirection)} previous-stamp={pick.NearPreviousPublication} incoming-source={(pick.NearSource?.Sequence ?? 0)}\n");
+        }
         if (reference is null) {
             text.Append("cpu-reference unavailable: run world.explain for this fenced pixel\n");
         } else {

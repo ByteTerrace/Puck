@@ -19,6 +19,7 @@ internal sealed partial class SdfWorldPickReadback {
         var target = m_slots[slot];
         target.Cache = null;
         target.Lighting = null;
+        target.PreviousLightingStamp = 0u;
         if (!target.Record || target.Request.Sample is null || cache is null || cacheVersion is null || diagnosticVersion is null) { return; }
         target.IndirectBuffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: IndirectBytes,
             name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "pick-indirect", index: slot));
@@ -31,6 +32,7 @@ internal sealed partial class SdfWorldPickReadback {
         }
         target.Cache = cache.Snapshot();
         target.Lighting = cache.PublishedLightingSource;
+        target.PreviousLightingStamp = cache.PreviousPublishedStamp;
         target.CacheVersion = cacheVersion;
         target.IndirectVersion = diagnosticVersion;
         SdfFrameBlock.WriteIndirectPick(block, true, target.Request.X, target.Request.Y);
@@ -64,6 +66,12 @@ internal sealed partial class SdfWorldPickReadback {
             Method = (SdfIndirectMethod)Word(51),
             SourcesEnabled = (SdfIndirectSources)Word(55),
             Near = (SdfIndirectNearOutcome)Word(59),
+            NearDirection = Vector(68),
+            NearPreviousPublication = Word(71),
+            NearSource = (Word(59) is 2u or 3u) && (SdfIndirectTier)Word(1) == SdfIndirectTier.High &&
+                (SdfIndirectMethod)Word(51) == SdfIndirectMethod.Cache &&
+                Word(11) == (uint)cache.PublishedGeneration && Word(15) == cache.PublishedStamp &&
+                Word(71) == slot.PreviousLightingStamp ? slot.Lighting : null,
         };
     }
 
@@ -75,5 +83,6 @@ internal sealed partial class SdfWorldPickReadback {
         public string? CacheVersion;
         public SdfIndirectCacheSnapshot? Cache;
         public SdfIndirectLightingSnapshot? Lighting;
+        public uint PreviousLightingStamp;
     }
 }

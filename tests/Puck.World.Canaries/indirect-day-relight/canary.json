@@ -1,0 +1,475 @@
+{
+  "id": "indirect-day-relight",
+  "title": "Current indirect day input preserves exactly its transport schedule contract",
+  "binding": "The held named directional changes white to red while keeping direction, weight and shadow policy. The opposite leg holds white. Color-only source changes must preserve depth-region work as well as stored transport. Both cumulative host schedule observations follow world.wait indirect current shared-cache fences. These assertions prove counted scheduling in the real World; captures are retained as evidence, not an invented brightness oracle. Cold numerical stored-hit agreement remains owned by independent CPU laws, and any pixel/reference station qualification remains owed. No ceilings or measured rows are authored here.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 75,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/indirect-day-relight/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "schedule-1",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "rays-1",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          },
+          {
+            "name": "geometry-1",
+            "field": "indirect.probes.scheduled.geometry",
+            "line": "indirect.probes.scheduled.geometry"
+          },
+          {
+            "name": "light-1",
+            "field": "indirect.probes.scheduled.light",
+            "line": "indirect.probes.scheduled.light"
+          },
+          {
+            "name": "regions-1",
+            "field": "indirect.light.regions",
+            "line": "indirect.light.regions"
+          },
+          {
+            "name": "completed-1",
+            "field": "indirect.sweeps.completed",
+            "line": "indirect.sweeps.completed"
+          },
+          {
+            "name": "restarted-1",
+            "field": "indirect.sweeps.restarted",
+            "line": "indirect.sweeps.restarted"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "schedule-2",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "rays-2",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          },
+          {
+            "name": "geometry-2",
+            "field": "indirect.probes.scheduled.geometry",
+            "line": "indirect.probes.scheduled.geometry"
+          },
+          {
+            "name": "light-2",
+            "field": "indirect.probes.scheduled.light",
+            "line": "indirect.probes.scheduled.light"
+          },
+          {
+            "name": "regions-2",
+            "field": "indirect.light.regions",
+            "line": "indirect.light.regions"
+          },
+          {
+            "name": "completed-2",
+            "field": "indirect.sweeps.completed",
+            "line": "indirect.sweeps.completed"
+          },
+          {
+            "name": "restarted-2",
+            "field": "indirect.sweeps.restarted",
+            "line": "indirect.sweeps.restarted"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "initial-transport-was-scheduled",
+        "operator": "greater",
+        "left": {
+          "value": "rays-1"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "rays-stand-across-light-change",
+        "operator": "equal",
+        "left": {
+          "value": "rays-2"
+        },
+        "right": {
+          "value": "rays-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "geometry-stand-across-light-change",
+        "operator": "equal",
+        "left": {
+          "value": "geometry-2"
+        },
+        "right": {
+          "value": "geometry-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "finite-light-work-follows-current-source",
+        "operator": "greater",
+        "left": {
+          "value": "light-2"
+        },
+        "right": {
+          "value": "light-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "completed-light-bank-follows-current-source",
+        "operator": "greater",
+        "left": {
+          "value": "completed-2"
+        },
+        "right": {
+          "value": "completed-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "color-only-keeps-depth-regions",
+        "operator": "equal",
+        "left": {
+          "value": "regions-2"
+        },
+        "right": {
+          "value": "regions-1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "current-source-fence-completed",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/indirect-day-relight/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "schedule-1",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "rays-1",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          },
+          {
+            "name": "geometry-1",
+            "field": "indirect.probes.scheduled.geometry",
+            "line": "indirect.probes.scheduled.geometry"
+          },
+          {
+            "name": "light-1",
+            "field": "indirect.probes.scheduled.light",
+            "line": "indirect.probes.scheduled.light"
+          },
+          {
+            "name": "regions-1",
+            "field": "indirect.light.regions",
+            "line": "indirect.light.regions"
+          },
+          {
+            "name": "completed-1",
+            "field": "indirect.sweeps.completed",
+            "line": "indirect.sweeps.completed"
+          },
+          {
+            "name": "restarted-1",
+            "field": "indirect.sweeps.restarted",
+            "line": "indirect.sweeps.restarted"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "schedule-2",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "rays-2",
+            "field": "indirect.rays.scheduled",
+            "line": "indirect.rays.scheduled"
+          },
+          {
+            "name": "geometry-2",
+            "field": "indirect.probes.scheduled.geometry",
+            "line": "indirect.probes.scheduled.geometry"
+          },
+          {
+            "name": "light-2",
+            "field": "indirect.probes.scheduled.light",
+            "line": "indirect.probes.scheduled.light"
+          },
+          {
+            "name": "regions-2",
+            "field": "indirect.light.regions",
+            "line": "indirect.light.regions"
+          },
+          {
+            "name": "completed-2",
+            "field": "indirect.sweeps.completed",
+            "line": "indirect.sweeps.completed"
+          },
+          {
+            "name": "restarted-2",
+            "field": "indirect.sweeps.restarted",
+            "line": "indirect.sweeps.restarted"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "initial-transport-was-scheduled",
+        "operator": "greater",
+        "left": {
+          "value": "rays-1"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "rays-stand-across-light-change",
+        "operator": "equal",
+        "left": {
+          "value": "rays-2"
+        },
+        "right": {
+          "value": "rays-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "geometry-stand-across-light-change",
+        "operator": "equal",
+        "left": {
+          "value": "geometry-2"
+        },
+        "right": {
+          "value": "geometry-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "finite-light-work-follows-current-source",
+        "operator": "equal",
+        "left": {
+          "value": "light-2"
+        },
+        "right": {
+          "value": "light-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "completed-light-bank-follows-current-source",
+        "operator": "equal",
+        "left": {
+          "value": "completed-2"
+        },
+        "right": {
+          "value": "completed-1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "color-only-keeps-depth-regions",
+        "operator": "equal",
+        "left": {
+          "value": "regions-2"
+        },
+        "right": {
+          "value": "regions-1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "current-source-fence-completed",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}
