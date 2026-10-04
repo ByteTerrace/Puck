@@ -42,6 +42,16 @@ while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
 safe only because the desktop's authority always resolves boot.
 
+`world.explain` is an Immediate observational one-shot request on the acting
+seat or pane's existing GPU picker. It suspends that picker's ordinary hover
+demand until the exact surfaced answer's fence completes, and settles on route
+loss, supersession or shutdown. It evaluates the captured publication's CPU
+reference once. Inspector and echo use the same cached indirect formatter;
+the HUD never evaluates a reference. `world.lighting` qualifies the retained
+fenced census separately from its live host allocation inventory. None of these
+reads infers GPU classifications from host schedule counts. The application
+README's presentation inspection section owns the user contract.
+
 Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
 stops at the two factories MISSES the wrapper's registration sites.
 

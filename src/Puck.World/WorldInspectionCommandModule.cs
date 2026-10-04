@@ -32,6 +32,8 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
             handler: Cost, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
         yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: "Shows the acting seat's pointer, camera, counts and reload diagnostics: world.inspect on|off; bare prints the same text as its panel.",
             handler: Inspect, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
+        yield return CommandDefinition.WithWireArgs(name: "world.explain", description: "Requests the acting seat or pane's pointer pixel once through its shared GPU picker. After its fence, reports actual indirect classes, receiver weights and source categories, and evaluates the captured publication's supported CPU reference once. Unsupported sources and missing pixels name their refusal; no simulation state changes.",
+            handler: Explain, routing: CommandRouting.Immediate, bindability: CommandBindability.Unbindable);
         yield return CommandDefinition.WithWireArgs(name: "world.gpu-timing", description: "Enables observational per-pass timestamps: world.gpu-timing on|off; bare prints completed window means in milliseconds. Off by default, and recording while dynamic resolution reads the world views' GPU frame time from them; off then stops only the readout. Timings never judge correctness.",
             handler: Timing, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
     }

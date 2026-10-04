@@ -40,6 +40,9 @@ public sealed class SdfWorldPicker {
     public bool Pending => (m_queued && (m_flight is null));
     /// <summary>Gets whether a copy is in flight.</summary>
     public bool InFlight => (m_flight is not null);
+    /// <summary>Gets the current request identity. A shared one-shot consumer cancels only while this still names
+    /// its own request; a newer consumer must keep its demand.</summary>
+    public long RequestIdentity => m_request;
 
     /// <summary>Requests the pixel at normalized coordinates, with the origin at the view's top left. Each coordinate
     /// must be finite and in [0, 1). Calling again supersedes every earlier result, and an answer to an earlier

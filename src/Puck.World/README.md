@@ -32,6 +32,18 @@ camera, ticks, render levers, counted work, capacity and reload refusal.
 The acting seat's sky and air use the same text as `world.lighting`, followed
 by its named clocks' presented ticks, phases, holds and rates. Long sky text
 uses the panel's ordinary wrapping and elision.
+`world.explain` takes one surfaced sample through the acting seat or pane's
+existing pointer picker. It waits for that sample's fence and evaluates its
+captured cache publication with the independent CPU irradiance reference once.
+The echo and inspector share the actual receiver, corner weights and stamps,
+source categories, allocation, epoch, published sweep depth and fenced probe
+census. These rows take priority over optional presentation rows within the
+panel's fixed reservation. Steady inspection reuses their text and reference;
+it does not run another estimator. Unsupported screen/cone sources, dynamic
+field operations and unresolved paths name their refusal and show no numeric
+divergence. A missing pixel or a current route that has not rendered refuses immediately;
+registering its picker does not establish a rendered view. Changing seat or pane, a newer
+pixel request or closing presentation settles an outstanding explanation.
 Point and normal read `unavailable` until an inspector surface sample completes;
 an ordinary hover still reports its measured identity, distance and pixel cost.
 A passthrough pane follows its own rendered residency, scale and shading quality;
@@ -1993,8 +2005,10 @@ each consuming camera's method alongside the layer's own shading levers.
 `world.lighting` appends that same host inventory, including exact allocation,
 epoch, submission and lighting-publication identities, each level's allocated
 and placed bricks and submitted strata, pending host work and valid light maps.
-GPU probe classifications and solve results require a fenced readback; the host
-report names them unread rather than deriving them from submission counts.
+GPU probe classifications and solve results require a fenced readback. The last
+explicit `world.explain` census is appended separately with its captured
+residency, allocation, epoch and publication, even after live host inventory
+changes. Host schedule counts never stand in for those GPU classifications.
 `world.indirect-freeze [on|off]` pauses new update admission in every active
 residency while views retain its cache. An already admitted frame may finish.
 `world.indirect-reset` queues their reset for the next renderable frame; while

@@ -69,6 +69,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
             Mirror = mirror,
             Slot = slot,
             Pick = pick,
+            IndirectReference = cursor.ReferenceOf(pick),
             Camera = (pick?.Sample?.Camera ?? viewports.Seat(slot: slot).Camera),
             Selection = seats.CurrentOf(slot: slot, world: (route?.Endpoint.Identity ?? WorldInstanceHost.BootInstanceName)),
             SimulationTick = mirror.Tick,

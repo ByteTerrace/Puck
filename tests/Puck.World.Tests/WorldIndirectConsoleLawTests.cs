@@ -8,6 +8,7 @@ using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Testing;
+using Puck.World.Client;
 using Puck.World.Server;
 using Xunit;
 
@@ -168,5 +169,29 @@ public sealed class WorldIndirectConsoleLawTests {
         Assert.EndsWith(expected, result.Output);
         Assert.Contains("cache=unallocated", expected);
         Assert.Contains("no renderer", WorldIndirectDiagnosticText.Describe(null));
+    }
+
+    [Fact]
+    public void LightingKeepsTheRetainedPixelsResidencyAndCensusSeparateFromLiveHostInventory() {
+        using var row = HostRow.Build(name: "indirect-retained-lighting");
+        using var live = Residency("live");
+        using var capturedOwner = Residency("captured-pane");
+        var probe = new WorldRenderProbe();
+        probe.RegisterIndirectResidency(live, active: true);
+        var pick = new SdfIndirectPick(SdfIndirectPickStatus.Resolved, SdfIndirectTier.Medium, 0, 1,
+            Vector3.Zero, Vector3.UnitY, .1f, Vector3.UnitY, 1, 23, [], default,
+            new SdfIndirectCacheSnapshot(31, SdfIndirectTier.Medium, 7, 8, 64, true, 0, 0, 0, 0,
+                4, true, 1, 23, 3, false, default, [], []), new SdfIndirectCensus(2, 3, 4, 5, 6), null) {
+            SourcesEnabled = SdfIndirectSources.Emission,
+        };
+        var registry = new CommandRegistry(modules: [new WorldLightingCommandModule(new Authority(row.Instance),
+            indirectReport: _ => WorldIndirectDiagnosticText.Describe(probe, pick, capturedOwner))]);
+        var result = registry.Submit("world.lighting");
+        Assert.False(result.IsError, result.Output);
+        Assert.Contains("indirect live", result.Output);
+        Assert.Contains("retained-pixel residency=captured-pane allocation=31 epoch=7 generation=1 stamp=23", result.Output);
+        Assert.Contains("sources=0x04", result.Output);
+        Assert.EndsWith(WorldIndirectPickText.DescribeCensus(pick), result.Output);
+        Assert.DoesNotContain("retained-pixel", WorldIndirectDiagnosticText.Describe(probe, pick));
     }
 }

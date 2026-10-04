@@ -9,17 +9,24 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>Reads the host-owned indirect inventory and actual allocations on the console/frame owner thread.
-/// GPU probe classes, solve results and divergence require a fenced readback and are not inferred here.</summary>
+/// A retained fenced answer is appended with its captured residency and publication; live host scheduling never
+/// supplies or relabels GPU classifications.</summary>
 public static class WorldIndirectDiagnosticText {
     /// <summary>Formats each unique active or retiring host cache and its actual allocation breakdown.</summary>
     /// <param name="probe">The live presentation inventory, or null when no renderer exists. Read on its console/frame owner thread.</param>
-    /// <returns>The host inventory and unread GPU-fact labels, or a named unavailable/off result.</returns>
-    public static string Describe(WorldRenderProbe? probe) {
+    /// <param name="captured">The last explicit explanation's fenced receiver, or null before one completes.</param>
+    /// <param name="capturedResidency">The exact rendered residency that owns that retained answer.</param>
+    /// <returns>The host inventory and separately qualified retained census, or a named unavailable/off result.</returns>
+    public static string Describe(WorldRenderProbe? probe, SdfIndirectPick? captured = null, SdfWorldResidency? capturedResidency = null) {
         if (probe is null) { return "indirect unavailable: no renderer"; }
         var residencies = probe.IndirectAllocationResidencies;
-        if (residencies.Count == 0) { return "indirect off, 0 byte(s)"; }
-        return string.Join(" | ", residencies.OrderBy(residency => residency.Name, StringComparer.Ordinal)
-            .Select(residency => Describe(residency, probe)));
+        var inventory = residencies.Count == 0 ? "indirect off, 0 byte(s)" :
+            string.Join(" | ", residencies.OrderBy(residency => residency.Name, StringComparer.Ordinal)
+                .Select(residency => Describe(residency, probe)));
+        if (captured is null || capturedResidency is null) { return inventory; }
+        return inventory + " | " + string.Create(CultureInfo.InvariantCulture,
+            $"retained-pixel residency={capturedResidency.Name} allocation={captured.Cache?.Allocation ?? 0} epoch={captured.Cache?.Epoch ?? 0} generation={captured.Generation} stamp={captured.Publication} source={captured.LightingSource?.Sequence ?? 0} sources=0x{(uint)captured.SourcesEnabled:x2} ")
+            + WorldIndirectPickText.DescribeCensus(captured);
     }
 
     private static string Describe(SdfWorldResidency residency, WorldRenderProbe probe) {

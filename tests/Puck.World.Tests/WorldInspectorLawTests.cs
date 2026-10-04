@@ -69,6 +69,25 @@ public sealed class WorldInspectorLawTests {
         Assert.Null(@object: residencyOf.Invoke(obj: source, parameters: [1]));
         field.SetValue(obj: cursor, value: null);
         Assert.Null(@object: residencyOf.Invoke(obj: source, parameters: [0]));
+        var malformed = registry.Submit("world.explain extra");
+        Assert.True(malformed.IsError, malformed.Output);
+        Assert.Equal("[world.explain: expected no arguments]", malformed.Output);
+        var absent = registry.Submit("world.explain");
+        Assert.True(absent.IsError, absent.Output);
+        Assert.Contains("world.explain:", absent.Output);
+        Assert.Null(absent.Settlement);
+        // Registration/following is earlier than an actual render. A refused or still-building replacement must not
+        // leave an explanation's console settlement waiting for a pixel it cannot record.
+        cursorType.GetField("m_pointerPicker", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, picker);
+        cursorType.GetField("m_pointerInstance", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, "unrendered-pane");
+        cursorType.GetField("m_pointerX", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, .5f);
+        cursorType.GetField("m_pointerY", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, .5f);
+        var unrendered = registry.Submit("world.explain");
+        Assert.True(unrendered.IsError, unrendered.Output);
+        Assert.Contains("no rendered pixel", unrendered.Output);
+        Assert.Null(unrendered.Settlement);
+        Assert.Equal(0, picker.RequestIdentity);
+        Assert.False(picker.Pending);
     }
     [Fact]
     public void FormatterNamesCapturedPlacementMaterialAndPixelCostWithoutSteadyAllocation() {
