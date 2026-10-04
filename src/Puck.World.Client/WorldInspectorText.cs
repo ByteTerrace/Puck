@@ -96,7 +96,7 @@ public sealed partial class WorldInspectorText {
             handler: $"words={snapshot.Words}/{snapshot.WordCapacity} headroom={(snapshot.WordCapacity - snapshot.Words)}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"instances={snapshot.Instances}/{SdfProgramBuilder.MaxInstances} headroom={(SdfProgramBuilder.MaxInstances - snapshot.Instances)}") && Line(text: scratch[..written]));
-        _ = Line(text: m_reloadLine, lines: ReloadLines);
+        _ = Line(lines: ReloadLines, text: m_reloadLine);
         Environment(snapshot: snapshot);
     }
 
