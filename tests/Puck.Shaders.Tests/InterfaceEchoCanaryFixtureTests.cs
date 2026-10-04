@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Puck.SdfVm;
 using Puck.Testing;
 
@@ -62,45 +64,6 @@ public sealed class InterfaceEchoCanaryFixtureTests {
 
     private static ShaderInterfaceGroupLayout[] Blocks(ShaderInterfaceLayout layout) =>
         [.. layout.Groups.Where(predicate: static group => (group.BlockMembers.Count != 0))];
-    // The last block's last member that is not padding, whose first word the perturbation retargets.
-    private static (uint Set, uint Word) LastMemberWord(ShaderInterfaceLayout layout) {
-        var group = Blocks(layout: layout)[^1];
-        var member = group.BlockMembers.Last(predicate: static member => !member.Name.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "_pad"
-        ));
-
-        return (group.Set, (member.Offset / 4));
-    }
-    private static string Perturb(string echo, ShaderInterface shaderInterface, ShaderInterfaceLayout layout) {
-        var generated = ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface);
-
-        var (set, word) = LastMemberWord(layout: layout);
-        var lastLine = $"    echo[uint2({(ShaderInterfaceEcho.Width(shaderInterface: shaderInterface) - 1)}, 0)] = ";
-        var start = generated.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: lastLine
-        );
-        var expected = $"0x{ShaderInterfaceEcho.Sentinel(set: set, word: word):X8}u";
-        var at = generated.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            startIndex: start,
-            value: expected
-        );
-
-        Assert.True(condition: (start >= 0));
-        Assert.True(condition: (at > start));
-
-        var perturbed = string.Concat(
-            str0: generated[..at],
-            str1: $"0x{ShaderInterfaceEcho.Sentinel(set: set, word: (word + 1)):X8}u",
-            str2: generated[(at + expected.Length)..]
-        );
-
-        return ($"// The echo pass of shader interface '{echo}-perturbed' ({shaderInterface.Hash}), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it."
-            + perturbed[perturbed.IndexOf(value: '\n')..]);
-    }
-
     /// <summary>Each echo's frame and pass blocks are its targets' blocks: the same groups in the same sets and sizes,
     /// and the same members at the same offsets, types and lengths under the same names in order.</summary>
     [MemberData(memberName: nameof(TargetNames))]
@@ -161,19 +124,49 @@ public sealed class InterfaceEchoCanaryFixtureTests {
 
         Assert.Equal(
             actual: File.ReadAllText(path: FixturePath(fileName: $"{echo}-perturbed.echo.hlsl")),
-            expected: Perturb(
-                echo: echo,
-                layout: parameters.Layout,
-                shaderInterface: parameters.Interface
-            )
+            expected: ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: parameters.Interface)
         );
+    }
+    /// <summary>The discriminator changes exactly the last pixel's first sentinel to the next word's;
+    /// every other pixel and word retains the positive echo's check.</summary>
+    [MemberData(memberName: nameof(EchoNames))]
+    [Theory]
+    public void Perturbation_changes_only_the_last_members_first_word_to_the_next_sentinel(string echo) {
+        var shaderInterface = EchoPass(echo: echo).Parameters.Interface;
+        var members = Blocks(layout: shaderInterface.Layout()).SelectMany(selector: static group => group.BlockMembers
+            .Where(predicate: static member => !member.Name.StartsWith(value: "_pad", comparisonType: StringComparison.Ordinal))
+            .Select(selector: member => (group.Set, Member: member))).ToArray();
+        var positive = ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface).Split(separator: '\n');
+        var perturbed = ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: shaderInterface).Split(separator: '\n');
+
+        Assert.Equal(expected: positive.Length, actual: perturbed.Length);
+        var changed = Assert.Single(collection: Enumerable.Range(start: 1, count: (positive.Length - 1))
+            .Where(predicate: index => (positive[index] != perturbed[index])));
+
+        Assert.StartsWith(expectedStartString: $"    echo[uint2({members.Length - 1}, 0)] = ", actualString: positive[changed]);
+        const string literal = @"0x([0-9A-F]{8})u";
+        var before = Regex.Matches(input: positive[changed], pattern: literal).Select(selector: static match =>
+            uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
+        var after = Regex.Matches(input: perturbed[changed], pattern: literal).Select(selector: static match =>
+            uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
+        var last = members[^1];
+
+        Assert.Equal(expected: (0x40000000u | (((last.Member.Offset / 4) + 2u) << 12) | (last.Set << 8) | 0xA5u), actual: after[0]);
+        Assert.NotEqual(expected: before[0], actual: after[0]);
+        Assert.Equal(expected: before.Skip(count: 1), actual: after.Skip(count: 1));
+        Assert.Equal(expected: Regex.Replace(input: positive[changed], pattern: literal, replacement: "sentinel"),
+            actual: Regex.Replace(input: perturbed[changed], pattern: literal, replacement: "sentinel"));
     }
     /// <summary>Each echo image holds one pixel per member, and the canary reads each capture at that extent, the
     /// discriminating leg's partial region holding every pixel but the last.</summary>
     [MemberData(memberName: nameof(EchoNames))]
     [Theory]
     public void Each_echo_image_holds_one_pixel_per_member_and_the_canary_captures_that_extent(string echo) {
-        var width = ShaderInterfaceEcho.Width(shaderInterface: EchoPass(echo: echo).Parameters.Interface);
+        var shaderInterface = EchoPass(echo: echo).Parameters.Interface;
+        var width = ((uint)Blocks(layout: shaderInterface.Layout()).Sum(selector: static group => group.BlockMembers.Count(predicate: static member =>
+            !member.Name.StartsWith(value: "_pad", comparisonType: StringComparison.Ordinal))));
+
+        Assert.Equal(expected: width, actual: ShaderInterfaceEcho.Width(shaderInterface: shaderInterface));
 
         foreach (var name in ((string[])[echo, $"{echo}-perturbed"])) {
             var image = Assert.Single(collection: ShaderPipelineLoader.ReadDefinition(

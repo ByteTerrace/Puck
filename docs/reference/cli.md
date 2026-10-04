@@ -708,6 +708,22 @@ writes each as `<interface>.interface.hlsli` beside its source instead, which an
 engine package, compiled at build, checks in, and `--echo` also generates each
 interface's echo pass as `<interface>.echo.hlsl`.
 
+`interface <canary-directory> --echo-fixtures --write` synchronizes the
+`interface-echo` canary as one family. It rebuilds the `sdf-world` and `indirect`
+graph blocks from the current engine packages, generates every declared echo
+and its deliberate last-member, next-word sentinel discriminator, and updates
+graph widths and capture extents, including the region before the last pixel.
+The commands and observations' expected outcomes remain authored. Planning
+completes before any file is written; no shader compiler or GPU is needed.
+Use `--check` instead of `--write` to report drift without changing files (exit
+1). This mode requires exactly one of those options and excludes `--package`
+and `--echo`:
+
+```text
+puck shaders interface tests/Puck.World.Canaries/interface-echo --echo-fixtures --write
+puck shaders interface tests/Puck.World.Canaries/interface-echo --echo-fixtures --check
+```
+
 `package` compiles a graph document or one-off shader and writes its
 `puck.shader.package.v1` package to `--output`: the source closure, each pass's
 interface and generated declarations, and its SPIR-V and DXIL binaries, with a
