@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world-fade2' (sha256/4b43cc38d451454c8206e225dac4f697e39e865233049ce8571e51f23d84277a). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world-fade2' (sha256/583269fa94ddfc44bbcc0e1b91f9704e6c156a47070a83b7290b9517df43ada4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 #define PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 
@@ -201,8 +201,8 @@ struct SdfWorldFade2Pass {
     [[vk::offset(496)]] uint workCounterRow;
     [[vk::offset(500)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsa23268AE7 : register(b0, space3);
-#define passGroup passGroupIsa23268AE7
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsaB87966AB : register(b0, space3);
+#define passGroup passGroupIsaB87966AB
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);

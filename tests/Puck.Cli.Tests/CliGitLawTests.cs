@@ -23,7 +23,7 @@ public sealed class CliGitLawTests {
         using var release = new CancellationTokenSource();
         using var output = ChildProcess.OpenOutputReader(reader: child.StandardOutput, release: release.Token);
         using var errors = ChildProcess.OpenOutputReader(reader: child.StandardError, release: release.Token);
-        var pumps = new[] { output.ReadToEndAsync(), errors.ReadToEndAsync() };
+        var pumps = new[] { output.ReadToEndAsync(cancellationToken: TestContext.Current.CancellationToken), errors.ReadToEndAsync(cancellationToken: TestContext.Current.CancellationToken) };
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
         var completed = false;
 
