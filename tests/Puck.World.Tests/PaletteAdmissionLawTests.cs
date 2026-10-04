@@ -25,16 +25,16 @@ public sealed class PaletteAdmissionLawTests {
     );
 
     [Fact]
-    public void ABounceThatIsNeitherHexNorAStateBindingIsRefusedByName() {
+    public void AFillThatIsNeitherHexNorAStateBindingIsRefusedByName() {
         AssertRefusesNaming(
             entry: new PaletteEntryDocument(
                 Color: "#CCCCCC",
                 Emissive: null,
                 Specular: null,
                 Roughness: null,
-                Bounce: "warm"
+                Fill: "warm"
             ),
-            needle: "bounce"
+            needle: "fill"
         );
 
         // Control.
@@ -43,15 +43,26 @@ public sealed class PaletteAdmissionLawTests {
             Emissive: null,
             Specular: null,
             Roughness: null,
-            Bounce: "#33150A"
+            Fill: "#33150A"
         ));
         AssertAccepts(entry: new PaletteEntryDocument(
             Color: "#CCCCCC",
             Emissive: null,
             Specular: null,
             Roughness: null,
-            Bounce: null
+            Fill: null
         ));
+    }
+    [Fact]
+    public void IndirectPaletteInputsAreAdmittedBeforeStamping() {
+        var entry = new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null);
+        AssertRefusesNaming(entry with { Bleed = "warm" }, "bleed");
+        foreach (var invalid in new[] { -0.1f, float.NaN, float.PositiveInfinity }) {
+            AssertRefusesNaming(entry with { Receive = invalid }, "receive");
+        }
+        AssertAccepts(entry with { Bleed = "#000000", Receive = 0 });
+        AssertAccepts(entry with { Bleed = "#FFFFFF", Receive = 2 });
+        AssertAccepts(entry);
     }
     [Fact]
     public void ANonFiniteRoughnessIsRefusedByName() {

@@ -10,12 +10,8 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="InvalidOperationException">The composed palette already holds <see cref="ScreenMaterialId"/>
     /// materials (see the ceiling check below).</exception>
     public int AddMaterial(SdfMaterial material) {
-        // Every field lands verbatim in the three packed palette words (SdfProgram writes Albedo/Emissive, then
-        // Specular/Roughness/Sheen/Metal, then Coat), so all seven are shading inputs with no host-side
-        // normalization: a negative reflectance or emissive/specular strength has no physical reading, an
-        // out-of-[0,1] roughness/sheen/metal/coat falls outside the curve this material model derives its GGX alpha
-        // and fresnel lift from, and a NaN in any of them propagates into the shaded colour of every pixel the
-        // material wins.
+        // Packed shading inputs retain their authored values; admission rejects invalid domains before either
+        // the view or indirect transport can propagate a non-finite or negative color into its output.
         RequireNonNegative(
             value: material.Albedo,
             paramName: nameof(material),
@@ -62,10 +58,12 @@ public sealed partial class SdfProgramBuilder {
             subject: "A material shading-normal soften"
         );
         RequireNonNegative(
-            value: material.Bounce,
+            value: material.Fill,
             paramName: nameof(material),
-            subject: "A material bounce tint"
+            subject: "A material fill tint"
         );
+        RequireNonNegative(value: material.Bleed ?? Vector3.One, paramName: nameof(material), subject: "A material bleed tint");
+        RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
             weathering: material.Weathering

@@ -1623,7 +1623,7 @@ The artist-facing syntax belongs to the [World reference](../../../src/Puck.Worl
 
 Every state read reaches a program, a decal or a pass through the state
 mirror, never through the document. A color a build bakes (a palette's surface,
-bounce, weathering or inset color, a height field's color, a text screen's ink)
+fill, bleed, weathering or inset color, a height field's color, a text screen's ink)
 resolves through `WorldBakedColors`, whose slots the presentation manifest
 registers at install; its builder calls `Begin` at a live build and follows
 `TryTakeMove` in its revision, so a bound color moving rebuilds it. A new baked

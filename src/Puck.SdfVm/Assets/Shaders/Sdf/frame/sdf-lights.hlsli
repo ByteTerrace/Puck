@@ -19,7 +19,7 @@ float3 worldPointLightPosition(SdfLight light) {
     return light.Direction;
 #endif
 }
-// Slot zero's direction, or the pinned sun's when it is vacant, for the glass tint and material bounce.
+// Slot zero's direction, or the pinned sun's when it is vacant, for the glass tint and material fill.
 float3 worldSunDirection() {
     int index = passGroup.shadowSlots.x;
 

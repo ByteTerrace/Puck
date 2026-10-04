@@ -93,11 +93,13 @@ public static class WorldPlacementStamper {
                 Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor),
                 Wrap: (entry?.Wrap ?? 0f),
                 Soften: (entry?.Soften ?? 0f),
-                Bounce: colors.Resolve(
+                Fill: colors.Resolve(
                     fallback: Vector3.Zero,
-                    value: entry?.Bounce
+                    value: entry?.Fill
                 ),
-                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor)
+                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
+                Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
+                Receive: entry?.Receive ?? 1f
             ));
         }
     }

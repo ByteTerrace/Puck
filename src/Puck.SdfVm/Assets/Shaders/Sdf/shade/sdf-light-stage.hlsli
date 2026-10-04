@@ -217,9 +217,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
-            // The warm or cool bounce (SdfMaterial.Bounce): a restrained fill on the side of the surface the key light does
+            // The warm or cool fill (SdfMaterial.Fill): a restrained fill on the side of the surface the key light does
             // not reach. Black, the default, adds nothing.
-            color += ((shadeMaterial.albedo * shadeMaterial.bounce) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+            color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
 
             // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion.
             {

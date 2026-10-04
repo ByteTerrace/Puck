@@ -12,11 +12,13 @@ struct SdfMaterialData {
     float coat;
     float wrap;
     float soften;
-    float3 bounce;
+    float3 fill;
+    float3 bleed;
+    float receive;
     float4 insetOriginDepth;
     float4 insetRotation;
     float4 paintControls; // ior, stop count, softness, modulation amplitude
-    float4 paintModulation; // frequency, seed bits, reserved
+    float4 paintModulation; // frequency, seed bits, bleed green/blue
     float4 paintStops[4]; // color, radius
     float4 weathering; // edge, lines, settle, reach
     float4 weatheringControls; // seed bits, scale, floor, lane
@@ -61,11 +63,13 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.coat = m2.x;
     data.wrap = m2.y;
     data.soften = m2.z;
-    data.bounce = asfloat(sdfWords[materialBase + 3u]).rgb;
+    data.fill = asfloat(sdfWords[materialBase + 3u]).rgb;
+    data.receive = asfloat(sdfWords[materialBase + 3u]).w;
     data.insetOriginDepth = asfloat(sdfWords[materialBase + 4u]);
     data.insetRotation = asfloat(sdfWords[materialBase + 5u]);
     data.paintControls = asfloat(sdfWords[materialBase + 6u]);
     data.paintModulation = asfloat(sdfWords[materialBase + 7u]);
+    data.bleed = float3(m2.w, data.paintModulation.zw);
     [unroll] for (uint i = 0u; i < 4u; i++) data.paintStops[i] = asfloat(sdfWords[materialBase + 8u + i]);
     data.weathering = asfloat(sdfWords[materialBase + 12u]);
     data.weatheringControls = asfloat(sdfWords[materialBase + 13u]);

@@ -223,7 +223,7 @@ public readonly record struct SdfMaterial(
     float Specular = 0f,
     float Roughness = SdfMaterial.DefaultRoughness,
     float Sheen = 0f,
-    // ... then Metal, Coat, Weathering, Wrap, Soften, Bounce and Inset
+    // ... then Metal, Coat, Weathering, Wrap, Soften, Fill, Inset, Bleed and Receive
 );
 ```
 

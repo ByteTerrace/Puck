@@ -42,8 +42,8 @@ public sealed class IrradianceSurfaces {
     public Func<Double3, Double3, int, Double3> Screens { get; }
 
     /// <summary>Creates the surfaces of the materials a program was built with: diffuse albedo
-    /// <c>albedo × (1 − metal)</c>, as the views pass's material shade has it, and self-emission
-    /// <c>albedo × emissive</c>, its <c>selfEmission</c> term.</summary>
+    /// <c>albedo × (1 − metal) × bleed</c>, and self-emission
+    /// <c>albedo × emissive × bleed</c>. Receive and the view's artistic fill do not become transport sources.</summary>
     /// <param name="materials">The materials, indexed as the program's material identifiers are.</param>
     /// <param name="direct">The function returning the direct light at a surface point; <see langword="null"/> for none.</param>
     /// <param name="sky">The function returning the sky's radiance in a direction; <see langword="null"/> for black.</param>
@@ -57,14 +57,16 @@ public sealed class IrradianceSurfaces {
             albedo: material => {
                 var entry = materials[material];
                 var diffuse = (1.0 - entry.Metal);
+                var bleed = entry.Bleed ?? System.Numerics.Vector3.One;
 
-                return new Double3(X: (entry.Albedo.X * diffuse), Y: (entry.Albedo.Y * diffuse), Z: (entry.Albedo.Z * diffuse));
+                return new Double3(X: (entry.Albedo.X * diffuse * bleed.X), Y: (entry.Albedo.Y * diffuse * bleed.Y), Z: (entry.Albedo.Z * diffuse * bleed.Z));
             },
             direct: direct,
             emission: material => {
                 var entry = materials[material];
+                var bleed = entry.Bleed ?? System.Numerics.Vector3.One;
 
-                return new Double3(X: (entry.Albedo.X * entry.Emissive), Y: (entry.Albedo.Y * entry.Emissive), Z: (entry.Albedo.Z * entry.Emissive));
+                return new Double3(X: (entry.Albedo.X * entry.Emissive * bleed.X), Y: (entry.Albedo.Y * entry.Emissive * bleed.Y), Z: (entry.Albedo.Z * entry.Emissive * bleed.Z));
             },
             sky: sky,
             screens: screens

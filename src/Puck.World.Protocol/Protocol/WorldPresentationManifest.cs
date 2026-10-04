@@ -20,7 +20,7 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// <see cref="WorldStateMirror"/> registers when it installs the document: a HUD element's binding or template
 /// placeholder, an overlay <c>state</c> predicate, a binding bar's layout and model cells, every bindable scalar and
 /// color (camera program operands, markers, render lighting, sky and environment colors, the theme), every state
-/// clock's row (read eased, as every keyed value on it reads it), every color a signed-distance program bakes (a creation palette's surface, bounce,
+/// clock's row (read eased, as every keyed value on it reads it), every color a signed-distance program bakes (a creation palette's surface, fill, bleed,
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
 /// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
@@ -677,7 +677,8 @@ public sealed class WorldPresentationManifest {
                 case PaletteEntryDocument entry:
                     // The walk continues into the entry's weathering and inset surfaces.
                     AddColor(token: entry.Color);
-                    AddColor(token: entry.Bounce);
+                    AddColor(token: entry.Fill);
+                    AddColor(token: entry.Bleed);
 
                     return true;
                 case PaletteRadialStopDocument stop:

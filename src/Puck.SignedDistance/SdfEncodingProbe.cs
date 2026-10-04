@@ -151,7 +151,7 @@ public static class SdfEncodingProbe {
             emit: static (b, _, v) => b.ResetPoint().Sphere(
                 material: b.AddMaterial(material: new SdfMaterial(
                     Albedo: new Vector3(x: v[0], y: v[1], z: v[2]),
-                    Bounce: new Vector3(x: v[3], y: v[4], z: v[5]),
+                    Fill: new Vector3(x: v[3], y: v[4], z: v[5]),
                     Coat: v[6],
                     Emissive: v[7],
                     Inset: new SdfInset(

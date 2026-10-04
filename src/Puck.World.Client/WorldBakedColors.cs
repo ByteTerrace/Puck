@@ -5,7 +5,7 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// The colors a signed-distance program or a screen decal bakes when it is built — a creation palette's surface,
-/// bounce, weathering and inset colors, a height field's color, a text screen's ink — read through the state mirror,
+/// fill, bleed, weathering and inset colors, a height field's color, a text screen's ink — read through the state mirror,
 /// the one path presentation reads state through. A <c>#RRGGBB</c> literal parses directly; a state binding reads the
 /// color slot the document's presentation manifest registered for it (<see cref="WorldPresentationManifest"/>), so a
 /// bound color resolves from the mirror's sample rather than from a second read of the document.

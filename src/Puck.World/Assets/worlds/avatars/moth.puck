@@ -1288,7 +1288,7 @@ prototypes {
           emissive: 0
           coat: 0
           wrap: 0.15
-          bounce: "#4B2318"
+          fill: "#4B2318"
         }
         {
           color: "#171210"

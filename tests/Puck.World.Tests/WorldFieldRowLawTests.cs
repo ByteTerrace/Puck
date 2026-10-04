@@ -22,7 +22,7 @@ namespace Puck.World.Tests;
 /// <c>i</c> at element <c>i</c>, refreshed as one read when a snapshot moves them and not at all when it does not, with
 /// no allocation once warm; a field row reaches a pass's region with the same bytes under every residency policy; a
 /// height field's brick is baked from the mirror's row slot, once per move; and the colors a program bakes (a palette's
-/// surface, bounce, weathering and inset colors, a height field's color, a text screen's ink) are registered in the
+/// surface, fill, weathering and inset colors, a height field's color, a text screen's ink) are registered in the
 /// mirror at install and followed through it.
 /// </summary>
 public sealed class WorldFieldRowLawTests {
@@ -50,7 +50,8 @@ public sealed class WorldFieldRowLawTests {
         Cells: [
             new StateCell(Key: CellName.Parse(candidate: "bump"), Value: CellValue.Text(value: bump)),
             new StateCell(Key: CellName.Parse(candidate: "body"), Value: CellValue.Text(value: "#102030")),
-            new StateCell(Key: CellName.Parse(candidate: "bounce"), Value: CellValue.Text(value: "#405060")),
+            new StateCell(Key: CellName.Parse(candidate: "fill"), Value: CellValue.Text(value: "#405060")),
+            new StateCell(Key: CellName.Parse(candidate: "bleed"), Value: CellValue.Text(value: "#8090A0")),
             new StateCell(Key: CellName.Parse(candidate: "deposit"), Value: CellValue.Text(value: "#708090")),
             new StateCell(Key: CellName.Parse(candidate: "ink"), Value: CellValue.Text(value: "#A0B0C0")),
             new StateCell(Key: CellName.Parse(candidate: "fg"), Value: CellValue.Text(value: "#D0E0F0")),
@@ -347,7 +348,7 @@ public sealed class WorldFieldRowLawTests {
         Assert.NotEqual(expected: ready, actual: Revision(emitter: emitter));
     }
     /// <summary>Every color a program or a decal bakes is registered in the mirror at install, beside the height
-    /// field's row: a palette entry's color and bounce, a weathering deposit's and an inset stop's color, the height
+    /// field's row: a palette entry's color, fill and bleed, a weathering deposit's and an inset stop's color, the height
     /// field's color and a text screen's ink.</summary>
     [Fact]
     public void BakedMaterialsAppearInTheMirrorAtInstall() {
@@ -361,7 +362,8 @@ public sealed class WorldFieldRowLawTests {
                 Metal: 0f,
                 Roughness: 0.5f
             )),
-            Bounce: "state.colors.bounce",
+            Fill: "state.colors.fill",
+            Bleed: "state.colors.bleed",
             Inset: new PaletteInsetDocument(
                 Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
                 Rotation: new DocumentQuaternion(value: Quaternion.Identity),
@@ -383,7 +385,7 @@ public sealed class WorldFieldRowLawTests {
         });
         var mirror = ClientFixtures.StateMirror(definition: definition);
 
-        foreach (var token in ((string[])["state.colors.body", "state.colors.bounce", "state.colors.deposit", "state.colors.ink", "state.colors.bump", "state.colors.fg"])) {
+        foreach (var token in ((string[])["state.colors.body", "state.colors.fill", "state.colors.bleed", "state.colors.deposit", "state.colors.ink", "state.colors.bump", "state.colors.fg"])) {
             Assert.True(
                 condition: (mirror.SlotOf(conversion: WorldStateConversion.Color, token: token) >= 0),
                 userMessage: token

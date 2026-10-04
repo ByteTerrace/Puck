@@ -15,12 +15,16 @@
 | `coat` | [0, 1] | 0 | a second narrow lobe at fixed roughness 0.25 — lacquer over the primary specular |
 | `wrap` | [0, 1] | 0 | widens the terminator; the skin and soft-surface control |
 | `soften` | [0, 1] | 0 | blends the shading normal toward a wide-stencil gradient, smoothing pores and seams out of the lit normal without touching the silhouette |
-| `bounce` | `#RRGGBB` or a state binding | black | a tint added on the side the key light misses, scaled by ambient occlusion |
+| `fill` | `#RRGGBB` or a state binding | black | an artistic tint on the side the key light misses, scaled by ambient occlusion |
+| `bleed` | `#RRGGBB` or a state binding | white | scales diffuse reflectance and emission sent into indirect lighting |
+| `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
 | `weathering` | see below | absent | |
 | `inset` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
 name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
+The former palette `bounce` spelling is also unmapped; use `fill` for the
+artistic tint. A light's `bounce` is a separate transport gain.
 
 For painted metal with a clearcoat: a moderate `specular` around 0.35, a
 `roughness` in the 0.25 to 0.45 band, `metal` near 0 for paint over metal or near

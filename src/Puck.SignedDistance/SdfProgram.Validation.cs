@@ -277,6 +277,7 @@ public sealed partial class SdfProgram {
     private static void RequirePackedMaterials(IReadOnlyList<SdfMaterial> materials, string paramName) {
         for (var index = 0; (index < materials.Count); index++) {
             var material = materials[index];
+            var bleed = material.Bleed ?? Vector3.One;
 
             if (
                 !VectorFunctions.IsFinite(vector: material.Albedo) ||
@@ -305,17 +306,20 @@ public sealed partial class SdfProgram {
                 !float.IsFinite(f: material.Soften) ||
                 (material.Soften < 0f) ||
                 (material.Soften > 1f) ||
-                !VectorFunctions.IsFinite(vector: material.Bounce) ||
-                (material.Bounce.X < 0f) ||
-                (material.Bounce.Y < 0f) ||
-                (material.Bounce.Z < 0f) ||
+                !VectorFunctions.IsFinite(vector: material.Fill) ||
+                (material.Fill.X < 0f) ||
+                (material.Fill.Y < 0f) ||
+                (material.Fill.Z < 0f) ||
+                !VectorFunctions.IsFinite(vector: bleed) ||
+                (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
+                !float.IsFinite(material.Receive) || (material.Receive < 0f) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering
             )
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and bounce tint, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
                     paramName: paramName
                 );
             }

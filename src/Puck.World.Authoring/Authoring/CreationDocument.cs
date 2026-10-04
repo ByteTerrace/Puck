@@ -21,10 +21,13 @@ namespace Puck.World.Authoring;
 /// <see cref="SdfMaterial.Wrap"/>.</param>
 /// <param name="Soften">The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see
 /// <see cref="SdfMaterial.Soften"/>.</param>
-/// <param name="Bounce">The bounce tint as <c>#RRGGBB</c> or a state binding (null = black — no bounce) — see
-/// <see cref="SdfMaterial.Bounce"/>.</param>
+/// <param name="Fill">The fill tint as <c>#RRGGBB</c> or a state binding (null = black — no fill) — see
+/// <see cref="SdfMaterial.Fill"/>.</param>
 /// <param name="Inset">Optional refractive paint layer.</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bounce = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null);
+/// <param name="Bleed">The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state
+/// binding; null means white.</param>
+/// <param name="Receive">The finite nonnegative gain on received indirect light; null means one.</param>
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null);
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
 /// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>

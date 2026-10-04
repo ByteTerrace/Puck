@@ -142,7 +142,8 @@ public sealed class IrradianceReference {
             hitNormal = -hitNormal;
         }
 
-        var arriving = m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
+        var arriving = m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material)
+            + m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
 
         if (bounce < bounces) {
             arriving += Incident(

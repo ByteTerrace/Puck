@@ -215,7 +215,7 @@ Each surface supplies `color`, `roughness`, and `metal`.
 `paint`: 1..4 ascending radial `{radius,color}` stops with `softness`,
 `modulationAmplitude`, `modulationFrequency`, and `seed`.
 Inset coordinates use the winning dynamic frame, or world space for a
-static hit. `wrap`, `soften`, and `bounce` retain their shading roles.
+static hit. `wrap`, `soften`, and `fill` retain their shading roles.
 
 ### `dynamics` — the personality table
 

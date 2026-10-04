@@ -10,6 +10,20 @@ namespace Puck.SignedDistance.Tests;
 // The irradiance reference against closed forms: the furnace's finite-bounce series, a floor under a uniform sky, a
 // floor beside an emissive half-plane, and a floor under a finite emissive disc.
 public sealed class IrradianceReferenceLawTests {
+    [Fact]
+    public void BleedScalesTransportWhileReceiveAndFillRemainViewControls() {
+        var material = new SdfMaterial(new Vector3(0.5f, 0.25f, 1f), Emissive: 2,
+            Metal: 0.5f, Bleed: new Vector3(0.25f, 0.5f, 0.75f), Fill: Vector3.One, Receive: 7);
+        var surfaces = IrradianceSurfaces.FromMaterials([material]);
+        Assert.Equal(new Double3(0.0625, 0.0625, 0.375), surfaces.Albedo(0));
+        Assert.Equal(new Double3(0.25, 0.25, 1.5), surfaces.Emission(0));
+        var control = IrradianceSurfaces.FromMaterials([material with { Receive = 0, Fill = Vector3.Zero }]);
+        Assert.Equal(surfaces.Albedo(0), control.Albedo(0));
+        Assert.Equal(surfaces.Emission(0), control.Emission(0));
+        var black = IrradianceSurfaces.FromMaterials([material with { Bleed = Vector3.Zero }]);
+        Assert.Equal(Double3.Zero, black.Albedo(0));
+        Assert.Equal(Double3.Zero, black.Emission(0));
+    }
     [InlineData(0.0, 0)]
     [InlineData(0.0, 3)]
     [InlineData(0.5, 0)]
