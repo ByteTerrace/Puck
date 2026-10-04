@@ -23,18 +23,13 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed partial class WorldDecompileRoundTripLawTests {
     // The documents the decompiler refuses by name, with the start of the refusal's message. A module instance's machine
-    // and a verdict row authored by name have no source spelling (open items S6 and S8).
+    // has no source spelling (open item S6).
     private static readonly Dictionary<string, string> NamedRefusals = new(comparer: StringComparer.Ordinal) {
         ["tests/Puck.World.Canaries/four-corners-sharded/island.world.json"] = "'arcade$agb-screen' at /machines/0/name is a name Puck generates",
         ["tests/Puck.World.Canaries/four-corners-sharded/quilt-ne.world.json"] = "'arcade$agb-screen' at /machines/0/name is a name Puck generates",
         ["tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json"] = "'arcade$agb-screen' at /machines/0/name is a name Puck generates",
         ["tests/Puck.World.Canaries/four-corners-sharded/quilt-se.world.json"] = "'arcade$agb-screen' at /machines/0/name is a name Puck generates",
         ["tests/Puck.World.Canaries/four-corners-sharded/quilt-sw.world.json"] = "'arcade$agb-screen' at /machines/0/name is a name Puck generates",
-        ["tests/Puck.World.Verdicts/phase-advance-stopped.world.json"] = "'passPhaseAdvanced' at /state/world/0 is a name Puck generates",
-        ["tests/Puck.World.Verdicts/phase-advance.world.json"] = "'passPhaseAdvanced' at /state/world/0 is a name Puck generates",
-        ["tests/Puck.World.Verdicts/proofs/expected-outcome.world.json"] = "'passPhaseStillZero' at /state/world/0 is a name Puck generates",
-        ["tests/Puck.World.Verdicts/proofs/unexpected-outcome.world.json"] = "'passPhaseStillZero' at /state/world/0 is a name Puck generates",
-        ["tests/Puck.World.Verdicts/refused-command.world.json"] = "'wrongGuardRefused' at /state/world/0 is a name Puck generates",
     };
 
     private static string Excerpt(JsonNode? node) {

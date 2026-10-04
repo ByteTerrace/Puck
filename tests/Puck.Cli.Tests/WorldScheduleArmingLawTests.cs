@@ -10,7 +10,7 @@ namespace Puck.Cli.Tests;
 /// decide still reads <c>never evaluated</c>, which is only possible if the scheduled guarded transform never
 /// landed.</remarks>
 public sealed class WorldScheduleArmingLawTests {
-    private const string ScheduledWorld = "phase-advance.world.json";
+    private const string ScheduledWorld = "phase-advance.puck";
     // The document's own export tick (two rows, the last at tick 6, settleTicks 6), fenced two ticks past so the
     // export lands before the pipe closes.
     private const string Script = "world.wait 14\nworld.schedule\nworld.verdicts\nquit\n";

@@ -8,8 +8,8 @@ of these by path instead.
 
 | World | Reproduces | After the repair |
 |---|---|---|
-| `unexpected-outcome.world.json` | a scheduled row the world refused, with the verdict still passing because the gate never depended on the row | exit 1, naming the row's index, its command and the recorded outcome |
-| `expected-outcome.world.json` | the same row declaring `expect: "Refused"` and the text the refusal must carry | exit 0 |
+| `unexpected-outcome.puck` | a scheduled row the world refused, with the verdict still passing because the gate never depended on the row | exit 1, naming the row's index, its command and the recorded outcome |
+| `expected-outcome.puck` | the same row declaring `expect: "Refused"` and the text the refusal must carry | exit 0 |
 
 Both are basis deltas over the parent directory's self-contained
 `phase-fixture.puck` and act as `seat1` under the same two authored grants.

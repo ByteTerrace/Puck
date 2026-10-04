@@ -121,7 +121,7 @@ public sealed class TestCommandLawTests {
 
         var input = Path.Combine(path1: directory, path2: "input");
         var kept = Path.Combine(path1: directory, path2: "kept");
-        var fixtures = new[] { "refused-command.world.json", "phase-advance.world.json" };
+        var fixtures = new[] { "refused-command.puck", "phase-advance.puck" };
         var verdicts = new[] { "wrongGuardRefused", "trickPhaseAdvanced" };
         ulong[] ticks = [14UL, 12UL];
 
@@ -130,7 +130,9 @@ public sealed class TestCommandLawTests {
                 path1: input,
                 path2: index.ToString(provider: CultureInfo.InvariantCulture)
             ));
-            var document = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: World(name: fixtures[index])))!.AsObject();
+            Assert.True(condition: WorldDefinitionFileSource.TryReadDocumentFile(path: World(name: fixtures[index]),
+                content: out var bytes, reason: out var readReason), userMessage: readReason);
+            var document = JsonNode.Parse(utf8Json: bytes!)!.AsObject();
 
             document[propertyName: "basis"] = World(name: "phase-fixture").Replace(newChar: '/', oldChar: '\\');
             File.WriteAllText(
@@ -476,11 +478,11 @@ public sealed class TestCommandLawTests {
     // Collection runs before artifact admission. An absent artifact fences this witness before any host starts,
     // including the deliberately stopped schedule, while preserving each authored document's name and rows.
     [Theory]
-    [InlineData("phase-advance.world.json")]
-    [InlineData("phase-advance-stopped.world.json")]
-    [InlineData("refused-command.world.json")]
-    [InlineData("proofs/expected-outcome.world.json")]
-    [InlineData("proofs/unexpected-outcome.world.json")]
+    [InlineData("phase-advance.puck")]
+    [InlineData("phase-advance-stopped.puck")]
+    [InlineData("refused-command.puck")]
+    [InlineData("proofs/expected-outcome.puck")]
+    [InlineData("proofs/unexpected-outcome.puck")]
     public void EveryAuthoredScheduledVerdictSourceIsCollectedWithoutAGeneratedTestBlock(string fixture) {
         using var scratch = new TemporaryDirectory(prefix: "puck-authored-verdict-collection-");
         var originalPath = World(name: fixture);
@@ -520,7 +522,7 @@ public sealed class TestCommandLawTests {
     [Fact]
     public void AHostThisVerbCannotBootIsRefusedByName() {
         var (exitCode, output) = RunTest(
-            World(name: "refused-command.world.json"),
+            World(name: "refused-command.puck"),
             "--host",
             "browser"
         );
@@ -537,7 +539,7 @@ public sealed class TestCommandLawTests {
     }
     [Fact]
     public void AWorldWhoseScheduledCommandIsRefusedPassesAndPrintsTheRecordedRefusal() {
-        var (exitCode, output) = RunTest(World(name: "refused-command.world.json"));
+        var (exitCode, output) = RunTest(World(name: "refused-command.puck"));
 
         Assert.Equal(
             actual: exitCode,
@@ -566,7 +568,7 @@ public sealed class TestCommandLawTests {
     }
     [Fact]
     public void AScheduledGuardedTransformAdvancesAShippedPhaseAndAnUnprovenVerdictFailsByName() {
-        var (exitCode, output) = RunTest(World(name: "phase-advance.world.json"));
+        var (exitCode, output) = RunTest(World(name: "phase-advance.puck"));
 
         Assert.Equal(
             actual: exitCode,
@@ -595,7 +597,7 @@ public sealed class TestCommandLawTests {
     }
     [Fact]
     public void AScheduledRowRefusedWithNoExpectationFailsTheWorldWhileItsPassingVerdictStands() {
-        var (exitCode, output) = RunTest(Proof(name: "unexpected-outcome.world.json"));
+        var (exitCode, output) = RunTest(Proof(name: "unexpected-outcome.puck"));
 
         Assert.Equal(
             actual: exitCode,
@@ -614,7 +616,7 @@ public sealed class TestCommandLawTests {
     }
     [Fact]
     public void TheSameRowDeclaringTheRefusalItExpectsPasses() {
-        var (exitCode, output) = RunTest(Proof(name: "expected-outcome.world.json"));
+        var (exitCode, output) = RunTest(Proof(name: "expected-outcome.puck"));
 
         Assert.Equal(
             actual: exitCode,

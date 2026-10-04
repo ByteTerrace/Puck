@@ -141,7 +141,7 @@ public sealed class ScheduledStepVocabularyLawTests {
                 "quit",
                 string.Empty
             ),
-            world: "refused-command.world.json"
+            world: "refused-command.puck"
         );
 
         var opened = run.Stdout.IndexOf(

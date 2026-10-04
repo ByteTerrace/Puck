@@ -765,29 +765,20 @@ boolean constants. A `Bool` row can therefore be compared with those literals
 and assigned from them without the document compiler mistaking either word for
 a row name.
 
-**Open:** three constructs the lowered test documents carry have no source
-spelling, so five hand-authored documents stay JSON
-(`tests/Puck.World.Verdicts/phase-advance.world.json`,
-`phase-advance-stopped.world.json`, `refused-command.world.json` and
-`proofs/expected-outcome.world.json`, `proofs/unexpected-outcome.world.json`)
-and `puck decompile` refuses each by name (`'passPhaseAdvanced' at
-/state/world/0 is a name Puck generates … a test block appends its verdict
-rows last, one per expectation, named 'expect$1' onward`):
+Named verdict rows use the explicit `state { world { row { … } } }` vocabulary,
+including the status cell that stays never evaluated until a rule fires.
+An authored `schedule` carries a refusal expectation and optional refusal text;
+`simulation { rateHz: 0 }` keeps a stopped schedule stopped. A generated test's
+`when` spells `seatN refused ["text"]: command`, and the decompiler preserves
+that outcome as well as distinguishing authored names from generated
+`expect$N` rows.
 
-- A verdict row authored by name. A test block names its rows `expect$N`; a
-  document that needs a stable, meaningful row name (`passPhaseAdvanced`,
-  `wrongGuardRefused`, `passPhaseStillZero`) states it only as a state row, and
-  the decompiler cannot tell it from a generated one.
-- The never-evaluated status as an authored outcome. A verdict row with no
-  firing reads as never evaluated; no `expect` spelling asks for that, so the
-  documents that prove the status are rows the test block cannot produce.
-- A scheduled refusal expectation. A scheduled row's `expect: Refused` message
-  (the `refused-command` document's wrong-guard row) and a `rateHz: 0`
-  schedule have no `when` spelling; the test block lowers every scheduled
-  command as submitted.
-
-Done when each of the five decompiles, compiles back to its document as parsed,
-and the JSON is deleted.
+All five scheduled fixtures under `tests/Puck.World.Verdicts` are `.puck`
+sources. Their parsed documents survive native decompile and compile exactly;
+`puck test` collects the authored schedule/verdict form through its normal
+composition and staging path without manufacturing a generated test block.
+The stopped fixture is booted directly with `quit` so its unreached rows are
+observed without waiting for an export tick it cannot reach.
 
 ### The costing correction
 
