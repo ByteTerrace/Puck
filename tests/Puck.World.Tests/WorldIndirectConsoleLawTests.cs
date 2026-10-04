@@ -111,6 +111,7 @@ public sealed class WorldIndirectConsoleLawTests {
             reason: () => residency.NotReadyReason, wait: residency.WaitPipelineBuilds);
         var reader = (SdfIndirectCache?)residency.Tables!.Indirect!.Retain();
         try {
+            Assert.NotNull(reader);
             var bytes = reader.Bytes;
             var probe = new WorldRenderProbe();
             probe.RegisterIndirectResidency(residency, active: true);
