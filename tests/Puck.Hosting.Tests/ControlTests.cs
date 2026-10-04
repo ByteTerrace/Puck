@@ -56,6 +56,7 @@ public sealed class ControlTests {
             Token
         ))!);
         var host = root.GetProperty(propertyName: "host").GetString();
+        var shape = root.GetProperty(propertyName: "shape").GetString();
         var nonce = Convert.ToHexString(inArray: RandomNumberGenerator.GetBytes(count: 32));
         var serverNonce = challenge.RootElement.GetProperty(propertyName: "nonce").GetString();
         var secret = (wrongSecret
@@ -66,7 +67,7 @@ public sealed class ControlTests {
             key: secret,
             source: Encoding.UTF8.GetBytes(s: $"puck-control:1:{host}:client:{serverNonce}:{nonce}")
         ));
-        var response = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{proof}}"}""");
+        var response = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"shape":"{{shape}}","host":"{{host}}","nonce":"{{nonce}}","proof":"{{proof}}"}""");
 
         await WriteFrameAsync(
             stream,
@@ -259,6 +260,7 @@ public sealed class ControlTests {
         );
         using var descriptor = JsonDocument.Parse(original);
         var host = descriptor.RootElement.GetProperty(propertyName: "host").GetString();
+        var shape = descriptor.RootElement.GetProperty(propertyName: "shape").GetString();
         var secret = descriptor.RootElement.GetProperty(propertyName: "secret").GetString();
         using var fake = new TcpListener(
             localaddr: IPAddress.Loopback,
@@ -279,7 +281,7 @@ public sealed class ControlTests {
             FileOptions.None,
             new FileInfo(fileName: real.AttachmentPath).GetAccessControl()
         )) {
-            file.Write(buffer: Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","port":{{port}},"secret":"{{secret}}"}"""));
+            file.Write(buffer: Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"shape":"{{shape}}","host":"{{host}}","port":{{port}},"secret":"{{secret}}"}"""));
         }
         var attempt = LocalControlClient.ConnectAsync(
             attachmentPath: path,
@@ -290,7 +292,7 @@ public sealed class ControlTests {
             c: 'A',
             count: 64
         );
-        var challenge = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":""}""");
+        var challenge = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"shape":"{{shape}}","host":"{{host}}","nonce":"{{nonce}}","proof":""}""");
 
         await WriteFrameAsync(
             peer.GetStream(),
@@ -303,7 +305,7 @@ public sealed class ControlTests {
             4096,
             Token
         ));
-        var forged = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{new string(
+        var forged = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"shape":"{{shape}}","host":"{{host}}","nonce":"{{nonce}}","proof":"{{new string(
             c: '0',
             count: 64
         )}}"}""");
