@@ -491,7 +491,7 @@ public sealed class TestCommandLawTests {
         var recompiled = Puck.World.Transpiler.WorldCompiler.Compile(source: printed,
             sourcePath: originalPath, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(condition: recompiled.Diagnostics.HasErrors,
-            userMessage: recompiled.Diagnostics.FormatReport(source: printed));
+            userMessage: recompiled.Diagnostics.FormatReport(printed));
         Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: recompiled.RequireJson()));
         document["basis"] = World(name: "phase-fixture").Replace(oldChar: '\\', newChar: '/');
         var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: fixture));
