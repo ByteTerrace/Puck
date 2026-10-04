@@ -3,7 +3,7 @@ namespace Puck.Cli.Laws;
 /// <summary>Builds a law's project with <c>dotnet build</c> and runs the law with <c>dotnet test</c>, reading the
 /// outcome from the run's TRX report rather than its console text. Build servers are disabled so no compiler or MSBuild
 /// node outlives the proof holding a file in its tree.</summary>
-internal sealed class DotnetLawRunner : ILawRunner {
+internal sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? buildRunner = null) : ILawRunner {
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 60);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(minutes: 30);
 
@@ -18,16 +18,22 @@ internal sealed class DotnetLawRunner : ILawRunner {
         _ = Directory.CreateDirectory(path: logDirectory);
         var countsPath = Path.Combine(path1: logDirectory, path2: "build.counts");
 
-        File.Delete(path: countsPath);
-        var build = CliProcess.RunCaptured(
-            cancellationToken: cancellationToken,
-            arguments: ["build", CliOptions.NoNodeReuse, project, "-c", CliOptions.DefaultConfiguration, "-v", "diag", "-consoleloggerparameters:ErrorsOnly;Summary", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false", $"-logger:{typeof(LawBuildLogger).FullName},{typeof(LawBuildLogger).Assembly.Location};{countsPath}"],
-            fileName: "dotnet",
-            input: string.Empty,
-            timeout: BuildTimeout,
-            workingDirectory: tree
-        );
-        var counts = LawBuildLogger.Read(path: countsPath);
+        LawBuildCounts? counts = null;
+        var build = CliReferenceAssemblyRecovery.Run(tree: tree,
+            log: Path.Combine(path1: logDirectory, path2: "reference-recovery.build.log"), timeout: BuildTimeout, build: remaining => {
+                File.Delete(path: countsPath);
+                string[] arguments = ["build", CliOptions.NoNodeReuse, project, "-c", CliOptions.DefaultConfiguration, "-v", "diag", "-consoleloggerparameters:ErrorsOnly;Summary", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false", $"-logger:{typeof(LawBuildLogger).FullName},{typeof(LawBuildLogger).Assembly.Location};{countsPath}"];
+                var result = ((buildRunner is { } run) ? run(arguments, remaining) : CliProcess.RunCaptured(
+                    cancellationToken: cancellationToken, arguments: arguments, fileName: "dotnet", input: string.Empty,
+                    timeout: remaining, workingDirectory: tree));
+                var attempt = LawBuildLogger.Read(path: countsPath);
+
+                counts = ((attempt is { } value) ? new LawBuildCounts(
+                    Compiled: (counts.GetValueOrDefault().Compiled + value.Compiled),
+                    Targets: (counts.GetValueOrDefault().Targets + value.Targets),
+                    UpToDate: (counts.GetValueOrDefault().UpToDate + value.UpToDate)) : null);
+                return result;
+            });
 
         if (
             !build.TimedOut &&

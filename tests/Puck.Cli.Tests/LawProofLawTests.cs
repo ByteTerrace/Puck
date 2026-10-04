@@ -64,11 +64,11 @@ public sealed partial class LawProofLawTests {
 
         return checkout;
     }
-    private static (int ExitCode, string Output, string Error) Prove(GitScratchCheckout checkout, LawFix fix, FakeRunner runner, TemporaryDirectory scratch) => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
+    private static (int ExitCode, string Output, string Error) Prove(GitScratchCheckout checkout, LawFix fix, FakeRunner runner, TemporaryDirectory scratch, string? repository = null) => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
         fix: fix,
         law: Law,
         project: null,
-        repositoryRoot: checkout.Root,
+        repositoryRoot: (repository ?? checkout.Root),
         runner: runner,
         scratchRoot: scratch.RootPath,
         lawTreesRoot: LawTreesRoot(checkout: checkout)
@@ -426,33 +426,42 @@ public sealed partial class LawProofLawTests {
             File.Delete(path: link);
         }
     }
-    [Fact]
-    public void CleanupNeverPrunesAnotherWorktreesRegistration() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void CleanupNeverPrunesAnotherWorktreesRegistration(bool linkedCaller) {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
         using var lease = HoldTree(checkout: checkout);
         using var other = new TemporaryDirectory(prefix: "puck-laws-other-law-");
         var otherTree = other.PathOf(name: "tree");
+        var callerTree = other.PathOf(name: "caller");
 
         _ = checkout.Git("worktree", "add", "--detach", "--quiet", otherTree, "HEAD");
         Directory.Delete(path: otherTree, recursive: true);
         _ = checkout.Git("config", "gc.worktreePruneExpire", "now");
         checkout.Write(name: FixPath, text: "fixed");
         _ = checkout.Commit(message: "lib: fix");
+        if (linkedCaller) { _ = checkout.Git("worktree", "add", "--detach", "--quiet", callerTree, "HEAD"); }
 
-        // Read last before the proof, so the registration it must keep is shown to exist when the proof starts.
-        var before = checkout.Git("worktree", "list", "--porcelain");
+        try {
+            // Read last before the proof, so the registration it must keep exists when either caller starts.
+            var before = checkout.Git("worktree", "list", "--porcelain");
 
-        var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: new FakeRunner(), scratch: scratch);
+            var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: new FakeRunner(), scratch: scratch, repository: (linkedCaller ? callerTree : checkout.Root));
 
-        Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
-        var registrations = checkout.Git("worktree", "list", "--porcelain");
-        var otherEntry = $"worktree {Puck.Abstractions.PuckPaths.Normalize(path: otherTree)}";
+            Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
+            var registrations = checkout.Git("worktree", "list", "--porcelain");
+            var otherEntry = $"worktree {Puck.Abstractions.PuckPaths.Normalize(path: otherTree)}";
 
-        Assert.Contains(actualString: before, expectedSubstring: otherEntry);
-        Assert.Contains(actualString: registrations, expectedSubstring: otherEntry);
-        Assert.Equal(expected: 2, actual: registrations.Split(separator: '\n').Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree ")));
-        Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
+            Assert.Contains(actualString: before, expectedSubstring: otherEntry);
+            Assert.Contains(actualString: registrations, expectedSubstring: otherEntry);
+            Assert.Equal(expected: (linkedCaller ? 3 : 2), actual: registrations.Split(separator: '\n').Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree ")));
+            Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
+            Assert.Equal(expected: "fixed", actual: checkout.Read(name: FixPath));
+        } finally {
+            if (linkedCaller) { _ = checkout.Git("worktree", "remove", "--force", callerTree); }
+        }
     }
     [Fact]
     public void CleanupRemovesABuiltTreeWhosePathsPassTheWindowsLimit() {

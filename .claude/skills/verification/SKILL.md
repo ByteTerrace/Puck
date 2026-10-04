@@ -69,7 +69,13 @@ and `puck docs citations` when required below, under the GPU rules.
   restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
 - A build interrupted under memory pressure can leave a corrupt assembly under
   `obj/` (the `ref` assembly), and every dependent compile then fails with
-  errors that point at it. Delete that `obj` `ref` directory and rebuild.
+  errors that point at it. CLI project builds and the native law runner retain
+  the first `CS0009` failure and repair only diagnosed corrupt `obj` reference
+  directories inside their own build tree, retrying once within the original
+  deadline. Links, outside paths and readable managed assemblies refuse that
+  recovery. A failed retry is still a setup failure, never a red law. For a
+  direct build, clean only the diagnosed owned reference directory before the
+  one rebuild; keep the original diagnostic.
 - Do not edit the source tree while a canary, parity or test run is going:
   canaries rebuild from source, and tests read baselines, schemas and generated
   tables from it. Apply the

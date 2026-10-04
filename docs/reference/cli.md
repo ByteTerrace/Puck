@@ -1147,6 +1147,15 @@ and reports the cold build on standard error. A missing or corrupt clone,
 or one whose origin names another caller, is recreated cold. If the cache
 cannot be opened or repaired, the proof also uses the scratch fallback.
 
+A failed build naming a corrupt reference assembly with `CS0009` can retain
+an interrupted build's `obj` output. The proof runner and CLI project builds
+keep that first failure in a `reference-recovery.build.log`, remove only the
+diagnosed `obj/.../ref` or `refint` directories inside their build tree, and
+retry once within the original build deadline. Outside paths, links and
+assemblies with readable managed metadata refuse recovery. A retry that fails
+remains a failed build, and no test runs against it. Proof work counts include
+both attempts.
+
 Cancellation kills and waits for the active child process before cleanup.
 The persistent clone survives success, refusal, exceptions and cancellation;
 per-proof scratch holds results, build counts, patches and the empty hooks

@@ -117,13 +117,18 @@ internal static partial class CliProjectBuild {
         List<string> arguments = [.. Arguments(project: project), "--output", outputDirectory];
 
         try {
-            build = ((runner is { }) ? runner(arguments, timeout) : CliProcess.RunCaptured(
-                arguments: arguments,
-                fileName: "dotnet",
-                input: string.Empty,
+            build = CliReferenceAssemblyRecovery.Run(
+                tree: repositoryRoot,
+                log: Path.Combine(path1: logDirectory, path2: $"{name}.reference-recovery.build.log"),
                 timeout: timeout,
-                workingDirectory: repositoryRoot
-            ));
+                build: remaining => ((runner is { }) ? runner(arguments, remaining) : CliProcess.RunCaptured(
+                    arguments: arguments,
+                    fileName: "dotnet",
+                    input: string.Empty,
+                    timeout: remaining,
+                    workingDirectory: repositoryRoot
+                ))
+            );
         } catch (Exception exception) when ((exception is InvalidOperationException or Win32Exception)) {
             error = $"could not start the {name} build: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
