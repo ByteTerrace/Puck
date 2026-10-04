@@ -1,6 +1,11 @@
 using System.Numerics;
-using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Puck.Commands;
+using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.Testing;
+using Puck.World.Client;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -10,13 +15,51 @@ public sealed partial class TemporalShadowCanaryLawTests {
     public void TheDepartedOccluderLeavesTheLiveGridCellsThatCanReachTheReceiver() {
         const string Path = "tests/Puck.World.Canaries/temporal-shadows/fixture.world.json";
         var definition = AuthoredGameFixtures.Load(relativePath: Path);
-        var frame = ComposedSdfWorldFixture.Capture(definition: definition, relativePath: Path);
+        var occluder = Assert.Single(collection: definition.Placements, predicate: row => (row.Id == "occluder"));
+        var creation = Assert.Single(collection: definition.Creations, predicate: row => (row.Id == occluder.PrototypeId));
+
+        Assert.True(condition: WorldPlacementStamper.IsAnimated(creation: creation),
+            userMessage: "The occluder must ride dynamic transforms; a static-stamp edit rebuilds geometry instead of testing motion rejection.");
+        using var files = new TemporaryDirectory(prefix: "temporal-shadow-grid-");
+        var host = files.Own(owner: WorldBootHarness.Compose(stateDirectory: files,
+            presentation: WorldHostPresentation.Offscreen, world: Path).Build());
+
+        Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var router = host.Services.GetRequiredService<InputRouter>();
+        var server = host.Services.GetRequiredService<WorldServer>();
+
+        SdfFrame Capture() => presenter.CaptureFrame(deltaSeconds: (1f / 30f), height: 128, interpolationAlpha: 1f, width: 128);
+
+        _ = Capture();
+        _ = Capture();
+        var frame = Capture();
         var program = frame.Program;
+        var revision = client.DefinitionRevision;
+
+        SdfFrame ScheduledMove(ulong tick) {
+            var command = definition.Schedule!.Rows.Single(predicate: row => (row.Tick == tick)).Command;
+            var result = registry.Submit(line: command);
+
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+            registry.ApplySnapshot(snapshot: router.SnapshotForTick(tick: server.NextInputTick, windowEndTick: ulong.MaxValue));
+            server.Advance(stepTicks: Fixtures.StepTicksAt(rateHz: 30));
+            var moved = Capture();
+
+            Assert.Equal(expected: revision, actual: client.DefinitionRevision);
+            Assert.Same(expected: program, actual: moved.Program);
+            Assert.False(condition: moved.ProgramChanged, userMessage: "A program upload seeds previous poses and would mask departing-occluder rejection.");
+            return moved;
+        }
+
         var transforms = frame.DynamicTransforms.ToArray();
-        var slot = Assert.Single(collection: Enumerable.Range(start: 0, count: transforms.Length), predicate: index =>
-            (transforms[index].Position == new Vector3(x: 1.2f, y: 0f, z: 0f)));
         var instance = Assert.Single(collection: Enumerable.Range(start: 0, count: program.Instances.Count), predicate: index =>
-            (program.Instances[index].Active && program.Instances[index].IsDynamic && (program.Instances[index].Slot == slot)));
+            (program.Instances[index].Active && program.Instances[index].IsDynamic));
+        var slot = program.Instances[instance].Slot;
+
+        Assert.InRange(actual: transforms[slot].Position.X, low: 1.19f, high: 1.21f);
         var scratch = new SdfInstanceGridInput[program.Instances.Count];
         var workspace = new SdfInstanceGrid.Workspace(maxInstances: SdfProgramBuilder.MaxInstances);
 
@@ -30,7 +73,8 @@ public sealed partial class TemporalShadowCanaryLawTests {
         var world = ((instances + 1) + (SdfProgram.BoundRecordVectors * program.Instances.Count));
 
         Assert.Equal(expected: 0u, actual: words[((4 * world) + SdfProgram.WorldSegmentCountLane)]);
-        transforms[slot] = transforms[slot] with { Position = Vector3.Zero };
+        transforms = ScheduledMove(tick: 100UL).DynamicTransforms.ToArray();
+        Assert.Equal(expected: new Vector3(x: 0f, y: 1f, z: 0f), actual: transforms[slot].Position);
         _ = program.BuildFrameInstanceGrid(inputScratch: scratch, transforms: transforms, workspace: workspace);
         var previous = scratch[instance];
         var direction = Vector3.Normalize(value: new Vector3(x: -0.6f, y: 0.8f, z: 0f));
@@ -41,12 +85,8 @@ public sealed partial class TemporalShadowCanaryLawTests {
 
         Assert.Null(@object: Assert.IsType<WorldRenderLight.Directional>(@object: definition.Render.Lighting!.Lights![1]).AngularRadius);
         Assert.True(condition: ((delta - (direction * along)).Length() <= ((previous.Radius + (chord * along)) / MathF.Sqrt(x: (1f - (chord * chord))))));
-        var departure = definition.Schedule!.Rows.Single(predicate: row => (row.Tick == 110UL)).Command;
-        using var coordinates = JsonDocument.Parse(json: departure[departure.IndexOf(value: '[')..]);
-        var position = coordinates.RootElement.EnumerateArray().Select(selector: item => item.GetSingle()).ToArray();
-
-        Assert.Equal(expected: 3, actual: position.Length);
-        transforms[slot] = transforms[slot] with { Position = new Vector3(x: position[0], y: position[1], z: position[2]) };
+        transforms = ScheduledMove(tick: 110UL).DynamicTransforms.ToArray();
+        Assert.Equal(expected: new Vector3(x: 0f, y: 1f, z: 64f), actual: transforms[slot].Position);
         var grid = program.BuildFrameInstanceGrid(inputScratch: scratch, transforms: transforms, workspace: workspace).ToArray();
 
         Assert.Equal(expected: 1u, actual: grid[0]);
@@ -77,5 +117,8 @@ public sealed partial class TemporalShadowCanaryLawTests {
         var bodyZ = (bodyCell / checked((int)(grid[1] * grid[2])));
 
         Assert.True(condition: (bodyZ > lastQueryZ), userMessage: $"Departed body cell z={bodyZ} must exceed every receiver query cell z<={lastQueryZ}.");
+        var returned = ScheduledMove(tick: 120UL);
+
+        Assert.Equal(expected: new Vector3(x: 0f, y: 1f, z: 0f), actual: returned.DynamicTransforms[slot].Position);
     }
 }

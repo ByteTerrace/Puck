@@ -59,13 +59,14 @@ public sealed partial class TemporalShadowCanaryLawTests {
         Assert.Equal(expected: 8, actual: placements.Count(predicate: static row => row.GetProperty(propertyName: "id").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "grid-")));
         var schedule = json.RootElement.GetProperty(propertyName: "schedule").GetProperty(propertyName: "rows").EnumerateArray().ToArray();
 
-        Assert.Contains(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set placements occluder position"));
+        Assert.Contains(collection: schedule, filter: static row => (row.GetProperty(propertyName: "command").GetString() == "world.state.cell.set shadowX $value 0"));
+        Assert.DoesNotContain(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.row.set placements"));
         Assert.DoesNotContain(collection: schedule, filter: static row => row.GetProperty(propertyName: "command").GetString()!.Contains(comparisonType: StringComparison.Ordinal, value: "placements receiver"));
         var delay = (amortize ? 0 : 2);
 
         Assert.Contains(collection: schedule, filter: row => ((row.GetProperty(propertyName: "tick").GetInt32() == (110 + delay))
-            && (row.GetProperty(propertyName: "command").GetString() == "world.row.set placements occluder position [0,0,64]")));
+            && (row.GetProperty(propertyName: "command").GetString() == "world.state.cell.set shadowZ $value 64")));
         Assert.Contains(collection: schedule, filter: row => ((row.GetProperty(propertyName: "tick").GetInt32() == (120 + delay))
-            && (row.GetProperty(propertyName: "command").GetString() == "world.row.set placements occluder position [0,0,0]")));
+            && (row.GetProperty(propertyName: "command").GetString() == "world.state.cell.set shadowZ $value 0")));
     }
 }

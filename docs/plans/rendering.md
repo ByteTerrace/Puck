@@ -8097,8 +8097,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       shadows. The manifest's pixel discriminator delays transitions past the
       subject captures. Eight off-camera pillars exercise the live frame grid;
       departure and return captures preserve the arrival, light and owner legs.
-      A CPU fixture law checks the departed body's actual packed cell is outside
-      the receiver query and its previous bound intersects the cone. Withholding
+      The occluder's state-backed slides move it without replacing the program
+      or reseeding previous poses. A CPU fixture law applies those same state-cell
+      commands, holds the program identity and revision, and checks the departed
+      body's actual packed cell is outside the receiver query while its previous
+      bound intersects the cone. Withholding
       the independent motion scan is the departure-specific shader red leg.
       A separate shader mutation keeps only receiver rejection;
       its GPU red leg must show the moving occluder's old shadow lingering.

@@ -154,6 +154,82 @@
         ]
       },
       "id": "pillar"
+    },
+    {
+      "document": {
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "color": "#CCCCCC",
+            "roughness": 1,
+            "specular": 0
+          }
+        ],
+        "name": "moving-pillar",
+        "shapes": [
+          {
+            "id": 0,
+            "name": "tall-pillar",
+            "type": "Box",
+            "material": 0,
+            "position": [
+              0,
+              1,
+              0
+            ],
+            "scale": [
+              0.35,
+              1,
+              0.35
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "slides": [
+              {
+                "driver": "horizontal",
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "amplitude": 1,
+                "wave": "linear"
+              },
+              {
+                "driver": "departure",
+                "axis": [
+                  0,
+                  0,
+                  -1
+                ],
+                "amplitude": 1,
+                "wave": "linear"
+              }
+            ]
+          }
+        ],
+        "drivers": [
+          {
+            "name": "horizontal",
+            "signal": "state.shadowX",
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "departure",
+            "signal": "state.shadowZ",
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          }
+        ]
+      },
+      "id": "moving-pillar"
     }
   ],
   "placements": {
@@ -181,14 +257,14 @@
       },
       {
         "position": [
-          1.2,
+          0,
           0,
           0
         ],
         "yawDegrees": 0,
         "scale": 1,
         "id": "occluder",
-        "prototypeId": "pillar"
+        "prototypeId": "moving-pillar"
       },
       {
         "position": [
@@ -353,13 +429,18 @@
   "grants": [
     {
       "grantee": "seat1",
-      "subject": "section:placements",
-      "capability": "Mutate"
+      "subject": "state:shadowX",
+      "capability": "Edit"
     },
     {
       "grantee": "seat1",
       "subject": "section:render",
       "capability": "Mutate"
+    },
+    {
+      "grantee": "seat1",
+      "subject": "state:shadowZ",
+      "capability": "Edit"
     }
   ],
   "schedule": {
@@ -367,17 +448,17 @@
       {
         "principal": "seat1",
         "tick": 100,
-        "command": "world.row.set placements occluder position [0,0,0]"
+        "command": "world.state.cell.set shadowX $value 0"
       },
       {
         "principal": "seat1",
         "tick": 110,
-        "command": "world.row.set placements occluder position [0,0,64]"
+        "command": "world.state.cell.set shadowZ $value 64"
       },
       {
         "principal": "seat1",
         "tick": 120,
-        "command": "world.row.set placements occluder position [0,0,0]"
+        "command": "world.state.cell.set shadowZ $value 0"
       },
       {
         "principal": "seat1",
@@ -467,6 +548,20 @@
         "ticks": [
           181
         ]
+      }
+    ]
+  },
+  "state": {
+    "world": [
+      {
+        "name": "shadowX",
+        "kind": "Fixed",
+        "value": "1.2"
+      },
+      {
+        "name": "shadowZ",
+        "kind": "Fixed",
+        "value": "0"
       }
     ]
   }
