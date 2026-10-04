@@ -3230,9 +3230,13 @@ source, named, and the rest of the run still reports. A semantic phase that
 cannot analyze an owning project fails rather than reporting unchecked source as
 clean.
 
-The semantic passes evaluate every project closure they need in one MSBuild
-process, so a reference graph the projects share is evaluated once, and they
-parse and compile each project once for both `null-pattern` and `named-args`.
+The semantic passes evaluate the project closures in one MSBuild process per
+SDK context. Each process uses one node and serial reference queries, including
+the SDK's nested project queries, while retaining its shared reference graph
+cache. Pooled and individual evaluations have a two-minute deadline: expiry
+stops the owned process tree and refuses the evaluation, without retrying each
+project from the stalled batch. They parse and compile each project once for
+both `null-pattern` and `named-args`.
 Each compilation carries the project's own assembly name, so a member another
 project exposes through `InternalsVisibleTo` binds as the build binds it.
 

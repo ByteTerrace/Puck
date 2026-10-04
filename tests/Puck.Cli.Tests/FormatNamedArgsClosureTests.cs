@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Puck.Cli.Format;
 using Puck.Testing;
 
@@ -359,7 +360,8 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     /// Evaluating several projects in one MSBuild process answers for each exactly as evaluating it alone does. A
     /// reference resolved from a project reference carries MSBuild's own note of the project it came from, so a batch
     /// that sorted its report by that note would hand the dependency's reference assembly to the dependency and take
-    /// it from the project that references it.
+    /// it from the project that references it. Both entry points use one node and disable nested parallel requests;
+    /// each project's own target observes those execution settings alongside the unchanged closure assertions.
     /// </summary>
     [Fact]
     public void ABatchedEvaluationReportsEachProjectsOwnClosure() {
@@ -367,17 +369,33 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             librarySource: "namespace Library;\n\npublic static class Reach {\n    public static string Find() => \"found\";\n}\n",
             sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Find();\n}\n"
         );
+        foreach (var project in ((string[])[library, sample])) {
+            var document = XDocument.Load(uri: project);
+
+            document.Root!.Add(content: new XElement(name: "Target",
+                new XAttribute(name: "Name", value: "ObserveClosureExecution"),
+                new XAttribute(name: "BeforeTargets", value: "FindReferenceAssembliesForReferences"),
+                new XElement(name: "WriteLinesToFile",
+                    new XAttribute(name: "File", value: "$(MSBuildProjectDirectory)/closure.execution.txt"),
+                    new XAttribute(name: "Lines", value: "$(MSBuildNodeCount)|$(BuildInParallel)"),
+                    new XAttribute(name: "Overwrite", value: "true"))));
+            document.Save(fileName: project);
+        }
         var batched = CompileClosure.EvaluateAll(
             configuration: "Release",
             projects: [sample, library]
         );
 
         foreach (var project in ((string[])[library, sample])) {
+            var execution = Path.Combine(path1: Path.GetDirectoryName(path: project)!, path2: "closure.execution.txt");
+
+            Assert.Equal(expected: "1|false", actual: File.ReadAllText(path: execution).Trim());
             var alone = CompileClosure.Evaluate(
                 configuration: "Release",
                 project: project
             );
 
+            Assert.Equal(expected: "1|false", actual: File.ReadAllText(path: execution).Trim());
             Assert.Null(@object: alone.Refusal);
             Assert.True(condition: batched.TryGetValue(
                 key: project,
