@@ -100,7 +100,7 @@ public sealed class SdfIndirectLayout {
         CellWordOffset = (ProbeCapacity * ProbeWords);
         HitWordOffset = (CellWordOffset + (ProbeCapacity * CellWords));
         ProofWordOffset = (HitWordOffset + ((ProbeCapacity * RaysPerProbe) * HitWords));
-        RadianceProbeOffset = ((Pools.Count == 0) ? 0 : (Pools[0] * ProbesPerBrick));
+        RadianceProbeOffset = ((tier == SdfIndirectTier.Medium) ? (Pools[0] * ProbesPerBrick) : 0);
         RadianceProbeCapacity = (ProbeCapacity - RadianceProbeOffset);
         RadianceWordOffset = (ProofWordOffset + (ProofCapacity * ProofWords));
         RadianceGenerationWords = (RadianceProbeCapacity * RaysPerProbe * RadianceWords);
@@ -143,9 +143,10 @@ public sealed class SdfIndirectLayout {
     public int HitWordOffset { get; }
     /// <summary>Gets the first proof word.</summary>
     public int ProofWordOffset { get; }
-    /// <summary>Gets the first probe that needs persistent ray radiance; the finest level has no finer readers.</summary>
+    /// <summary>Gets the first probe with persistent directional radiance. High retains every level for near-field
+    /// receivers; Medium retains only the coarser level read by continuations.</summary>
     public int RadianceProbeOffset { get; }
-    /// <summary>Gets the probes whose coarser rays a continuation can read.</summary>
+    /// <summary>Gets the probes whose rays a continuation or High near-field receiver can read.</summary>
     public int RadianceProbeCapacity { get; }
     /// <summary>Gets the first stored ray radiance word.</summary>
     public int RadianceWordOffset { get; }

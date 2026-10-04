@@ -2856,10 +2856,10 @@ A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
 height in the terminal word; the view's launch uses the visibility record's
 reserved L word. Each irradiance generation also stamps its probes, so a reused
 brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
-probe and the same full identities require 394,395,656 cache bytes, including
-proofs, both irradiance generations and the coarser levels' ray radiance. Three
+probe and the same full identities require 562,167,816 cache bytes, including
+proofs, both irradiance generations and all High levels' directional radiance. Three
 slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
-total to 433,192,968 bytes. Held fading owners add their explicitly counted map
+total to 600,965,128 bytes. Held fading owners add their explicitly counted map
 regions. The tables and constant rings must satisfy the recorded bounds; these
 are allocation counts, not a claim that the tier has passed hardware qualification.
 The receiver certificate adds 32 bytes per allocated ordinary-view pixel beyond
@@ -2875,7 +2875,7 @@ Its successful
 proof entries also carry a publication sequence, 28 bytes each. The current raw
 geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
 G4's declared layout retains those records and reserves both lighting generations
-and their stamps, giving 100,728,840 bytes at `medium` and 394,395,656 at `high`,
+and their stamps, giving 100,728,840 bytes at `medium` and 562,167,816 at `high`,
 plus the region rings, counters and descriptors that `world.budget` reports.
 Lighting stores five nonnegative R11G11B10 words per ray or irradiance texel:
 direct, feedback, emission, sky and screens. Contributions are accumulated and
