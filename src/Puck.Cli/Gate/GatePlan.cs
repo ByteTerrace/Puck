@@ -10,8 +10,9 @@ internal sealed record GateStep(string Name, GateStepKind Kind, string[] Argumen
 internal static class GatePlan {
     // The test selection of every device suite: the test classes that carry the Gpu trait, which GPU001 holds every
     // class that opens a device to. The CPU runs take the complement (AffectedCommand.CpuSelection); nothing else spells
-    // either selection. The solution build runs first, so each suite runs its built binaries.
-    public static readonly string[] GpuSelection = ["--filter-trait", "Category=Gpu"];
+    // either selection. Device collections run serially so a suite holds only one device law on the GPU at a time.
+    // The solution build runs first, so each suite runs its built binaries.
+    public static readonly string[] GpuSelection = ["--filter-trait", "Category=Gpu", "--parallel", "none"];
     // The device-law suites, each run with GpuSelection.
     public static readonly IReadOnlyList<(string Suite, string[] Selection)> DeviceSuites = [
         ("Puck.World.Tests", GpuSelection),

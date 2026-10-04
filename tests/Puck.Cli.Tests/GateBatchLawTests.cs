@@ -73,7 +73,7 @@ public sealed partial class GateRunLawTests {
     }
     [Fact]
     public void EveryDeviceSuiteRunsTheGpuTraitAndTheCpuRunsItsComplement() {
-        Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu"]));
+        Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu", "--parallel", "none"]));
         Assert.Equal(actual: AffectedCommand.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
     }
     [Fact]
