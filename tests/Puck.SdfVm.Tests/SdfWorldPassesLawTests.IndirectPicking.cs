@@ -30,7 +30,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: [new(residency.IndirectInstanceName, Kind: ShaderPipelineResourceKind.Buffer)], Refresh: RenderGraphRefresh.EveryFrame),
             new RenderGraphInstance(Name: residency.IndirectInstanceName, ExternalPackage: RenderGraphPackageCatalog.Indirect,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                Output: ShaderPipelineResourceKind.Buffer, Passes: indirect.FragmentOf(residency.IndirectInstanceName)!.Passes.Count, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
         ], out var set, out var setRefusal), setRefusal?.Message);
         Assert.True(RenderGraphRuntime.TryCreate(set, new RenderGraphRuntimeGraph?[2], "world", packages,
             pipelines.Pipelines, gpu, false, out var runtime, out var refusal), refusal?.Message);

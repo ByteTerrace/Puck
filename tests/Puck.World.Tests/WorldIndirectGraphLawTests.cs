@@ -12,6 +12,25 @@ namespace Puck.World.Tests;
 /// <summary>The session tier and graph edges own one cache per residency and none while off.</summary>
 public sealed class WorldIndirectGraphLawTests {
     [Fact]
+    public void TheSharedEnvironmentRunsBeforeTheFiniteSolvesPinPass() {
+        Assert.True(RenderGraphInstanceSet.TryCreate([
+            new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: 2, Reads: [],
+                Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment),
+            new(Name: "world", Refresh: RenderGraphRefresh.EveryFrame, Passes: 1,
+                Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),
+            new(Name: "world$1", Refresh: RenderGraphRefresh.EveryFrame, Passes: 1,
+                Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),
+        ], out var set, out var refusal), refusal?.Message);
+        var graph = WorldIndirectGraph.Append(set, new Dictionary<string, string> { ["world"] = "cache", ["world$1"] = "cache" });
+        var cache = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.Indirect);
+        Assert.Equal(5, cache.Passes);
+        var environment = Assert.Single(cache.Reads, read => read.Producer == "environment");
+        Assert.False(environment.PreviousFrame);
+        Assert.Equal(ShaderPipelineResourceKind.Buffer, environment.Kind);
+        Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf("environment")) < graph.Order.ToList().IndexOf(graph.IndexOf("cache")));
+    }
+
+    [Fact]
     public void SharedViewsReadOneBufferProducerAndOffAddsNothing() {
         var views = new[] {
             new RenderGraphInstance("world", RenderGraphRefresh.EveryFrame, 1, [], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),

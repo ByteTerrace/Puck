@@ -41,7 +41,8 @@ public sealed partial class ShaderPipelineCompiler {
         for (var index = 0; (index < outputs.Count); index++) {
             yield return (outputs[index], true, false, false, ((package is null)
                 ? pass.IsGraphics
-                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)), false);
+                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)),
+                (package?.OutputAccess(index: index) == RenderGraphPortAccess.TransferWrite));
         }
     }
     // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
@@ -188,7 +189,7 @@ public sealed partial class ShaderPipelineCompiler {
 
                 var use = (arguments
                     ? ArgumentsUse
-                    : transfer ? new ShaderPipelineAccessState(Access: GpuAccess.TransferRead,
+                    : transfer ? new ShaderPipelineAccessState(Access: write ? GpuAccess.TransferWrite : GpuAccess.TransferRead,
                         Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer) : UseOf(
                         graphics: graphics,
                         preserve: (mutate || (resource.From is not null)),

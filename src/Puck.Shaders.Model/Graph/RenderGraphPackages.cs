@@ -28,6 +28,9 @@ public enum RenderGraphPortAccess : byte {
     /// <summary>Reads a current buffer as the source of a transfer command. The package declares the copy and the
     /// planner supplies its transfer-stage barrier; images and history are not transfer input ports.</summary>
     TransferRead = 5,
+    /// <summary>Writes a current buffer with a transfer command. The graph owns its destination barrier and the
+    /// transition to subsequent shader readers; images and history are not transfer output ports.</summary>
+    TransferWrite = 6,
 }
 /// <summary>One port of an engine package: what the version a pass binds to it carries, a buffer's storage, and how the
 /// package reaches it. A pass binds a version of the port's kind, and to a buffer port a buffer of the port's stride and
@@ -53,7 +56,7 @@ public sealed record RenderGraphPackagePort(
     /// port's stride, when it has one, is a positive multiple of four, only an image port is a color attachment,
     /// and only a buffer input can be updated in place.</summary>
     public bool IsValid => (Enum.IsDefined(value: Access) && (Kind switch {
-        ShaderPipelineResourceKind.Image => ((Access is not (RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead)) && (StrideBytes is null) && (Count is null)),
+        ShaderPipelineResourceKind.Image => ((Access is not (RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead or RenderGraphPortAccess.TransferWrite)) && (StrideBytes is null) && (Count is null)),
         ShaderPipelineResourceKind.Buffer => (
             (Access != RenderGraphPortAccess.ColorAttachmentWrite) &&
             ((StrideBytes is not { } stride) || ((stride != 0) && ((stride % 4) == 0)))

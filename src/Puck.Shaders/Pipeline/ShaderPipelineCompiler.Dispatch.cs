@@ -11,6 +11,16 @@ public sealed partial class ShaderPipelineCompiler {
     // updates preserve producer-owned contents. Neither reaches history or the host's mapped upload region.
     private static void ValidateMutableInputs(IReadOnlyList<ShaderPipelinePackagePass> packages, IReadOnlyDictionary<string, ShaderPipelineResource> resources, List<ShaderPipelineDiagnostic> diagnostics) {
         foreach (var package in packages) {
+            for (var index = 0; index < package.Outputs.Count; index++) {
+                if (package.OutputAccess(index: index) != RenderGraphPortAccess.TransferWrite) { continue; }
+                var output = package.Outputs[index];
+                var destination = resources[output.Name];
+                if (destination.Kind != ShaderPipelineResourceKind.Buffer || destination.IsHostBuffer || destination.IsExternal ||
+                    destination.History || output.PreviousFrame) {
+                    Add(diagnostics, "SHADERPIPE_TRANSFER_OUTPUT",
+                        $"Package pass '{package.Name}' transfer-writes '{output.Name}'; only a current owned buffer outside host-upload ports and history can be a copy destination.", output.Name);
+                }
+            }
             for (var index = 0; (index < package.Inputs.Count); index++) {
                 if (package.InputAccess(index: index) == RenderGraphPortAccess.TransferRead) {
                     var transferred = package.Inputs[index];

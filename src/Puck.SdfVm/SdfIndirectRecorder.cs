@@ -15,13 +15,18 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
     private readonly SdfWorldPasses m_views;
     private readonly RenderGraphPackageSets m_sets;
     private readonly RenderGraphPackageWorkCounters m_work;
+    private readonly string m_prefix;
+    private readonly string m_lightDepthVersion;
+    private bool m_environmentRecorded;
 
     public SdfIndirectRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfIndirectPasses.Built built, SdfWorldPasses views) {
         m_context = context;
         m_built = built;
         m_views = views;
-        m_sets = new RenderGraphPackageSets(context, groups, built.Residency.Tables!.Pipeline(kernel: Kernel).GroupLayoutHandles);
+        m_sets = new RenderGraphPackageSets(context, groups, built.Tables.Pipeline(kernel: Kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
+        m_prefix = context.Pass[..^context.Part!.Length];
+        m_lightDepthVersion = m_prefix + SdfWorldPackage.IndirectLightDepth;
     }
 
     private int Count => m_context.Part switch {
@@ -36,17 +41,26 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         _ => SdfKernel.IndirectClassify,
     };
     private bool IsShade => m_context.Part == SdfWorldPackage.IndirectShade;
+    private bool IsEnvironmentPin => m_context.Part == SdfSkyEnvironmentGraph.Pin;
 
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => SdfWorldWorkDetails.Indirect;
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => IsEnvironmentPin ? [] : SdfWorldWorkDetails.Indirect;
     public bool Skips(in FrameContext context) {
+        m_environmentRecorded = false;
         m_views.Begin(residency: m_built.Residency);
         if (!m_built.Residency.Prepare(context: context) || !ReferenceEquals(objA: m_built.Cache, objB: m_built.Residency.Tables!.Indirect)) { return true; }
         m_built.Residency.Tables.PlanIndirect(frame: m_built.Residency.Frame!);
+        if (IsEnvironmentPin) { return m_built.Cache.Frozen || m_built.Cache.Lighting?.CanRecordEnvironment != true; }
         return ((m_context.Part != SdfWorldPackage.IndirectTrace) && (Count == 0) && (!IsShade || m_built.Cache.ShadeBatch is null));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var tables = m_built.Residency.Submit(context: recording.Context);
         var cache = m_built.Cache;
+
+        if (IsEnvironmentPin) {
+            cache.Lighting!.RecordEnvironment(recording: recording, frame: m_built.Residency.Frame!, prefix: m_prefix);
+            m_environmentRecorded = true;
+            return RenderGraphPackageOutcome.Drew;
+        }
 
         if (Count == 0 && m_context.Part != SdfWorldPackage.IndirectTrace) { return RenderGraphPackageOutcome.Drew; }
         Span<byte> common = stackalloc byte[SdfFrameBlock.SizeBytes];
@@ -78,7 +92,14 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectUpdates, cache.Regions[IsShade ? 4 : 1].Buffer(slot: tables.CurrentSlot));
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectDirections, cache.Regions[2].Buffer(slot: tables.CurrentSlot));
         tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectTraceStates, cache.Regions[3].Buffer(slot: tables.CurrentSlot));
-        tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectLightDepth, IsShade && recording.Inputs.Length > 0 ? recording.Inputs[0].Buffer! : tables.DummyBuffer);
+        var lightDepth = tables.DummyBuffer;
+        if (IsShade) {
+            foreach (var input in recording.Inputs) {
+                if ((input.Version == SdfWorldPackage.IndirectLightDepth || input.Version == m_lightDepthVersion) &&
+                    input.Buffer is { } depth) { lightDepth = depth; }
+            }
+        }
+        tables.WriteInterfaceBuffer(set, layout, SdfWorldPackage.IndirectLightDepth, lightDepth);
         m_work.Write(passSet: set, recording: recording);
         var pipeline = tables.Pipeline(kernel: Kernel);
 
@@ -89,6 +110,10 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         return RenderGraphPackageOutcome.Drew;
     }
     public void Submitted() {
+        if (IsEnvironmentPin && m_environmentRecorded) {
+            m_environmentRecorded = false;
+            m_built.Cache.Lighting!.EnvironmentSubmitted(m_built.Cache);
+        }
         if (m_context.Part == SdfWorldPackage.IndirectTrace) { m_built.Cache.Submitted(); }
         if (IsShade) { m_built.Cache.SubmittedLighting(); }
     }

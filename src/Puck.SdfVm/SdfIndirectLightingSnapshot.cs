@@ -1,4 +1,5 @@
 using Puck.SignedDistance;
+using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
@@ -7,10 +8,11 @@ namespace Puck.SdfVm;
 public sealed class SdfIndirectLightingSnapshot {
     private readonly SdfFrame m_frame;
 
-    internal SdfIndirectLightingSnapshot(SdfFrame frame, SdfLightGeometry geometry, ulong sequence) {
+    internal SdfIndirectLightingSnapshot(SdfFrame frame, SdfLightGeometry geometry, ulong sequence, GpuImagePublication environment) {
         m_frame = frame;
         Geometry = geometry;
         Sequence = sequence;
+        Environment = environment;
         var lights = new SdfLight[SdfLights.MaxLights];
         frame.Lights.Pack(lights);
         Lights = Array.AsReadOnly(lights);
@@ -28,6 +30,9 @@ public sealed class SdfIndirectLightingSnapshot {
     public SdfLightGeometry Geometry { get; }
     /// <summary>Gets the capture sequence within this cache's source owner.</summary>
     public ulong Sequence { get; }
+    /// <summary>Gets the exact submitted environment whose map and coefficients were copied together. Unknown means
+    /// the solve has no sky source; it never names a later live projection or an earlier completed buffer.</summary>
+    public GpuImagePublication Environment { get; }
 
     /// <summary>Returns a private frame for CPU reference evaluation, with independent mutable light and sky tables.
     /// Read-only program and transform data are shared with this immutable capture.</summary>

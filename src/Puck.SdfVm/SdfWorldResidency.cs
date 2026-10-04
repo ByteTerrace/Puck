@@ -539,6 +539,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (!m_submitted) {
             m_submitted = true;
+            if (m_frame is { } frame) { tables.PlanIndirect(frame: frame); }
             tables.SubmitUpload();
         }
 

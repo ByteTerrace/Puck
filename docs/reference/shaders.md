@@ -332,7 +332,7 @@ pass binds must carry what its port carries: its kind, and for a buffer port
 the same stride and count. A port also declares the stage and access its
 package reaches it by (`RenderGraphPortAccess`): an input is a compute read,
 a fragment-sampled read, a buffer `TransferRead`, or a `ComputeReadWrite` buffer input; an output is a
-compute write or a color-attachment write, which only an image port takes. A package compiles no source, so a
+compute write, buffer `TransferWrite`, or a color-attachment write, which only an image port takes. A package compiles no source, so a
 package reference names no `"as"`. `RenderGraphPackageCatalog` is what a host
 offers:
 
@@ -371,7 +371,11 @@ A `TransferRead` input declares a buffer-copy source at the transfer stage.
 The planner orders the copy after the producer's writes; the recorder adds no
 hidden barrier. It accepts current buffers, and refuses images, host-upload
 ports and history. A cross-instance transfer read also refuses a previous-frame
-edge. A package copying two source buffers declares both inputs.
+edge. A package copying two source buffers declares both inputs and both
+`TransferWrite` buffer outputs. The planner orders those writes before later
+shader reads. Copy destinations cannot be external, host-upload or history
+versions; a package may supply their allocations through its existing borrowed
+buffer ownership.
 
 An instance publishes every output of its selected fragment, with the first as
 its default. `RenderGraphRuntimeInput.Output` selects an exported buffer by

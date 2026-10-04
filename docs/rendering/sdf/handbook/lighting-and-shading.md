@@ -272,6 +272,16 @@ Allocation accounting includes the pinned
 regions, their rings and the separate shade-update region; resizing a pinned
 region waits for its previous readers before replacing it.
 
+When an environment producer is registered, the same source owner holds a
+65,536-byte map and 144-byte coefficient snapshot in device-local memory.
+Sky transport enables their copies. The indirect
+producer's `environment-pin` pass declares both current environment exports
+as transfer inputs and both snapshots as transfer outputs. CPU sources stage
+before the residency upload; the pair copies after projection, and successful
+copy submission admits the first shade batch. A newer environment publication
+does not alter an active solve. Its exact owner and sequence participate in
+desired-source matching, so readiness waits for a solve using that newer source.
+
 `LightingSource` describes the active solve, while `PublishedLightingSource`
 describes the complete generation readers still see during a later solve.
 Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable

@@ -64,8 +64,9 @@ producer's allocation and contents, and the borrowed producer reacquires
 intervening writes through the existing barrier tracker. Previous-frame edges,
 host-upload ports and graph-owned buffer rings cannot serve mutable imports.
 
-Finite source copies declare buffer `TransferRead` ports for every source,
-including both environment map and coefficients. Select each exported producer
+Finite source copies declare buffer `TransferRead` ports for every source and
+`TransferWrite` outputs for their owned snapshots, including both environment
+map and coefficients. The planner owns both sides' barriers. Select each exported producer
 buffer with `RenderGraphRuntimeInput.Output`; null keeps the default output.
 The runtime binds the selected produced frame, never a candidate allocation.
 Transfer inputs reject images, host-upload ports and previous-frame/history
@@ -77,7 +78,12 @@ the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through
 a sweep. `SdfIndirectCache` publishes only complete submitted sweeps, separately
 from geometry trace completion, and retains the published source while a newer
-source is solving. Count the pinned regions and their rings beside the cache.
+source is solving. The environment pin is a pass of that same producer: CPU
+sources stage before the residency upload, both projected buffers copy afterward,
+and successful copy submission admits shading. Pin the actual submitted
+environment owner/sequence, and include it in desired-source readiness; never
+relabel old buffers with a newer live projection. Count the pinned regions,
+their rings and the one 65,680-byte device-local environment pair beside the cache.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
 and share bounded receiver-proof admission and deferred counters. Their reset is

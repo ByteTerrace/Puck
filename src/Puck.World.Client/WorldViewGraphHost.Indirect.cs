@@ -94,12 +94,23 @@ public static class WorldIndirectGraph {
             : instance)).ToList();
 
         foreach (var cache in cacheByView.Values.Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)) {
+            var reads = new List<RenderGraphRead> {
+                new(Producer: WorldViewNames.IndirectLight(cache: cache), Kind: ShaderPipelineResourceKind.Buffer),
+            };
+            foreach (var view in cacheByView.Where(pair => pair.Value == cache)) {
+                foreach (var read in set.Instances[set.IndexOf(view.Key)].Reads) {
+                    if (set.Instances[set.IndexOf(read.Producer)].ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment &&
+                        !reads.Any(existing => existing.Producer == read.Producer)) { reads.Add(read); }
+                }
+            }
             instances.Add(item: new(Name: WorldViewNames.IndirectLight(cache: cache), Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 0).Passes.Count, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
                 OutputExtent = new RenderGraphPixelExtent(Width: SdfIndirectLightLayout.Resolution, Height: SdfIndirectLightLayout.Resolution),
             });
-            instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 4,
-                Reads: [new(Producer: WorldViewNames.IndirectLight(cache: cache), Kind: ShaderPipelineResourceKind.Buffer)],
+            var fragment = SdfWorldPackage.IndirectFragment(bytes: sizeof(uint));
+            if (reads.Count > 1) { fragment = SdfSkyEnvironmentGraph.WithIndirectEnvironment(fragment); }
+            instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: fragment.Passes.Count,
+                Reads: reads,
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.Indirect));
         }
         if (!RenderGraphInstanceSet.TryCreate(instances, out var result, out var refusal, set.NestingDepth)) {

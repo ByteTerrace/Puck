@@ -461,7 +461,12 @@ images through the existing graph reads. Independent image feeds remain current;
 world-derived images, including postprocessing chains, use their previous
 publication to break feedback through the environment. The usual view reads
 still demand those producers. Map and coefficients are separate named exports,
-so a finite lighting solve declares both transfer reads when pinning them.
+so a finite lighting solve declares both transfer reads when pinning them. Its
+existing indirect producer copies the pair into two cache-owned buffer outputs,
+then admits the solve only after that copy submits. The pair costs 65,680
+device-local bytes once per retained cache. Shading reads the pinned versions
+throughout the finite solve; a refreshed live environment invalidates desired-source
+readiness without changing the visible completed bank's source identity.
 The source identity is the producer's owner and completed sequence acquired
 with its image lease and fence. A changed publication or sampling map refreshes
 a lit panorama even when its packed sky parameters are unchanged. The CPU

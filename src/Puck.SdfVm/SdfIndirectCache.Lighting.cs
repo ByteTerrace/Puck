@@ -23,7 +23,7 @@ public sealed partial class SdfIndirectCache {
     /// <summary>Gets the retained shade batch's probe count.</summary>
     public int ShadeCount => m_shade?.Probes.Count ?? 0;
     /// <summary>Gets the immutable actual source of the current finite solve, absent before its first admission.</summary>
-    public SdfIndirectLightingSnapshot? LightingSource => HasLightingCycle ? Lighting?.Snapshot : null;
+    public SdfIndirectLightingSnapshot? LightingSource => HasLightingCycle && Lighting?.AwaitingEnvironment != true ? Lighting?.Snapshot : null;
     /// <summary>Gets the source that produced the visible complete sweep. While a later solve writes its other bank,
     /// this keeps the preceding source instead of relabeling the still visible irradiance.</summary>
     public SdfIndirectLightingSnapshot? PublishedLightingSource { get; private set; }

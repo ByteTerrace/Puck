@@ -70,7 +70,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 Reads: [new RenderGraphRead(Producer: residency.IndirectInstanceName, Kind: ShaderPipelineResourceKind.Buffer)],
                 Refresh: RenderGraphRefresh.EveryFrame),
             new RenderGraphInstance(Name: residency.IndirectInstanceName, ExternalPackage: RenderGraphPackageCatalog.Indirect,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                Output: ShaderPipelineResourceKind.Buffer, Passes: indirect.FragmentOf(residency.IndirectInstanceName)!.Passes.Count, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
         ], refusal: out var setRefusal, set: out var set), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(deviceContext: gpu, graphs: new RenderGraphRuntimeGraph?[2],
             hostsOnDirectX: false, packages: packages, pipelines: pipelines.Pipelines, refusal: out var refusal,

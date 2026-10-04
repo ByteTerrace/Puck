@@ -92,9 +92,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the pending trace stratum count.</summary>
     public int TraceCount => (m_pending?.Traces.Count ?? 0);
     /// <summary>Gets whether this schedule has GPU work.</summary>
-    public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount + ShadeCount) != 0);
-    /// <summary>Gets whether publication owes an update, a table-only eviction or the shared receiver allowance reset.</summary>
-    public bool NeedsPublish => (m_pending is not null || m_shade is not null || m_receiverAdmission);
+    public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount + ShadeCount) != 0) || Lighting?.AwaitingEnvironment == true;
+    /// <summary>Gets whether publication owes an update, environment pin, table-only eviction or shared receiver allowance reset.</summary>
+    public bool NeedsPublish => (m_pending is not null || m_shade is not null || m_receiverAdmission || Lighting?.AwaitingEnvironment == true);
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>

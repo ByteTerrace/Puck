@@ -15,6 +15,12 @@ public static class SdfSkyEnvironmentGraph {
     public const string Input = "skyEnvironment";
     /// <summary>The external map dependency in each consuming view or finite lighting solve.</summary>
     public const string MapInput = "skyEnvironmentMap";
+    /// <summary>The finite solve's copy pass, admitted once before its first shade batch.</summary>
+    public const string Pin = "environment-pin";
+    /// <summary>The immutable coefficient version held for a finite solve.</summary>
+    public const string PinnedCoefficients = "pinnedSkyCoefficients";
+    /// <summary>The immutable two-plane map version held for a finite solve.</summary>
+    public const string PinnedMap = "pinnedSkyMap";
 
     /// <summary>Gets the graph whose two buffers are borrowed from one residency.</summary>
     public static RenderGraphPackageFragment Fragment { get; } = new(
@@ -68,4 +74,37 @@ public static class SdfSkyEnvironmentGraph {
                 InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead] }
             : pass)],
     };
+
+    /// <summary>Adds one declared pair of transfer copies to the existing finite-solve producer. Its shade pass reads
+    /// only the pinned versions, so later live projections cannot change a partially submitted sweep.</summary>
+    /// <param name="fragment">The residency's indirect fragment, including its optional light-depth input.</param>
+    /// <returns>The fragment with two current environment imports and two cache-owned snapshot buffers.</returns>
+    public static RenderGraphPackageFragment WithIndirectEnvironment(RenderGraphPackageFragment fragment) {
+        var passes = new List<RenderGraphFragmentPass>();
+        foreach (var pass in fragment.Passes) {
+            if (pass.Name != SdfWorldPackage.IndirectShade) { passes.Add(pass); continue; }
+            passes.Add(new(Name: Pin, Inputs: [Input, MapInput],
+                InputAccesses: [RenderGraphPortAccess.TransferRead, RenderGraphPortAccess.TransferRead],
+                Outputs: [PinnedCoefficients, PinnedMap],
+                OutputAccesses: [RenderGraphPortAccess.TransferWrite, RenderGraphPortAccess.TransferWrite],
+                Members: SdfWorldPackage.IndirectMembers));
+            passes.Add(pass with {
+                Inputs = [.. pass.Inputs, new ResourceReference(PinnedCoefficients), new ResourceReference(PinnedMap)],
+                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+            });
+        }
+        return fragment with {
+            InputVersions = [.. fragment.InputVersions, Input, MapInput],
+            Resources = [.. fragment.Resources,
+                new(Name: Input, Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: SdfSkyEnvironment.CoefficientBytes,
+                    StrideBytes: sizeof(float) * 4, Initialization: ShaderPipelineInitialization.External),
+                new(Name: MapInput, Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: SdfSkyEnvironment.MapBytes,
+                    StrideBytes: sizeof(uint) * 2, Initialization: ShaderPipelineInitialization.External),
+                new(Name: PinnedCoefficients, Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: SdfSkyEnvironment.CoefficientBytes,
+                    StrideBytes: sizeof(float) * 4),
+                new(Name: PinnedMap, Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: SdfSkyEnvironment.MapBytes,
+                    StrideBytes: sizeof(uint) * 2)],
+            Passes = passes,
+        };
+    }
 }

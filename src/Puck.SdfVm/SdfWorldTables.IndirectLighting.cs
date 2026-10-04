@@ -8,16 +8,21 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     private void PlanIndirectLighting(SdfIndirectCache cache, SdfFrame frame) {
         if (cache.CanBeginLighting && (!cache.HasLightingCycle || cache.Lighting is null || !cache.Lighting.Matches(frame))) {
-            cache.Lighting ??= new PinnedIndirectLighting(this);
-            cache.Lighting.Capture(frame);
-            cache.BeginLighting();
+            var lighting = EnsureIndirectLighting(cache);
+            lighting.Capture(frame);
+            // CPU source regions are staged before the upload. An image-backed environment is produced afterward;
+            // only the declared pair of successful copies admits the finite solve that consumes those sources.
+            if (!lighting.AwaitingEnvironment) { cache.BeginLighting(); }
         }
         cache.PlanLighting();
     }
 
+    internal PinnedIndirectLighting EnsureIndirectLighting(SdfIndirectCache cache) =>
+        cache.Lighting ??= new PinnedIndirectLighting(this);
+
     // The same World layout and table decoders serve live views and a finite indirect solve. The solve takes its
     // own immutable region contents; later frame packing cannot change a partly submitted sweep's sources.
-    internal sealed class PinnedIndirectLighting : IDisposable {
+    internal sealed partial class PinnedIndirectLighting : IDisposable {
         private static readonly string[] Members = [SdfWorldPackage.ProgramWords, SdfWorldPackage.DynamicTransforms,
             SdfWorldPackage.FrameInstanceGrid, SdfWorldPackage.ScreenSurfaces, SdfWorldPackage.ScreenMappings,
             SdfWorldPackage.ScreenLights, SdfKernelInterfaces.Lights, SdfKernelInterfaces.ShadowHandoffs];
@@ -59,9 +64,15 @@ public sealed partial class SdfWorldTables {
         public SdfPassValues Values => m_values;
         public SdfIndirectLightingSnapshot? Snapshot { get; private set; }
         public IEnumerable<GpuRegion> Regions => m_regions.OfType<GpuRegion>();
-        public GpuMemoryBytes Bytes => Regions.Aggregate(default(GpuMemoryBytes), (bytes, region) => bytes + region.OwnedBytes);
+        public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal:
+            (EnvironmentMap?.SizeBytes ?? 0) + (EnvironmentCoefficients?.SizeBytes ?? 0), HostVisible: 0), (bytes, region) => bytes + region.OwnedBytes);
 
         public bool Matches(SdfFrame frame) {
+            if (AwaitingEnvironment || !MatchesEnvironment(frame)) { return false; }
+            return MatchesScene(frame);
+        }
+
+        private bool MatchesScene(SdfFrame frame) {
             if (m_frame is not { } held || m_geometry != m_tables.LightGeometry ||
                 m_values.ScreenCount != m_tables.PassValues.ScreenCount || held.FarDistance != frame.FarDistance ||
                 held.DisableScreenLights != frame.DisableScreenLights || held.EnableShadowProxy != frame.EnableShadowProxy ||
@@ -79,12 +90,14 @@ public sealed partial class SdfWorldTables {
             // packed bytes. Camera and presentation clock changes do not reauthor these lighting sources.
             for (var index = 3; index < Members.Length; index++) {
                 var source = Source(index);
-                if (!source.SequenceEqual(m_regions[index]!.Contents[..source.Length])) { return false; }
+                if (m_regions[index] is not { } region || region.Contents.Length < source.Length ||
+                    !source.SequenceEqual(region.Contents[..source.Length])) { return false; }
             }
             return true;
         }
 
         public void Capture(SdfFrame frame) {
+            if (AwaitingEnvironment && MatchesScene(frame)) { return; }
             var grow = false;
             for (var index = 0; index < Members.Length; index++) {
                 grow |= m_regions[index] is not { } region || region.Contents.Length < Source(index).Length;
@@ -112,7 +125,9 @@ public sealed partial class SdfWorldTables {
                 Views = Array.AsReadOnly(frame.Views.ToArray()), MovedTransforms = null };
             m_values = m_tables.PassValues;
             m_geometry = m_tables.LightGeometry;
-            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, ++m_sequence);
+            AwaitingEnvironment = (frame.IndirectSources & SdfIndirectSources.Sky) != 0;
+            m_environment = default;
+            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, ++m_sequence, environment: default);
             if (grow) { m_bindingRevision = -1; }
         }
 
@@ -124,6 +139,10 @@ public sealed partial class SdfWorldTables {
                     for (var index = 0; index < Members.Length; index++) {
                         m_tables.WriteWorldBuffer(set: m_sets[ring], member: Members[index], buffer: m_regions[index]!.Buffer(ring));
                     }
+                    if (EnvironmentMap is { } map && EnvironmentCoefficients is { } coefficients) {
+                        m_tables.WriteWorldBuffer(set: m_sets[ring], member: SdfKernelInterfaces.SkyEnvironment, buffer: map);
+                        m_tables.WriteWorldBuffer(set: m_sets[ring], member: SdfKernelInterfaces.SkyCoefficients, buffer: coefficients);
+                    }
                 }
                 m_bindingRevision = m_tables.m_bindingRevision;
             }
@@ -132,6 +151,8 @@ public sealed partial class SdfWorldTables {
 
         public void Dispose() {
             foreach (var region in Regions) { region.Dispose(); }
+            EnvironmentMap?.Dispose();
+            EnvironmentCoefficients?.Dispose();
             m_copies.Dispose();
             m_tables.m_bindings.DestroyPool(m_pool);
         }
