@@ -338,8 +338,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var residency = view.Residency;
         return [
             .. (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off
-                ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
-                    .. (LightViewName(residency: residency) is { } light ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : []) } : []),
+                ? (RenderGraphRuntimeInput[])[new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
+                    .. (LightViewName(residency: residency) is { } light ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : [])] : []),
             .. (EnvironmentName(residency: residency) is { } environment
                 ? new RenderGraphRuntimeInput[] {
                     new(Version: SdfSkyEnvironmentGraph.Input, Producer: environment, Output: SdfSkyEnvironmentGraph.Coefficients),
