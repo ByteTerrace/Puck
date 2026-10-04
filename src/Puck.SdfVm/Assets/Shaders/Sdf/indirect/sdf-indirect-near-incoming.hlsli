@@ -75,6 +75,7 @@ bool sdfIndirectNearIncoming(float3 launched, float3 direction, out SdfIndirectS
 
 // The one incoming sample replaces the interval's cache answer. Failure keeps every source of that fallback.
 SdfIndirectSources sdfIndirectNearResult(bool answered, SdfIndirectSources incoming, SdfIndirectSources fallback) {
-    return answered ? incoming : fallback;
+    if (answered) { return incoming; }
+    return fallback;
 }
 #endif
