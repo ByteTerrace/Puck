@@ -39,8 +39,8 @@ public sealed record SdfIndirectCacheSnapshot(long Allocation, SdfIndirectTier T
     IReadOnlyList<IrradianceLevel> Levels, IReadOnlyList<SdfIndirectBrickSnapshot> Bricks);
 
 public sealed partial class SdfIndirectCache {
-    private static long s_nextAllocation;
-    private readonly long m_allocation = Interlocked.Increment(ref s_nextAllocation);
+    private static long NextAllocation;
+    private readonly long m_allocation = Interlocked.Increment(ref NextAllocation);
 
     /// <summary>Gets the exact identity temporal readers see, including completed lighting publications.</summary>
     public SdfIndirectHistory History => new(m_allocation, Epoch, LightingPublication);
