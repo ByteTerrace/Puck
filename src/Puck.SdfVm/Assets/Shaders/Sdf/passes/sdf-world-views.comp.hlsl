@@ -15,6 +15,7 @@
 #endif
 #define SDF_FRAME_INSTANCE_GRID
 #define SDF_INSTANCE_MASKS
+#define SDF_SEGMENT_TAPES
 #define SDF_SCREEN_SOURCES
 // Primary and views sample the glyph atlas, so primary marches true lettering.
 // The beam and other non-atlas kernels retain the conservative cell box.
@@ -83,4 +84,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // A hit pass counts a pixel whose visibility record it stored and views a pixel whose texel it wrote.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 }

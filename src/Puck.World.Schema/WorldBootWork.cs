@@ -3,7 +3,7 @@ using Puck.Abstractions.Counting;
 namespace Puck.World;
 
 /// <summary>
-/// The deterministic work a world boot does before its first tick, counted in a <see cref="WorkCounterSet"/> and read
+/// The work a world boot does before its first tick, counted in a <see cref="WorkCounterSet"/> and read
 /// through <see cref="IWorkCounterSource"/> under the source name <see cref="SourceName"/>: the documents read, the
 /// <c>.puck</c> sources compiled and the ones the compile cache answered, the basis-and-imports merges, the strict
 /// parses and validations, and the builds and loads that follow. Each count is a monotonic total over the ledger's
@@ -25,6 +25,7 @@ public sealed class WorldBootWork : IWorkCounterSource {
     public const string SourceName = "world.boot";
 
     private static readonly AsyncLocal<WorldBootWork?> Attributed = new();
+    private static readonly AsyncLocal<bool> Compiling = new();
 
     private readonly WorkCounterSet m_counts = new(
         kinds: Kinds,
@@ -52,6 +53,13 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the compositions answered from an image held in memory or on disk
     /// rather than merged again.</summary>
     public static WorkKind CompositionsShared { get; } = new(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the documents read while compiling a source, including its inherited basis declarations. A
+    /// held compile performs none of this work.</summary>
+    public static WorkKind CompileDocumentsRead { get; } = new(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the basis-and-imports merges performed inside source compilation.</summary>
+    public static WorkKind CompileCompositions { get; } = new(name: "world.boot.compile-compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the held compositions reused inside source compilation.</summary>
+    public static WorkKind CompileCompositionsShared { get; } = new(name: "world.boot.compile-compositions-shared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting <c>.puck</c> compilations that ran: one per source parsed, walked and
     /// lowered, whichever door asked.</summary>
     public static WorkKind Compiles { get; } = new(name: "world.boot.compiles", unit: "count", workClass: WorkClass.Pacing);
@@ -117,11 +125,26 @@ public sealed class WorldBootWork : IWorkCounterSource {
 
         return new Scope(previous: previous);
     }
+    /// <summary>Attributes document and composition work to source compilation until the returned scope ends.
+    /// Nested compiles preserve their enclosing attribution.</summary>
+    /// <returns>The scope that restores the calling flow's previous compilation attribution.</returns>
+    public static CompilationScope AttributeCompilation() {
+        var previous = Compiling.Value;
+
+        Compiling.Value = true;
+        return new CompilationScope(previous: previous);
+    }
     /// <summary>Counts one unit of <paramref name="kind"/> into <see cref="Current"/>.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
     public static void Count(WorkKind kind) =>
-        Current.Add(amount: 1L, kind: kind);
+        Current.Add(amount: 1L, kind: (Compiling.Value ? CompilationKind(kind: kind) : kind));
+
+    private static WorkKind CompilationKind(WorkKind kind) => ((kind == DocumentsRead) ? CompileDocumentsRead
+        : ((kind == Compositions) ? CompileCompositions
+        : ((kind == CompositionsShared) ? CompileCompositionsShared
+        : kind)));
+
     /// <summary>Adds <paramref name="amount"/> units of <paramref name="kind"/>. Several flows may count at once.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>
     /// <param name="amount">The non-negative amount of work.</param>
@@ -157,6 +180,15 @@ public sealed class WorldBootWork : IWorkCounterSource {
         public void Dispose() =>
             Attributed.Value = m_previous;
     }
+    /// <summary>Ends an <see cref="AttributeCompilation"/> when disposed.</summary>
+    public readonly struct CompilationScope : IDisposable {
+        private readonly bool m_previous;
+
+        internal CompilationScope(bool previous) { m_previous = previous; }
+
+        /// <summary>Restores the calling flow's previous compilation attribution.</summary>
+        public void Dispose() => Compiling.Value = m_previous;
+    }
 
     // The process ledger sizes itself from Kinds, so it is built only once every kind exists, whatever order the
     // members are declared in.
@@ -170,6 +202,9 @@ public sealed class WorldBootWork : IWorkCounterSource {
             DocumentsRead,
             Compositions,
             CompositionsShared,
+            CompileDocumentsRead,
+            CompileCompositions,
+            CompileCompositionsShared,
             Compiles,
             PuckParses,
             PuckCacheHits,

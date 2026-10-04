@@ -160,6 +160,7 @@ public static class WorldCompiler {
         sourceMap ??= new SourceMap();
         vocabulary ??= WorldDocumentVocabulary.Instance;
         WorldBootWork.Count(kind: WorldBootWork.Compiles);
+        using var compilationWork = WorldBootWork.AttributeCompilation();
 
         // The modules the import walk parses are the .puck files it reads, so the walk's own reads are the count. The
         // basis read for its enums is a compile of its own, counted there or served held, so its reads are not.

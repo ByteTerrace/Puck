@@ -94,11 +94,18 @@ float3 sdfSuperellipsoidGradient(float3 p, float3 inverseRadii, float exponent) 
     if (m <= 0.0) {
         return float3(0.0, 0.0, 0.0);
     }
+    if (exponent > 2.0 && exponent <= 3.0
+        && sdfSuperellipsoidNormIsClamped(sdfSuperellipsoidPowerNorm(q, m, exponent), length(q), exponent)) {
+        // Both norm-envelope endpoints have the ellipsoid's normalized gradient; their positive scalar factors cancel.
+        return sdfEllipsoidGaugeGradient(p, inverseRadii);
+    }
     return sdfSafeNormalize(sign(p) * pow(q / m, (exponent - 1.0)) * inverseRadii);
 }
 #endif
 // The gradient companion to evaluateShape (same dispatch): analytic for the cheap majority, shape-local FD for the rest.
 float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data1) {
+    sdfWorkGradients++;
+    sdfWorkShapes++;
     switch (shapeType) {
         case SDF_SHAPE_SPHERE:      return sdfSafeNormalize(p);
         // The plane's gradient is its (host-normalized) normal, exactly.
@@ -122,7 +129,11 @@ float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data
         // (the analytic-dual doctrine already pays FD for Star/Ellipse here). For a brick that is 4 extra pool samples,
         // hit-only; an analytic trilinear gradient is a recorded follow-up. FD holds in both variants because the
         // SDF_SHAPE_SAMPLED_REGION arm of evaluateShape is compiled in both (not stripped under SDF_CORE_OPS).
-        default:                    return sdfShapeGradientFd(shapeType, p, data0, data1);
+        default: {
+            sdfWorkGradients--; // Finite differences are scalar taps, not analytic derivatives.
+            sdfWorkShapes--; // The four scalar taps count their own shape evaluations.
+            return sdfShapeGradientFd(shapeType, p, data0, data1);
+        }
     }
 }
 // The gradient-carrying twin of blendShape: reproduces its distance branch-for-branch AND propagates the world-space
@@ -142,7 +153,7 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
         case SDF_BLEND_SMOOTH_UNION: {
             float h = clamp((0.5 + ((0.5 * (candidate - current)) / smoothK)), 0.0, 1.0);
             outDist = blendSmoothUnion(current, candidate, smoothK);
-            outGrad = lerp(currentGrad, candidateGrad, (1.0 - h));
+            outGrad = h <= 0.0 ? candidateGrad : (h >= 1.0 ? currentGrad : lerp(currentGrad, candidateGrad, (1.0 - h)));
             break;
         }
         case SDF_BLEND_SUBTRACTION: {
@@ -172,13 +183,13 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
         case SDF_BLEND_SMOOTH_INTERSECTION: {
             float h = clamp((0.5 + ((0.5 * (current - candidate)) / smoothK)), 0.0, 1.0);
             outDist = -blendSmoothUnion(-current, -candidate, smoothK);
-            outGrad = lerp(currentGrad, candidateGrad, (1.0 - h));
+            outGrad = h <= 0.0 ? candidateGrad : (h >= 1.0 ? currentGrad : lerp(currentGrad, candidateGrad, (1.0 - h)));
             break;
         }
         case SDF_BLEND_SMOOTH_SUBTRACTION: {
             float h = clamp((0.5 + ((0.5 * ((-current) - candidate)) / smoothK)), 0.0, 1.0);
             outDist = -blendSmoothUnion(candidate, -current, smoothK);
-            outGrad = lerp((-candidateGrad), currentGrad, (1.0 - h));
+            outGrad = h <= 0.0 ? currentGrad : (h >= 1.0 ? -candidateGrad : lerp((-candidateGrad), currentGrad, (1.0 - h)));
             break;
         }
         case SDF_BLEND_GROOVE_UNION:

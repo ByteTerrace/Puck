@@ -2050,7 +2050,7 @@ once on the error stream, the prototype drawing through its field), and the fiel
 mesh draws (`near`) and impostor cards (`far`) of baked placements the views
 recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
-presented host registers `sdf.transforms`: the dynamic-transform rows packed,
+presented host registers `sdf.transforms`: pacing counts of the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the
 frame source each session view composes for itself. A released session view's
 totals stay in the sum. The

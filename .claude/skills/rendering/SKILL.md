@@ -81,6 +81,11 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    part walk in `sdf-parts.hlsli`. A blend needs `blendShape` and
    `blendShapeDual` (subtraction negates the candidate gradient) and a place in
    the material-winner rules of `sdfComposeCandidate` and its dual twin.
+   `mapGradCore` selects final nonzero shape weights before replaying selected
+   derivatives; preserve that selection's signed weights, field operations
+   and its full-dual fallback when the contributor set fills. Count both
+   attempts. A new blend must retain its branch and tie rules in the selection
+   as well as the full dual walk.
 5. **Kernel tiers** — if the case is stripped under `SDF_STRIP_HEAVY` or
    `SDF_STRIP_ALL_EXOTIC`, `SdfViewsKernelVariants.FirstHeavyTouch` /
    `FirstExoticTouch` must send a program using it to a fuller variant. Read the
@@ -211,6 +216,18 @@ register.
   cost sheet.
 
 ## Field contracts that bite
+
+- **Tile pruning needs a certificate for the GPU evaluator it uses.** The
+  `tape` pass follows `beam`, encloses masked candidates over eight balls per
+  16-pixel tile and writes a live-instruction mask and segment summary for each
+  slab, consumed through the existing instance-mask walk and compiled-part bindings.
+  Extend the host's certified interval/Lipschitz model when
+  adding an eligible operation; a missing or nonfinite model stays live.
+  `distanceScale` alone never bounds a transformed candidate. Preserve the
+  outward float-evaluation margin, smooth-band separation and the consumer's
+  inside-ball guard: the tape's scalar answer must equal the full walk bit for
+  bit. Use CPU pruning laws and compiled device variants for comparisons;
+  never add an environment or validation switch.
 
 These are one-line cautions; the owning pages hold the derivations.
 
@@ -1187,8 +1204,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
   its pass as the kinds in `GpuWork.KernelKinds`: march steps, texels written,
-  sky evaluations, hashes and texture loads, and the six `gpu.shadow.slot0.steps`
-  through `gpu.shadow.slot5.steps` columns, then `gpu.shadow.pixels`, once the submission
+  sky evaluations, hashes and texture loads, the six `gpu.shadow.slot0.steps`
+  through `gpu.shadow.slot5.steps` columns, `gpu.shadow.pixels`, the three indirect
+  counts, then `gpu.shapes.evaluated` and `gpu.shapes.gradients`, once the submission
   completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
@@ -1294,8 +1312,9 @@ These are one-line cautions; the owning pages hold the derivations.
   so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
-  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps, texels written
-  and sky evaluations), which are `PerBackendDeterministic` like created-object
+  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps, texels
+  written, sky evaluations, hashes and texture loads, shadow-slot steps, shape
+  evaluations and shape gradients), which are `PerBackendDeterministic` like created-object
   kinds, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
@@ -1360,6 +1379,11 @@ sky-drift, sky-twinkle and sky-cycle fixtures use `tests/Puck.Counters/sky.scrip
 to isolate each sky change with cadence enabled; each has its own ceilings
 (`--ceilings tests/Puck.Counters/sky-<workload>.ceilings.json`). Report workload and script
 identity must match the ceilings; absent cadence samples are not measured zeros.
+The Nexus and courtyard workloads (`tests/Puck.Counters/nexus.world.json` and
+`courtyard.world.json`) inherit the shipped scenes and use `counters.script.txt`
+at the fixed counters camera and 1440x810 floor grid. Record their own ceilings
+on the floor GPU. Count the tape's and gradient selection's shape evaluations
+alongside the work they save; a lower derivative count alone is insufficient.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`

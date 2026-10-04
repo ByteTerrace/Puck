@@ -1205,7 +1205,8 @@ authored script: `wire.errors`, whose exact response count it checks, and
 `quit`, which ends the World once everything queued ahead of it has run. The
 manifest's `timeoutSeconds` is therefore not how long a leg runs. It is the
 ceiling at which the runner kills a leg that has hung, from 1 to 60 seconds
-(240 for a federated leg). Every World the runner starts also gets
+(90 for a headless leg, 240 for a federated leg). Every World the runner starts
+also gets
 `--exit-after-seconds` at that ceiling, so a World the runner can no longer
 kill stops on its own. A companion authority gets its client's ceiling plus
 fifteen seconds, so it outlasts its client.
@@ -1942,6 +1943,13 @@ command accepted.
 
 `--world` and `--script` select another authored JSON workload and its console
 script. Both paths are recorded in the report and must match its ceilings.
+The [Nexus and courtyard workloads](../../tests/Puck.Counters/README.md) inherit
+the real overworld hub and Moth courtyard. They use `counters.script.txt`, the
+same fixed camera, and the floor preset's 1440×810 render grid inside a
+1920×1080 output, with temporal reconstruction and dynamic resolution off.
+Their ceilings are `nexus.ceilings.json` and `courtyard.ceilings.json`, recorded
+on the floor GPU with `--ceilings` naming the corresponding file. They measure
+per-tile pruning and winner-gradient work without changing scene geometry.
 The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
@@ -1964,7 +1972,7 @@ class:
 | Class | Meaning | Compared |
 |---|---|---|
 | `deterministic` | The same inputs give the same count on every run and backend: simulation counts at a pinned tick, and the GPU counts of one submission. | Across backends in one run, and between two reports. |
-| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, the march steps and texels written the SDF kernels count, and the counts of a pass whose work follows the device (the SDF engine's `bricks` and `upload`, which follow its residency policy). | Between two reports, backend by backend. |
+| `per-backend-deterministic` | The same on every run of one backend: the GPU objects a node creates, the march steps, shape evaluations, shape gradients and texels written the SDF kernels count, and the counts of a pass whose work follows the device (the SDF engine's `bricks` and `upload`, which follow its residency policy). | Between two reports, backend by backend. |
 | `pacing` | Depends on timing or on state outside the run: which submission a read lands on, skipped presents, the compile cache's hits. | Never. |
 | `allocation-zero-nonzero` | A managed-allocation reading from `AllocationWindow.Measure` over a named window (`world.counters.read`), recorded with the GC mode. | Only as zero or not zero. |
 
@@ -2010,16 +2018,21 @@ document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.jso
 backend what every render node's GPU submission kinds may read, pass by pass
 and outside every pass: each deterministic or per-backend-deterministic count
 reads at most its ceiling, and a ceiling of zero is a required zero. The SDF
-view's march steps (`gpu.march.steps`) and texels written
-(`gpu.texels.written`), which its kernels count on the GPU, are among them, so
-a pass that cannot do such work (`sdf.world$cull-args` marches nothing) and a
-pass the floor tier skips (the shadow and ambient passes, and the mesh pass of
-a meshless frame) hold required zeros.
+view counts field queries as march steps (`gpu.march.steps`), primitive distance
+evaluations (`gpu.shapes.evaluated`), primitive gradient evaluations
+(`gpu.shapes.gradients`) and texels written (`gpu.texels.written`). Shape
+evaluations include the tape pass, winner selection and primitive
+finite-difference taps, so reducing gradient work cannot hide its selection
+cost. These kernel counts are among the ceilings, so a pass that cannot do
+such work (`sdf.world$cull-args` marches nothing) and a pass the floor tier
+skips (the shadow and ambient passes, and the mesh pass of a meshless frame)
+hold required zeros.
 
 Each backend's ceilings are in two parts. Its shared ceilings hold every
 deterministic count and every ceiling carrying `requiredZero`: a zero of a
-kernel kind (march steps, texels written, sky evaluations), a magnitude that
-follows the device, that its pass never counts, so zero is a structural
+kernel kind (including march steps, shape evaluations, shape gradients, texels
+written and sky evaluations), a magnitude that follows the device, that its
+pass never counts, so zero is a structural
 contract on every device. Its `devices` hold one record per device, with every
 other per-backend-deterministic ceiling: the kernel kinds' magnitudes, and the
 counts of a pass whose work follows the device (the SDF `upload` and `bricks`

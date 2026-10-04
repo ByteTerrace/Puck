@@ -1,6 +1,8 @@
 // The program word stream, its instance directory and frame instance grid, the group masks, and the variant strip tiers every tape interpreter reads.
 #ifndef FIELD_SDF_PROGRAM_HLSLI
 #define FIELD_SDF_PROGRAM_HLSLI
+static uint sdfWorkShapes = 0u;
+static uint sdfWorkGradients = 0u;
 // Program word stream (sdfWords, each element one uint4 = 16 bytes), read-only: the program is never written. Layout:
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
@@ -10,7 +12,7 @@
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances, world render path only): one
-//                           (instanceCount, 0, 0, 0) header uint4, then 2 uint4 per instance — i0 = bound
+//                           (instanceCount, partProgramOffset, shadingFlags, tapeTokens) header uint4, then 2 uint4 per instance — i0 = bound
 //                           center/offset.xyz + radius (float bits), i1 = (mode, dynamicSlot, segmentFirst,
 //                           segmentEnd) — segmentFirst/segmentEnd index the SEGMENT directory (not raw
 //                           instructions): every segment in that range is owned by exactly that instance, so

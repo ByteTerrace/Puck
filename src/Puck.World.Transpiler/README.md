@@ -102,6 +102,12 @@ records is a full path. A failed compile is never held. Each compile and each an
 `world.boot.puck-cache-hits`). [`Composition/WorldSourceLoader`](Composition/WorldSourceLoader.cs) admits a compiled
 single-document source exactly as the game boots one.
 
+A cold source compile composes its basis to read inherited enum declarations.
+The composer attributes that work to `world.boot.compile-documents-read`,
+`world.boot.compile-compositions` and `world.boot.compile-compositions-shared`.
+These counts have class `pacing`, since a held compile skips the work. The
+admission's ordinary document and composition counts stay deterministic.
+
 ## The construct table
 
 Every construct of this vocabulary is described once, in

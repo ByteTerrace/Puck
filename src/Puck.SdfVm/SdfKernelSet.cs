@@ -79,6 +79,7 @@ public sealed class SdfKernelSet {
         SdfKernel.IndirectClassify => "sdf-indirect-classify",
         SdfKernel.IndirectTrace => "sdf-indirect-trace",
         SdfKernel.Beam => "sdf-beam",
+        SdfKernel.Tape => "sdf-tape",
         SdfKernel.InstanceCull => "sdf-instance-cull",
         SdfKernel.CullArgs => "sdf-cull-args",
         SdfKernel.Primary => "sdf-world-primary",

@@ -5,7 +5,8 @@ walks a compiled signed-distance program on the GPU. `SdfWorldResidency` makes
 one frame source resident on the render graph's device and holds its
 `SdfWorldTables` (the program, transforms, screens, lights, volumes and mesh
 draws every view of it reads), and `SdfWorldPasses` records each view as an
-`sdf.world` instance of the render graph: beam cull, then the per-view render
+`sdf.world` instance of the render graph: instance and beam culling, certified
+tile pruning, then the per-view render
 into the instance's own output image. The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
@@ -28,6 +29,12 @@ never a Vulkan or DirectX type by name.
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam
   ever cone-marches, so beam cost tracks instances near the tile's cone
   rather than the total instance count.
+- *Certified tile pruning:* the tape pass encloses masked candidates over
+  eight depth slabs per tile, retaining the instructions that may contribute
+  in each slab. The existing scalar, gradient and compiled-part walks read its
+  instruction masks; segment masks and summary words skip empty runs.
+  Missing certificates and samples outside the covered balls keep the full
+  walk; small masked programs bypass the slab evaluations.
 - *Live program growth:* construction options reserve program words and instances.
   `UploadProgram` grows those buffers once the device is idle, retaining
   images, pipelines, and baked data. Dynamic-transform slots remain reserved by
@@ -36,8 +43,12 @@ never a Vulkan or DirectX type by name.
   scene be assembled from independent emitters—fixed geometry, an authoring
   pool, a debug takeover—as one list instead of one hand-written
   `BuildProgram` method.
-- *Gradient propagation for normals:* one forward-mode walk (`mapGradCore`)
-  carries shape gradients through transforms and composition. Common primitives,
+- *Gradient propagation for normals:* `mapGradCore` selects the shapes with
+  nonzero blend weight at the hit, then evaluates their gradients through the
+  existing transform and composition rules. A hard blend, or a smooth blend
+  outside its radius, keeps the deciding side; a smooth band retains every
+  weighted shape. A contributor set that fills falls back to the full dual walk.
+  Common primitives,
   including superellipsoids, use analytical leaf normals; the remaining shapes
   use local finite differences. The full-field finite-difference option remains
   available for comparisons. Authored curvature shading uses four neighboring
@@ -45,7 +56,9 @@ never a Vulkan or DirectX type by name.
   shading-only details need a fifth sample because their shading field differs
   from the march field.
   Keep the four curvature samples in one loop: each spelled-out VM call
-  duplicates the whole inlined interpreter.
+  duplicates the whole inlined interpreter. The
+  [gradient reference](../../docs/rendering/sdf/reference/gradients-and-normals.md)
+  explains the selected derivative walk and its counted cost.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, primary, shadow, AO)
   and appears only in the hit-only re-evaluations at an already-found surface
@@ -71,7 +84,8 @@ A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words e
 staged region of frame data owes, copied into its device-local buffer; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
-(cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
+(cone march over the tile-masked field) → `sdf-tape.comp` (certified instruction and segment masks)
+→ `sdf-cull-args.comp` → the mesh pass
 (`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws, and `sdf-mesh-impostor.frag` the baked impostors' cards a view records) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
@@ -103,8 +117,8 @@ map and its coefficients, rendered only when lighting-visible irradiance changes
 (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
-kernels' march steps, texels written and sky evaluations, hashes and texture
-loads among them. The sky, composite and views expose per-layer detail rows, and the
+kernels' march steps, shape evaluations, shape gradients, texels written and
+sky evaluations, hashes and texture loads among them. The sky, composite and views expose per-layer detail rows, and the
 shadow exposes its slot; the ledger reconciles these with the plain remainder
 into each pass's totals. The views
 kernel ships in three compiled variants
@@ -138,7 +152,7 @@ resolution and a layout transition's dip set) changes dispatches and the packed 
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
 at its current grid. Views at a native ceiling that do not ask for temporal
-reconstruction retain their eleven passes, allocate no resolve resources and
+reconstruction retain their twelve passes, allocate no resolve resources and
 ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.
@@ -159,7 +173,11 @@ The iteration count describes the selected march; the evaluation count sums
 queries across all primary marches and attribute resolution, saturating at
 8,388,607. The evaluation diagnostic adds the surface, AO and shading queries.
 Queries can evaluate different amounts of geometry, so this count alone does
-not measure field work.
+not measure field work. `gpu.shapes.evaluated` counts that work, including the
+tape pass, winner selection and primitive finite-difference taps;
+`gpu.shapes.gradients` counts primitive derivatives. The
+[dense counters workloads](../../tests/Puck.Counters/README.md) hold the Nexus
+and courtyard camera, extent and floor tier fixed for comparisons.
 
 The beam chooses its work from the program's traversal admission. Programs that
 trace compiled parts independently use at most eight conservative entry samples;
@@ -430,6 +448,12 @@ range and rebuilding only on a revision change. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.
+
+Its `sdf.transforms.*` counters total the rows packed, bytes compared and rows
+owed over produced frames. These are `pacing` counts: interpolation can produce
+several poses between simulation ticks, so a pinned tick does not pin the
+amount of presentation work. An unchanged zero-time frame skips packing while
+keeping any pending follower motion for the next advancing frame.
 
 `SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
 to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that

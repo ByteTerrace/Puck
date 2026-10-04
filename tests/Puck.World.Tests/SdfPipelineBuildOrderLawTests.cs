@@ -29,6 +29,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
                 SdfKernel.Sky,
                 SdfKernel.Beam,
                 SdfKernel.BrickBake,
+                SdfKernel.Tape,
                 SdfKernel.InstanceCull,
                 SdfKernel.CullArgs,
                 SdfKernel.Primary,

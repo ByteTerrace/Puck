@@ -63,7 +63,7 @@ public sealed partial class SdfProgram {
         var firstSegment = ((int)m_words[(entry + 2)]);
         var endSegment = ((int)(m_words[(entry + 3)] & SegmentEndMask));
         var rigid = (((int)m_words[(segments + SegmentRigidPlanLane)]) * WordsPerVector);
-        var vectors = (((((1 + InstructionDataVectors) + BoundRecordVectors) * instructionCount) + BoundRecordVectors)
+        var vectors = (((((2 + InstructionDataVectors) + BoundRecordVectors) * instructionCount) + BoundRecordVectors)
             + ((BoundRecordVectors + 1) * (endSegment - firstSegment)));
 
         for (var segment = firstSegment; (segment < endSegment); segment++) {

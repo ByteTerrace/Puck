@@ -2,6 +2,7 @@ using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Counters;
+using Puck.Cli.Gate;
 using Puck.Testing;
 using Puck.World;
 
@@ -129,6 +130,65 @@ public sealed class CountersCeilingsLawTests {
         Assert.Empty(collection: verdict.Failures);
         Assert.Empty(collection: verdict.Notes);
     }
+    [InlineData("nexus")]
+    [InlineData("courtyard")]
+    [Theory]
+    public void RecordingAnUnrecordedDenseWorkloadCreatesDeviceCeilingsAndOneGateStep(string workload) {
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-dense-ledger-law-");
+        var stem = $"tests/Puck.Counters/{workload}";
+        var relativeCeilings = (stem + ".ceilings.json");
+        var path = Path.Combine(path1: directory.RootPath, path2: relativeCeilings);
+        var report = Report(vulkan: Run(backend: "vulkan")) with { Workload = (stem + ".world.json") };
+
+        report = report with {
+            Runs = [.. report.Runs.Select(selector: static run => run with {
+                Counts = [.. run.Counts,
+                    new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.ShapesEvaluated.Name, Node: "world", Pass: "sdf.world$primary", Source: "gpu", Value: 123L),
+                    new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.ShapeGradients.Name, Node: "world", Pass: "sdf.world$primary", Source: "gpu", Value: 12L),
+                    new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.ShapesEvaluated.Name, Node: "world", Pass: "sdf.world$tape", Source: "gpu", Value: 17L),
+                ],
+            })],
+        };
+        directory.WriteText(name: report.Workload, text: "{}");
+        directory.WriteText(name: report.Script, text: "world.counters --json");
+        var step = GatePlan.Steps.Single(predicate: static candidate => (candidate.Kind == GateStepKind.Counters));
+
+        Assert.False(condition: File.Exists(path: path));
+        Assert.Empty(collection: GatePlan.CounterWorkloads(repositoryRoot: directory.RootPath, step: step));
+        Assert.True(condition: CountersCommand.TryRecord(path: path, reason: out var first, report: report), userMessage: first);
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ceilings, path: path, reason: out var reason), userMessage: reason);
+        Assert.Equal(actual: (ceilings.Workload, ceilings.Script), expected: (report.Workload, report.Script));
+        Assert.Equal(actual: ceilings.Backends.Select(selector: static backend => backend.Backend), expected: ["vulkan", "directx"]);
+        Assert.All(collection: ceilings.Backends, action: static backend => {
+            Assert.Contains(collection: backend.Ceilings, filter: static ceiling => ((ceiling.Kind == GpuWork.IndirectDispatches.Name) && (ceiling.Ceiling == 1L)));
+            Assert.Contains(collection: backend.Ceilings, filter: static ceiling => ((ceiling.Kind == GpuWork.MarchSteps.Name) && (ceiling.Pass == "sdf.world$cull-args") && ceiling.RequiredZero));
+            var device = Assert.Single(collection: backend.Devices);
+
+            Assert.Equal(actual: device.Device, expected: Device(backend: backend.Backend));
+            Assert.Equal(actual: device.Ceilings.Select(selector: static ceiling => (ceiling.Pass, ceiling.Kind, ceiling.Ceiling)), expected: [
+                ("sdf.world$primary", GpuWork.MarchSteps.Name, 4096L),
+                ("sdf.world$primary", GpuWork.ShapesEvaluated.Name, 123L),
+                ("sdf.world$primary", GpuWork.ShapeGradients.Name, 12L),
+                ("sdf.world$tape", GpuWork.ShapesEvaluated.Name, 17L),
+            ]);
+        });
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
+        var discovered = Assert.Single(collection: GatePlan.CounterWorkloads(repositoryRoot: directory.RootPath, step: step));
+
+        Assert.Equal(actual: discovered.Name, expected: ("counters " + workload));
+        Assert.Equal(actual: discovered.Arguments, expected: ["counters", "--check", "--world", report.Workload, "--ceilings", relativeCeilings, "--script", report.Script]);
+        var elsewhere = report with {
+            Runs = [.. report.Runs.Select(selector: static run => run with { Device = Device(backend: run.Backend, deviceId: 0x2786U) })],
+        };
+
+        Assert.True(condition: CountersCommand.TryRecord(path: path, reason: out var second, report: elsewhere), userMessage: second);
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var merged, path: path, reason: out var mergedReason), userMessage: mergedReason);
+        Assert.All(collection: merged.Backends, action: static backend => Assert.Equal(
+            actual: backend.Devices.Select(selector: static device => device.Device.DeviceId), expected: [0x1F08U, 0x2786U]));
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: merged, report: report).Failures);
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: merged, report: elsewhere).Failures);
+        Assert.Equal(actual: Assert.Single(collection: GatePlan.CounterWorkloads(repositoryRoot: directory.RootPath, step: step)).Arguments, expected: discovered.Arguments);
+    }
     [Fact]
     public void ACountRaisedOverItsCeilingFailsNamingItsKindPassAndNode() {
         var verdict = CountersCeilings.Check(
@@ -204,9 +264,15 @@ public sealed class CountersCeilingsLawTests {
             actual: Assert.Single(collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: recordingRun with { Device = Elsewhere })).Failures),
             expected: "vulkan: no ceilings recorded for Example GPU (vendor=0x10de device=0x2786); run puck counters --record on it"
         );
+        Assert.Contains(collection: recorded.Backends[0].Ceilings, filter: static ceiling => ((ceiling.Pass == "sdf.world$shadow") && (ceiling.Kind == GpuWork.ShapesEvaluated.Name) && ceiling.RequiredZero));
+        Assert.Contains(collection: recorded.Backends[0].Ceilings, filter: static ceiling => ((ceiling.Pass == "sdf.world$shadow") && (ceiling.Kind == GpuWork.ShapeGradients.Name) && ceiling.RequiredZero));
 
         var executing = recordingRun with {
-            Counts = [.. recordingRun.Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.MarchSteps.Name, Node: "world", Pass: "sdf.world$shadow", Source: "gpu", Value: 7L)],
+            Counts = [.. recordingRun.Counts,
+                new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.MarchSteps.Name, Node: "world", Pass: "sdf.world$shadow", Source: "gpu", Value: 7L),
+                new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.ShapesEvaluated.Name, Node: "world", Pass: "sdf.world$shadow", Source: "gpu", Value: 11L),
+                new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.ShapeGradients.Name, Node: "world", Pass: "sdf.world$shadow", Source: "gpu", Value: 3L),
+            ],
             Device = Elsewhere,
             Passes = [skipped with { State = GpuPassState.Executed }],
         };
@@ -215,6 +281,10 @@ public sealed class CountersCeilingsLawTests {
             collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: executing)).Failures,
             expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$shadow detail=- node=world breaks its required zero: reads 7"
         );
+        Assert.Contains(collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: executing)).Failures,
+            expected: "vulkan: per-backend-deterministic kind=gpu.shapes.evaluated pass=sdf.world$shadow detail=- node=world breaks its required zero: reads 11");
+        Assert.Contains(collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: executing)).Failures,
+            expected: "vulkan: per-backend-deterministic kind=gpu.shapes.gradients pass=sdf.world$shadow detail=- node=world breaks its required zero: reads 3");
     }
     // The recorded files state a required zero exactly where the recorder would: every zero of a kernel kind is marked, so a
     // file recorded or edited without the mark, and a mark on anything else, fails here and not on a foreign device. Each

@@ -29,6 +29,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private static readonly string[] ScratchMembers = [
         SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.InstanceMasksWritten,
+        SdfWorldPackage.SegmentTapes,
+        SdfWorldPackage.SegmentTapesWritten,
         SdfWorldPackage.Tiles,
         SdfWorldPackage.TilesWritten,
         SdfWorldPackage.CullBounds,
@@ -437,6 +439,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var pipeline = m_part switch {
             SdfWorldPackage.Parts.Mask => tables.Pipeline(kernel: SdfKernel.InstanceCull),
             SdfWorldPackage.Parts.Beam => tables.Pipeline(kernel: SdfKernel.Beam),
+            SdfWorldPackage.Parts.Tape => tables.Pipeline(kernel: SdfKernel.Tape),
             SdfWorldPackage.Parts.CullArgs => tables.Pipeline(kernel: SdfKernel.CullArgs),
             SdfWorldPackage.Parts.Primary => tables.Pipeline(kernel: SdfKernel.Primary),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
@@ -495,7 +498,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         var (x, y) = m_part switch {
             SdfWorldPackage.Parts.Mask => (((tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge), ((tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge)),
-            SdfWorldPackage.Parts.Beam => (tileGridX, tileGridY),
+            SdfWorldPackage.Parts.Beam or SdfWorldPackage.Parts.Tape => (tileGridX, tileGridY),
             _ => (1u, 1u),
         };
 
@@ -811,6 +814,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.IndirectCache => SdfWorldPackage.IndirectCache,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
+        SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapes,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
@@ -820,6 +824,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasksWritten,
+        SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapesWritten,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.TilesWritten,
         SdfWorldPackage.Parts.Arguments => SdfWorldPackage.ViewsArgsWritten,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsWritten,

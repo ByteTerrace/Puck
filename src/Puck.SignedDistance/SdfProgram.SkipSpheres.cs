@@ -70,7 +70,9 @@ public sealed partial class SdfProgram {
         // a second list instead of shifting `segments`' own suffix down by one on every merge — O(segments) total
         // instead of O(segments x merges). `accumulator` plays the role the old loop's `next` played: the up-to-date
         // (possibly already-merged) entry immediately to the right of the index under test.
-        if (segments.Count > 1) {
+        // Dense programs retain their reset chains as tape deletion units; their slab proof replaces the benefit
+        // of merging nearby bounds. Small programs retain the compact directory and never build a tile tape.
+        if ((segments.Count > 1) && (m_instructions.Length < TapeInstructionThreshold)) {
             var compacted = new List<BoundRecord>(capacity: segments.Count);
             var accumulator = segments[^1];
 

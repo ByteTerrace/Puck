@@ -29,10 +29,11 @@ world.budget
   output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
   completed submission: per labeled pass (the residency's `fillers`, `bricks`, `upload` and
-  `environment`, then each view's `mask`, `beam`, `cull-args`, `mesh`, `primary`,
+  `environment`, then each view's `mask`, `beam`, `tape`, `cull-args`, `mesh`, `primary`,
   `surface`, `ambient`, `shadow`, `views`, `resolve` where the view reduces or
   reconstructs, `sky` and `composite`) the dispatches, barriers, binds, push-constant bytes and
-  uploads it recorded and the march steps and texels written its kernels
+  uploads it recorded and the march steps, shape evaluations, shape gradients,
+  texels written, sky evaluations, hashes and texture loads its kernels
   counted, or `skipped` for a pass that did not run, and, for a render-graph
   instance's node, `owned-bytes`, the GPU memory the node holds now. The recorded counts are
   exact and the same on every backend for the same inputs, and the kernels'
@@ -58,6 +59,14 @@ march more samples to take. When a counted-work comparison alone cannot answer
 the question (e.g. two dispatches with the same counts but different kernel
 variants), read the kernel disassembly or trace the code path instead of
 reaching for a stopwatch.
+
+`gpu.shapes.evaluated` measures how much geometry each field query visits,
+including tape construction, winner selection and primitive finite-difference
+taps. `gpu.shapes.gradients` counts the primitive derivatives a normal needs.
+Compare those alongside `gpu.march.steps`: per-tile pruning saves shape work
+while retaining the march's query sequence. The
+[Nexus and courtyard workloads](../../../../tests/Puck.Counters/README.md)
+pin dense scenes to one camera and extent for those comparisons.
 
 ## Three ways a scene is bound
 

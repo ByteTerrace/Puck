@@ -228,7 +228,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
         var listed = CliGit.Run(repositoryRoot, "ls-files", "--", "*.interface.hlsli");
-        var tracked = listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)).ToList();
+        var tracked = listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)).Distinct(comparer: StringComparer.Ordinal).ToList();
         var problems = new List<string>();
         var includes = GenerateCommand.Includes(
             files: tracked,

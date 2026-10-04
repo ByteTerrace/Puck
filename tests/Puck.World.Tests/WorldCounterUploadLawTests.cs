@@ -114,7 +114,7 @@ public sealed class WorldCounterUploadLawTests {
             }
         }
         Assert.True(condition: expected.SequenceEqual(second: actual), userMessage:
-            $"Expected:\n{string.Join(separator: '\n', values: expected)}\nActual:\n{string.Join(separator: '\n', values: actual)}");
+            $"Expected:\n{string.Join(separator: '\n', values: expected)}\nActual:\n{string.Join(separator: '\n', values: actual)}\nCPU work:\n{GpuWorkReport.AppendSample(builder: new System.Text.StringBuilder(), sample: sample)}");
         Assert.Empty(collection: gpu.StateConflicts);
     }
 }

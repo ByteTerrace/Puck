@@ -171,6 +171,10 @@ public static partial class SdfWorldPackage {
     public const string InstanceMasks = "sdfInstanceMasks";
     /// <summary>The per-tile instance masks, written by the mask pass.</summary>
     public const string InstanceMasksWritten = "sdfInstanceMasksRW";
+    /// <summary>The certified per-tile live-segment masks and slab balls.</summary>
+    public const string SegmentTapes = "sdfSegmentTapes";
+    /// <summary>The live-segment masks written by the tape pass.</summary>
+    public const string SegmentTapesWritten = "sdfSegmentTapesRW";
     /// <summary>The cull buffer, read by cull-args and the hit passes.</summary>
     public const string Tiles = "tiles";
     /// <summary>The cull buffer, written by the beam.</summary>
@@ -397,6 +401,8 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
+        Read(element: ShaderValueType.Uint, name: SegmentTapes),
+        Written(element: ShaderValueType.Uint, name: SegmentTapesWritten),
         Read(element: ShaderValueType.Float, name: Tiles),
         Written(element: ShaderValueType.Float, name: TilesWritten),
         Read(element: ShaderValueType.Uint, name: CullBounds),
@@ -439,6 +445,7 @@ public static partial class SdfWorldPackage {
         Passes: [
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
+            Pass(inputs: [Parts.InstanceMasks, Parts.Tiles], name: Parts.Tape, outputs: [Parts.SegmentTapes]),
             Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
             new RenderGraphFragmentPass(
                 CountsKernelWork: true,
@@ -463,6 +470,12 @@ public static partial class SdfWorldPackage {
             Buffer(
                 count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,
+                sizeBytes: null,
+                strideBytes: sizeof(uint)
+            ),
+            Buffer(
+                count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.SegmentTapeWords)],
+                name: Parts.SegmentTapes,
                 sizeBytes: null,
                 strideBytes: sizeof(uint)
             ),
@@ -565,6 +578,7 @@ public static partial class SdfWorldPackage {
             Parts.CullBounds,
             Parts.InstanceMasks,
             Parts.Tiles,
+            Parts.SegmentTapes,
             .. (mesh ? (string[])[Parts.MeshTarget] : []),
             .. ((visibility is null) ? [] : (string[])[visibility]),
         ];
@@ -584,6 +598,10 @@ public static partial class SdfWorldPackage {
         public const string Mask = "mask";
         /// <summary>The beam prepass writing the tile planes and part bounds.</summary>
         public const string Beam = "beam";
+        /// <summary>The certified segment-pruning pass over the tile's depth slabs.</summary>
+        public const string Tape = "tape";
+        /// <summary>The live-segment masks, summary words, slab balls and working mask.</summary>
+        public const string SegmentTapes = "segmentTapes";
         /// <summary>The reduction to the indirect dispatch arguments and the dispatch box.</summary>
         public const string CullArgs = "cull-args";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>

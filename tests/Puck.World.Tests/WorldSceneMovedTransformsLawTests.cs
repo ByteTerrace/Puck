@@ -63,15 +63,15 @@ public sealed class WorldSceneMovedTransformsLawTests {
         z: 0f
     );
     // One frame's counted work: rows packed, bytes compared, rows owed.
-    private static (long Packed, long Compared, long Owed) Frame(Scene scene) {
+    private static (long Packed, long Compared, long Owed) Frame(Scene scene, float deltaSeconds = FrameSeconds) {
         var moved = scene.Frames.MovedTransforms;
         var packed = Read(kind: SdfMovedTransforms.PackedRows, source: moved);
         var compared = Read(kind: SdfMovedTransforms.ComparedBytes, source: moved);
         var owed = Read(kind: SdfMovedTransforms.OwedRows, source: moved);
 
-        scene.Emitter.Tick(deltaSeconds: FrameSeconds);
+        scene.Emitter.Tick(deltaSeconds: deltaSeconds);
         _ = scene.Frames.CaptureFrame(
-            deltaSeconds: FrameSeconds,
+            deltaSeconds: deltaSeconds,
             height: 64,
             interpolationAlpha: 0f,
             width: 64
@@ -108,6 +108,20 @@ public sealed class WorldSceneMovedTransformsLawTests {
         Assert.Equal(actual: packed, expected: 0L);
         Assert.Equal(actual: compared, expected: 0L);
         Assert.Equal(actual: owed, expected: 0L);
+    }
+    [Fact]
+    public void PausedFramesDoNotRepackUnchangedOwnersAndResumeKeepsTheirSettlingWork() {
+        var scene = Settled();
+
+        Deliver(client: scene.Client, position: body => (Rest(body: body) + Vector3.UnitZ), tick: 2UL);
+        var rows = (((long)Bodies) * WorldRigCatalog.TransformSlotsPerBody);
+
+        Assert.Equal(expected: (rows, (rows * 48L), rows), actual: Frame(deltaSeconds: 0f, scene: scene));
+        for (var frame = 0; (frame < 20); frame++) {
+            Assert.Equal(expected: (0L, 0L, 0L), actual: Frame(deltaSeconds: 0f, scene: scene));
+        }
+        Assert.Equal(expected: (rows, (rows * 48L), 0L), actual: Frame(scene: scene));
+        Assert.Equal(expected: (0L, 0L, 0L), actual: Frame(scene: scene));
     }
     [InlineData(1)]
     [InlineData(4)]

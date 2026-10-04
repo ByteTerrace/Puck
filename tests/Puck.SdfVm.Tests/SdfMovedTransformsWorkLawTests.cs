@@ -1,4 +1,6 @@
 using Puck.Abstractions.Counting;
+using Puck.SignedDistance;
+using System.Numerics;
 
 using Xunit;
 
@@ -11,6 +13,24 @@ namespace Puck.SdfVm.Tests;
 /// frame source of its own attaches its moved set beside the presenter's, so the counters sum every frame source.
 /// </summary>
 public sealed class SdfMovedTransformsWorkLawTests {
+    [Fact]
+    public void ExtraProducedPosesCountTheirActualPackingWorkAsPacing() {
+        var moved = new SdfMovedTransforms();
+        var slots = new DynamicTransform[1];
+        var previous = new DynamicTransform[1];
+
+        for (var frame = 1; (frame <= 3); frame++) {
+            slots.CopyTo(array: previous, index: 0);
+            moved.Begin(everything: false, tableRows: 1);
+            slots[0] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (Vector3.UnitX * frame));
+            Assert.True(condition: moved.Commit(previous: previous, reseat: false, slots: slots, start: 0));
+            Assert.True(condition: moved.TryRead(kind: SdfMovedTransforms.PackedRows, value: out var packed));
+            Assert.True(condition: moved.TryRead(kind: SdfMovedTransforms.ComparedBytes, value: out var compared));
+            Assert.True(condition: moved.TryRead(kind: SdfMovedTransforms.OwedRows, value: out var owed));
+            Assert.Equal(actual: (packed, compared, owed), expected: (((long)frame), (frame * 48L), ((long)frame)));
+        }
+        Assert.All(collection: moved.WorkKinds.ToArray(), action: static kind => Assert.Equal(expected: WorkClass.Pacing, actual: kind.Class));
+    }
     [Fact]
     public void AForwarderRegisteredBeforeTheMovedSetReadsItOnceRetargeted() {
         var forwarder = new ForwardingWorkCounterSource(

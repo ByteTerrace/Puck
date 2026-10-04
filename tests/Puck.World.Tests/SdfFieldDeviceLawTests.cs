@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
+using Puck.SdfVm;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Testing;
@@ -119,14 +121,22 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
     // results back, one per case in leg order.
-    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null) {
-        var caseCount = checked((legs.Count * Points.Length));
+    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null,
+        Vector3[]? points = null, Vector4[]? parameters = null, int tapeWordsPerCase = 0, uint[]? instanceMasks = null) {
+        points ??= Points;
+        var caseCount = checked((legs.Count * points.Length));
 
-        if ((Points.Length > 0xFFFF) || (caseCount > 0xFFFF)) {
+        if ((points.Length > 0xFFFF) || (caseCount > 0xFFFF)) {
             throw new InvalidOperationException(message: "The pushed index packs a leg's first case and count in 16 bits each.");
         }
 
         var height = ((((uint)caseCount) + (ResultsWidth - 1U)) / ResultsWidth);
+
+        uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.WorldLayout, member: member);
+        var visibilityBinding = Binding(member: SdfWorldPackage.VisibilityRecordsWritten);
+        var tapeReadBinding = Binding(member: SdfWorldPackage.SegmentTapes);
+        var tapeWriteBinding = Binding(member: SdfWorldPackage.SegmentTapesWritten);
+        var instanceMaskBinding = Binding(member: SdfWorldPackage.InstanceMasks);
         var worldGroup = new GpuGroupLayoutDescription(
             bindings: ((transforms is null)
                 ? [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)]
@@ -135,7 +145,11 @@ public sealed partial class SdfFieldDeviceLawTests {
         );
         var passGroup = new GpuGroupLayoutDescription(
             bindings: [
-                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: 9, kind: GpuBindingKind.ReadWriteBuffer)]),
+                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: visibilityBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
+                .. ((instanceMasks is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: instanceMaskBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
+                .. ((tapeWordsPerCase == 0) ? Array.Empty<GpuGroupBinding>() : [
+                    new GpuGroupBinding(binding: tapeReadBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+                    new GpuGroupBinding(binding: tapeWriteBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
                 new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                 new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
             ],
@@ -151,15 +165,19 @@ public sealed partial class SdfFieldDeviceLawTests {
             Name: KernelName,
             PushConstantBinding: null
         );
-        var caseWords = new uint[(caseCount * 4)];
+        var caseWords = new uint[((caseCount + (parameters?.Length ?? 0)) * 4)];
 
         for (var index = 0; (index < caseCount); index++) {
-            var point = Points[(index % Points.Length)];
+            var point = points[(index % points.Length)];
 
             caseWords[(index * 4)] = BitConverter.SingleToUInt32Bits(value: point.X);
             caseWords[((index * 4) + 1)] = BitConverter.SingleToUInt32Bits(value: point.Y);
             caseWords[((index * 4) + 2)] = BitConverter.SingleToUInt32Bits(value: point.Z);
             caseWords[((index * 4) + 3)] = ((uint)index);
+        }
+
+        if (parameters is not null) {
+            MemoryMarshal.Cast<Vector4, uint>(span: parameters.AsSpan()).CopyTo(destination: caseWords.AsSpan(start: (caseCount * 4)));
         }
 
         using var module = services.ShaderModuleFactory.Create(
@@ -189,8 +207,13 @@ public sealed partial class SdfFieldDeviceLawTests {
             name: default, sizeBytes: (((ulong)transforms.Length) * 16), usage: GpuBufferUsage.Storage));
         using var visibility = ((transforms is null) ? null : services.BufferFactory.CreateDeviceLocal(
             name: default, sizeBytes: (((ulong)caseCount) * 64), usage: GpuBufferUsage.Storage));
+        using var tapes = ((tapeWordsPerCase == 0) ? null : services.BufferFactory.CreateDeviceLocal(
+            name: default, sizeBytes: checked(((((ulong)tapeWordsPerCase) * ((ulong)caseCount)) * sizeof(uint))), usage: GpuBufferUsage.Storage));
+        using var masks = ((instanceMasks is null) ? null : services.BufferFactory.CreateHostVisible(
+            name: default, sizeBytes: checked((((ulong)instanceMasks.Length) * sizeof(uint))), usage: GpuBufferUsage.Storage));
 
         dynamicTable?.Write<Vector4>(data: transforms);
+        masks?.Write<uint>(data: instanceMasks);
         var programs = new List<IGpuStorageBuffer>(capacity: legs.Count);
 
         cases.Write<uint>(data: caseWords);
@@ -218,8 +241,18 @@ public sealed partial class SdfFieldDeviceLawTests {
             );
 
             if (visibility is not null) {
-                bindings.WriteBuffer(binding: 9, bufferHandle: visibility.BufferHandle, bufferSize: visibility.SizeBytes,
+                bindings.WriteBuffer(binding: visibilityBinding, bufferHandle: visibility.BufferHandle, bufferSize: visibility.SizeBytes,
                     descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
+            }
+            if (tapes is not null) {
+                bindings.WriteBuffer(binding: tapeReadBinding, bufferHandle: tapes.BufferHandle, bufferSize: tapes.SizeBytes,
+                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadOnlyBuffer);
+                bindings.WriteBuffer(binding: tapeWriteBinding, bufferHandle: tapes.BufferHandle, bufferSize: tapes.SizeBytes,
+                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
+            }
+            if (masks is not null) {
+                bindings.WriteBuffer(binding: instanceMaskBinding, bufferHandle: masks.BufferHandle, bufferSize: masks.SizeBytes,
+                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadOnlyBuffer);
             }
             bindings.WriteBuffer(
                 binding: CasesBinding,
@@ -296,7 +329,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                     pipelineLayoutHandle: pipeline.LayoutHandle
                 );
 
-                ReadOnlySpan<uint> pushed = [(((uint)(index * Points.Length)) | (((uint)Points.Length) << 16))];
+                ReadOnlySpan<uint> pushed = [(((uint)(index * points.Length)) | (((uint)points.Length) << 16))];
 
                 recorder.PushConstants(
                     bindPoint: GpuBindPoint.Compute,
@@ -306,9 +339,16 @@ public sealed partial class SdfFieldDeviceLawTests {
                     pipelineLayoutHandle: pipeline.LayoutHandle,
                     stageFlags: GpuShaderStage.Compute
                 );
+                if (tapes is not null) {
+                    recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: tapes.BufferHandle,
+                        sourceAccessMask: ((index == 0) ? GpuAccess.None : GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+                        destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                        sourceStageMask: ((index == 0) ? GpuStage.TopOfPipe : GpuStage.ComputeShader),
+                        destinationStageMask: GpuStage.ComputeShader);
+                }
                 recorder.Dispatch(
                     commandBufferHandle: command,
-                    groupCountX: ((((uint)Points.Length) + (GroupWidth - 1U)) / GroupWidth),
+                    groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
                     groupCountY: 1U,
                     groupCountZ: 1U
                 );

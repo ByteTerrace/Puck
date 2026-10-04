@@ -114,11 +114,17 @@ public sealed partial class SdfWorldTables {
             m_changedTransforms.Add(length: 1, start: slot);
         }
     }
+
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
     // soft-shadow march only), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
     // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
     // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
-    private static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
+    /// <summary>Packs a transform into the world table's three float4 rows: position and shadow participation,
+    /// orientation, then render lanes.</summary>
+    /// <param name="floats">The destination, with at least twelve elements.</param>
+    /// <param name="transform">The frame's posed transform.</param>
+    /// <exception cref="IndexOutOfRangeException">The destination has fewer than twelve elements.</exception>
+    public static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
         floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = (transform.CastsSoftShadow
             ? 0f
             : 1f
@@ -126,6 +132,7 @@ public sealed partial class SdfWorldTables {
         floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
+
     // Packs the screen-light table: each screen slot's emitted color (the framebuffer average set through SetScreenLight)
     // with the room-glow intensity gain in w. KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights.
     private void PackScreenLights() {

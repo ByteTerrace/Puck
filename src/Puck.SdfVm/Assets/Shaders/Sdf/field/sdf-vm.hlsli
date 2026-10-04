@@ -30,6 +30,8 @@
 #include "sdf-blend.hlsli"
 #include "sdf-gradients.hlsli"
 #include "sdf-layout.hlsli"
+#include "sdf-tape.hlsli"
+#include "sdf-parts.hlsli"
 #include "sdf-map.hlsli"
 #include "sdf-map-grad.hlsli"
 #include "sdf-instance-flags.hlsli"

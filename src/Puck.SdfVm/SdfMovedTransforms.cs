@@ -18,7 +18,9 @@ namespace Puck.SdfVm;
 /// Emitters pack an owner's slots (an avatar's leaf range, a stamp registration's root and shapes) only while it is
 /// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing has come
 /// to rest and owes nothing. A still frame therefore packs no rows, compares no bytes and owes nothing, and a frame
-/// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>.
+/// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>. These totals
+/// have <see cref="WorkClass.Pacing"/> because presentation may interpolate several produced frames per simulation
+/// tick, and each frame packs the pose it actually presents.
 /// </para>
 /// <para>
 /// A moved range whose slots changed owner is also reseated (<see cref="Commit"/>'s <c>reseat</c>): a consumer's
@@ -36,20 +38,20 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     public static readonly WorkKind PackedRows = new(
         name: "sdf.transforms.packed-rows",
         unit: "rows",
-        workClass: WorkClass.Deterministic
+        workClass: WorkClass.Pacing
     );
     /// <summary>Counts the packed bytes a restless owner's repack compared against the slots' prior contents.</summary>
     public static readonly WorkKind ComparedBytes = new(
         name: "sdf.transforms.compared-bytes",
         unit: "bytes",
-        workClass: WorkClass.Deterministic
+        workClass: WorkClass.Pacing
     );
     /// <summary>Counts the rows a frame owed its consumers: the ranges whose repack changed them, or the whole table on
     /// a frame that owes everything.</summary>
     public static readonly WorkKind OwedRows = new(
         name: "sdf.transforms.owed-rows",
         unit: "rows",
-        workClass: WorkClass.Deterministic
+        workClass: WorkClass.Pacing
     );
 
     private static readonly WorkKind[] DeclaredKinds = [PackedRows, ComparedBytes, OwedRows];

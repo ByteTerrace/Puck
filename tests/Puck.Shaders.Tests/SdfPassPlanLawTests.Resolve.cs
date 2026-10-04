@@ -30,7 +30,7 @@ public sealed partial class SdfPassPlanLawTests {
         var plan = ResolvedPlan;
 
         Assert.Equal(expected: ResolvedOrder, actual: plan.Pipeline.Passes.Select(selector: static pass => pass.Package!.Part));
-        var counts = new ShaderPipelineStorageCounts(Height: 60, Width: 80) { RenderHeight = 30, RenderWidth = 40, Viewports = 1 };
+        var counts = new ShaderPipelineStorageCounts(Height: 60, Width: 80) { RenderHeight = 30, RenderWidth = 40, SegmentTapeWords = 33, Viewports = 1 };
         var visibility = plan.Pipeline.Storages.Single(predicate: static storage => (storage.Name == "sdf$visibility"));
 
         Assert.Equal(expected: ((40UL * 30) * 64), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
@@ -79,7 +79,7 @@ public sealed partial class SdfPassPlanLawTests {
     // and half scale that is 70,502,400 bytes more.
     [Fact]
     public void AReducedViewAddsOnlyItsOutputExtentPassesOverTheNativeGraphAtItsCeiling() {
-        var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, Tiles = 8160, Viewports = 1 };
+        var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, SegmentTapeWords = 36, Tiles = 8160, Viewports = 1 };
         var reduced = render with { Height = 1080, RenderHeight = 540, RenderWidth = 960, Width = 1920 };
         const ulong Output = ((1920UL * 1080) * 8);
         const ulong RenderColor = ((960UL * 540) * 8);

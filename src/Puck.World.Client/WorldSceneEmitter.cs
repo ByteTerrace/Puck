@@ -663,6 +663,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
             if (!m_avatarOwners.Wake(
                 castsSoftShadow: castsSoftShadow,
+                deltaSeconds: deltaSeconds,
                 moved: moved,
                 orientation: orientation,
                 owner: index,

@@ -1,6 +1,7 @@
 // mapGradCore, the forward-mode twin of mapCore that carries the analytic gradient.
 #ifndef FIELD_SDF_MAP_GRAD_HLSLI
 #define FIELD_SDF_MAP_GRAD_HLSLI
+#include "sdf-gradient-plan.hlsli"
 // Applies a RepeatPolar sector fold's local orthogonal map (a rotation by -angle*sector in the fold plane, then an
 // optional reflection across the sector bisector — both isometries, piecewise-constant per sector) to a Jacobian
 // column vector `b`, identity on the axial coordinate. `rc`/`rs` = cos/sin(angle*sector); `flip` = -1 when the point's
@@ -33,14 +34,14 @@ float3 sdfApplyPlaneJacobian(float3 b, int axisA, int axisB, float2 col0, float2
     return b;
 }
 
-// The forward-mode dual twin of mapCore (see the "Forward-mode gradient dual" banner above blendShapeDual). Walks the
-// SAME segment/instance merge and the SAME op stream, tracking — beside the scalar accumulator — the transform-chain
-// Jacobian columns jx/jy/jz (= d(localPosition)/d(worldPosition.{x,y,z}); the point ops build them, RESET restores
-// identity) and the world-space accumulator gradient `resultGradient`. `gradient` (out) is the UN-normalized surface
-// gradient at the hit; the consumer normalizes (which cancels the stepScale the scalar distance still carries). HIT-
-// ONLY: never called from the march, so its ~2x cost is paid once per lit pixel. KEEP the walk skeleton IN SYNC with
-// mapCore — this is a parallel evaluation path, not a rewrite: only the gradient lane is added.
-SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradient) {
+// The hit-only dual uses mapCore's segment/instance merge and transform chain. Its
+// decision phase carries field-op derivatives and records shape weights; its replay
+// transports only the surviving shape gradients through these same Jacobians.
+// Mode zero is the complete forward dual, used on contributor overflow and by laws.
+// The consumer normalizes the result, cancelling the scalar field's stepScale.
+SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float3 gradient) {
+    sdfTapeTrackMaterial = false;
+    sdfTapeSample(worldPosition, instanceMaskBase);
     // KEEP-IN-SYNC with mapCore's decode above: same sdfLoadProgramLayout-cached static, same fields.
     uint dataOffset = sdfProgramLayout.dataOffset;
     uint boundsOffset = sdfProgramLayout.boundsOffset;
@@ -110,6 +111,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
         int segmentInstance = -1;
 
         if (!hasInstances) {
+            linearCursor = sdfTapeNextSegment(linearCursor, segmentCount);
             if (linearCursor >= segmentCount) {
                 break;
             }
@@ -120,6 +122,12 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             worldCursor++;
             worldNext = ((worldCursor < worldCount) ? sdfWords[worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldCursor].x : SDF_SEGMENT_NONE);
         } else if (instanceSegment < instanceSegmentEnd) {
+            instanceSegment = sdfTapeNextSegment(instanceSegment, instanceSegmentEnd);
+            if (instanceSegment == instanceSegmentEnd) {
+                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                    maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                continue;
+            }
             segmentInstance = (int)pendingInstance;
             segment = instanceSegment++;
 
@@ -131,10 +139,11 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
         }
 
         uint4 segmentMeta = sdfWords[segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u];
+        if (sdfTapeNextSegment(segment, segment + 1u) != segment) { continue; }
         uint segmentBoundMode = (segmentMeta.x & SDF_SEGMENT_BOUND_MASK);
 
         [branch]
-        if (segmentBoundMode != SDF_BOUND_NONE) {
+        if (sdfGradientMode != 2u && segmentBoundMode != SDF_BOUND_NONE) {
             float4 segmentBound = asfloat(sdfWords[segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment)]);
             float3 boundCenter = segmentBound.xyz;
             bool boundReady = (segmentBoundMode == SDF_BOUND_STATIC);
@@ -209,7 +218,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     // marks a non-Union/unbounded leaf that is always evaluated.
                     float4 leafBound = asfloat(sdfWords[leafOffset + 2u]);
 
-                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)) {
+                    if (sdfGradientMode != 2u && (leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)) {
                         float3 toLeafCenter = (rigidBasePosition - leafBound.xyz);
                         float leafClearance = max((result.distance + leafBound.w), 0.0);
 
@@ -223,6 +232,10 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shapeHeader))) {
                         continue;
                     }
+                    if (!sdfTapeShapeLive(shapeIndex)) { continue; }
+
+                    float selectedWeight = (sdfGradientMode == 2u) ? sdfGradientWeight(shapeIndex) : 1.0;
+                    if (selectedWeight == 0.0) continue;
 
                     float3 leafBasePosition = rigidBasePosition;
                     uint reflected = 0u;
@@ -242,10 +255,12 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     float4 shapeData0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex)]);
                     float4 shapeData1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex) + 1u]);
                     uint shapeType = (SDF_INSTRUCTION_SHAPE(shapeHeader) & SDF_SHAPE_TYPE_MASK);
-                    float candidate = evaluateShape(shapeType, rigidPosition, shapeData0, shapeData1);
+                    float candidate = 0.0;
+                    if (sdfGradientMode != 2u) candidate = evaluateShape(shapeType, rigidPosition, shapeData0, shapeData1);
                     // The shape-LOCAL gradient, forward-rotated to world by the leaf rotation then (for a dynamic leaf)
                     // the entity orientation — R_dyn * R_leaf * localGrad = R(dynamicOrientation ∘ leafQuat) * localGrad.
-                    float3 leafGrad = evaluateShapeGradient(shapeType, rigidPosition, shapeData0, shapeData1);
+                    float3 leafGrad = 0.0;
+                    if (sdfGradientMode == 0u || sdfGradientMode == 2u) leafGrad = evaluateShapeGradient(shapeType, rigidPosition, shapeData0, shapeData1);
 
                     if (!leafIdentity) {
                         leafGrad = rotatePointByQuaternion(leafGrad, leafQuat);
@@ -261,7 +276,16 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     }
 #endif
 
-                    sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, SDF_INSTRUCTION_BLEND(shapeHeader), (int)SDF_INSTRUCTION_MATERIAL(shapeHeader), rigidLanes, segmentInstance, rigidSlot, shapeData1.x);
+#ifdef SDF_GRADIENT_LAW_REFERENCE
+                    if (sdfGradientMode == 3u) leafGrad = float3(shapeIndex == sdfGradientReferenceShape ? 1.0 : 0.0, 0.0, 0.0);
+#endif
+                    if (sdfGradientMode == 2u) {
+                        sdfGradientSelected += selectedWeight * leafGrad;
+                    } else {
+                        if (sdfTapeDecided(shapeIndex)) { result.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shapeHeader)); }
+                        sdfGradientCompose(result.distance, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), shapeData1.x, shapeIndex, false);
+                        sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, SDF_INSTRUCTION_BLEND(shapeHeader), (int)SDF_INSTRUCTION_MATERIAL(shapeHeader), rigidLanes, segmentInstance, rigidSlot, shapeData1.x);
+                    }
                 }
 
                 continue;
@@ -277,6 +301,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u]);
 
             bool composePending = false;
+            bool composeScope = false;
             float composeCandidate = SDF_FAR_DISTANCE;
             float3 composeGradient = float3(0.0, 0.0, 0.0);
             uint composeBlend = SDF_BLEND_UNION;
@@ -602,6 +627,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     float onionSign = ((result.distance < 0.0) ? -1.0 : 1.0);   // d -> |d| - t flips the gradient by sign(d)
                     result.distance = (abs(result.distance) - data0.x);
                     resultGradient *= onionSign;
+                    sdfGradientScale(onionSign);
                     break;
                 }
 #endif
@@ -624,7 +650,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         ((data0.x * cos(df.x)) * (sy * sz)),
                         ((sx * data0.y * cos(df.y)) * sz),
                         ((sx * sy) * (data0.z * cos(df.z)))));
-                    resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
+                    if (sdfGradientMode != 3u) resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }
 #endif
@@ -635,7 +661,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         SDF_INSTRUCTION_BLEND(instructionHeader), data0.z, gradient);
                     result.distance += data0.y * (value - 0.5);
                     float3 localGradient = (data0.y * data0.x) * gradient;
-                    resultGradient += float3(dot(localGradient, jx), dot(localGradient, jy), dot(localGradient, jz));
+                    if (sdfGradientMode != 3u) resultGradient += float3(dot(localGradient, jx), dot(localGradient, jy), dot(localGradient, jz));
                     break;
                 }
                 case SDF_OP_NOISE_DISPLACE: {
@@ -660,7 +686,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     float noiseScale = (data0.y * data1.x);
                     result.distance += (noiseScale * noiseSum);
                     float3 localGradProduct = (noiseScale * noiseGradSum);
-                    resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
+                    if (sdfGradientMode != 3u) resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }
 #endif
@@ -706,11 +732,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(instructionHeader))) {
                         break;
                     }
+                    if (!sdfTapeShapeLive(index)) { break; }
+
+                    float selectedWeight = (sdfGradientMode == 2u) ? sdfGradientWeight(index) : 1.0;
+                    if (selectedWeight == 0.0) break;
 
                     uint4 shapeBoundMeta = sdfWords[boundsOffset + (SDF_BOUND_RECORD_VECTORS * index) + 1u];
 
                     [branch]
-                    if (shapeBoundMeta.x != SDF_BOUND_NONE) {
+                    if (sdfGradientMode != 2u && shapeBoundMeta.x != SDF_BOUND_NONE) {
                         float4 shapeBound = asfloat(sdfWords[boundsOffset + (SDF_BOUND_RECORD_VECTORS * index)]);
                         float3 shapeBoundCenter = shapeBound.xyz;
                         bool shapeBoundReady = (shapeBoundMeta.x == SDF_BOUND_STATIC);
@@ -734,11 +764,21 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     uint shapeType = (SDF_INSTRUCTION_SHAPE(instructionHeader) & SDF_SHAPE_TYPE_MASK);
                     int material = (int)SDF_INSTRUCTION_MATERIAL(instructionHeader);
-                    float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
+                    float candidate = 0.0;
+                    if (sdfGradientMode != 2u) candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
                     // The primitive's LOCAL gradient, mapped to world through the transform-chain Jacobian columns and
                     // scaled by the same distanceScale the candidate distance took (Scale/LogSphere's metric factor).
-                    float3 localGrad = evaluateShapeGradient(shapeType, localPosition, data0, data1);
+                    float3 localGrad = 0.0;
+                    if (sdfGradientMode == 0u || sdfGradientMode == 2u) localGrad = evaluateShapeGradient(shapeType, localPosition, data0, data1);
                     float3 worldGrad = (float3(dot(localGrad, jx), dot(localGrad, jy), dot(localGrad, jz)) * distanceScale);
+#ifdef SDF_GRADIENT_LAW_REFERENCE
+                    if (sdfGradientMode == 3u) worldGrad = float3(index == sdfGradientReferenceShape ? 1.0 : 0.0, 0.0, 0.0);
+#endif
+
+                    if (sdfGradientMode == 2u) {
+                        sdfGradientSelected += selectedWeight * worldGrad;
+                        break;
+                    }
 
                     composeCandidate = candidate;
                     composeGradient = worldGrad;
@@ -753,6 +793,11 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 }
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_PUSH_FIELD: {
+                    if (sdfGradientMode == 1u) {
+                        sdfGradientScope = sdfGradientCount;
+                        sdfGradientParentOverflow = sdfGradientOverflow;
+                        sdfGradientOverflow = false;
+                    }
                     saved.distance = result.distance;
                     saved.material = result.material;
                     saved.lanes = result.lanes;
@@ -778,6 +823,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     if (candidateScale > 0.0) {
                         composeCandidate *= candidateScale;
                         composeGradient *= candidateScale;
+                        sdfGradientScale(candidateScale);
                     }
                     composeMaterial = result.material;
                     composeLanes = result.lanes;
@@ -791,11 +837,16 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     result.frameSlot = saved.frameSlot;
                     resultGradient = saved.gradient;
 
+                    if (sdfTapeDecided(index)) {
+                        sdfGradientScopeWeights(1.0, 0.0);
+                        break;
+                    }
                     if (composeBlend == SDF_BLEND_MORPH) {
                         float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
                         float t = saturate((lane - data0.y) / (data0.z - data0.y));
                         result.distance = lerp(saved.distance, composeCandidate, t);
                         resultGradient = lerp(saved.gradient, composeGradient, t);
+                        sdfGradientScopeWeights(1.0 - t, t);
                         bool candidateWins = (t >= 0.5);
                         result.material = candidateWins ? composeMaterial : saved.material;
                         result.lanes = candidateWins ? composeLanes : saved.lanes;
@@ -820,15 +871,19 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                             float w = m - s;
                             float dStairs = 0.5 * (u + a + abs(w));
                             float3 gradStairs = (m >= s) ? (isSub ? (-composeGradient) : composeGradient) : saved.gradient;
+                            float2 stairsWeights = (m >= s) ? float2(0.0, isSub ? -1.0 : 1.0) : float2(1.0, 0.0);
+                            float2 selectedWeights;
                             if (isSub) {
                                 float baseDist = max(a, -b);
                                 float3 baseGrad = ((-b) > a) ? (-composeGradient) : saved.gradient;
                                 if (-dStairs > baseDist) {
                                     result.distance = -dStairs;
                                     resultGradient = -gradStairs;
+                                    selectedWeights = -stairsWeights;
                                 } else {
                                     result.distance = baseDist;
                                     resultGradient = baseGrad;
+                                    selectedWeights = ((-b) > a) ? float2(0.0, -1.0) : float2(1.0, 0.0);
                                 }
                                 bool candidateWins = (-b > a);
                                 result.material = candidateWins ? composeMaterial : saved.material;
@@ -841,9 +896,11 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                                 if (dStairs < baseDist) {
                                     result.distance = dStairs;
                                     resultGradient = gradStairs;
+                                    selectedWeights = stairsWeights;
                                 } else {
                                     result.distance = baseDist;
                                     resultGradient = baseGrad;
+                                    selectedWeights = (b < a) ? float2(0.0, 1.0) : float2(1.0, 0.0);
                                 }
                                 bool candidateWins = (b < a);
                                 result.material = candidateWins ? composeMaterial : saved.material;
@@ -851,11 +908,13 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                                 result.instanceIndex = candidateWins ? composeInstance : saved.instanceIndex;
                                 result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
                             }
+                            sdfGradientScopeWeights(selectedWeights.x, selectedWeights.y);
                             composePending = false;
                             break;
                         }
                     }
 
+                    composeScope = true;
                     composePending = true;
                     break;
                 }
@@ -867,10 +926,12 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             }
 
             if (composePending) {
+                if (!composeScope && sdfTapeDecided(index)) { result.distance = sdfTapeWinnerSeed(composeBlend); }
                 // The shared dual compose tail (also mapGradCore's rigid fast path). KEEP-IN-SYNC with mapCore's tail
                 // EXCEPT the material blend channel: this dual twin is HIT-ONLY and resolves the NORMAL, not the shaded
                 // albedo (the primary stage captures sdfMaterialBlendWeight from the scalar accept-sample march), so it neither
                 // computes nor publishes the channel — exactly as it skips sdfMapStepBound for being hit-only.
+                sdfGradientCompose(result.distance, composeCandidate, composeBlend, composeSmooth, index, composeScope);
                 sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth);
             }
         }
@@ -881,6 +942,36 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     // normalizes the gradient (which cancels it) — so applying it here would be undone anyway.
     gradient = resultGradient;
 
+    return result;
+}
+
+SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradient) {
+    sdfGradientCount = 0u;
+    sdfGradientScope = 0u;
+    sdfGradientOverflow = false;
+    sdfGradientParentOverflow = false;
+    sdfGradientSelected = 0.0;
+    sdfGradientMode = 1u;
+#ifdef SDF_VM_FULL_GRADIENTS
+    sdfGradientMode = 0u;
+#endif
+    SdfHit result = sdfIsaErrorHit();
+    float3 fieldGradient = 0.0;
+    [loop]
+    for (uint phase = 0u; phase < 2u; phase++) {
+        float3 walkGradient;
+        SdfHit walk = sdfMapGradientWalk(worldPosition, instanceMaskBase, walkGradient);
+        if (sdfGradientMode == 0u) {
+            gradient = walkGradient;
+            return walk;
+        }
+        if (sdfGradientMode == 2u) break;
+        result = walk;
+        fieldGradient = walkGradient;
+        sdfGradientMode = sdfGradientOverflow ? 0u : 2u;
+    }
+    gradient = fieldGradient + sdfGradientSelected;
+    sdfGradientMode = 0u;
     return result;
 }
 // The per-tile MASKED dual entry (world render path, hit-only). Analytic surface gradient at `worldPosition` under the

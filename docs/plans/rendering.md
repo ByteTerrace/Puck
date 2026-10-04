@@ -58,7 +58,8 @@ beside the package that owns it. The open parts are:
   backends has not been made.
 - **P13:** P13b steps 1, 2, 3, 5 and 6 have landed; step 4's owner-recorded
   Windows click and focus return is the one remaining item.
-- **P14:** steps 1 to 13 have landed; steps 14 and 15 are open.
+- **P14:** all fifteen steps have landed; the residency, routed-world and
+  device-recording follow-ups in [open items](open-items.md) remain.
 - **P15:** P15-1 to P15-7 have landed or been decided; P15-8 and the recorded
   Steam Deck run are open.
 - **P16:** the display transform, the HDR swapchain selection, paper white and
@@ -5075,7 +5076,8 @@ running the passes of `SdfWorldPackage`'s fragments over the tables of an
 (step 6). The frame's values are members of the generated pass block
 (`SdfWorldPackage.Values`), the lights and the sky are World-group regions with
 generated decoders, the kernels build as entries of the pass-pipeline cache, and
-`SdfKernel` is the one kernel table. Steps 14 and 15 start from this code.
+`SdfKernel` is the one kernel table. The tile tape and selected-gradient walks
+use these same passes, tables and interpreter.
 
 **Owns:** the capability matrix, the SDF pass package, its generated frame
 block, the HLSL module tree and its layering check, staged shading, and the
@@ -5501,58 +5503,81 @@ item 2 landed.
     stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
-14. Per-tile segment pruning. A `tape` pass in `sdf.world`, between `beam`
+14. Per-tile instruction pruning, landed. A `tape` pass in `sdf.world`, between `beam`
     and `primary`, proves which masked segments cannot decide any ray of a
     tile and leaves them out of the march.
     - Delivers: for each 16-pixel tile, the pass walks the tile's masked
-      segments over four to eight depth slabs, from the beam's entry to the far
+      segments over eight depth slabs, from the beam's entry to the far
       bound. It evaluates each `ShapeBlend` once at the slab ball's centre,
       bounded by the world-space ball's radius times a certified Lipschitz
       bound for that candidate, including its transforms and domain warps.
+      Host certificates use Puck.Maths' outward interval rules and bound the
+      existing GPU evaluator's float error. The pass includes the error at
+      both the centre and the later ray sample, rounding the bounds outward.
       The interpreter's `distanceScale` alone is not that bound: a scale also
       changes the coordinates at which the shape is evaluated. A candidate
       without a finite certified bound stays live. The pass tracks which side
       each union, smooth union, intersection and subtraction chooses over the
-      ball. It writes a per-tile bitmask of live segments with summary words,
+      ball. Each slab keeps a live-instruction mask and a live-segment mask with summary words,
       which `mapCore` and `mapGradCore` read through the existing
-      instance-mask walk. Every pass counts the shapes it evaluates, beside
-      `gpu.march.steps`. The pass is off for a program under about thirty
+      instance-mask walk. A shape can be omitted inside a retained segment,
+      and compiled parts read their placement's original instruction decisions.
+      Fourth-power depth spacing concentrates the eight balls near the beam entry.
+      Samples outside the covered balls retain the full
+      walk. Every pass counts `gpu.shapes.evaluated` and
+      `gpu.shapes.gradients` beside `gpu.march.steps`, including tape building,
+      winner selection and primitive finite-difference taps. The gradient counter counts analytic derivatives;
+      finite-difference taps count scalar shape evaluations. The pass is off for a program under about thirty
       masked instructions per tile, where pruning saves under 10%.
-    - Evidence: a CPU study of interval pruning over the render programs, on
-      the counters camera at 1440x810 with 16-pixel tiles, against the instance
-      mask with its sphere and rigid-leaf skips. It enclosed each primitive over
-      a ball of the tile's view cone in centered Lipschitz form, mapped the ball
-      through every transform and fold, decided a hard min or max when the
-      intervals separated (a smooth one only when they separated by more than
-      its radius), and dropped the dead instructions. Instructions pruned beyond
-      the instance mask: counters 5.9%, the parity world's vocabulary station
-      9.5%, the Nexus 84.1%, the courtyard 83.0%. Shape evaluations per march
-      sample fall 2.3%, 9.1%, 71.4% and 84.7% with one tape per tile, and 10.1%,
-      46.2%, 83.6% and 91.1% with a tape per depth slab. Every pruned tape
-      matched the full walk bit for bit over 1.79 million march samples, at
-      tile sizes 8, 16 and 32. The gain is large for dense programs, negligible
-      for small ones, and larger per slab.
-    - Limits of the evidence: the figures count shape evaluations and
-      dispatched instructions on the CPU, not GPU time, and do not price
-      building, uploading or indexing a tape per tile. The study ran static
-      placements only, with no active bodies or adjacency bands. An op with no
-      interval model stays live, and a wallpaper fold was transcribed
-      approximately. The figures survive only in a commit message; the study's
-      code is not part of the engine.
     - Soundness: the pass builds on Puck.Maths' certified interval rules
       (`FixedInterval` and the SDF interval rules over it), never on a second,
-      float-based evaluator. The study's soundness law failed once its outward
-      rounding was removed: a tape pruned by an uncertified bound can silently
-      change what is drawn.
-    - Done when: on the Nexus and courtyard workloads at the floor tier,
-      primary's shape evaluations fall by at least 60% (the study predicts 71%
-      to 85%), the tape pass's own evaluations stay under 25% of those it
-      saves, `gpu.march.steps` is unchanged, and parity passes.
-    - Open; P15-5 has landed, so it can start.
-15. Winner-only gradients. `mapGradCore` takes a hit's gradient from the
+      float-based evaluator. Every deletion requires a certified enclosure
+      that selects one branch throughout the covered ball. Outward rounding
+      is part of that proof; an uncertified bound can silently change what is drawn.
+    - Done when: on the Nexus workload at the floor tier, primary's shape
+      evaluations fall by at least 40%; on every dense workload, the tape
+      pass's own evaluations stay under 25% of those it saves,
+      `gpu.march.steps` is unchanged, and parity passes.
+    - Measured on the RTX 2060 at the floor tier: Vulkan primary shape
+      evaluations fall from 398.8 million to 228.7 million on the Nexus
+      (42.7% fewer); the tape evaluates 2.6 million shapes, 1.5% of those saved.
+      Courtyard primary falls from 683.0 million to 667.7 million (2.2% fewer);
+      its tape evaluates 1.3 million shapes, 8.6% of those saved. Direct3D 12
+      shape counts are within about 1,000 evaluations. March steps are equal
+      with and without the tape on each backend, and parity passes.
+    - Courtyard's pruning is limited by its structure. The exact certified
+      CPU study drops 308,529 of 1,267,576 candidate/slab pairs (24.3%) with
+      eight slabs; 714,040 remain live solely because of the ball radius.
+      All courtyard shapes have finite certificates. Actual march samples
+      concentrate near surface tiles whose superellipsoid clusters all remain
+      live, so the march-weighted saving is much smaller. A 60% primary-saving
+      estimate inferred from per-candidate figures overstates the saving:
+      candidate/slab pairs do not carry the ray march's sample frequencies.
+      The CPU study uses the initial composed frame, near-plane entry and
+      authored far bound; it has no GPU beam readback and is not a measured
+      GPU saving.
+    - Open experiment: retain the first four production slabs and split each
+      of the last four in two. These twelve slabs drop 760,783 of 1,901,364
+      courtyard candidates (40.0%) and 2,987,504 of 4,532,340 Nexus candidates
+      (65.9%) in the exact CPU study. They cost 50% more tape evaluations and
+      about 33 MB more courtyard tape storage. This partition is not built
+      into the renderer; it replaces eight slabs only if floor-GPU
+      march-weighted counts justify its extra work and storage.
+    - The [Nexus and courtyard counters workloads](../../tests/Puck.Counters/README.md)
+      inherit the real scenes and pin the camera, floor tier and 1440×810
+      extent. Their production and compiled-reference reports supply the
+      measured comparison; the CPU study explains its structural limits.
+15. Winner-only gradients, landed. `mapGradCore` takes a hit's gradient from the
     shape that decides its value, rather than walking every shape's gradient,
     wherever one shape decides it: a hard blend, or a smooth blend outside its
     radius. Inside a smooth blend's band it keeps every shape the blend weighs.
+    The existing interpreter first records final signed blend weights, dropping
+    a leaf when a later decision gives it zero weight, then replays only the
+    selected derivatives through its transform and field rules. More than
+    thirty-two simultaneous contributors falls back to the full dual walk,
+    with both attempts counted. The scalar result is the first walk's exact
+    result; weighted gradient reconstruction may reassociate floating-point
+    operations, so the device laws hold its vector to the full walk's tolerance.
     - Evidence: on the Nexus a hit's gradient walk costs 71.6 shape
       evaluations, where the deciding shapes alone cost 6.0.
     - Done when: on the same Nexus camera, extent and hit samples, the count
@@ -5561,6 +5586,14 @@ item 2 landed.
       count (step 14), including work to find the winners, must also be lower
       than with this optimization off. `SdfFieldDeviceLawTests` holds the
       gradients, and parity passes.
+    - The device laws use compiled full-gradient and selected-gradient
+      variants over identical hit samples. Their Nexus sample lattice uses
+      the presenter's composed program and posed transforms at the pinned
+      counters camera and extent. The full counters workloads also retain the
+      scenes' actors and animation. The gradient device laws hold on Vulkan
+      and Direct3D 12: analytic counts match the full walk's nonzero-weight
+      shapes, total shape work including winner selection falls, and the
+      gradients remain within the reference tolerance. Parity passes.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -6237,6 +6270,40 @@ so one could be added later as another mode of `resolve`.
 
 **Depends on:** P4's motion and jitter contract, P11 for per-instance history,
 and P14.
+
+#### Research input: per-tile interval pruning
+
+A CPU study measured how much of a render program interval analysis could stop
+evaluating per screen tile, beyond what the per-tile instance mask already
+removes. It enclosed each primitive over a ball of the tile's view cone in
+centered Lipschitz form, mapped the ball through every transform and fold,
+decided a hard min or max when the intervals separated (a smooth one only when
+they separated by more than its radius), and dropped the dead instructions. On
+the counters camera at 1440x810 with 16-pixel tiles, one tape per tile removed
+5.9% of the instructions the mask leaves in the counters world, 9.5% in the
+parity world's vocabulary station, 84.1% in nexus and 83.0% in the courtyard.
+Per march sample, shape evaluations fell against today's mask plus sphere and
+rigid-leaf skips by 2.3%, 9.1%, 71.4% and 84.7%, and by 10.1%, 46.2%, 83.6% and
+91.1% with a tape per depth slab. Every pruned tape returned the full walk's
+value at all 1.79 million march samples, at tile sizes 8, 16 and 32. The gain is
+large for dense programs, negligible for small ones, and larger per slab.
+
+The figures count shape evaluations and dispatched instructions on the CPU, not
+GPU time, and do not price building, uploading or indexing a tape per tile. The
+study ran static placements only, with no active bodies or adjacency bands, and
+records its figures for 16-pixel tiles. An op with no interval model stays live,
+and a wallpaper fold was transcribed approximately. The figures were printed by
+an explicit experiment and survive only in a commit message; the study's code is
+not part of the engine.
+
+A production version builds on Puck.Maths' certified interval rules
+(`FixedInterval` and the SDF interval rules over it), never on a second,
+float-based evaluator. P14-14's tape pass uses the existing GPU evaluator with
+an outward error margin in each finite host certificate; unsupported models
+stay live. Its consumer uses a tape only inside the balls whose proof built
+it, and preserves the full walk's distance bit for bit. The study's soundness law failed once its outward
+rounding was removed: a tape pruned by an uncertified bound can silently change
+what is drawn.
 
 ### P16 — Display output
 
@@ -8285,9 +8352,11 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
 bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
-and the final sweep (P14-13): steps 1 to 13 have landed, and the counted-cost
-ceilings landed as P15-1. Per-tile segment pruning (P14-14) is open, and P15-5
-has landed; winner-only gradients (P14-15) follow P14-14's shapes-evaluated count.
+and the final sweep (P14-13). Per-tile instruction pruning (P14-14) and
+winner-only gradients (P14-15) have landed, with per-pass shape and gradient
+counts and the dense counters workloads. The RTX 2060 measurements meet the
+pruning criterion, gradient device laws hold on both backends, and parity
+passes. The counted-cost framework is P15-1.
 P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
 with P14-10's float working targets and its HDR desktop capture after it; the
 HDR-display checks keep P16 open and are listed under
@@ -8309,9 +8378,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14's other first thirteen steps, so the remaining P15 step
-is P15-8 (P15-1 to P15-7 have landed or been decided), with P14-14's pruning
-open. A bake's
+landed, and P14's fifteen steps have landed with their pruning and gradient
+GPU acceptance conditions met. The remaining P15 step is P15-8 (P15-1 to
+P15-7 have landed or been decided). A bake's
 textures and impostor (P17) come before P6's choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march

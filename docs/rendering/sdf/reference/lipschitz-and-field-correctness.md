@@ -17,6 +17,57 @@ Consumers must distinguish scaled field distance from world-space length.
 Hit thresholds, AO probes, shadow steps, and bound comparisons must apply the
 conversion documented by the shader contract.
 
+## Tile-pruning certificates
+
+The tape pass encloses each candidate over balls covering a screen tile's
+depth interval. A centre sample `d` and a radius `r` give an interval around
+`d` with reach `L × r`, where `L` bounds the complete world-space candidate.
+Scaling changes both the sample coordinates and the returned distance;
+`distanceScale` alone is therefore insufficient. Domain warps need their own
+bounded contribution to `L`.
+
+The host derives candidate certificates with Puck.Maths' outward interval
+rules. Each certificate also bounds the existing GPU evaluator's float error
+on its admitted coordinate domain. The GPU expands for the errors of both
+the centre evaluation and the eventual ray sample, and rounds the interval
+outward. It does not introduce another shape evaluator. A missing model, an
+unbounded interval, an unsupported operation or a sample outside the admitted
+domain leaves the candidate live.
+
+A dynamic rigid pose transforms the ball before applying the candidate's
+local certificate. Its packed quaternion's polynomial supplies the operator
+norm, including nonunit quaternions, and the pose's float arithmetic contributes
+another outward error margin. Being a rigid-pose instruction alone is not a
+proof that its packed coefficients form an exact isometry.
+
+For superellipsoid exponents between two and three, the existing evaluator
+clamps its power approximation to a certified norm band. With `q = abs(p)/r`,
+the exact norm lies between `(1 − (7/25) × (e − 2)) × length(q)` and
+`length(q)`. Write its lower factor as `alpha`, its gap as `g = 1 − alpha`,
+the distance-scaled minimum radius as `R`, and the arithmetic error as `E`.
+The measured centre value bounds the norm itself, giving the certified reach
+`L × r + (g / alpha) × (abs(d) + R) + 2 × E / alpha`. This includes the whole
+possible norm band without charging a distant world-space origin as shape
+error. It assumes no accuracy bound for the hardware power intrinsic.
+Exponent two keeps its Euclidean norm; other unsupported exponents remain live.
+
+A separated pair of intervals can prove one side of a hard blend irrelevant.
+A smooth blend requires additional separation by its radius, including the
+float arithmetic margin needed to prove its weight saturates. Equal-value
+ties retain the full walk's decision. Each slab has a separate instruction
+mask: a losing shape can be omitted while the segment's point and field
+operations still execute. A segment is omitted only when its point-state and
+field effects permit omission. Material queries also retain ordinary bound
+tests: a bound-skipped smooth loser leaves an earlier seam intact, while an
+evaluated smooth loser clears it. Queries select a containing ball before reading
+its masks, and use them only with the camera mask and the same detail
+selection. Secondary queries and root queries that omit independently marched
+parts retain their complete expressions. Compiled parts
+consume the decisions through their original placement instruction indices;
+pruning never discards a child field because another part beats it. The required result is the full
+walk's distance bit for bit at every sampled point, preserving its march
+steps as well as the visible surface.
+
 ## Composition bounds
 
 A blend's bound is a property of the composition, not of the operands' authored
