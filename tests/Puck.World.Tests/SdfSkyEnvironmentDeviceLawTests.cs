@@ -103,7 +103,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                     z: ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(high & 0xFFFFu))))
                 );
                 foreach (var (actual, reference) in new[] { (map[texel].X, expected[texel].X), (map[texel].Y, expected[texel].Y), (map[texel].Z, expected[texel].Z) }) {
-                    Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"Texel {texel} holds {map[texel]}; the reference holds {expected[texel]}.");
+                    Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"The {name} map texel {texel} holds {map[texel]}; the reference holds {expected[texel]}.");
                 }
                 var reflectionOffset = ((SdfSkyEnvironment.Texels + texel) * SdfSkyEnvironment.TexelBytes);
 
@@ -111,7 +111,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                     var actual = ((float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: first.Map.AsSpan(start: (reflectionOffset + (channel * 2))))));
                     var reference = expectedReflection[texel][channel];
 
-                    Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
+                    Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"The {name} reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
                 }
             }
 
@@ -130,7 +130,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 );
                 var difference = Vector3.Abs(value: (actual - projected[index]));
 
-                Assert.True(condition: (MathF.Max(x: difference.X, y: MathF.Max(x: difference.Y, y: difference.Z)) <= bound), userMessage: $"Coefficient {index} is {actual}; the reference projects {projected[index]}.");
+                Assert.True(condition: (MathF.Max(x: difference.X, y: MathF.Max(x: difference.Y, y: difference.Z)) <= bound), userMessage: $"The {name} coefficient {index} is {actual}; the reference projects {projected[index]}.");
             }
         }
     }

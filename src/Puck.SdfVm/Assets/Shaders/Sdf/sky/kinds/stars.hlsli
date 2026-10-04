@@ -65,9 +65,11 @@ float4 sdfSkyStarsLayer(SdfSkyStars stars, SdfSkyLayer layer, SdfSkySample sampl
 
     float2 starUv = lerp(stars.Inset.xx, (1.0 - stars.Inset).xx, float2(((float)h.y * SDF_INV_2POW32), ((float)h.z * SDF_INV_2POW32)));
     float3 starDirection = sdfOctDecode((((cellId + starUv) / density) * 2.0) - 1.0);
-    // 1 - cos(angle) ≈ angle²/2 for the small angles a star subtends: compare against the radius squared over two, no acos.
+    // Half the squared chord equals 1 - cos(angle) for unit directions, without subtracting a rounded dot product from
+    // one. For the small angles a star subtends this is angle²/2: compare against the radius squared over two, no acos.
     float radius = (((stars.RadiusFraction * 3.14159265) / density) * lerp(0.6, 1.0, sqrt(luminosity)));
-    float separation = (1.0 - dot(direction, starDirection));
+    float3 chord = (direction - starDirection);
+    float separation = (0.5 * dot(chord, chord));
     float coverage = smoothstep((0.5 * (radius * radius)), 0.0, separation);
 
     return float4(((stars.Brightness * luminosity) * tint), coverage);

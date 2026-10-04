@@ -168,7 +168,10 @@ public static partial class SdfSkyEnvironment {
         var star = IrradianceLattice.Decode(u: ((x + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Y * Unit))) / density), v: ((y + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Z * Unit))) / density));
         var starDirection = new Vector3(x: ((float)star.X), y: ((float)star.Z), z: ((float)star.Y));
         var radius = (((stars.RadiusFraction * 3.14159265f) / density) * Mix(a: 0.6f, b: 1f, t: MathF.Sqrt(x: luminosity)));
-        var coverage = Smooth(a: ((0.5f * radius) * radius), b: 0f, x: (1f - Vector3.Dot(vector1: d, vector2: starDirection)));
+        // Half the squared chord equals 1 - cos(angle), without subtracting a rounded dot product from one.
+        var chord = (d - starDirection);
+        var separation = (0.5f * Vector3.Dot(vector1: chord, vector2: chord));
+        var coverage = Smooth(a: (0.5f * (radius * radius)), b: 0f, x: separation);
 
         return new Vector4(value: ((stars.Brightness * luminosity) * tint), w: coverage);
     }
