@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -12,7 +13,9 @@ namespace Puck.World.Tests;
 /// <summary>The shipped spatial resolve preserves the analytic step colors, and copies a grid of its output's own
 /// extent exactly. These inputs isolate the resolver from traversal: the dispatch box covers the whole grid, every
 /// visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
-/// reduced-world canary exercises its ordinary package recorder.</summary>
+/// reduced-world canary exercises its ordinary package recorder. Every output transport element is poisoned before the
+/// dispatch and read back afterwards: native copies carry the sample tag and zero distance, reconstructed misses carry
+/// zero weights, and both formats overwrite the second packed word.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfResolveDeviceLawTests {
@@ -138,7 +141,13 @@ public sealed class SdfResolveDeviceLawTests {
         using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
         using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
         var transportStride = parameters.Layout.Bindings.Single(predicate: binding => (binding.Name == SdfWorldPackage.TransportWritten)).ElementStride;
+        Assert.Equal(actual: transportStride, expected: 2u * sizeof(uint));
         using var transport = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * transportStride), usage: GpuBufferUsage.Storage);
+        var poisonedTransport = new byte[checked((int)transport.SizeBytes)];
+
+        Array.Fill(array: poisonedTransport, value: (byte)0xa5);
+        using var transportSeed = services.BufferFactory.CreateHostVisible(data: poisonedTransport, name: default, usage: GpuBufferUsage.Storage);
+        using var transportReadback = services.BufferFactory.CreateReadback(name: default, sizeBytes: transport.SizeBytes);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceFormat = GpuPixelFormat.R8G8B8A8Unorm;
@@ -225,6 +234,12 @@ public sealed class SdfResolveDeviceLawTests {
             var command = commands.CommandBufferHandle;
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: transport.BufferHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: transport.BufferHandle,
+                sizeBytes: transport.SizeBytes, sourceBufferHandle: transportSeed.BufferHandle);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: transport.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             if (temporal) {
                 recorder.TransitionImageLayout(commandBufferHandle: command, imageHandle: historyOutput!.ImageHandle,
                     sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
@@ -261,11 +276,29 @@ public sealed class SdfResolveDeviceLawTests {
                 recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: group, pipelineLayoutHandle: pipeline.LayoutHandle);
             }
             recorder.Dispatch(commandBufferHandle: command, groupCountX: ((width + 7) / 8), groupCountY: ((height + 7) / 8), groupCountZ: 1);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: transport.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader, destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
+            recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: transportReadback.BufferHandle,
+                sizeBytes: transport.SizeBytes, sourceBufferHandle: transport.BufferHandle);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: transportReadback.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
             var colors = readback.Read(bytesPerPixel: 8, format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
                 sourceImageHandle: (poisonCurrent ? historyOutput!.ImageHandle : output.ImageHandle), sourceLayout: GpuImageLayout.General);
 
+            var transportBytes = new byte[checked((int)transport.SizeBytes)];
+
+            transportReadback.Read(destination: transportBytes);
+            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent)
+                ? SdfSurfaceTransport.SampleWord(distance: 0f).Low : 0u);
+
+            for (var pixel = 0; (pixel < (width * height)); pixel++) {
+                var offset = checked((int)(pixel * transportStride));
+
+                Assert.Equal(expected: expectedLow, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: transportBytes.AsSpan(start: offset)));
+                Assert.Equal(expected: 0u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: transportBytes.AsSpan(start: (offset + sizeof(uint)))));
+            }
             return MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
