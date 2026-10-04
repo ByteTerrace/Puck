@@ -5,8 +5,8 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-// The views the world renders beside its own, as the render graph runs them: each camera registration and each session
-// screen is an sdf.world instance (WorldViewInstances). A camera view is a view of the world's own frame, rendered from
+// The views the world renders beside its own, as the render graph runs them: each camera registration, session
+// screen and available infinity layer is an sdf.world instance (WorldViewInstances). A camera view is a view of the world's own frame, rendered from
 // the world's residency (FilmViews); a session screen renders a residency of its own, which the binder creates when the
 // render graph's package first resolves the instance and releases once the session is gone. The binder hands the
 // instances to its mappings, which the view graph host composes into the running set.
@@ -55,7 +55,7 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, a session
     /// screen's residency, created the first time the render graph's package asks for it once the views are configured,
-    /// or a camera of another world's view of the residency that world renders through.</summary>
+    /// a fitted infinity layer, or a camera of another world's view of the residency that world renders through.</summary>
     /// <param name="name">The instance's name.</param>
     /// <param name="view">The view, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the instance is a view this binder registered and the views are
@@ -87,6 +87,8 @@ internal sealed partial class WorldScreenBinder {
 
             return true;
         }
+
+        if (TryResolveInfinityView(name, out view)) { return true; }
 
         if (SessionFeedOf(name: name) is not { } feed) {
             return TryResolveNestedCameraView(
@@ -230,6 +232,7 @@ internal sealed partial class WorldScreenBinder {
 
         m_viewResidencies.Clear();
         ReleaseRoutedResidencies();
+        ReleaseInfinityRoots();
     }
     // Sets every view from the camera registrations and the session screens and hands the views to the mappings when any
     // changed, which composes the running set again; a frame that changes nothing allocates nothing. A view's demand is
@@ -273,7 +276,7 @@ internal sealed partial class WorldScreenBinder {
         EnsureFeeds();
 
         foreach (var feed in m_feeds) {
-            if (feed.FrameSource is null) {
+            if ((feed.FrameSource is null) || !InfinityShown(feed)) {
                 continue;
             }
 
@@ -297,12 +300,13 @@ internal sealed partial class WorldScreenBinder {
                 Width: width
             ) {
                 OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
-                Parent = feed.ParentFeed?.RegistrationName,
+                Parent = (feed.ParentFeed?.RegistrationName ?? ((feed.ParentInfinity is { } infinity) ? InfinityParent(infinity) : null)),
                 Reads = feed.Nested?.Reads,
             });
         }
 
         SetNestedCameraViews(refresh: refresh);
+        SetInfinityViews();
         m_views.SetNestedSources(sources: m_nestedSources);
 
         if (m_views.TryPublish(instances: out var views)) {

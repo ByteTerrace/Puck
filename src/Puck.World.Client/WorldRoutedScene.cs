@@ -88,6 +88,10 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// and windows' first, it adds a view of each camera of the world a screen shows, at an index the caller records.
     /// <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
+
+    /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives this
+    /// authority's resolved sky and the frame dimensions after seat, window and camera views have been dressed.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
     /// <inheritdoc/>
     /// <remarks>The world's own font atlas (<see cref="WorldSessionSceneEmitter.GlyphAtlas"/>).</remarks>
     public SdfGlyphAtlas? GlyphAtlas => m_emitter.GlyphAtlas;
@@ -150,6 +154,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         m_frameViews.Clear();
         m_frameViews.AddRange(collection: m_dressedViews);
         Film?.Invoke(obj: m_frameViews);
+        FitSkyViews?.Invoke(m_frameViews, frame.Sky, width, height);
 
         if (m_hostFrame() is not { } host) {
             return frame with {

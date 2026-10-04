@@ -349,6 +349,16 @@ world, and `far`, only named prototypes of this one) is a second `sdf.world` ins
 at the tangent each pixel's direction has on the viewer's basis, inside the rectangle of the camera plane the layer's
 cone covers; before the instance has an image the layer draws its fallback colour, and either way a pixel counts a
 shown texel in the layer's detail row, which demands the instance's next frame.
+The binder reads the authority's existing named-layer observation and gives each
+planned layer one scene and residency. Each consuming camera fits its own output
+after its frame's cameras and sky quality resolve; a second camera shares the
+scene and the original nesting/cap decision. The shown world's physical screens
+use the existing nested-screen sources and session admission. An unavailable
+observation keeps its fitted fallback without publishing an unresolved graph
+dependency. Only a completed, executed composite changes visibility demand;
+standing frames retain it. Each sky recorder binds eight fitted records
+(40 `float4` values, 640 bytes) beside eight images, indexed by packed layer
+ordinal rather than an authored screen number.
 Each distinct layer label keeps its own counter row across live edits and reloads;
 retired labels retain their identities until the composition is disposed. The
 existing counter buffers grow after their frame slots complete, and their actual

@@ -1151,6 +1151,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// runtime schedules it, such as the editor comparison's placement and viewport record.</summary>
     public Action? FrameComposed { get; set; }
 
+    /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
+    /// resolved sky and display dimensions after every camera and its resolution policy have been dressed.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
+
     // Runs after the world's one capture has dressed its cameras, including when convergence reuses a frozen frame.
     private void PlaceComposedFrame() {
         if ((m_graphContext is not { } context) || (m_graphs is not { } graphs)) {
@@ -1690,6 +1694,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,
         };
+
+        FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
 
         return m_dressedFrame;
     }

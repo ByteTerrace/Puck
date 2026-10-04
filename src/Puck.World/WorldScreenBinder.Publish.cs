@@ -107,6 +107,7 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
+        ReconcileInfinityRoots();
         ReconcileNesting();
         SettleWindowRoutes();
         // Reconciliation may have closed a view or routed it into a shared residency this frame.

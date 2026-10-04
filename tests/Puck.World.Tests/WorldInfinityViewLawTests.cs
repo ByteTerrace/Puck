@@ -1,9 +1,11 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm.Views;
 using Puck.World.Client;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -42,6 +44,90 @@ public sealed class WorldInfinityViewLawTests {
     // A small cone straight ahead of a level viewer.
     private static InfinityViewMask Ahead(float halfAngle = 0.1f) => new(Axis: -Vector3.UnitZ, HalfAngle: halfAngle);
     private static IReadOnlyList<InfinityViewSpec> NoChildren(string parent, InfinityViewSpec spec) => [];
+
+    private sealed class VisibleLayers(long root, long nested) : IGpuWorkReadback {
+        public void AddTo(int slot, Span<long> counts, int rowCount) {
+            var columns = GpuWork.SubmissionKinds.Length;
+            var evaluations = GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations);
+            // Outside + two passes + four details: sky/plain, sky/lobby, composite/plain, composite/lobby.
+            counts[4 * columns + evaluations] += root;
+            counts[6 * columns + evaluations] += nested;
+        }
+    }
+
+    [Fact]
+    public void OnlyTheViewersExecutedCompositeChangesItsNamedLayerDemand() {
+        var views = new WorldInfinityViews();
+        views.Apply(WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("lobby")], nestingDepth: 2));
+        var ledger = new GpuWorkLedger(framesInFlight: 1, name: "gpu.infinity-demand");
+        var gpu = GpuWorkCounting.Wrap(new FakeGpuDevice().Services, ledger);
+        ledger.Configure(1, ["sdf.world$sky", "sdf.world$composite"]);
+        ledger.ConfigureDetails([new(0, "plain"), new(0, "lobby"), new(1, "plain"), new(1, "lobby")]);
+        var sample = new GpuWorkSample();
+        void Submit(long shown, bool standing = false) {
+            ledger.EnterPass(0);
+            ledger.LeavePass();
+            if (standing) { ledger.StandPass(1); } else { ledger.EnterPass(1); ledger.LeavePass(); }
+            ledger.ReadOnCompletion(new VisibleLayers(999, shown), 0);
+            gpu.QueueSubmitter.SubmitAndWait([]);
+            Assert.True(ledger.TryReadCompleted(sample));
+        }
+        Submit(7);
+        views.Report(parent: null, sample);
+        Assert.True(views.Demand.IsDemanded("sky$lobby"));
+        Assert.False(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+        views.Report(parent: "sky$lobby", sample);
+        Assert.True(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+        Submit(0, standing: true);
+        views.Report(parent: null, sample);
+        Assert.True(views.Demand.IsDemanded("sky$lobby"));
+        Submit(0);
+        views.Report(parent: null, sample);
+        Assert.False(views.Demand.IsDemanded("sky$lobby"));
+        Assert.True(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+    }
+
+    [Fact]
+    public void AnUnavailableObservationKeepsItsFitAndFallbackWithoutPublishingARead() {
+        var views = new WorldInfinityViews();
+        views.Apply(WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("moon")], nestingDepth: 2));
+        views.Demand.Report("sky$lobby", 12);
+        var published = new WorldViewSet();
+        published.Begin();
+        views.Update(Viewer(), 1280, 720, QualityTier.High, published, available: _ => false);
+        _ = published.TryPublish(out _);
+        Assert.Empty(published.Instances.Views);
+        var fallback = Assert.Single(views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High));
+        Assert.Null(fallback.Producer);
+        Assert.True(views.FrameOf("sky$lobby").Visible);
+
+        published.Begin();
+        views.Update(Viewer(), 1280, 720, QualityTier.High, published, available: name => name == "sky$lobby");
+        Assert.True(published.TryPublish(out var admitted));
+        var lobby = Assert.Single(admitted.Views);
+        Assert.Equal("sky$lobby", lobby.Name);
+        Assert.Empty(lobby.Reads!);
+        Assert.Equal("sky$lobby", Assert.Single(views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High)).Producer);
+        Assert.Null(Assert.Single(views.BindingsOf("sky$lobby", views.FrameOf("sky$lobby").Camera, 1280, 720, QualityTier.High)).Producer);
+    }
+
+    [Fact]
+    public void AnotherCameraOfAShownWorldKeepsTheOriginalNamesAndCapDecision() {
+        var plan = WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, spec) => spec.Name switch {
+            "lobby" => [Spec("moon")],
+            "moon" => [Spec("star")],
+            _ => [],
+        }, nestingDepth: 3, cap: 2);
+        var camera = plan.Below("sky$lobby");
+        var moon = Assert.Single(camera.Views);
+        Assert.Equal("sky$lobby$sky$moon", moon.Name);
+        Assert.Null(moon.Parent);
+        var fallback = Assert.Single(camera.Fallbacks);
+        Assert.Equal(moon.Name, fallback.Parent);
+        Assert.Equal("star", fallback.Spec.Name);
+        Assert.Equal(Assert.Single(plan.Fallbacks).Reason, fallback.Reason);
+        Assert.Same(plan, plan.Below(null));
+    }
 
     [Fact]
     public void AnInstanceIsNamedUnderTheSkyAndNestedUnderTheViewWhoseWorldShowsIt() {

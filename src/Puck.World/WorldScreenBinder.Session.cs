@@ -139,6 +139,7 @@ internal sealed partial class WorldScreenBinder {
             feed: feed,
             views: views
         );
+        emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed, views, sky, width, height);
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);
@@ -484,6 +485,8 @@ internal sealed partial class WorldScreenBinder {
 
         // The view whose world the screen stands in, or null for a screen of a world the display shows directly.
         public SessionFeed? ParentFeed { get; init; }
+        // The infinity scene whose physical screen this is, when it has no parent session feed.
+        public InfinityEntry? ParentInfinity { get; init; }
         // The routed world whose own screen this is, or null.
         public WorldRoutedScene? RootScene { get; init; }
 

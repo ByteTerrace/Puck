@@ -43,6 +43,24 @@ public sealed class WorldInfinityViewPlan {
     /// <summary>Gets the views that draw their fallback.</summary>
     public IReadOnlyList<WorldInfinityFallback> Fallbacks { get; }
 
+    /// <summary>Returns the existing plan below one shown world for another camera of that same world. It keeps the
+    /// planned layer names and cap decisions, so the camera shares those residencies and cannot open another subtree.</summary>
+    /// <param name="parent">The shown world's planned layer path, or null for this plan.</param>
+    /// <returns>The descendants with the direct children's parent made local to the consuming camera.</returns>
+    public WorldInfinityViewPlan Below(string? parent) {
+        if (parent is null) { return this; }
+        var kept = new HashSet<string>(StringComparer.Ordinal) { parent };
+        var views = new List<WorldInfinityView>();
+        foreach (var view in Views) {
+            if ((view.Parent is null) || !kept.Contains(view.Parent)) { continue; }
+            _ = kept.Add(view.Name);
+            views.Add(view with { Parent = ((view.Parent == parent) ? null : view.Parent) });
+        }
+        var fallbacks = Fallbacks.Where(fallback => (fallback.Parent is not null) && kept.Contains(fallback.Parent))
+            .Select(fallback => fallback with { Parent = ((fallback.Parent == parent) ? null : fallback.Parent) }).ToArray();
+        return new WorldInfinityViewPlan(views, fallbacks);
+    }
+
     /// <summary>Checks the infinity views one world's sky authors: every record sound, names distinct, no more than the
     /// cap.</summary>
     /// <param name="specs">The views one world authors.</param>

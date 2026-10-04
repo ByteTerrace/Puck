@@ -1,4 +1,5 @@
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -12,7 +13,8 @@ namespace Puck.World.Client;
 /// (<see cref="InfinityViewDemand"/>), and published as a <see cref="WorldView"/> the render graph schedules. A view the
 /// viewer's sky shows is fitted to the viewer's camera, and a view a deeper world's sky shows to the camera of the view
 /// that renders that world, so each level turns with the one above and is never translated by it.
-/// <para>Every planned view is published with <see cref="WorldViewDemand.Sky"/>, so the viewer always reads its latest image. A
+/// <para>Every available planned view is published with <see cref="WorldViewDemand.Sky"/>, so the viewer always reads its latest image. An
+/// unavailable observation retains its fitted fallback and publishes no instance or dependency. A
 /// demanded view in the viewer's frustum is also published with <see cref="WorldViewDemand.SkySeen"/>, which the graph host
 /// turns into a footprint, so the graph renders it; any other has no footprint, which the graph reads as unread
 /// (<see cref="RenderGraphInstanceStatus.Unread"/>), so it renders nothing and keeps its last image. Its footprint is the
@@ -29,6 +31,8 @@ public sealed class WorldInfinityViews {
     private readonly Dictionary<string, IReadOnlyList<string>> m_reads = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, List<SdfSkyViewBinding>> m_bindings = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_producers = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_unavailable = new(comparer: StringComparer.Ordinal);
+    private readonly List<string> m_readScratch = [];
     private WorldInfinityViewPlan m_plan = WorldInfinityViewPlan.Empty;
 
     /// <summary>Initializes the fit set for one consuming camera. Planned layer identities stay shared across
@@ -80,6 +84,7 @@ public sealed class WorldInfinityViews {
         m_reads.Clear();
         m_bindings.Clear();
         m_producers.Clear();
+        m_unavailable.Clear();
         foreach (var view in plan.Views) {
             m_producers[view.Name] = ((Consumer == WorldViewGraphs.WorldInstance)
                 ? view.Name
@@ -87,7 +92,7 @@ public sealed class WorldInfinityViews {
         }
 
         foreach (var view in plan.Views) {
-            m_reads[view.Name] = [.. plan.Views.Where(predicate: child => string.Equals(a: child.Parent, b: view.Name, comparisonType: StringComparison.Ordinal)).Select(selector: child => ProducerOf(name: child.Name))];
+            m_reads[view.Name] = [];
         }
     }
     /// <summary>Returns the frame a view last rendered with, for the dresser of its instance to take its camera from.</summary>
@@ -96,6 +101,27 @@ public sealed class WorldInfinityViews {
     public InfinityViewFrame FrameOf(string name) => (m_frames.TryGetValue(key: name, value: out var frame)
         ? frame
         : default);
+
+    /// <summary>Updates demand from the completed composite of one viewer. Only executed detail rows report a new
+    /// visibility result; a standing or skipped composite keeps the previous result, and other passes cannot demand a view.</summary>
+    /// <param name="parent">The planned parent view, or null for the root consumer.</param>
+    /// <param name="sample">The completed work of that viewer, including its immutable layer labels.</param>
+    public void Report(string? parent, GpuWorkSample sample) {
+        ArgumentNullException.ThrowIfNull(sample);
+        var column = GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations);
+        foreach (var view in m_plan.Views) {
+            if (!string.Equals(view.Parent, parent, StringComparison.Ordinal)) { continue; }
+            for (var row = 0; row < sample.Details.Length; row++) {
+                var detail = sample.Details[row];
+                if (string.Equals(detail.Detail, view.Spec.Name, StringComparison.Ordinal)
+                    && sample.PassLabels[detail.Pass].EndsWith("$composite", StringComparison.Ordinal)
+                    && sample.TryGetDetailCount(row, column, out var count)) {
+                    Demand.Report(view.Name, count);
+                    break;
+                }
+            }
+        }
+    }
 
     /// <summary>Fits the sky sampling records of the root viewer or one nested viewer. Layers beyond the nesting
     /// or residency cap still carry their fitted fallback, while inactive cones carry no binding.</summary>
@@ -114,7 +140,7 @@ public sealed class WorldInfinityViews {
         bindings.Clear();
         foreach (var view in m_plan.Views) {
             if (!string.Equals(a: view.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
-            Add(spec: view.Spec, frame: FrameOf(name: view.Name), producer: ProducerOf(name: view.Name));
+            Add(spec: view.Spec, frame: FrameOf(name: view.Name), producer: (m_unavailable.Contains(view.Name) ? null : ProducerOf(name: view.Name)));
         }
         foreach (var fallback in m_plan.Fallbacks) {
             if (!string.Equals(a: fallback.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
@@ -129,15 +155,28 @@ public sealed class WorldInfinityViews {
                 Parameters: InfinityViewSampling.Describe(spec: spec, viewer: viewer, frame: frame, imageSlot: -1)));
         }
     }
-    /// <summary>Fits and publishes every planned view for a frame.</summary>
+    /// <summary>Fits every planned view and publishes the available ones for a frame.</summary>
     /// <param name="viewer">The viewer's camera.</param>
     /// <param name="viewerWidth">The pixels across the viewer renders.</param>
     /// <param name="viewerHeight">The pixels down the viewer renders.</param>
     /// <param name="tier">The quality tier the viewer draws at.</param>
     /// <param name="views">The set the views publish into, between its <see cref="WorldViewSet.Begin"/> and
     /// <see cref="WorldViewSet.TryPublish"/>.</param>
-    public void Update(CameraSnapshot viewer, uint viewerWidth, uint viewerHeight, QualityTier tier, WorldViewSet views) {
+    /// <param name="available">Whether an authority-owned observation or far scene is ready. An unavailable view keeps
+    /// its fitted fallback and publishes no graph instance. Null makes every planned view available.</param>
+    /// <param name="readsOf">The existing screen dependencies of each shown world, or null for none.</param>
+    /// <param name="tierOf">The resolved sky tier of a nested viewer. Null uses the root viewer's tier throughout.</param>
+    public void Update(CameraSnapshot viewer, uint viewerWidth, uint viewerHeight, QualityTier tier, WorldViewSet views,
+        Func<string, bool>? available = null, Func<string, IReadOnlyList<string>?>? readsOf = null,
+        Func<string, QualityTier>? tierOf = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
+
+        m_unavailable.Clear();
+        foreach (var view in m_plan.Views) {
+            if (((view.Parent is not null) && m_unavailable.Contains(view.Parent)) || (available?.Invoke(view.Name) == false)) {
+                _ = m_unavailable.Add(view.Name);
+            }
+        }
 
         foreach (var view in m_plan.Views) {
             CameraSnapshot consumer;
@@ -163,10 +202,12 @@ public sealed class WorldInfinityViews {
             }
 
             var frame = ((shownByParent && (consumerWidth != 0u) && (consumerHeight != 0u))
-                ? InfinityViewFit.Fit(spec: view.Spec, tier: tier, viewer: consumer, viewerHeight: consumerHeight, viewerWidth: consumerWidth)
+                ? InfinityViewFit.Fit(spec: view.Spec, tier: ((view.Parent is null) ? tier : (tierOf?.Invoke(view.Parent) ?? tier)), viewer: consumer, viewerHeight: consumerHeight, viewerWidth: consumerWidth)
                 : default);
 
             m_frames[view.Name] = frame;
+
+            if (m_unavailable.Contains(view.Name)) { continue; }
 
             if (frame.Visible) {
                 // The extent is the footprint's step of the consumer's, so it moves only when the footprint does.
@@ -191,9 +232,25 @@ public sealed class WorldInfinityViews {
             ) {
                 OutputExtent = extent,
                 Parent = ((view.Parent is null) ? null : ProducerOf(name: view.Parent)),
-                Reads = m_reads[view.Name],
+                Reads = Reads(view.Name, readsOf?.Invoke(view.Name)),
                 SkyConsumer = ((view.Parent is null) ? Consumer : ProducerOf(name: view.Parent)),
             });
         }
+    }
+
+    private IReadOnlyList<string> Reads(string name, IReadOnlyList<string>? screens) {
+        m_readScratch.Clear();
+        foreach (var child in m_plan.Views) {
+            if (string.Equals(child.Parent, name, StringComparison.Ordinal) && !m_unavailable.Contains(child.Name)) {
+                m_readScratch.Add(ProducerOf(child.Name));
+            }
+        }
+        if (screens is not null) {
+            foreach (var screen in screens) {
+                if (!m_readScratch.Contains(screen, StringComparer.Ordinal)) { m_readScratch.Add(screen); }
+            }
+        }
+        if (!m_readScratch.SequenceEqual(m_reads[name], StringComparer.Ordinal)) { m_reads[name] = m_readScratch.ToArray(); }
+        return m_reads[name];
     }
 }

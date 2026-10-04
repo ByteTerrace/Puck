@@ -215,6 +215,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
     /// records. <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
+
+    /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
+    /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
     /// <inheritdoc/>
     /// <remarks>The destination's own font atlas, resolved beside its own document.</remarks>
     public SdfGlyphAtlas? GlyphAtlas {
@@ -537,6 +541,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             layers: SkyLayers,
             shadowSelection: m_deliveredShadows
         );
+
+        FitSkyViews?.Invoke(m_views, environment.Sky, width, height);
 
         return new SdfFrame(
             Program: program,

@@ -36,7 +36,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var feed in m_feeds) {
             if (
-                (feed.FrameSource is not null) &&
+                (feed.FrameSource is not null) && InfinityShown(feed) &&
                 (feed.Nested is { } level)
             ) {
                 SetNestedCameraViews(
@@ -45,6 +45,9 @@ internal sealed partial class WorldScreenBinder {
                     refresh: refresh
                 );
             }
+        }
+        foreach (var entry in InfinityEntries()) {
+            if ((entry.Screens is { } screens) && (InfinityParent(entry) is { } parent)) { SetNestedCameraViews(screens, parent, refresh); }
         }
     }
     private void SetNestedCameraViews(WorldNestedScreens<SessionFeed> level, string? parent, RenderGraphRefresh refresh) {
@@ -73,6 +76,9 @@ internal sealed partial class WorldScreenBinder {
     }
     // The level whose screens show a camera view of another world, by the view's name, or null.
     private WorldNestedScreens<SessionFeed>? NestedCameraLevel(string name) {
+        foreach (var entry in InfinityEntries()) {
+            if ((entry.Screens is { } screens) && screens.TryCamera(name, out _)) { return screens; }
+        }
         foreach (var routed in m_routedScreens.Values) {
             if (routed.TryCamera(
                 camera: out _,
@@ -142,6 +148,9 @@ internal sealed partial class WorldScreenBinder {
             } else {
                 return false;
             }
+        } else if ((owner.Infinity is { } infinity) && (InfinityResidencyOf(infinity) is { } own)) {
+            target = infinity;
+            residency = own;
         } else {
             return false;
         }

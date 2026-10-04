@@ -51,6 +51,10 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
     /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_inner.ScreenDecals;
 
+    /// <summary>Gets or sets what films the shown world's camera screens and fits their sky after its consuming
+    /// cameras have replaced the emitter's default view. The resolved sky and frame dimensions belong to this world.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
+
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var dressed = m_inner.Dress(
@@ -74,6 +78,7 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
         foreach (var view in views) {
             m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) with { IndirectMethod = view.Quality.IndirectMethod } });
         }
+        FitSkyViews?.Invoke(m_fittedViews, dressed.Sky, width, height);
 
         return dressed with {
             FarDistance = m_spec.FarDistance,

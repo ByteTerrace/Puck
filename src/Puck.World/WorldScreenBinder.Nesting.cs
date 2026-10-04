@@ -149,6 +149,9 @@ internal sealed partial class WorldScreenBinder {
                 sessions: sessions
             );
         }
+        foreach (var entry in InfinityEntries()) {
+            if (entry.Screens is { } screens) { moved |= ReconcileLevel(screens, sessions); }
+        }
 
         if (!(moved || m_feedsMoved)) {
             return;
@@ -226,6 +229,10 @@ internal sealed partial class WorldScreenBinder {
                 AddFeed(feed: screens.Views[index]);
             }
         }
+        foreach (var entry in InfinityEntries()) {
+            if (entry.Screens is not { } screens) { continue; }
+            foreach (var feed in screens.Views) { AddFeed(feed); }
+        }
 
         m_feedsMoved = false;
     }
@@ -260,11 +267,7 @@ internal sealed partial class WorldScreenBinder {
 
         var nested = new List<RenderGraphInstance>();
 
-        foreach (var feed in m_feeds) {
-            if (feed.Nested is not { } screens) {
-                continue;
-            }
-
+        foreach (var screens in m_feeds.Select(feed => feed.Nested).Concat(InfinityEntries().Select(entry => entry.Screens)).OfType<WorldNestedScreens<SessionFeed>>()) {
             foreach (var source in screens.Sources) {
                 if (
                     !WorldSourceInstances.Holds(
@@ -462,6 +465,11 @@ internal sealed partial class WorldScreenBinder {
     public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
         ArgumentNullException.ThrowIfNull(argument: view);
 
+        if (m_infinityOutputs.TryGetValue(view, out var infinity)) {
+            placements = (infinity.Entry.Screens?.Mappings.Mappings ?? []);
+            return true;
+        }
+
         if (SessionFeedOf(name: view) is { } feed) {
             placements = ((feed.Nested is { } screens)
                 ? screens.Mappings.Mappings
@@ -504,7 +512,9 @@ internal sealed partial class WorldScreenBinder {
 
         WorldNestedScreens<SessionFeed>? world;
 
-        if (m_feedsByName.TryGetValue(
+        if (m_infinityOutputs.TryGetValue(consumer, out var infinity)) {
+            world = infinity.Entry.Screens;
+        } else if (m_feedsByName.TryGetValue(
             key: consumer,
             value: out var parent
         )) {
@@ -524,7 +534,8 @@ internal sealed partial class WorldScreenBinder {
         ) {
             if (
                 (shown.ParentFeed is not null) ||
-                (shown.RootScene is not null)
+                (shown.RootScene is not null) ||
+                (shown.ParentInfinity is not null)
             ) {
                 return WorldPortalGlass.Elsewhere;
             }
@@ -561,6 +572,7 @@ internal sealed partial class WorldScreenBinder {
     // What one level's screens present: the instance whose screen sessions they show, the world their glass stands in,
     // and the eye a window among them fits to, with the feed or routed scene the level belongs to.
     private sealed record NestedOwner(string Instance, Func<WorldDefinition?> Local, Func<Vector3?> Eye, SessionFeed? Feed, WorldRoutedScene? Scene) {
+        public InfinityEntry? Infinity { get; init; }
         // The extents of the source instances the level's screens show, which its mappings publish at.
         public NestedImages? Images { get; set; }
     }
@@ -627,6 +639,7 @@ internal sealed partial class WorldScreenBinder {
                 value: out var owner
             ) &&
             ((owner.Feed is null) || (owner.Feed.Observation is { Ended: false })) &&
+            ((owner.Infinity?.Hosted is null) || (owner.Infinity.Hosted.Observation is { Ended: false })) &&
             (binder.m_instanceHost.ScreenSession(
                 instanceName: owner.Instance,
                 screenIndex: screen
@@ -665,6 +678,7 @@ internal sealed partial class WorldScreenBinder {
                 Eye = owner.Eye,
                 Local = owner.Local,
                 ParentFeed = owner.Feed,
+                ParentInfinity = owner.Infinity,
                 RootScene = owner.Scene,
                 Row = () => screens.RowOf(screen: screen),
             };
