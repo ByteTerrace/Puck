@@ -35,16 +35,15 @@ public sealed class WorldCompileCacheLawTests {
         return (work.Read(kind: WorldBootWork.Compiles), work.Read(kind: WorldBootWork.PuckCacheHits));
     }
     // The persisted entry format, written independently of the cache: the magic, then UTF-8 length-prefixed fields —
-    // the writing build, the shape fingerprint the ledger records for the format, the key, the file facts, the document, whether it emits one, no worlds, no schema, no tests —
+    // the shape fingerprint the ledger records for the format, the writing build, the key, the file facts, the document, whether it emits one, no worlds, no schema, no tests —
     // and a trailing SHA-256 over all of it. The one fact recorded is the source's current bytes, so the entry stands.
     private static byte[] Forge(string build, string key, string source, byte[] document, string? shape = null) {
         using var stream = new MemoryStream();
 
         stream.Write(buffer: "PUCKWCC1"u8);
         using (var writer = new BinaryWriter(encoding: Encoding.UTF8, leaveOpen: true, output: stream)) {
-            writer.Write(value: FormatLedgerShapes.Of(id: "WorldCompileCache.Magic"));
+            writer.Write(value: (shape ?? FormatLedgerShapes.Of(id: "WorldCompileCache.Magic")));
             writer.Write(value: build);
-            writer.Write(value: (shape ?? Puck.Testing.FormatLedgerShapes.Of(id: "WorldCompileCache.Magic")));
             writer.Write(value: key);
             writer.Write(value: 1);
             writer.Write(value: Convert.ToHexStringLower(inArray: System.Security.Cryptography.SHA256.HashData(source: File.ReadAllBytes(path: source))));
@@ -63,7 +62,7 @@ public sealed class WorldCompileCacheLawTests {
 
         return stream.ToArray();
     }
-    // The build that wrote an entry, the first field after the magic.
+    // The build that wrote an entry, after the magic and its shape fingerprint.
     private static string BuildOf(string entry) {
         using var reader = new BinaryReader(encoding: Encoding.UTF8, input: new MemoryStream(buffer: File.ReadAllBytes(path: entry)));
 
@@ -84,7 +83,7 @@ public sealed class WorldCompileCacheLawTests {
             : full
         ) + "\0document");
     }
-    // The key an entry records, the second field after the magic.
+    // The key an entry records, after the magic, shape fingerprint and writing build.
     private static string KeyIn(string entry) {
         using var reader = new BinaryReader(encoding: Encoding.UTF8, input: new MemoryStream(buffer: File.ReadAllBytes(path: entry)));
 
