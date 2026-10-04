@@ -18,9 +18,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
 | `render.lighting.lights[][directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
 | `render.lighting.lights[][directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
-| `render.lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
-| `render.lighting.lights[][hemisphere].base` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Base` |
-| `render.lighting.lights[][hemisphere].gradient` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Gradient` |
 | `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
 | `render.lighting.lights[][rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
 | `render.lighting.lights[][rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
@@ -41,9 +38,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
 | `render.lighting.keys[].lights{*}[directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
 | `render.lighting.keys[].lights{*}[directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
-| `render.lighting.keys[].lights{*}[hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
-| `render.lighting.keys[].lights{*}[hemisphere].base` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Base` |
-| `render.lighting.keys[].lights{*}[hemisphere].gradient` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Gradient` |
 | `render.lighting.keys[].lights{*}[rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
 | `render.lighting.keys[].lights{*}[rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
 | `render.lighting.keys[].lights{*}[rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
@@ -68,10 +62,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.layers[][gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
-| `render.sky.layers[][fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
-| `render.sky.layers[][fog].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
-| `render.sky.layers[][fog].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
-| `render.sky.layers[][fog].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.layers[][sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
@@ -117,6 +107,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.layers[][panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
+| `render.sky.layers[][panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
+| `render.sky.layers[][panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
+| `render.sky.layers[][panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.layers[][panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.layers[][view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.layers[][view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
@@ -134,10 +130,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
-| `render.sky.keys[].layers{*}[fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
-| `render.sky.keys[].layers{*}[fog].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
-| `render.sky.keys[].layers{*}[fog].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
-| `render.sky.keys[].layers{*}[fog].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.keys[].layers{*}[sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.keys[].layers{*}[sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
@@ -183,6 +175,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
+| `render.sky.keys[].layers{*}[panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
+| `render.sky.keys[].layers{*}[panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
+| `render.sky.keys[].layers{*}[panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
+| `render.sky.keys[].layers{*}[panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.keys[].layers{*}[view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
@@ -191,9 +189,19 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
-| `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
-| `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
-| `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
+| `render.environment.ambient` | State | Binding | Binding | `WorldRenderEnvironment.Ambient` |
+| `render.environment.reflection` | State | Binding | Binding | `WorldRenderEnvironment.Reflection` |
+| `render.atmosphere.fog.density` | State | Binding | Binding | `WorldRenderFog.Density` |
+| `render.atmosphere.fog.color` | State | Binding | Binding | `WorldRenderFog.Color` |
+| `render.atmosphere.fog.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
+| `render.atmosphere.fog.height.falloff` | State | Binding | Binding | `WorldRenderAirHeight.Falloff` |
+| `render.atmosphere.haze.amount` | State | Binding | Binding | `WorldRenderHaze.Amount` |
+| `render.atmosphere.haze.anisotropy` | State | Binding | Binding | `WorldRenderHaze.Anisotropy` |
+| `render.atmosphere.haze.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
+| `render.atmosphere.haze.height.falloff` | State | Binding | Binding | `WorldRenderAirHeight.Falloff` |
+| `render.atmosphere.medium.surface` | State | Binding | Binding | `WorldRenderMedium.Surface` |
+| `render.atmosphere.medium.extinction` | State | Binding | Binding | `WorldRenderMedium.Extinction` |
+| `render.atmosphere.medium.color` | State | Binding | Binding | `WorldRenderMedium.Color` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
@@ -2673,17 +2681,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
 | `render.lighting.lights[][directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
-| `render.lighting.lights[][hemisphere].name` | `WorldRenderLight.Hemisphere.Name` | a light name a section key addresses |
 | `render.lighting.lights[][rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.lights[][point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
 | `render.lighting.lights[][occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
-| `render.lighting.keys[].lights{*}[hemisphere].name` | `WorldRenderLight.Hemisphere.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
-| `render.sky.layers[][fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
@@ -2691,10 +2696,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][noise].name` | `WorldRenderSkyLayer.Noise.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][pattern].name` | `WorldRenderSkyLayer.Pattern.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][panorama].name` | `WorldRenderSkyLayer.Panorama.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][panel].name` | `WorldRenderSkyLayer.Panel.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
-| `render.sky.keys[].layers{*}[fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
@@ -2702,6 +2707,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[noise].name` | `WorldRenderSkyLayer.Noise.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[pattern].name` | `WorldRenderSkyLayer.Pattern.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[panorama].name` | `WorldRenderSkyLayer.Panorama.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[panel].name` | `WorldRenderSkyLayer.Panel.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
