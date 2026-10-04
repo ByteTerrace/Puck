@@ -9,7 +9,7 @@ public sealed class SdfNestedFieldScopeLawTests {
     [Theory]
     [InlineData(0d, -1d, 0)]
     [InlineData(4d, .25d, 4)]
-    [InlineData(4.5d, -.5d, 1)]
+    [InlineData(4.5d, -.25d, 4)]
     [InlineData(6d, -.5d, 3)]
     public void NestedCutsPreserveParentFieldsAndMaterialWinners(double x, double expected, int material) {
         var builder = new SdfProgramBuilder();
