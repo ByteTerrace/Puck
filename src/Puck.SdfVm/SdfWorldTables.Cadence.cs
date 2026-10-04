@@ -53,7 +53,7 @@ public sealed partial class SdfWorldTables {
     private ulong m_visualSignature;
 
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
-        SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights,
+        SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectMethod,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
         SdfWorldPackage.GridObjectOrigin, SdfWorldPackage.GridObjectPitch, SdfWorldPackage.GridObjectFrame,

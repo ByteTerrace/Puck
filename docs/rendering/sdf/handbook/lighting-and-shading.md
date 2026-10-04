@@ -263,6 +263,13 @@ Actual GPU classifications and selected receiver contributions still require
 their fenced readback. Receiver application and its qualification remain part
 of the open cache work in the rendering plan.
 
+The counted comparison has a per-view SdfIndirectMethod selector: the ordinary
+cache, current screen-space visibility, or one-bounce field cones. Its pass value
+belongs to the lighting signature, so changing the method re-renders shading and
+its consumers without changing geometry or shadow ownership. Quality restrictions
+retain the consuming view's method. The alternative kernels and measured comparison
+remain open work in the rendering plan.
+
 ## Ambient occlusion: three taps into the ambient fill
 
 Puck's AO is the classic normal-ladder technique: from the hit, step fixed

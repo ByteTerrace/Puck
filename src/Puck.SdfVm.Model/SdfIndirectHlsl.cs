@@ -24,6 +24,7 @@ public static class SdfIndirectHlsl {
             text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectLight{field.Name} = {field.GetRawConstantValue()}u;\n");
         }
         Enum<SdfIndirectTier>(prefix: "SdfIndirectTier");
+        Enum<SdfIndirectMethod>(prefix: "SdfIndirectMethod");
         Enum<IrradianceProbeClass>(prefix: "SdfIndirectClass");
         Enum<IrradianceHitKind>(prefix: "SdfIndirectKind");
         Enum<IrradianceSource>(prefix: "SdfIndirectSource");

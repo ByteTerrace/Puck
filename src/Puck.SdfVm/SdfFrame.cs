@@ -66,6 +66,9 @@ public readonly record struct SdfSkyViewBinding(string Layer, SdfSkyView Paramet
 /// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature
 /// folds it, so a change renders the view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
 public readonly record struct SdfViewQuality {
+    /// <summary>The per-view method used by the counted indirect comparison. The default uses the residency cache.
+    /// Quality restrictions retain the consumer's method; this selector changes no simulation or cache geometry.</summary>
+    public SdfIndirectMethod IndirectMethod { get; init; }
     /// <summary>Gets whether the view skips ambient occlusion: occlusion reads 1, so creases read brighter, and the
     /// ambient pass does not run. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
     public bool DisableAmbientOcclusion { get; init; }
@@ -107,6 +110,7 @@ public readonly record struct SdfViewQuality {
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
+        IndirectMethod = IndirectMethod,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableFarBound = (DisableFarBound || other.DisableFarBound),
         DisableSoftShadows = (DisableSoftShadows || other.DisableSoftShadows),

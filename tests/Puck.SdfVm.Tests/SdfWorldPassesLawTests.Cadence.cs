@@ -37,6 +37,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("haze", false)]
     [InlineData("medium", false)]
     [InlineData("light-color", false)]
+    [InlineData("indirect-method", false)]
     [InlineData("shadow-direction", false)]
     [InlineData("camera", false)]
     [InlineData("drift", true)]
@@ -44,6 +45,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("haze", true)]
     [InlineData("medium", true)]
     [InlineData("light-color", true)]
+    [InlineData("indirect-method", true)]
     [InlineData("shadow-direction", true)]
     [InlineData("camera", true)]
     [Theory]
@@ -68,6 +70,9 @@ public sealed partial class SdfWorldPassesLawTests {
             case "haze": frame.Sky.Atmosphere.HazeAmount = 0.2f; goto case "lighting";
             case "medium": frame.Sky.Atmosphere.MediumExtinction = 0.2f; goto case "lighting";
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
+            case "indirect-method":
+                frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { IndirectMethod = SdfIndirectMethod.Screen } }] };
+                goto case "lighting";
             case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
             case "shadow-direction":
                 frame.Lights.Set(index: 0, light: frame.Lights[0] with { Direction = new Vector3(x: 0.8f, y: 0.2f, z: 0.1f) });

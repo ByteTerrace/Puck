@@ -32,6 +32,7 @@ public sealed class SdfFrameBlockLawTests {
     );
     // A quality every lever of which is off its default, and the pass-block members that carry them.
     private static readonly SdfViewQuality Restricted = new() {
+        IndirectMethod = SdfIndirectMethod.Screen,
         DisableAmbientOcclusion = true,
         DisableFarBound = true,
         DisableSoftShadows = true,
@@ -42,6 +43,8 @@ public sealed class SdfFrameBlockLawTests {
         UseFastSoftShadowMarch = true,
     };
     private static readonly (string Member, SdfViewQuality Quality, uint Bits)[] QualityValues = [
+        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Screen }, 1u),
+        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Cone }, 2u),
         (SdfWorldPackage.CameraTileShadowMask, new() { UseCameraTileShadowMask = true }, 1u),
         (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u),
         (SdfWorldPackage.DisableFarBound, new() { DisableFarBound = true }, 1u),

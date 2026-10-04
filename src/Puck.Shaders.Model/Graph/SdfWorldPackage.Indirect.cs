@@ -5,6 +5,8 @@ namespace Puck.Shaders;
 public static partial class SdfWorldPackage {
     /// <summary>The selected indirect cache tier, zero disabling every cache read.</summary>
     public const string IndirectTier = "indirectTier";
+    /// <summary>The per-view counted comparison method: cache, screen-space samples or one-bounce field cones.</summary>
+    public const string IndirectMethod = "indirectMethod";
     /// <summary>The geometry epoch carried by valid probe states.</summary>
     public const string IndirectEpoch = "indirectEpoch";
     /// <summary>The submitted cache update sequence, for reading only completed proof publications.</summary>

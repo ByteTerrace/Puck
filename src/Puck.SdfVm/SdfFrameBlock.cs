@@ -63,6 +63,7 @@ public static partial class SdfFrameBlock {
     private static readonly int ShadowLightReject = Offset(member: SdfWorldPackage.ShadowLightReject);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int IndirectTier = Offset(member: SdfWorldPackage.IndirectTier);
+    private static readonly int IndirectMethod = Offset(member: SdfWorldPackage.IndirectMethod);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
@@ -201,6 +202,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
         WriteUInt32(block: block, offset: IndirectTier, value: ((uint)frame.IndirectTier));
+        WriteUInt32(block: block, offset: IndirectMethod, value: ((uint)quality.IndirectMethod));
         var lights = frame.Lights;
         var curvature = lights.Curvature;
 
