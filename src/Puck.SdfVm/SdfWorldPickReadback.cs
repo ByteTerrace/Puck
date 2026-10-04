@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 // keeps the transform table of the frame its copy recorded, the rows that frame's upload staged, so a winning slot
 // resolves against the table the record was rendered with. Its view's picker polls only signaled submissions; changing
 // demand never replaces an in-flight buffer.
-internal sealed class SdfWorldPickReadback : IDisposable {
+internal sealed partial class SdfWorldPickReadback : IDisposable {
     // V (4 words), C (3) and L.x: the identity, the ray parameter, the material, the flags and the transform slot.
     private const int PickBytes = 32;
     // V through N: an inspector's surface normal too.
@@ -84,6 +84,14 @@ internal sealed class SdfWorldPickReadback : IDisposable {
                 readback = new RenderGraphBufferReadback(Version: target.Box!, SourceOffsetBytes: 0, SizeBytes: BoxBytes,
                     Destination: target.Buffer!, DestinationOffsetBytes: ((ulong)target.RecordBytes));
                 return true;
+            case 2 when target.Cache is not null:
+                readback = new RenderGraphBufferReadback(Version: target.IndirectVersion!, SourceOffsetBytes: 0,
+                    SizeBytes: IndirectBytes, Destination: target.IndirectBuffer!);
+                return true;
+            case 3 when target.Cache is not null:
+                readback = new RenderGraphBufferReadback(Version: target.CacheVersion!, SourceOffsetBytes: 0,
+                    SizeBytes: target.ProbeBuffer!.SizeBytes, Destination: target.ProbeBuffer);
+                return true;
             default:
                 target.Record = false;
                 readback = default;
@@ -117,6 +125,8 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         foreach (var slot in m_slots) {
             slot.IdentityBuffer?.Dispose();
             slot.SurfaceBuffer?.Dispose();
+            slot.IndirectBuffer?.Dispose();
+            slot.ProbeBuffer?.Dispose();
         }
     }
 
@@ -150,10 +160,11 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             Flags = BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[12..]),
             TransformSlot = transformSlot,
             Transform = ((transformSlot is { } index) ? slot.TransformAt(slot: index) : null),
+            Indirect = AnswerIndirect(slot),
         };
     }
 
-    private sealed class Slot {
+    private sealed partial class Slot {
         private DynamicTransform[] m_transforms = [];
         private int m_transformCount;
 

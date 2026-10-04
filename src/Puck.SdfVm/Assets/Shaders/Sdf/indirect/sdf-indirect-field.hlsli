@@ -14,12 +14,16 @@ static uint sdfIndirectLaunchEvaluations = 0u;
 SdfHit sdfIndirectSample(float3 position, uint mask) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;
+    bool previousTape = sdfTapeActive;
+    sdfTapeActive = false;
 #ifdef SDF_SCREEN_SOURCES
+    bool previousMask = sdfShadowMaskActive;
     sdfShadowMaskActive = mask != SDF_INSTANCE_MASK_ALL;
 #endif
     SdfHit hit = mapCore(position, mask, true);
+    sdfTapeActive = previousTape;
 #ifdef SDF_SCREEN_SOURCES
-    sdfShadowMaskActive = false;
+    sdfShadowMaskActive = previousMask;
 #endif
     return hit;
 }
@@ -27,8 +31,11 @@ SdfHit sdfIndirectSample(float3 position, uint mask) {
 float3 sdfIndirectGradient(float3 position) {
     sdfIndirectEvaluations++;
     sdfWorkSteps++;
+    bool previousTape = sdfTapeActive;
+    sdfTapeActive = false;
     float3 gradient;
     mapGradCore(position, SDF_INSTANCE_MASK_ALL, gradient);
+    sdfTapeActive = previousTape;
     float magnitude = length(gradient);
     return magnitude > 0.0 && isfinite(magnitude) ? gradient / magnitude : 0.0;
 }

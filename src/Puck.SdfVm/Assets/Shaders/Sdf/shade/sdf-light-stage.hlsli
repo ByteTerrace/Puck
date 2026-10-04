@@ -11,6 +11,7 @@
 #include "sdf-light.hlsli"
 #include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
+#include "../indirect/sdf-indirect-apply.hlsli"
 
 float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
@@ -23,7 +24,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
     }
     coverage = 1.0;
 
-    float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
+    precise float3 rayTravel = p.rayDirection * s.t;
+    precise float3 surfacePoint = p.rayOrigin + rayTravel;
     float3 normal = s.normal;
     float curvature = s.curvature;
     int material = s.material;
@@ -32,7 +34,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
     float materialBlendWeight = s.blendWeight;
     int materialBlendOther = s.blendOther;
     bool curvatureShading = worldCurvatureShadingEnabled();
-    bool useFinalShading = worldFinalShadingMode(p.viewMode);
+    bool useFinalShading = worldFinalShadingMode(p.viewMode) || p.viewMode == DebugViewModeIndirect;
     bool sampledScreen = false;
     reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
 
@@ -217,9 +219,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
-            // The warm or cool fill (SdfMaterial.Fill): a restrained fill on the side of the surface the key light does
-            // not reach. Black, the default, adds nothing.
-            color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+            SdfIndirectSources indirect = sdfIndirectApply(p, s, surfacePoint, normal);
+            color += sdfIndirectSourceTotal(indirect) * shadeMaterial.albedo
+                * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * ambientOcclusion);
+            // Authored fill is the indirect-off look. It never adds a second approximation while the cache is on.
+            if (passGroup.indirectTier == SdfIndirectTierOff) {
+                color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
+            }
 
             // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion.
             {

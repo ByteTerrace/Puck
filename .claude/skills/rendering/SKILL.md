@@ -71,7 +71,22 @@ a sweep. `SdfIndirectCache` publishes only complete submitted sweeps, separately
 from geometry trace completion, and retains the published source while a newer
 source is solving. Count the pinned regions and their rings beside the cache.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
-owns this flow and its remaining receiver work.
+owns this flow and its remaining receiver work. Views consume the complete bank
+and share one bounded receiver-proof admission counter. Its reset is the existing
+trace pass's one-word work, not another cache or queue. Frozen views admit no
+new proof. Preserve outer field-mask and secondary-body policy while querying
+the full field from a nested lighting helper.
+
+Indirect inspection extends the existing surface picker. Its 272-byte GPU
+record and full probe-state census share the visibility submission's fence and
+retain that request's allocation, epoch and published source. Do not substitute
+host admission for GPU classes, later live lights for captured source, or final
+RGB proportions for independently accumulated categories. The selected method
+labels alternative output; the eight corner records describe its cache fallback.
+Every package readback reports its actual bytes through
+`IRenderGraphPackageReadback.ReadbackBytes`; installed and retired graph accounting
+must both include them. The current bounded proof buckets and uncached normal
+launch still owe the plan's completed-standing zero-work contract.
 
 ## Changing the instruction set
 

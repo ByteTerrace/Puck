@@ -177,6 +177,7 @@ public static partial class SdfFrameBlock {
         WriteShadowHistory(block: block, enabled: false, lightMotion: 0, ownership: 0);
         WritePreviousView(block: block, valid: false, view: default);
         WriteLightViews(block: block, views: null, depthCamera: false);
+        WriteIndirect(block: block, cache: null);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;

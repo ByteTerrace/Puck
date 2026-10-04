@@ -16,6 +16,8 @@ public enum SdfIndirectPickStatus {
     Resolved,
     /// <summary>The shared frame allowance admitted no new proof for this receiver.</summary>
     Deferred,
+    /// <summary>The selected pixel did not perform diffuse shading, for example a miss, screen or geometric debug view.</summary>
+    NotShaded,
 }
 
 /// <summary>One actual corner considered by the selected GPU lookup.</summary>
@@ -43,7 +45,8 @@ public readonly record struct SdfIndirectCensus(int Active, int Relocated, int I
 public readonly record struct SdfIndirectPickSources(Vector3 Direct, Vector3 Feedback, Vector3 Emission, Vector3 Sky, Vector3 Screens);
 
 /// <summary>A selected receiver answer copied under the same fence as its visibility and cache census. The immutable
-/// source is the solve that produced the selected generation; a later live frame cannot relabel this answer.</summary>
+/// source is the solve that produced the cache fallback generation; a later live frame cannot relabel that source.
+/// Alternative output uses its rendered frame and cannot use this cache source as a CPU reference.</summary>
 /// <param name="Status">The GPU lookup outcome.</param>
 /// <param name="Tier">The tier the selected view used.</param>
 /// <param name="Level">The selected lattice level, or minus one without a readable component.</param>
@@ -58,8 +61,13 @@ public readonly record struct SdfIndirectPickSources(Vector3 Direct, Vector3 Fee
 /// <param name="Sources">The five independent incident contributions before material response.</param>
 /// <param name="Cache">The CPU inventory captured with the request; null while indirect is off.</param>
 /// <param name="Census">The fenced classification census; null without an active cache.</param>
-/// <param name="LightingSource">The source that produced this publication; null before a complete solve.</param>
+/// <param name="LightingSource">The source that produced the cache publication, not an alternative's current-frame
+/// replacement; null before a complete solve.</param>
 public sealed record SdfIndirectPick(SdfIndirectPickStatus Status, SdfIndirectTier Tier, int Level, uint ProofMask,
     Vector3 Position, Vector3 Launched, float Clearance, Vector3 Normal, uint Generation, uint Publication,
     IReadOnlyList<SdfIndirectPickCorner> Corners, SdfIndirectPickSources Sources, SdfIndirectCacheSnapshot? Cache,
-    SdfIndirectCensus? Census, SdfIndirectLightingSnapshot? LightingSource);
+    SdfIndirectCensus? Census, SdfIndirectLightingSnapshot? LightingSource) {
+    /// <summary>Gets the selected presentation algorithm. Corners describe its cache fallback; Sources describes
+    /// the actual result after any alternative replacement.</summary>
+    public SdfIndirectMethod Method { get; init; }
+}

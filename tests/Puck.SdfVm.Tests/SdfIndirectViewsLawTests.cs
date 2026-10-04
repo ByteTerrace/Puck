@@ -4,8 +4,8 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// The views kernel reads the indirect cache and never evaluates the field for it. Every field call site is a whole
-/// inlined interpreter in the hottest kernel, so the indirect debug views (<c>indirect/sdf-indirect-read.hlsli</c>, called
+/// The indirect probe and cell diagnostics read stored records without evaluating the field. Every field call site is
+/// an inlined interpreter, so these debug views (<c>indirect/sdf-indirect-read.hlsli</c>, called
 /// from <c>debug/</c>) read stored records alone. The evaluating functions are derived from the tree: the indirect
 /// module's two field calls (<c>sdfIndirectSample</c>, <c>sdfIndirectGradient</c>) and every indirect function that
 /// reaches one of them.
@@ -45,7 +45,7 @@ public sealed partial class SdfIndirectViewsLawTests {
     private static bool Calls(string body, string name) => Regex.IsMatch(input: body, pattern: $@"\b{name}\s*\(");
 
     [Fact]
-    public void TheViewsKernelReadsTheCacheWithoutEvaluatingTheField() {
+    public void TheIndirectProbeAndCellDiagnosticsReadTheCacheWithoutEvaluatingTheField() {
         var functions = Functions(paths: SourcesIn(directory: "indirect"));
         var evaluators = Evaluators(functions: functions);
 

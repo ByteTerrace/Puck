@@ -16,6 +16,8 @@ namespace Puck.Shaders;
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
 // here it is the logical size, not the backend's allocation, which may pad rows.
+// Package readback rings belong to their installed recorder, are counted at their actual lazy allocation sizes, and
+// remain in a retired graph's LiveBytes until that recorder is disposed.
 public sealed partial class ShaderPipelineRenderNode {
     private const ulong FullscreenVertexBytes = (FullscreenTriangle.StrideBytes * FullscreenTriangle.VertexCount);
 
@@ -208,6 +210,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (ReferenceEquals(objA: plan, objB: m_pipeline?.Plan) && (m_passes.Length > 0) && (m_passes[0].KernelCounters is { } counters)) {
             steady = checked(((steady + counters.TotalBytes) - KernelCounterBytes(inFlight: m_inFlight, plan: plan)));
         }
+        if (ReferenceEquals(plan, m_pipeline?.Plan)) { steady = checked(steady + PackageReadbackBytes(m_passes)); }
         var carried = 0UL;
 
         foreach (var index in CarriedHistoryOf(

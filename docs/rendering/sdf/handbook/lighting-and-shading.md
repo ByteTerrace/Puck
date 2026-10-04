@@ -269,9 +269,30 @@ primary evaluates its existing interpreter over the complete field instead of
 independent parts and camera masks, whose exclusions cannot certify that ball.
 This adds no launch query, but the primary shape count can increase.
 
-Actual GPU classifications and selected receiver contributions still require
-their fenced readback. Receiver application and its qualification remain part
-of the open cache work in the rendering plan.
+The views pass applies the complete lighting bank through the same certified
+component proof and irradiance weights as the solve. A missing approach uses
+the bounded normal launch. All views share the tier's finite new-proof allowance;
+its counter resets once through the residency's existing trace pass, including
+frames with no new transport rays. Frozen caches read completed proofs and admit
+none. Material albedo, metallic diffuse exclusion, `receive` and AO apply once
+after the selected algorithm returns its independent source contributions.
+The `indirect` debug view shows the incident sum before those material factors.
+
+An existing surface-picker request also copies a 272-byte receiver record and
+the allocated probe-state range under the visibility copy's fence. The answer
+retains its cache epoch and published lighting source across later resets. Its
+eight corners carry actual classifications, stamps and normalized weights; its
+five RGB contributions come from the GPU result, and its method identifies an
+alternative replacement when selected. Corners then describe the cache fallback.
+The whole-cache census counts only the captured brick inventory at that epoch.
+Graph accounting includes the declared receiver record and every live or retiring
+readback slot, including the census buffer.
+
+Receiver GPU qualification remains open. The current eight proof buckets per
+cell can collide permanently, and normal-launch fallback has no retained launch
+certificate. Completed standing receivers therefore do not yet satisfy the
+plan's zero-new-proof-work requirement; those storage gaps remain implementation
+work rather than qualified exceptions.
 
 The counted comparison has a per-view SdfIndirectMethod selector: the ordinary
 cache, current screen-space visibility, or one-bounce field cones. Its pass value

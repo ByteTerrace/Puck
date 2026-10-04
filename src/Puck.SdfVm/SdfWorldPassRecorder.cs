@@ -42,6 +42,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.IndirectCache,
+        SdfWorldPackage.IndirectCacheWritten,
+        SdfWorldPackage.IndirectPickWritten,
         SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.IndirectLightDepthWritten,
     ];
@@ -335,6 +337,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
         SdfFrameBlock.WriteLightViews(block: recording.PassBlock,
             views: ((residency.IndirectTier == SdfIndirectTier.Off) ? null : residency.IndirectLightViews), depthCamera: m_view.LightView);
+        SdfFrameBlock.WriteIndirect(recording.PassBlock, BoundIndirect(recording, tables));
         if (m_view.LightView) {
             SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: default, historyFrames: 0, temporal: false);
             SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: default, valid: false);
@@ -356,6 +359,19 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
         SdfFrameBlock.WriteWorkCounterDetailRow(block: recording.PassBlock, row: recording.WorkDetailRow);
 
+        if (m_pick is not null) {
+            m_pick.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
+                box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
+                sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
+                cut: frame.Views[view].CutRevision);
+            var cachePort = Array.IndexOf(m_inputs, SdfWorldPackage.IndirectCache);
+            var pickPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectPick);
+            m_pick.PrepareIndirect(recording.Slot, BoundIndirect(recording, tables),
+                cachePort < 0 ? null : recording.Inputs[cachePort].Version,
+                pickPort < 0 ? null : recording.Outputs[pickPort].Version, recording.PassBlock);
+        }
+
         if (IsMesh) {
             RecordMesh(
                 camera: frame.Views[view].Camera,
@@ -369,18 +385,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             );
         }
 
-        if (string.Equals(
-            a: m_part,
-            b: SdfWorldPackage.Parts.Views,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
-                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
-                box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
-                sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
-                cut: frame.Views[view].CutRevision);
-        }
-
         return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
@@ -390,6 +394,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         readback = default;
         return false;
     }
+    public ulong ReadbackBytes => m_pick?.ReadbackBytes ?? 0UL;
     public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
 
     private int InputIndexOf(string member) {
@@ -828,9 +833,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>
         (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
-    private static string? ReadMemberOf(string version) => version switch {
+    private string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
-        SdfWorldPackage.IndirectCache => SdfWorldPackage.IndirectCache,
+        SdfWorldPackage.IndirectCache => m_part == SdfWorldPackage.Parts.Views ? SdfWorldPackage.IndirectCacheWritten : SdfWorldPackage.IndirectCache,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapes,
@@ -839,8 +844,18 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
         _ => null,
     };
+    // A graph may still retain an old allocation while a tier or far-distance replacement installs. Never combine
+    // that buffer with the new allocation's brick directory or publication stamps.
+    private SdfIndirectCache? BoundIndirect(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+        if (m_view.LightView || tables.Indirect is not { } cache) { return null; }
+        for (var port = 0; port < m_inputs.Length; port++) {
+            if (m_inputs[port] == SdfWorldPackage.IndirectCache && ReferenceEquals(recording.Inputs[port].Buffer, cache.Buffer)) { return cache; }
+        }
+        return null;
+    }
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
+        SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasksWritten,

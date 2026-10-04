@@ -75,6 +75,7 @@ public sealed partial class SdfWorldTables {
     internal void PlanIndirect(SdfFrame frame) {
         if (m_indirect is not { } cache) { return; }
         cache.Plan(inputs: IndirectInputs(frame: frame));
+        cache.AdmitReceivers();
         PlanIndirectLighting(cache, frame);
     }
 

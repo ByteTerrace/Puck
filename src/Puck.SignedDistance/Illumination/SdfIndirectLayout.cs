@@ -103,7 +103,8 @@ public sealed class SdfIndirectLayout {
         IrradianceWordOffset = (RadianceWordOffset + (LightingGenerations * RadianceGenerationWords));
         IrradianceGenerationWords = (ProbeCapacity * IrradianceTexels * RadianceWords);
         PublicationWordOffset = (IrradianceWordOffset + (LightingGenerations * IrradianceGenerationWords));
-        WordCount = (PublicationWordOffset + (LightingGenerations * ProbeCapacity));
+        ReceiverProofWordOffset = (PublicationWordOffset + (LightingGenerations * ProbeCapacity));
+        WordCount = (ReceiverProofWordOffset + (tier == SdfIndirectTier.Off ? 0 : 1));
     }
 
     /// <summary>Gets the selected tier.</summary>
@@ -152,6 +153,8 @@ public sealed class SdfIndirectLayout {
     public int IrradianceGenerationWords { get; }
     /// <summary>Gets the per-generation probe publication stamps, cleared with a replaced probe.</summary>
     public int PublicationWordOffset { get; }
+    /// <summary>Gets the shared receiver-proof admission counter, reset once per submitted residency frame.</summary>
+    public int ReceiverProofWordOffset { get; }
     /// <summary>Gets the total storage words.</summary>
     public int WordCount { get; }
     /// <summary>Gets the cache allocation's bytes, excluding host regions and descriptor storage.</summary>

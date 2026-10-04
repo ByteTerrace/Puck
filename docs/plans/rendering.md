@@ -2849,16 +2849,17 @@ slots, never K alone.
 | Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
 | Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
 | Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
-| **Total before qualification** | **≤ 129,040,384** |
+| Shared per-frame receiver-proof admission counter | 4 |
+| **Total before qualification** | **≤ 129,040,388** |
 
 A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
 height in the terminal word; the view's launch uses the visibility record's
 reserved L word. Each irradiance generation also stamps its probes, so a reused
 brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
-probe and the same full identities require 394,395,648 cache bytes, including
+probe and the same full identities require 394,395,652 cache bytes, including
 proofs, both irradiance generations and the coarser levels' ray radiance. Three
 slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
-total to 424,804,352 bytes. Held fading owners add their explicitly counted map
+total to 424,804,356 bytes. Held fading owners add their explicitly counted map
 regions. The tables and constant rings must satisfy the recorded bounds; these
 are allocation counts, not a claim that the tier has passed hardware qualification.
 
@@ -2870,7 +2871,7 @@ Its successful
 proof entries also carry a publication sequence, 28 bytes each. The current raw
 geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
 G4's declared layout retains those records and reserves both lighting generations
-and their stamps, giving 100,728,832 bytes at `medium` and 394,395,648 at `high`,
+and their stamps, giving 100,728,836 bytes at `medium` and 394,395,652 at `high`,
 plus the region rings, counters and descriptors that `world.budget` reports.
 Lighting stores five nonnegative R11G11B10 words per ray or irradiance texel:
 direct, feedback, emission, sky and screens. Contributions are accumulated and

@@ -594,10 +594,19 @@ names still reports an unavailable name.
 The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
 travels with the request. SDF identity names a program instance ordinal plus one,
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
-L.x, separate from its instance's conservative bound slot. The remaining L words
-are reserved, and anonymous lanes read the existing transform row. The record
+L.x, separate from its instance's conservative bound slot. L.y carries the certified
+indirect receiver approach, and anonymous lanes read the existing transform row. The record
 remains 64 bytes. Nothing in this picker enters simulation input or grants edit
 authority.
+
+With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
+a 272-byte GPU answer and the probe-state range for a census of the snapshot's
+allocated bricks. It uses the visibility submission's fence and retains its own
+cache epoch, completed lighting source and selected method. Source RGB values
+and corner weights are the actual shader results; classifications come from the
+copied probe states. No CPU schedule count stands for a GPU classification.
+The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`
+accounts for the actual lazy readback rings until their recorder retires.
 
 ## Documentation
 

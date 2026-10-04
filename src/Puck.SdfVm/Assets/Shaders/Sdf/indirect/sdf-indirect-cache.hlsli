@@ -1,7 +1,7 @@
 #ifndef SDF_INDIRECT_CACHE_HLSLI
 #define SDF_INDIRECT_CACHE_HLSLI
 #include "sdf-indirect-cells.hlsli"
-#ifdef SDF_INDIRECT_PASS
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
 #define SDF_INDIRECT_WORDS indirectCacheRW
 #else
 #define SDF_INDIRECT_WORDS indirectCache
@@ -10,8 +10,27 @@
 static uint sdfIndirectLoads = 0u;
 static uint sdfIndirectHashes = 0u;
 static uint sdfIndirectProofOwner = 0xffffffffu;
-
 uint sdfIndirectLoad(uint word) { sdfIndirectLoads++; return SDF_INDIRECT_WORDS[word]; }
+#ifdef SDF_VIEWS_PASS
+static bool sdfIndirectReceiverPermit = false;
+static bool sdfIndirectReceiverDeferred = false;
+// The finite CAS loop never overflows the counter. Contention may defer a receiver, but cannot admit past the limit.
+bool sdfIndirectAdmitReceiver() {
+    uint word = sdfIndirectReceiverProofWordOffset(passGroup.indirectTier);
+    uint limit = passGroup.indirectReceiverProofs;
+    if (limit == 0u) { sdfIndirectReceiverDeferred = true; return false; }
+    uint observed = sdfIndirectLoad(word);
+    [loop] for (uint attempt = 0u; attempt < 64u && observed < limit; attempt++) {
+        uint previous;
+        InterlockedCompareExchange(indirectCacheRW[word], observed, observed + 1u, previous);
+        if (previous == observed) { return true; }
+        observed = previous;
+    }
+    sdfIndirectReceiverDeferred = true;
+    return false;
+}
+#endif
+
 int3 sdfIndirectCorner(uint corner) { return int3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u); }
 uint sdfIndirectLevelCount() { return passGroup.indirectTier == SdfIndirectTierHigh ? 3u : 2u; }
 
@@ -36,7 +55,7 @@ SdfIndirectPlacement sdfIndirectReadProbe(int index) {
     uint address = (uint)index * SdfIndirectProbeWords;
     uint state = sdfIndirectLoad(address + 3u);
     if ((state >> SdfIndirectEpochShift) == 0u) { return placement; }
-#ifdef SDF_INDIRECT_PASS
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
     if ((state >> SdfIndirectEpochShift) != passGroup.indirectEpoch) { return placement; }
 #endif
     placement.position = asfloat(uint3(sdfIndirectLoad(address), sdfIndirectLoad(address + 1u), sdfIndirectLoad(address + 2u)));
@@ -113,6 +132,7 @@ void sdfIndirectStoreCell(uint cell, uint proof, SdfIndirectCell value) {
     indirectCacheRW[cell + 1u] = sdfIndirectPackNormal(value.normal);
     indirectCacheRW[cell + 2u] = asuint(value.offset);
 }
+#endif
 
 bool sdfIndirectReuseProof(uint proof, uint key, uint frame, float3 position, float certifiedClearance,
     float spacing, out uint mask) {
@@ -126,6 +146,7 @@ bool sdfIndirectReuseProof(uint proof, uint key, uint frame, float3 position, fl
     return true;
 }
 
+#ifdef SDF_INDIRECT_PASS
 float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
     float3 direction = indirectDirections[ray].xyz;
     uint symmetry = sdfIndirectHash(lattice, level) % 48u;
@@ -157,9 +178,13 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
     uint entry = sdfIndirectProofEntry((uint)index, cell, sdfIndirectProofSlot(position, spacing), level, key);
     uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + entry * SdfIndirectProofWords;
     sdfIndirectHashes++;
-#ifdef SDF_INDIRECT_PASS
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
     uint cachedMask;
     if (sdfIndirectReuseProof(proof, key, passGroup.indirectFrame, position, certifiedClearance, spacing, cachedMask)) { return cachedMask; }
+#endif
+#ifdef SDF_VIEWS_PASS
+    if (!sdfIndirectReceiverPermit && !sdfIndirectAdmitReceiver()) { return 0u; }
+    sdfIndirectReceiverPermit = false;
 #endif
     SdfIndirectPlacement corners[8];
     [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(cell + sdfIndirectCorner(c), level)); }
@@ -193,9 +218,16 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
             break;
         }
     }
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+    // Trace retains its single source-ray owner. Views atomically claim an empty slot; every reader rejects this
+    // submission's stamp, so it cannot observe a partially written anchor from another workgroup.
+    bool owns = false;
 #ifdef SDF_INDIRECT_PASS
-    // One source ray owns publication; readers use only records from earlier frames.
-    if (mask != 0u && sdfIndirectProofOwner == (uint)index && sdfIndirectLoad(proof + 6u) == 0u) {
+    owns = sdfIndirectProofOwner == (uint)index;
+#else
+    owns = passGroup.indirectReceiverProofs != 0u;
+#endif
+    if (mask != 0u && owns) {
         float clearance = isfinite(certifiedClearance) ? max(0.0, certifiedClearance) : 0.0;
         if (clearance == 0.0 && budget > 0u) {
             budget--;
@@ -203,6 +235,12 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
             clearance = sdfMapBallClearance(sample.distance);
         }
         if (clearance > 0.0 && isfinite(clearance)) {
+            uint previous;
+            InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, previous);
+            if (previous != 0u) {
+                sdfIndirectProofEvaluations += sdfIndirectEvaluations - start;
+                return mask;
+            }
             indirectCacheRW[proof] = asuint(position.x);
             indirectCacheRW[proof + 1u] = asuint(position.y);
             indirectCacheRW[proof + 2u] = asuint(position.z);

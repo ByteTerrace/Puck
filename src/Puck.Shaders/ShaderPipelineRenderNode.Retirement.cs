@@ -55,10 +55,10 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
     /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
-    /// buffer the capture readback holds once a capture has been served, plus optional timestamp readback buffers.</summary>
+    /// buffer the capture readback holds once a capture has been served, plus package and timestamp readback buffers.</summary>
     public ulong OwnedBytes {
         get {
-            var bytes = checked(((AllocationBytes + m_readbackBytes) + TimingReadbackBytes));
+            var bytes = checked(AllocationBytes + m_readbackBytes + TimingReadbackBytes + PackageReadbackBytes(m_passes));
 
             foreach (var retired in m_retired) {
                 bytes = checked((bytes + retired.Bytes));
@@ -82,7 +82,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
     private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
-        var bytes = (preview?.LiveBytes() ?? 0UL);
+        var bytes = checked((preview?.LiveBytes() ?? 0UL) + PackageReadbackBytes(passes));
 
         foreach (var pass in passes) {
             if (pass?.GeometryBuffer is { } geometry) {

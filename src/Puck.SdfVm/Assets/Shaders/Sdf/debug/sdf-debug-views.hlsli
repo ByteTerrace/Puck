@@ -65,6 +65,10 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     }
 
     switch (p.viewMode) {
+        case DebugViewModeIndirect: {
+            viewColor = sdfIndirectSourceTotal(sdfIndirectReceiverSources);
+            break;
+        }
         case 1: { // depth
             float depth = saturate(s.t / p.farDistance);
             viewColor = float3(depth, depth, depth);

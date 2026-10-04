@@ -13,6 +13,60 @@ public sealed class SdfIndirectCacheLawTests {
         Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: 0.1)], WorldMin: Double3.Zero, WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1));
 
     [Fact]
+    public void ReceiverAdmissionCommitsOnceWithoutRepeatingCompletedTransport() {
+        using var rig = new Rig();
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        var rays = rig.Work.Read(SdfIndirectWork.Rays);
+        var sequence = rig.Cache.Frame;
+        Assert.True(rig.Cache.IsComplete);
+        rig.Cache.AdmitReceivers();
+        rig.Cache.AdmitReceivers();
+        Assert.True(rig.Cache.NeedsPublish);
+        Assert.False(rig.Cache.HasWork);
+        Assert.Equal(sequence, rig.Cache.Frame);
+        rig.Cache.Submitted();
+        Assert.Equal(sequence + 1u, rig.Cache.Frame);
+        Assert.Equal(rays, rig.Work.Read(SdfIndirectWork.Rays));
+        Assert.False(rig.Cache.NeedsPublish);
+        rig.Cache.Submitted();
+        Assert.Equal(sequence + 1u, rig.Cache.Frame);
+        rig.Cache.Frozen = true;
+        rig.Cache.AdmitReceivers();
+        Assert.False(rig.Cache.NeedsPublish);
+        rig.Cache.Submitted();
+        Assert.Equal(sequence + 1u, rig.Cache.Frame);
+    }
+
+    [Fact]
+    public void ReceiverBlocksUsePublishedLightingAndFreezeRetainsCompletedProofsWithoutNewAdmission() {
+        using var rig = new Rig();
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        rig.Cache.BeginLighting();
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        uint Word(string member) => BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member)));
+        SdfFrameBlock.WriteIndirect(block, rig.Cache);
+        Assert.Equal(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectReadPublication));
+        rig.Cache.PlanLighting();
+        rig.Cache.SubmittedLighting();
+        rig.Cache.PlanLighting();
+        rig.Cache.SubmittedLighting();
+        SdfFrameBlock.WriteIndirect(block, rig.Cache);
+        Assert.Equal(rig.Cache.PublishedStamp, Word(Puck.Shaders.SdfWorldPackage.IndirectReadPublication));
+        Assert.NotEqual(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectReadPublication));
+        Assert.Equal(32768u, Word(Puck.Shaders.SdfWorldPackage.IndirectReceiverProofs));
+        Assert.Equal(rig.Cache.Frame, Word(Puck.Shaders.SdfWorldPackage.IndirectFrame));
+        rig.Cache.Frozen = true;
+        SdfFrameBlock.WriteIndirect(block, rig.Cache);
+        Assert.Equal(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectReceiverProofs));
+        Assert.Equal(rig.Cache.Frame + 1u, Word(Puck.Shaders.SdfWorldPackage.IndirectFrame));
+        Assert.Equal(rig.Cache.PublishedStamp, Word(Puck.Shaders.SdfWorldPackage.IndirectReadPublication));
+        SdfFrameBlock.WriteIndirect(block, null);
+        Assert.Equal(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectTier));
+        Assert.Equal(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectReadPublication));
+        Assert.Equal(0u, Word(Puck.Shaders.SdfWorldPackage.IndirectReceiverProofs));
+    }
+
+    [Fact]
     public void APlanIsCountedOnceOnlyAfterItsSuccessfulSubmission() {
         using var rig = new Rig();
 

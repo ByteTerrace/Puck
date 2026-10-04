@@ -17,6 +17,9 @@ public readonly record struct RenderGraphBufferReadback(string Version, ulong So
 /// <see cref="TryReadback"/> returns false for the first index. The graph still owns each buffer's access state,
 /// including a copy's override of its planned state, so a later access is ordered after the transfer.</summary>
 public interface IRenderGraphPackageReadback {
+    /// <summary>Gets the actual GPU bytes of this recorder's readback allocations, including every retained ring slot.
+    /// These bytes remain owned until this recorder disposes them, even after its graph retires.</summary>
+    ulong ReadbackBytes { get; }
     /// <summary>Takes one copy the pass's latest recording requested. The graph asks for indexes from zero, in order,
     /// once per recorded frame, and records every copy until the first false.</summary>
     /// <param name="slot">The frame slot whose previous submission is complete.</param>

@@ -48,7 +48,7 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         var tables = m_built.Residency.Submit(context: recording.Context);
         var cache = m_built.Cache;
 
-        if (Count == 0) { return RenderGraphPackageOutcome.Drew; }
+        if (Count == 0 && m_context.Part != SdfWorldPackage.IndirectTrace) { return RenderGraphPackageOutcome.Drew; }
         Span<byte> common = stackalloc byte[SdfFrameBlock.SizeBytes];
 
         common.Clear();
@@ -85,7 +85,7 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         recording.Recorder.BindPipeline(recording.CommandBuffer, GpuBindPoint.Compute, pipeline.Handle);
         m_sets.Bind(recording.Recorder, recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, recording.Slot);
         recording.Recorder.BindDescriptorSet(recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, ((uint)ShaderInterfaceGroup.World), pinned?.WorldSet(tables.CurrentSlot) ?? tables.WorldSet(slot: tables.CurrentSlot));
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((uint)Count), groupCountY: 1, groupCountZ: 1);
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((uint)Math.Max(1, Count)), groupCountY: 1, groupCountZ: 1);
         return RenderGraphPackageOutcome.Drew;
     }
     public void Submitted() {

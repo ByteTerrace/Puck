@@ -4,6 +4,8 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public sealed partial class ShaderPipelineRenderNode {
+    private static ulong PackageReadbackBytes(RuntimePass[] passes) => passes.Aggregate(0UL,
+        static (bytes, pass) => checked(bytes + ((pass?.Package as IRenderGraphPackageReadback)?.ReadbackBytes ?? 0UL)));
     // A package asks for ranges, never a barrier. The node tracks each transfer like every other unplanned access.
     private void RecordPackageReadback(RuntimePass pass, int slot, nint command, IGpuRecorder recorder) {
         if (pass.Package is not IRenderGraphPackageReadback source) {

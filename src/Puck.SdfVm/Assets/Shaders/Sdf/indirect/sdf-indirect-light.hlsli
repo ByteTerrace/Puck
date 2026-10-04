@@ -40,12 +40,14 @@ float sdfIndirectLightVisibility(uint light, float3 surfacePoint, float3 normal,
     if (sdfIndirectLightLookup(light, surfacePoint, normal, visibility, region)) { return visibility; }
     fallback = true;
     uint budget = SdfIndirectLightMarchSteps;
+    bool previousSecondary = sdfSecondaryMarchActive;
+    bool previousParticipation = sdfShadowParticipationActive;
     sdfSecondaryMarchActive = true;
     sdfShadowParticipationActive = true;
     SdfIndirectRay ray = sdfIndirectMarch(surfacePoint + normal * 0.002, toward, 0.0, passGroup.farDistance,
         SDF_INSTANCE_MASK_ALL, 0.0, budget);
-    sdfShadowParticipationActive = false;
-    sdfSecondaryMarchActive = false;
+    sdfShadowParticipationActive = previousParticipation;
+    sdfSecondaryMarchActive = previousSecondary;
     return ray.kind == SdfIndirectKindExit ? 1.0 : 0.0;
 }
 #endif

@@ -69,7 +69,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #else
     float coverage;
     float reactivity;
+    sdfIndirectPickBegin(p);
     float3 color = sdfViewsStage(p, coverage, reactivity);
+    sdfIndirectPickFinish();
 
     if (p.active) {
         // The lit image: the float working color premultiplied by the pixel's coverage, the coverage in its alpha, which

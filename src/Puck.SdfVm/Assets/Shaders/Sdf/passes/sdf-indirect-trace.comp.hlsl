@@ -6,7 +6,14 @@
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
-    if (passGroup.indirectTier == SdfIndirectTierOff || group.x >= passGroup.indirectTraceCount) { return; }
+    if (passGroup.indirectTier == SdfIndirectTierOff) { return; }
+    // One existing transport dispatch resets the allowance shared by all subsequent view consumers, even at rest.
+    if (group.x == 0u && lane == 0u) {
+        indirectCacheRW[sdfIndirectReceiverProofWordOffset(passGroup.indirectTier)] = 0u;
+        puckCountDetail(4u, 0u, 1u, 0u, 0u, 0u);
+        if (passGroup.workCounterRowDetail == 0u) { puckCountWork(0u, 1u); }
+    }
+    if (group.x >= passGroup.indirectTraceCount) { return; }
     sdfProgramLayout = sdfLoadProgramLayout();
     uint4 update = indirectUpdates[passGroup.indirectPlaceCount + passGroup.indirectClassifyCount + group.x];
     uint index = update.x;

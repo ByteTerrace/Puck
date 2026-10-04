@@ -2110,13 +2110,17 @@ counts two numbers from the plan it would install:
   the images a graphics pass draws into and depth attachments,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
-  `Position` input, and the preview an external selected output needs.
+  `Position` input, and the preview an external selected output needs. For an
+  installed graph it also includes the actual readback buffers its package
+  recorders report through `IRenderGraphPackageReadback.ReadbackBytes`; these
+  lazy allocations do not exist in a candidate's initial plan.
 - **Replacement peak**: everything the node owns at that moment plus the
   candidate's steady-state bytes. What the node owns is the installed graph and
   its preview, replaced objects still waiting for the GPU, published images
   held from them, and what the first capture creates: the readback's staging
   buffer, sized to the published surface, and for a float output the display
-  encode's RGBA8 target beside it. All of it exists
+  encode's RGBA8 target beside it. Package readback buffers remain charged with
+  their retiring recorder until its final submission completes. All of it exists
   together while the candidate allocates.
   History the candidate carries over is moved into it, never allocated fresh,
   so the peak counts those instances once and is lower by exactly their bytes.

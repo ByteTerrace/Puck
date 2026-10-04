@@ -5,6 +5,20 @@
 #include "sdf-indirect-radiance.hlsli"
 
 struct SdfIndirectSources { float3 values[SdfIndirectSourceCount]; };
+#ifdef SDF_VIEWS_PASS
+static bool sdfIndirectPickActive = false;
+static uint sdfIndirectPickStores = 0u;
+void sdfIndirectPickStore(uint word, uint value) { indirectPickRW[word] = value; sdfIndirectPickStores++; }
+void sdfIndirectPickClearCorners() {
+    [unroll] for (uint corner = 0u; corner < 8u; corner++) {
+        uint word = 16u + 4u * corner;
+        sdfIndirectPickStore(word, 0xffffffffu);
+        sdfIndirectPickStore(word + 1u, SdfIndirectClassInactive);
+        sdfIndirectPickStore(word + 2u, 0u);
+        sdfIndirectPickStore(word + 3u, 0u);
+    }
+}
+#endif
 float3 sdfIndirectSourceTotal(SdfIndirectSources sources) {
     float3 total = 0.0;
     [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) { total += sources.values[source]; }
@@ -75,22 +89,51 @@ bool sdfIndirectIrradianceAt(float3 surfacePoint, float3 launched, float3 normal
     float3 fraction = frac(scaled);
     irradiance = (SdfIndirectSources)0;
     float total = 0.0;
+#ifdef SDF_VIEWS_PASS
+    if (sdfIndirectPickActive) { sdfIndirectPickClearCorners(); }
+#endif
     [unroll] for (uint corner = 0u; corner < 8u; corner++) {
-        if ((mask & (1u << corner)) == 0u) { continue; }
+        bool included = (mask & (1u << corner)) != 0u;
+#ifdef SDF_VIEWS_PASS
+        if (!included && !sdfIndirectPickActive) { continue; }
+#else
+        if (!included) { continue; }
+#endif
         int index = sdfIndirectProbeIndex(cell + sdfIndirectCorner(corner), level);
-        if (index < 0 || !sdfIndirectPublished((uint)index, generation, publication)) { continue; }
+        uint stamp = index < 0 ? 0u : sdfIndirectLoad(sdfIndirectPublicationAddress((uint)index, generation));
         SdfIndirectPlacement probe = sdfIndirectReadProbe(index);
+#ifdef SDF_VIEWS_PASS
+        if (sdfIndirectPickActive) {
+            uint word = 16u + 4u * corner;
+            sdfIndirectPickStore(word, (uint)index);
+            sdfIndirectPickStore(word + 1u, probe.classification);
+            sdfIndirectPickStore(word + 3u, stamp);
+        }
+#endif
+        if (!included || index < 0 || publication == 0u || stamp != publication) { continue; }
         if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) { continue; }
         float3 toward = probe.position - surfacePoint;
         float magnitude = length(toward);
         float facing = (magnitude > 0.0 ? max(dot(normal, toward / magnitude), 0.0) : 0.0) + 0.01;
         float weight = sdfIndirectCornerWeight(fraction, corner) * facing;
         if (weight <= 0.0) { continue; }
+#ifdef SDF_VIEWS_PASS
+        if (sdfIndirectPickActive) { sdfIndirectPickStore(18u + 4u * corner, asuint(weight)); }
+#endif
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
             irradiance.values[source] += sdfIndirectProbeIrradiance((uint)index, generation, normal, source) * weight;
         }
         total += weight;
     }
+#ifdef SDF_VIEWS_PASS
+    if (sdfIndirectPickActive) {
+        [unroll] for (uint corner = 0u; corner < 8u; corner++) {
+            uint word = 18u + 4u * corner;
+            float weight = asfloat(indirectPickRW[word]);
+            sdfIndirectPickStore(word, asuint(total > 0.0 ? weight / total : 0.0));
+        }
+    }
+#endif
     [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
         irradiance.values[source] = total > 0.0 ? irradiance.values[source] / total : 0.0;
     }

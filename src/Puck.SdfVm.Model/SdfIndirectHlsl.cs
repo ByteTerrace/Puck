@@ -28,6 +28,7 @@ public static class SdfIndirectHlsl {
         Enum<IrradianceProbeClass>(prefix: "SdfIndirectClass");
         Enum<IrradianceHitKind>(prefix: "SdfIndirectKind");
         Enum<IrradianceSource>(prefix: "SdfIndirectSource");
+        text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectPickWords = {SdfWorldPackage.IndirectPickWords}u;\n");
         var medium = new SdfIndirectLayout(tier: SdfIndirectTier.Medium);
         var high = new SdfIndirectLayout(tier: SdfIndirectTier.High);
 

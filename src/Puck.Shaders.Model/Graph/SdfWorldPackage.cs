@@ -406,9 +406,12 @@ public static partial class SdfWorldPackage {
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
+        .. WorldIndirectValues,
         Read(element: ShaderValueType.Float, name: IndirectLightDepth),
         Written(element: ShaderValueType.Float, name: IndirectLightDepthWritten),
         Read(element: ShaderValueType.Uint, name: IndirectCache),
+        Written(element: ShaderValueType.Uint, name: IndirectCacheWritten),
+        Written(element: ShaderValueType.Uint, name: IndirectPickWritten),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),

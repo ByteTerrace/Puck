@@ -3,6 +3,8 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
+    /// <summary>The selected receiver's header, eight corner records and five independent RGB source records.</summary>
+    public const int IndirectPickWords = 68;
     /// <summary>The selected indirect cache tier, zero disabling every cache read.</summary>
     public const string IndirectTier = "indirectTier";
     /// <summary>The per-view counted comparison method: cache, screen-space samples or one-bounce field cones.</summary>
@@ -31,6 +33,14 @@ public static partial class SdfWorldPackage {
     public const string IndirectWritePublication = "indirectWritePublication";
     /// <summary>The finite solve's feedback gain, zero during its direct sweep.</summary>
     public const string IndirectFeedback = "indirectFeedback";
+    /// <summary>The maximum new receiver proofs admitted by all views this frame; zero freezes proof writes.</summary>
+    public const string IndirectReceiverProofs = "indirectReceiverProofs";
+    /// <summary>The selected receiver diagnostic pixel and enabled flag.</summary>
+    public const string IndirectPickPixel = "indirectPickPixel";
+    /// <summary>The view-owned selected receiver diagnostic record.</summary>
+    public const string IndirectPick = "indirectPick";
+    /// <summary>The selected receiver record as the views kernel writes it.</summary>
+    public const string IndirectPickWritten = "indirectPickRW";
     /// <summary>The residency's published buffer version.</summary>
     public const string IndirectCache = "indirectCache";
     /// <summary>The cache as its kernels write it.</summary>
@@ -51,6 +61,16 @@ public static partial class SdfWorldPackage {
     public const string IndirectTrace = "trace";
     /// <summary>The finite lighting solve's dispatch.</summary>
     public const string IndirectShade = "shade";
+
+    /// <summary>Gets the visible cache publication and receiver allowance carried only by world passes.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> WorldIndirectValues { get; } = [
+        Value(name: IndirectEpoch, type: ShaderValueType.Uint),
+        Value(name: IndirectFrame, type: ShaderValueType.Uint),
+        Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
+        Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
+        Value(name: IndirectReceiverProofs, type: ShaderValueType.Uint),
+        Value(name: IndirectPickPixel, type: ShaderValueType.Uint4),
+    ];
 
     /// <summary>Gets the indirect kernels' interface members. Every host table is a region.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> IndirectMembers { get; } = [
@@ -94,17 +114,21 @@ public static partial class SdfWorldPackage {
             new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
-    /// <summary>Adds the cache's buffer edge to a view. Only the primary and debug shading read it.</summary>
+    /// <summary>Adds the cache's buffer edge to a view. Primary reads it; views also publish receiver proofs.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>
     /// <param name="bytes">The residency's cache size.</param>
     /// <returns>The view fragment with its external cache dependency.</returns>
     public static RenderGraphPackageFragment WithIndirect(RenderGraphPackageFragment fragment, ulong bytes) => fragment with {
         InputVersions = [.. fragment.InputVersions, IndirectCache],
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
-            Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External)],
+            Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
+            new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
+                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint))],
         Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is Parts.Primary or Parts.Views) ? pass with {
             Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache)],
-            InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+            InputAccesses = [.. pass.InputAccesses, pass.Name == Parts.Views ? RenderGraphPortAccess.ComputeReadWrite : RenderGraphPortAccess.ComputeRead],
+            Outputs = pass.Name == Parts.Views ? [.. pass.Outputs, IndirectPick] : pass.Outputs,
+            OutputAccesses = pass.Name == Parts.Views ? [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite] : pass.OutputAccesses,
         } : pass))],
     };
 }
