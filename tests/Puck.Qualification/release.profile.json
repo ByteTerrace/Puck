@@ -56,7 +56,7 @@
     },
     {
       "name": "ink-pipeline",
-      "world": "Assets/worlds/pipeline.puck",
+      "world": "Assets/worlds/pipeline.world.json",
       "warmupTicks": 120,
       "soakTicks": 900,
       "worldReloads": 0,

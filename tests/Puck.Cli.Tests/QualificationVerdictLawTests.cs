@@ -32,7 +32,7 @@ public sealed class QualificationVerdictLawTests {
             SoakTicks: 60,
             TimeoutSeconds: 60,
             WarmupTicks: 30,
-            World: "Assets/worlds/pipeline.puck",
+            World: "Assets/worlds/pipeline.world.json",
             WorldReloads: 0
         )
     );
@@ -237,8 +237,8 @@ public sealed class QualificationVerdictLawTests {
                 Out(line: "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink unsupported: the dxc shader tool is absent", stream: CliProcessOutputStream.Stderr),
-                Out(line: "[world.reload: world.reload applied — base is 'Assets/worlds/pipeline.puck' (world.reload), journal cleared]"),
-                Out(line: "[world.definition: world.reload applied — base is 'Assets/worlds/pipeline.puck' (world.reload), journal cleared]", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[world.reload: world.reload applied — base is 'Assets/worlds/pipeline.world.json' (world.reload), journal cleared]"),
+                Out(line: "[world.definition: world.reload applied — base is 'Assets/worlds/pipeline.world.json' (world.reload), journal cleared]", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[world.codec refused: PayloadMalformed: a cell holds no value]", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[world.reload: the file is missing]", stream: CliProcessOutputStream.Stderr),
                 Out(line: Reading),

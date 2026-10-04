@@ -30,7 +30,7 @@ public sealed class ReleaseProfileLawTests {
           "resolutions": [{ "width": 1280, "height": 800 }],
           "workloads": [
             { "name": "world", "world": "Assets/worlds/puck.world.json", "warmupTicks": 30, "soakTicks": 60, "worldReloads": 2, "pipeline": null, "timeoutSeconds": 120 },
-            { "name": "ink", "world": "Assets/worlds/pipeline.puck", "warmupTicks": 30, "soakTicks": 60, "worldReloads": 0,
+            { "name": "ink", "world": "Assets/worlds/pipeline.world.json", "warmupTicks": 30, "soakTicks": 60, "worldReloads": 0,
               "pipeline": { "instance": "ink", "layout": "pipeline", "settleFrames": 4, "reloads": 2, "resizes": 1, "loads": 3 }, "timeoutSeconds": 120 }
           ],
           "thresholds": [
