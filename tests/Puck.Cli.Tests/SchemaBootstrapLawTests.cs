@@ -98,14 +98,14 @@ public sealed class SchemaBootstrapLawTests {
         var compilation = CSharpCompilation.Create(
             assemblyName: "SchemaBootstrapLawModel",
             syntaxTrees: [
-                CSharpSyntaxTree.ParseText(text: source, options: parse),
-                CSharpSyntaxTree.ParseText(text: "global using System; global using System.Collections.Generic; namespace Puck.World { public sealed class WorldDefinition { } public sealed class WorldJsonContext { } }", options: parse)
+                CSharpSyntaxTree.ParseText(text: source, options: parse, cancellationToken: TestContext.Current.CancellationToken),
+                CSharpSyntaxTree.ParseText(text: "global using System; global using System.Collections.Generic; namespace Puck.World { public sealed class WorldDefinition { } public sealed class WorldJsonContext { } }", options: parse, cancellationToken: TestContext.Current.CancellationToken)
             ],
             references: references,
             options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary)
         );
         using var image = new MemoryStream();
-        var emitted = compilation.Emit(peStream: image);
+        var emitted = compilation.Emit(peStream: image, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(condition: emitted.Success, userMessage: string.Join(separator: "\n", values: emitted.Diagnostics));
         image.Position = 0;
         var context = new AssemblyLoadContext(name: "schema-bootstrap-law", isCollectible: true);
