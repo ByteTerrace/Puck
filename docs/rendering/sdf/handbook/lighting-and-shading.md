@@ -277,6 +277,13 @@ frames with no new transport rays. Frozen caches read completed proofs and admit
 none. Material albedo, metallic diffuse exclusion, `receive` and AO apply once
 after the selected algorithm returns its independent source contributions.
 The `indirect` debug view shows the incident sum before those material factors.
+`SdfFrame.IndirectSources` carries one shared category mask into both the solve
+and receiver algorithms. Its bits follow the five stored categories: direct 1,
+feedback 2, emission 4, sky 8 and screens 16. The current default enables the
+first three; sky and screen transport still require their captured publication
+paths. A source-mask edit is lighting-visible and does not retrace geometry.
+Disabled categories are zero in newly solved records and receiver results,
+including an earlier complete bank retained while the new solve runs.
 
 An existing surface-picker request also copies a 272-byte receiver record and
 the allocated probe-state range under the visibility copy's fence. The answer

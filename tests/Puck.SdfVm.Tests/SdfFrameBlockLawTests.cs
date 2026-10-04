@@ -11,6 +11,17 @@ namespace Puck.SdfVm.Tests;
 /// declares is written, at the offset its generated declaration reads, and the mesh pass's interface lays the same block
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
+    [Fact]
+    public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        var frame = Frame() with { IndirectSources = SdfIndirectSources.Sky | SdfIndirectSources.Screens };
+        SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
+        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectSources));
+        Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan(offset)));
+        var generated = SdfIndirectHlsl.Generate();
+        Assert.Contains("SdfIndirectSourcesSky = 8u;", generated, StringComparison.Ordinal);
+        Assert.Contains("SdfIndirectSourcesScreens = 16u;", generated, StringComparison.Ordinal);
+    }
     // The values the writer leaves as their zero default on every frame: the extent, which the node writes, and the view
     // base, since each instance renders its one view at row zero.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,

@@ -304,6 +304,7 @@ public static partial class SdfWorldPackage {
         Value(name: LightMapCount, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows), name: LightMaps, type: ShaderValueType.Float4),
         Value(name: IndirectTier, type: ShaderValueType.Uint),
+        Value(name: IndirectSources, type: ShaderValueType.Uint),
         Value(name: IndirectMethod, type: ShaderValueType.Uint),
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),

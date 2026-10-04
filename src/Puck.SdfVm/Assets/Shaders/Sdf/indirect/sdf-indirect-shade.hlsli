@@ -125,7 +125,7 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
         }
         // Sky exits are filled by the environment snapshot seam. Unresolved rays never enter the cosine denominator.
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-            uint packed = sdfIndirectPackRadiance(result.values[source]);
+            uint packed = sdfIndirectPackRadiance((passGroup.indirectSources & (1u << source)) != 0u ? result.values[source] : 0.0);
             sdfIndirectShaded[ray].values[source] = sdfIndirectUnpackRadiance(packed);
             if (index >= sdfIndirectRadianceProbeOffset(passGroup.indirectTier)) {
                 indirectCacheRW[sdfIndirectRadianceAddress(index, ray, writeGeneration) + source] = packed;

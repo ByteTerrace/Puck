@@ -65,6 +65,7 @@ public sealed partial class SdfWorldTables {
             if (m_frame is not { } held || m_geometry != m_tables.LightGeometry ||
                 m_values.ScreenCount != m_tables.PassValues.ScreenCount || held.FarDistance != frame.FarDistance ||
                 held.DisableScreenLights != frame.DisableScreenLights || held.EnableShadowProxy != frame.EnableShadowProxy ||
+                held.IndirectSources != frame.IndirectSources ||
                 held.Lights.Count != frame.Lights.Count || held.Lights.ShadowSlots.SlotCount != frame.Lights.ShadowSlots.SlotCount ||
                 held.Lights.ShadowSlots.FadeCapacity != frame.Lights.ShadowSlots.FadeCapacity || held.Lights.ShadowSlots.FadeCount != frame.Lights.ShadowSlots.FadeCount) { return false; }
             for (var slot = 0; slot < SdfShadowSlots.MaxSlots; slot++) {

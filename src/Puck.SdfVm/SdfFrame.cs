@@ -231,6 +231,9 @@ public sealed record SdfFrame(
     public bool EnableCadenceGate { get; init; }
     /// <summary>The residency's indirect-cache demand. Off allocates and schedules no cache work.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
+    /// require their captured source publications; the current default admits authored lights, feedback and emission.</summary>
+    public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.Direct | SdfIndirectSources.Feedback | SdfIndirectSources.Emission;
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
     /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
     /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow

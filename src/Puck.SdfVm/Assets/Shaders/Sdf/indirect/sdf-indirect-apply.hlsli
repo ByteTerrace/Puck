@@ -95,6 +95,9 @@ SdfIndirectSources sdfIndirectApply(SdfPixel p, SdfSurfaceSample receiver, float
     uint beforeQueries = sdfIndirectEvaluations;
     uint beforeLoads = sdfIndirectLoads;
     sdfIndirectReceiverSources = sdfIndirectReceiver(p, receiver, surfacePoint, normal);
+    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+        if ((passGroup.indirectSources & (1u << source)) == 0u) { sdfIndirectReceiverSources.values[source] = 0.0; }
+    }
     uint steps = sdfWorkSteps - beforeSteps;
     sdfEvalCount += (float)(sdfIndirectEvaluations - beforeQueries);
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT, steps, 0u, 0u, 0u, 0u);
