@@ -19,7 +19,7 @@ public sealed class SdfWorkDetailLawTests {
         // in (SDF_SKY_DETAIL_ATMOSPHERE), the view's indirect diagnostics, then the layers' labels.
         Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere", "indirect" }, actual: details.Labels);
         Assert.Equal(actual: 3u, expected: ((uint)SdfSkyDetails.AtmosphereRow));
-        Assert.Contains(expectedSubstring: "puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, ", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
+        Assert.Contains(expectedSubstring: "sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, ", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
         Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_ATMOSPHERE 3u", actualString: Source(path: "isa/sdf-sky-kinds.hlsli"));
         Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
         Assert.Equal(expected: 6u, actual: details.RowOf(label: "clouds"));
@@ -43,6 +43,7 @@ public sealed class SdfWorkDetailLawTests {
         var offset = checked((int)layout.BlockOffsetOf(member: ShaderWorkCounters.DetailRow));
 
         Assert.Equal(expected: 37u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
+        Assert.DoesNotContain(expectedSubstring: "sdfCountSky", actualString: Source(path: "passes/sdf-world-views.comp.hlsl"));
         Assert.DoesNotContain(expectedSubstring: "puckCountDetail", actualString: Source(path: "passes/sdf-world-views.comp.hlsl"));
         Assert.Contains(expectedSubstring: "puckCountShadow(shadowSlot, (sdfWorkSteps - before));", actualString: Source(path: "surface/sdf-shadow.hlsli"));
     }
@@ -67,20 +68,24 @@ public sealed class SdfWorkDetailLawTests {
     // runs' texture loads in their runs' rows: the base in the lowest run's, the upper images in their runs'.
     [Fact]
     public void SkyHashesAndTextureLoadsCountAtTheOperationsThatPerformThem() {
+        var wrapper = Source(path: "sky/sdf-sky.hlsli");
+
+        Assert.Matches(actualString: wrapper, expectedRegexPattern: @"void sdfCountSky\([^)]*\)\s*\{\s*sdfSkyCost \+= float3\(evaluations, hashes, loads\);\s*puckCountDetail\(detail, steps, texels, evaluations, hashes, loads\);\s*\}");
+        Assert.Single(collection: Regex.Matches(input: wrapper, pattern: @"\bpuckCountDetail\("));
         foreach (var kind in SdfSkyKindsHlsl.Kinds) {
-            Assert.Contains(actualString: Source(path: $"sky/kinds/{kind.Name}.hlsli"), expectedSubstring: "puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, ");
+            Assert.Contains(actualString: Source(path: $"sky/kinds/{kind.Name}.hlsli"), expectedSubstring: "sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, ");
         }
 
         var stars = Source(path: "sky/kinds/stars.hlsli");
 
         Assert.Equal(expected: 3, actual: Regex.Matches(input: stars,
-            pattern: @"uint3 h\d? = sdfPcg3d\([^;]+;\s*puckCountDetail\(layer\.Detail, 0u, 0u, 0u, 1u, 0u\);").Count);
-        Assert.Matches(actualString: Source(path: "sky/kinds/clouds.hlsli"), expectedRegexPattern: @"sdfPeriodicFbm2\([^;]+;\s*float density = sdfPeriodicFbm2\([^;]+;\s*puckCountDetail\(layer\.Detail, 0u, 0u, 0u, \(8u \* octaves\), 0u\);");
+            pattern: @"uint3 h\d? = sdfPcg3d\([^;]+;\s*sdfCountSky\(layer\.Detail, 0u, 0u, 0u, 1u, 0u\);").Count);
+        Assert.Matches(actualString: Source(path: "sky/kinds/clouds.hlsli"), expectedRegexPattern: @"sdfPeriodicFbm2\([^;]+;\s*float density = sdfPeriodicFbm2\([^;]+;\s*sdfCountSky\(layer\.Detail, 0u, 0u, 0u, \(8u \* octaves\), 0u\);");
         var runs = Source(path: "passes/sdf-sky-pass.hlsli");
 
-        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyBase.Load\(tap\);\s*puckCountDetail\(0u, 0u, 0u, 0u, 0u, 1u\);");
-        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper0.Load\(tap\);\s*float4 upper1 = skyUpper1.Load\(tap\);\s*puckCountDetail\(1u, 0u, 0u, 0u, 0u, 2u\);");
-        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper2.Load\(tap\);\s*puckCountDetail\(2u, 0u, 0u, 0u, 0u, 1u\);");
+        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyBase.Load\(tap\);\s*sdfCountSky\(0u, 0u, 0u, 0u, 0u, 1u\);");
+        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper0.Load\(tap\);\s*float4 upper1 = skyUpper1.Load\(tap\);\s*sdfCountSky\(1u, 0u, 0u, 0u, 0u, 2u\);");
+        Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper2.Load\(tap\);\s*sdfCountSky\(2u, 0u, 0u, 0u, 0u, 1u\);");
     }
     // Clouds at the low tier hash at most a quarter of what they hash at the high tier a covered pixel: one thickness tap
     // of three octaves (two fractal sums of four lattice corners an octave) against four taps of the kind's octaves, and
