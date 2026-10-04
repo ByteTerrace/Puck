@@ -36,6 +36,8 @@ public sealed partial class WorldRenderProbeAllocationLawTests(ITestOutputHelper
         Assert.Contains(expected: typeof(WorldBootCompositionLawTests), set: probes);
         Assert.Contains(expected: typeof(WorldRenderLeverFrameLawTests), set: probes);
         Assert.Contains(expected: typeof(WorldRenderEnvelopeLawTests), set: probes);
+        Assert.Contains(expected: typeof(SdfTapeInventoryLawTests), set: probes);
+        Assert.Contains(expected: typeof(SdfTapePredictionLawTests), set: probes);
         var parallel = probes.Where(predicate: type => {
             var collection = type.GetCustomAttributesData().SingleOrDefault(predicate: attribute => (attribute.AttributeType == typeof(CollectionAttribute)));
 
