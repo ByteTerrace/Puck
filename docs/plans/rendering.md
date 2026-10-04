@@ -7930,8 +7930,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 11. **P18-11, infinity views: other worlds and far geometry.** The sharing
     prerequisites are available: routed seats and eligible windows share an
     endpoint residency, and camera views render from the world's own residency.
-    Other session screens retain separate residencies; infinity-view routing
-    and quality levers remain part of this step.
+    Other session screens retain separate residencies. The `view` and `far`
+    layer records, validation, fitting, planning and scene construction exist;
+    the binder does not yet route their rendered images or feed their demand
+    back from completed sky counts. The remaining work below is implementation,
+    not merely verification.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
@@ -8016,10 +8019,19 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       while the upper-run images keep their packed summaries; the composite
       filters the field costs and adds point and atmosphere work. Completed
       work is counted once, where executed, through `world.cost sky`.
-    - Verification remains owed for the combined source: the focused timeline,
-      layer, inspector, cost and reload/save CPU laws and their withheld-fix
-      legs; both backends of the timeline, cost and edit GPU laws; the touched
-      sky evaluation law, editor/sky canaries and parity. The held-clock GPU
+    - The incoming CPU evidence covers held and scrubbed clocks, the common
+      inspector formatter, muted automatic discs, completed sky cost rows,
+      and reload/source-write behavior with their fixes withheld. It does not
+      cover the unfinished rate, keyed-rate integration and invalid-command
+      red legs, or the changes that port those controls onto the open stack
+      and separate atmosphere. Those focused proofs remain owed: per-layer
+      held-clock phases, named and repeated row audition, atmosphere-only
+      inspector invalidation, and reload/save of the current rows. The combined
+      CPU selections must pass; accepted earlier red evidence need not be
+      repeated for unchanged behavior.
+    - Device verification remains owed: both backends of the timeline, cost
+      and edit GPU laws; the touched sky evaluation law, editor/sky canaries
+      and parity. The held-clock GPU
       law requires no submission after the first frame. No GPU result follows
       from a CPU law, and counted ceilings must be recorded from completed work.
 13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
@@ -8104,6 +8116,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       columns too; their sums and the plain remainder reconcile to the pass.
       K history writes count five stored words per active pixel, only with
       amortization on and more than one stable slot. There is no new dispatch.
+    - The temporal rejection, history ownership, allocation, preset and
+      decision-row CPU laws have withheld-fix evidence. The later per-invocation
+      shadow-slot atomic change remains unqualified: its
+      `ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence` law
+      still needs a red leg restoring the subgroup reduction, and the
+      `shadow-slots` Vulkan run must establish nonzero, reconciled counts.
+      A source assertion alone does not establish that the device counts them.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the

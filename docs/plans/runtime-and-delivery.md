@@ -16,6 +16,17 @@ reasoning behind every decision is in
 
 ## Implementation status
 
+- **Canonical world sources:** `standard`, `pipeline` and `shards/quilt-nw-gap`
+  are authored as `.puck`. Five migrations remain unstarted:
+  `puck.world.json` and `shards/quilt-ne.world.json`, `quilt-nw.world.json`,
+  `quilt-se.world.json` and `quilt-sw.world.json`, all under
+  `src/Puck.World/Assets/worlds`. The JSON resolver prerequisite is implemented.
+  Each migration must preserve the composed definition and its state baseline,
+  replace source-facing references, and keep executable-relative references
+  naming the generated `.world.json` output. The build ships those generated
+  documents, not the authored sources. Format shape fingerprints already remove
+  source trivia before normalization; that work is implemented rather than an
+  unstarted prerequisite.
 - **Landed:** the baked solid query, `WorldSolidField`, `WorldOutputHub`
   narration, and `WorldDeadlineTable`; the `WorldServer` facade split and its
   constraints (every record the checkpoint codec reads sits at the top level of
