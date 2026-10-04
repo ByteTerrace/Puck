@@ -87,7 +87,10 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
     [loop]
     while (true) {
-        SdfHit hit = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
+        // Hit acceptance reads this exact point. Keep the product and sum separately rounded on both backends.
+        precise float3 sampleAdvance = (rayDirection * traveled);
+        precise float3 samplePosition = (rayOrigin + sampleAdvance);
+        SdfHit hit = sdfPrimarySample(samplePosition, instanceMaskBase, part, localPart);
 
         sdfEvalCount += 1.0; // one primary-march sample, or the exhaustion arm's one extra evaluation
         sdfWorkSteps += 1u;

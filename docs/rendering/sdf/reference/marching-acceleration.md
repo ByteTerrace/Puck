@@ -4,6 +4,11 @@ The world marcher combines conservative sphere-tracing steps with an
 auto-relaxed production path. The strict path remains the reference for
 correctness and parity diagnosis.
 
+Each primary field sample first multiplies the ray direction by its traveled
+distance, then adds the ray origin. Both operations retain separate rounding
+with contraction disabled. A fused product and sum can move a sample across the
+hit-acceptance boundary and change how many refinement steps it takes.
+
 ## Auto-relaxation
 
 Relaxation uses recent progress to enlarge steps when the field behaves
