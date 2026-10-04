@@ -311,7 +311,7 @@ internal static class Fixtures {
             AudioRaw: null,
             CollisionRaw: collision,
             HostRaw: StandardHost,
-            // The engine ships no rig (Assets/worlds/standard.world.json authors the standard one), and a nonzero
+            // The engine ships no rig (Assets/worlds/standard.puck authors the standard one), and a nonzero
             // census must author a views section, so the fixture carries the standard chase framing itself.
             ViewsRaw: StandardViews,
             DynamicsRaw: StandardDynamics,
@@ -984,7 +984,7 @@ internal static class Fixtures {
         },
         Channels: new Dictionary<string, string>()
     );
-    /// <summary>The standard host row (the values <c>standard.world.json</c> authors), for fixtures whose documents
+    /// <summary>The standard host row (the values <c>standard.puck</c> authors), for fixtures whose documents
     /// must carry an authored host (serialization round-trips, the host-member strict-parse laws) — the engine no
     /// longer carries one.</summary>
     public static WorldHostDefaults StandardHost { get; } = new(
@@ -1015,7 +1015,7 @@ internal static class Fixtures {
         PreviewDeadlineFrames: 12
     );
     /// <summary>The document's declared <c>dynamics</c> rows, mirroring what
-    /// <c>src/Puck.World/Assets/worlds/standard.world.json</c> authors — <c>chase</c> backs
+    /// <c>src/Puck.World/Assets/worlds/standard.puck</c> authors — <c>chase</c> backs
     /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
     /// own row.</summary>
     public static DynamicsRow[] StandardDynamics { get; } = [
@@ -1032,7 +1032,7 @@ internal static class Fixtures {
             Response: 0f
         ),
     ];
-    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
+    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.puck</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
     /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
     public static WorldCameraProgram StandardSeatRig { get; } = new(

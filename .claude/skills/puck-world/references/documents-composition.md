@@ -96,7 +96,7 @@ subject names them:
 
 A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
-`standard.world.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
+`standard.puck`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
 `state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
 resolves to `WorldThemeSection.Absent`, all zeros, which the console panel draws as a 120×16 px
@@ -475,8 +475,8 @@ document loaded as a world with `exports` on it refuses at validation, and `worl
 Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
-**`standard.world.json` — the standard library, not a world.** The engine ships
-no content default: what a world shares is AUTHORED. `standard.world.json`
+**`standard.puck` — the standard library, not a world.** The engine ships
+no content default: what a world shares is AUTHORED. `standard.puck`
 carries the `transforms` and `colors` state rows, the `theme`, the ground
 safety-net placements and prototypes, a body sleep default, and an import of the
 `quality.puck` render presets; the island (`puck.world.json`) names it as its
@@ -489,7 +489,7 @@ and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
 property non-null between parse and validation which the validator refuses for
 any document whose `population.capacity` is nonzero — the same derived refusal
 `kits` carries, so a seatless document may still author neither. A world takes
-the standard set by naming `standard.world.json` as its `basis`; a world that
+the standard set by naming `standard` as its `basis`; a world that
 wants only its own `layouts` and other prototype-specific sections over that
 basis authors just those sections in its own body — the ordinary basis-refine
 rule above, no second file involved.

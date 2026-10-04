@@ -78,6 +78,7 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
     float2 fraction = (position - float2(origin));
     uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
     float total = 0.0;
+    float2 fieldCost = float2(0.0, 0.0);
 
     base = float3(0.0, 0.0, 0.0);
     [unroll] for (uint run = 0u; (run < SDF_SKY_MAX_UPPER_FIELD_RUNS); run++) {
@@ -91,7 +92,7 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
         if (weight > 0.0) {
             int3 tap = int3(clamp((origin + corner), int2(0, 0), (grid - 1)), 0);
             float4 runBase = skyBase.Load(tap);
-            puckCountDetail(0u, 0u, 0u, 0u, 0u, 1u);
+            sdfCountSky(0u, 0u, 0u, 0u, 0u, 1u);
 
             // Only the base is written for an invalid tap. Do not load its unwritten upper runs: multiplying an undefined
             // value by zero does not exclude it from the filter (zero times NaN is still NaN).
@@ -141,6 +142,7 @@ float3 sdfSkyPassEnvironment(float3 direction) {
     [unroll] for (uint i = 0u; i < 4u; i++) {
         color += (weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i]]));
     }
+    sdfCountSky(0u, 0u, 0u, 0u, 0u, 4u);
 
     return color;
 }

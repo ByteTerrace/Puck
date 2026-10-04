@@ -29,6 +29,9 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,
 camera, ticks, render levers, counted work, capacity and reload refusal.
+The acting seat's sky and air use the same text as `world.lighting`, followed
+by its named clocks' presented ticks, phases, holds and rates. Long sky text
+uses the panel's ordinary wrapping and elision.
 Point and normal read `unavailable` until an inspector surface sample completes;
 an ordinary hover still reports its measured identity, distance and pixel cost.
 A passthrough pane follows its own rendered residency, scale and shading quality;
@@ -36,6 +39,11 @@ its placement costs and pass timings use that same view.
 `world.cost <placement>` reads live placement ownership; bare `world.cost`
 uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
 Shared program overhead is reported separately and reconciles to `world.budget`.
+`world.cost sky` prints each node's latest completed sky, composite and
+environment passes, including the gradient, disc, stars and clouds detail
+rows. Evaluations, hashes and texture loads are counted where they run. Fog's
+environment-map reads belong to the gradient row. A skipped pass has no
+counts; a retained submission keeps its identity and reports historical work.
 These are presentation queries and never submit simulation input.
 
 Every inspector line fits the panel's 96 columns: a long line wraps onto
@@ -624,7 +632,7 @@ reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 Start the three-pass feedback example from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.puck --state-dir artifacts/pipeline/state
 ```
 
 The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer
@@ -991,7 +999,7 @@ Facts a script needs:
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.world.json` (the standards as
+  boot default), a delta over `worlds/standard.puck` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
@@ -1920,7 +1928,7 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.temporal`, `world.upscale-sharpness`, `world.sky-quality`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+`world.debug-view`, `world.sky-layer`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
 temporal-reconstruction switch, a dynamic-resolution switch, render-scale
@@ -2181,6 +2189,37 @@ prediction misses the authority's phase. `world.timeline` echoes each clock's so
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.
+
+`world.timeline hold <clock>` keeps the current presented reading;
+`world.timeline at <clock> <engine-tick>` scrubs to an exact unsigned engine
+tick and holds it. `world.timeline rate <clock> <multiplier>` selects a finite,
+nonnegative rate without moving the current reading, and `world.timeline run
+<clock>` resumes from it. A state clock samples the delivered row at the
+requested tick and holds that phase; this is a preview of the row's current
+prediction, not a stored simulation history. The controls affect presentation
+keys and their integrated rates. The simulation, its state rows and its tick
+continue normally. Clock previews never save or enter replay.
+
+`world.sky-layer solo <index>` auditions one authored sky row; `solo off`
+restores the stack. `world.sky-layer mute <index> on|off` toggles a row, with
+mute taking precedence over solo. Indices are the zero-based `sky[index]`
+rows in `world.lighting`. These render levers apply across World views and
+session screens and never save. Solo removes the default gradient and fog
+unless the selected row supplies that contribution.
+
+`world.debug-view sky-cost` shows evaluations in red (one quarter per layer
+evaluation), procedural hashes in green (one sixty-fourth per hash), and
+texture loads in blue (one sixteenth per load), clamped at one. Field-run
+cost is filtered with the field's pixels and combined with the output
+pixel's point and fog work. It is cost attributed to a pixel; `world.cost sky`
+reports exact completed pass totals. `world.debug-view off` restores the image.
+
+Sky edits use the ordinary authoring loop: `world.compare hold`, edit the
+sky's `.puck` rows, `world.reload`, then `world.compare diff`, `split` or
+`wipe`. `world.save <path.puck>` writes the live sky back through the source
+printer and preserves unrelated authored text. The CPU sky-edit law drives
+those commands with the reference environment map; rendered comparisons and
+the held-clock submission gate remain GPU verification legs.
 
 Every scalar or angle a presentation section authors declares one domain
 (`WorldValueFields`): a light's weight, radius, power and angular radius, the

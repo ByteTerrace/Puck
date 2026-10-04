@@ -204,7 +204,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/shards/quilt-nw-gap.world.json",
+    "world": "src/Puck.World/Assets/worlds/shards/quilt-nw-gap.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

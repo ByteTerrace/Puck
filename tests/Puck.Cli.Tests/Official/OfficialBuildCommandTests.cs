@@ -408,11 +408,20 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             );
         }
 
+        // The basis already ships as its .puck source; the root is authored as one here.
         foreach (var name in ((string[])["puck", "standard"])) {
             var document = Path.Combine(
                 path1: worlds,
                 path2: WorldDocumentName.DocumentFile(name: name)
             );
+
+            if (!File.Exists(path: document)) {
+                Assert.True(condition: File.Exists(path: Path.Combine(
+                    path1: worlds,
+                    path2: WorldDocumentName.SourceFile(name: name)
+                )), userMessage: name);
+                continue;
+            }
 
             File.WriteAllText(
                 contents: WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: document)),

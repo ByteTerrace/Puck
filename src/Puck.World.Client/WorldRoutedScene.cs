@@ -52,8 +52,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
     /// <param name="shadowSettings">The presentation's live slot policy.</param>
+    /// <param name="skyLayers">The presentation's session-only layer audition.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null) {
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyLayers? skyLayers = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
@@ -68,7 +69,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
-        );
+        ) { SkyLayers = skyLayers };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
             emitters: [m_emitter]

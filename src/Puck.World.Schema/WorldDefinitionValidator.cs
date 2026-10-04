@@ -1462,7 +1462,7 @@ public static partial class WorldDefinitionValidator {
         // bodyless document may author none and reads the inert WorldCollision.Absent.
         if (definition.CollisionRaw is null) {
             if (definition.Population.Capacity > 0) {
-                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
+                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis that does.");
             }
         } else {
             ValidateCollision(

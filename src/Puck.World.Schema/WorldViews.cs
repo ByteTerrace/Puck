@@ -226,9 +226,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [System.Text.Json.Serialization.JsonIgnore]
     public int NestingDepth => (NestingDepthRaw ?? Puck.Hosting.RenderGraphInstanceSet.DefaultNestingDepth);
     /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — an empty program, holding the
-    /// property non-null between parse and validation. The engine carries no camera policy of its own: the standard
-    /// chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that
-    /// document as its basis. A document whose census implies a body is refused for authoring no <c>views</c>
+    /// property non-null between parse and validation. The engine carries no camera policy of its own: a world
+    /// AUTHORS its chase framing (the island's <c>seatRig</c>) or inherits it from its basis. A document whose census implies a body is refused for authoring no <c>views</c>
     /// (<c>WorldDefinitionValidator</c>), so nothing ever composes a seat view from this. Control feel is not here
     /// either: it is per-seat, on <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
     public static WorldViewDefaults Absent { get; } = new(

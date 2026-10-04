@@ -29,6 +29,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
+    private readonly WorldClockReads m_clocks = new();
 
     private readonly WorldValueDomainGuard m_domains;
 
@@ -97,17 +98,21 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         if (
-            moved ||
+            moved || !ReferenceEquals(layers, m_layers) || (layers?.Revision ?? 0) != m_layersRevision ||
             !ReferenceEquals(
             objA: mirror,
             objB: m_mirror
         ) ||
             (mirror.Generation != m_generation) ||
+            m_clocks.Moved(mirror: mirror) ||
             (m_readsTick && (mirror.Presented != m_tick)) ||
             BoundSlotMoved(mirror: mirror)
         ) {
             m_mirror = mirror;
+            m_layers = layers;
+            m_layersRevision = layers?.Revision ?? 0;
             m_bound.Clear();
+            m_clocks.Clear();
             m_readsTick = false;
             Write(
                 atmosphere: definition.Render.Atmosphere,
@@ -243,13 +248,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return;
         }
 
-        var slot = mirror.ClockSlotOf(name: keys.Clock);
-
-        if (slot >= 0) {
-            NoteSlot(mirror: mirror, slot: slot);
-        } else if (!mirror.ClockHoldsStill(name: keys.Clock)) {
-            m_readsTick = true;
-        }
+        m_clocks.Note(mirror, keys.Clock);
     }
     private void NoteBinding(WorldStateMirror mirror, StateBinding? binding, WorldStateConversion conversion) {
         if (binding is { } bound) {
@@ -387,7 +386,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return 0d;
         }
 
-        if ((value.Keys is not null) || ((value.Literal is { } literal) && (literal != 0f))) {
+        if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != 0f)) {
             m_readsTick = true;
         }
 
@@ -401,7 +400,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return Vector2.Zero;
         }
 
-        if ((value.Keys is not null) || ((value.Literal is { } literal) && (literal != Vector2.Zero))) {
+        if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != Vector2.Zero)) {
             m_readsTick = true;
         }
 
@@ -593,6 +592,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         var layers = (sky?.Layers ?? []);
+        m_layers?.ClearExcluded(m_resolvedSky, layers);
 
         // An authored gradient replaces the default look's; a stack with none draws over it.
         for (var index = 0; (index < layers.Count); index++) {

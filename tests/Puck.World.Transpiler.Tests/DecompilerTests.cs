@@ -19,12 +19,7 @@ public class DecompilerTests {
     }
     [Fact]
     public void TestPipelineWorldDecompilationAndRoundTrip() {
-        var jsonPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: "pipeline.world.json"
-        );
-        var originalJson = File.ReadAllText(path: jsonPath);
-        var originalNode = (JsonNode.Parse(originalJson) as JsonObject);
+        var originalNode = ShippedWorlds.Compile(relativePath: "pipeline.puck").RequireJson();
 
         Assert.NotNull(@object: originalNode);
 

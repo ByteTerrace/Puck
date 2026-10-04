@@ -84,8 +84,7 @@ silo image, and the eviction of everything under `src/Puck.World/Assets`.
    patch, the `quilt-nw-gap` shard, the shader-pipeline demo world), the orphans
    are deleted (the hud-builder addon binary, `sdf/example.sdf.json`, the
    transition stinger patch), and the generated schemas and default recording
-   move to the projects that own them. The stale `standard.world.json` claims
-   leave source comments and regenerated schemas.
+   move to the projects that own them.
 2. `content/puck` and its manifest exist and the official content moves there:
    `branding/` (copies the build makes from the repository's `branding/`),
    `worlds/`, `cartridges/`, `music/`, `tunes/`, `patches/`, `addons/`,

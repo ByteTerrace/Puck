@@ -75,8 +75,8 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
     public const float MinGridCellSize = 0.05f;
 
     /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
-    /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
-    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
+    /// The engine holds no contact tuning of its own: a world AUTHORS its tuning (the island does) or
+    /// inherits it from its basis. A
     /// document whose census implies a body is refused for authoring no <c>collision</c>, so only a bodyless world
     /// ever reads this.</summary>
     public static WorldCollision Absent { get; } = new(

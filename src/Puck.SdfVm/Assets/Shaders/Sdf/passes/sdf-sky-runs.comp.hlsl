@@ -23,7 +23,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    if (seen && (passGroup.debugMode == 0u)) {
+    if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost))) {
         float3 direction = sdfSkyPassDirection(sdfSkyPassView(), id.xy);
         uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
         float3 base;

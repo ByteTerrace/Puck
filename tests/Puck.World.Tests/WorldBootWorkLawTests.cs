@@ -207,14 +207,14 @@ public sealed class WorldBootWorkLawTests {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
         // Twenty-five documents — the island, its basis, its games and modules, the shared quality presets, and the
-        // four shards its borders name — are read and merged once each; nineteen of them are .puck sources, each asked of
-        // the compile cache nine times a boot. The island is parsed once and each shard once, though admission and its
+        // four shards its borders name — are read and merged once each; twenty of them are .puck sources (the basis among
+        // them), each asked of the compile cache nine times a boot. The island is parsed once and each shard once, though admission and its
         // completion each prove all four borders.
         var first = BootIsland(catalog: catalog);
 
         AssertPinned(
-            asks: 171L,
-            compileCeiling: 19L,
+            asks: 180L,
+            compileCeiling: 20L,
             counts: first,
             exact: [
                 ("world.boot.loads", 1L),
@@ -230,7 +230,7 @@ public sealed class WorldBootWorkLawTests {
         Assert.True(condition: (first["world.boot.curve-compiles"] <= 2L));
         // The second boot compiles nothing, merges nothing, and parses only the island itself.
         AssertPinned(
-            asks: 171L,
+            asks: 180L,
             compileCeiling: 0L,
             counts: BootIsland(catalog: catalog),
             exact: [

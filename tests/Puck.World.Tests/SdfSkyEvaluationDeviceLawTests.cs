@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Runtime.Versioning;
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -76,6 +77,8 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
+        using var skyBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(new[] { new SdfSky().Block }.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
+        using var stopBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(new SdfSky().Stops), name: default, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         // The pass's row, then a row each of the sky's detail rows: its runs', then its layers'.
         const int Rows = (1 + SdfSkyDetails.Capacity);

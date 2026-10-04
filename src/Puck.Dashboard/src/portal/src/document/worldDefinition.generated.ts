@@ -5895,7 +5895,7 @@ export type WorldHudDefaults = {
    */
   enabled: boolean;
   /**
-   * The drawn pointer cursor's presentation policy, or null for no drawn cursor at all — the engine draws no cursor of its own; the standard policy is AUTHORED, in Assets/worlds/standard.world.json. Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to hidden.
+   * The drawn pointer cursor's presentation policy, or null for no drawn cursor at all — the engine draws no cursor of its own; a world AUTHORS the policy or inherits its basis's. Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to hidden.
    */
   cursor?: WorldHudCursor | null;
   /**

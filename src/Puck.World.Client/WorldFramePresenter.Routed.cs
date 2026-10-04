@@ -180,6 +180,7 @@ public sealed partial class WorldFramePresenter {
         domains: m_domains,
         endpoint: endpoint,
         hostFrame: () => m_dressedFrame,
+        skyLayers: m_settings.SkyLayers,
         shadowSettings: () => m_settings.ShadowSlots
     );
 }

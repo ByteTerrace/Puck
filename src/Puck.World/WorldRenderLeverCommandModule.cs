@@ -358,6 +358,23 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.sky-layer",
+            description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={(settings.SkyLayers.Solo < 0 ? "off" : settings.SkyLayers.Solo.ToString(CultureInfo.InvariantCulture))} | {string.Join(" | ", Enumerable.Range(0, server.Definition.Render.Sky?.Layers?.Count ?? 0).Select(index => $"sky[{index}] muted={settings.SkyLayers.Muted(index)} included={settings.SkyLayers.Includes(index)}"))}]");
+                if (args.Count == 0) { return Echo(); }
+                var solo = args.Is(0, "solo");
+                var index = -1;
+                var off = solo && args.Count == 2 && args.Is(1, "off");
+                var mute = args.Count == 3 ? ParseOnOff(args[2]) : null;
+                if ((!solo && !args.Is(0, "mute")) || args.Count != (solo ? 2 : 3) || (!solo && mute is null) ||
+                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || index < 0 || index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0)))) {
+                    return CommandResult.Usage("world.sky-layer", "solo <index>|solo off|mute <index> on|off");
+                }
+                return SubmitLever(link, context.Principal, solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute, index, Echo, mute == true ? 1d : 0d);
+            });
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadows",
             description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
             handler: (context, args) => {

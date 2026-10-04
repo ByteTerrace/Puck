@@ -320,7 +320,7 @@ through the same closed mutation vocabulary as `pipeline.load`. The host
 (`WorldViewGraphHost`) reconciles only accepted document state into the render
 graph runtime's instance set. The runtime owns resources, history, background
 compilation and frame-boundary installation; none belongs in the schema. Use
-[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
+[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.puck)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the `puck.render.graph.v1` document contract a row's source is written in.

@@ -31,7 +31,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
 
-    if (passGroup.debugMode == 0u) {
+    if ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost)) {
         ViewportData view = sdfSkyPassView();
         float3 direction = sdfSkyPassDirection(view, id.xy);
         float3 origin = view.position.xyz;
