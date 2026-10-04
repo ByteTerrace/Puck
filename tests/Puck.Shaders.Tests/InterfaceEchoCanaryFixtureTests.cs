@@ -141,22 +141,22 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         var perturbed = ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: shaderInterface).Split(separator: '\n');
 
         Assert.Equal(expected: positive.Length, actual: perturbed.Length);
-        var changed = Assert.Single(collection: Enumerable.Range(start: 1, count: (positive.Length - 1))
-            .Where(predicate: index => (positive[index] != perturbed[index])));
+        var changed = Assert.Single(collection: Enumerable.Range(start: 1, count: (positive.Length - 1)),
+            predicate: index => (positive[index] != perturbed[index]));
 
         Assert.StartsWith(expectedStartString: $"    echo[uint2({(members.Length - 1)}, 0)] = ", actualString: positive[changed]);
-        const string literal = @"0x([0-9A-F]{8})u";
-        var before = Regex.Matches(input: positive[changed], pattern: literal).Select(selector: static match =>
+        const string Literal = @"0x([0-9A-F]{8})u";
+        var before = Regex.Matches(input: positive[changed], pattern: Literal).Select(selector: static match =>
             uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
-        var after = Regex.Matches(input: perturbed[changed], pattern: literal).Select(selector: static match =>
+        var after = Regex.Matches(input: perturbed[changed], pattern: Literal).Select(selector: static match =>
             uint.Parse(s: match.Groups[1].Value, style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture)).ToArray();
         var last = members[^1];
 
         Assert.Equal(expected: 0x40000000u | (((last.Member.Offset / 4) + 2u) << 12) | (last.Set << 8) | 0xA5u, actual: after[0]);
         Assert.NotEqual(expected: before[0], actual: after[0]);
         Assert.Equal(expected: before.Skip(count: 1), actual: after.Skip(count: 1));
-        Assert.Equal(expected: Regex.Replace(input: positive[changed], pattern: literal, replacement: "sentinel"),
-            actual: Regex.Replace(input: perturbed[changed], pattern: literal, replacement: "sentinel"));
+        Assert.Equal(expected: Regex.Replace(input: positive[changed], pattern: Literal, replacement: "sentinel"),
+            actual: Regex.Replace(input: perturbed[changed], pattern: Literal, replacement: "sentinel"));
     }
     /// <summary>Each echo image holds one pixel per member, and the canary reads each capture at that extent, the
     /// discriminating leg's partial region holding every pixel but the last.</summary>
