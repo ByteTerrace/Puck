@@ -210,7 +210,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 afterSubmission: m_submissions,
                 bytes: 0UL,
                 fence: fence,
-                image: new HeldBindingRetirement(lease: lease),
+                allocation: new HeldBindingRetirement(lease: lease),
                 passes: [],
                 preview: null,
                 resources: []

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace Puck.Shaders;
 
@@ -133,5 +134,44 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         return false;
+    }
+    /// <summary>Copies one pass's live packed parameter block for inspection or persistence.</summary>
+    public bool TryGetConfigSnapshot(string passName, out byte[] bytes) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passName);
+        var pass = m_passes.FirstOrDefault(predicate: item => (item.Name == passName));
+
+        if (pass is null) {
+            bytes = [];
+            return false;
+        }
+        bytes = pass.Parameters.Bytes.ToArray();
+        return true;
+    }
+    /// <summary>Rebinds a complete JSON object to one pass's authored parameter schema.</summary>
+    public bool TrySetConfig(string passName, JsonElement? config, out string reason) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passName);
+        if (
+            (m_pipeline is null) ||
+            !m_ready
+        ) {
+            reason = "The shader pipeline has not allocated its GPU resources yet.";
+            return false;
+        }
+        var pass = m_passes.FirstOrDefault(predicate: item => (item.Name == passName));
+
+        if (pass is null) {
+            reason = $"Unknown shader pass '{passName}'.";
+            return false;
+        }
+        if (!pass.ParametersLayout.TryBind(
+            config: config,
+            reason: out reason,
+            values: out var values
+        )) {
+            return false;
+        }
+        if (!pass.Parameters.Bytes.Span.SequenceEqual(other: values.Bytes.Span) && (pass.Cadence is { } cadence)) { cadence.Signature = null; }
+        pass.Parameters = values;
+        return true;
     }
 }
