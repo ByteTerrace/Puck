@@ -36,9 +36,8 @@ public sealed partial class SdfWorldPassesLawTests {
         residency.ProduceFirstFrame(context: context);
         Assert.True(RenderGraphInstanceSet.TryCreate(instances: [new RenderGraphInstance(Name: Light,
             Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 2).Passes.Count,
-            Reads: [], Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
-            OutputExtent = new RenderGraphPixelExtent(Width: 512, Height: 512),
-        }], set: out var set, refusal: out var setRefusal), setRefusal?.Message);
+            Reads: [], Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld)],
+            set: out var set, refusal: out var setRefusal), setRefusal?.Message);
         RenderGraphRuntime Create() {
             Assert.True(RenderGraphRuntime.TryCreate(deviceContext: gpu, graphs: new RenderGraphRuntimeGraph?[1],
                 hostsOnDirectX: false, packages: packages, pipelines: pipelines.Pipelines, root: Light, set: set,
@@ -56,6 +55,8 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         using var original = Create();
         Complete(original, publications: 2);
+        Assert.Equal((512u, 512u), views.RenderExtentOf(Light)!.FrameAt(width: Extent, height: Extent));
+        Assert.Equal(1.0, views.RenderExtentOf(Light)!.Grid);
         var cache = residency.Tables!.Indirect!;
         var geometry = residency.Tables.LightGeometry;
         var regions = Enumerable.Range(0, 2).Select(residency.IndirectLightViews.Snapshot).ToArray();
