@@ -48,8 +48,10 @@ beside the package that owns it. The open parts are:
 - **P1b:** the reference-GPU qualification on the RTX 4070 and the AMD devices
   (the Direct3D 12 cells included), the driver-removal exercise, and the peak
   device-local thresholds the published-package readings set.
-- **P6:** the representation experiments and P6-GI's G2 to G10 are open; G1, the
-  CPU reference, has landed.
+- **P6:** the representation experiments remain open. P6-GI's cache, light
+  views, finite lighting solve, change classes, source closure, diagnostics,
+  near field and comparison methods are implemented. Their remaining physical
+  qualification and the counted choice of defaults keep G2 to G10 open.
 - **P7:** every step of P7b has landed; the Linux and Windows shader-bytecode
   comparison has not run.
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
@@ -64,9 +66,13 @@ beside the package that owns it. The open parts are:
   Steam Deck run are open.
 - **P16:** the display transform, the HDR swapchain selection, paper white and
   the HDR desktop capture have landed; the HDR-display checks have not run.
-- **P17:** the impostor's device runs are open.
-- **P18:** steps 1 to 5 have landed; step 6 has its retained-resource
-  foundation, and steps 7 to 14 are open.
+- **P17:** the bake and impostor implementation and sampling evidence hold;
+  the extended handover and paused-state World observations remain open.
+- **P18:** the cadence, lighting, atmosphere, live panorama, infinity-layer
+  routing and artist controls are implemented. Remaining image, admission and
+  counted-default checks are named under their steps. P18-11's part-two binder
+  work uses the existing layer and prototype vocabulary; P18-7's separate
+  celestial body vocabulary remains open.
 
 Of P18's landed steps, the sky and the bounded media animate on the presented
 engine tick, the `timeline` section names presentation clocks, the sky block and
@@ -3071,14 +3077,17 @@ re-record explained in the same change.
      share within the fixtures' ceilings, none on a completed still world or a
      pan with no new demand, every byte of the memory table in `world.budget`,
      and every row zero with the lever off.
-   - Verification state: device laws, their mutation legs, diagnostic rendering,
-     cadence, parity and measured counter ceilings require the GPU verification
-     run. Their presence in the tree is not evidence that those checks pass.
+   - Verification state: the gather, trace and debug device laws and the
+     cadence canary have retained passing evidence. The finite-lighting
+     extensions and measured comparison rows are judged by the checks below;
+     their presence in the tree is not evidence that those checks pass.
 3. **G3, the light view.** After G2.
    - Source state: the residency schedule, finite orthographic camera,
-     depth-only graph, map metadata, resource accounting and CPU/device laws
-     are implemented. Generated declarations, positive and withholding laws,
-     actual device visibility and counted runtime qualification remain owed.
+     depth-only graph, map metadata and resource accounting are implemented.
+     The depth bank belongs to the cache; graph scratch uses the light camera's
+     render extent. Ownership, replacement, installation and dormant retirement
+     have CPU laws with withheld-fix evidence. Actual device visibility and
+     counted runtime qualification remain distinct requirements.
    - Delivers: the one depth-only camera view per residency cycling its held
      and fading slots' two regions, its zero-divergence orthographic rays, its
      caster-volume near and far bounds, its march accepting within a texel's
@@ -3102,15 +3111,24 @@ re-record explained in the same change.
      region a frame, zero on a frame whose slots' lights and casters have not
      moved.
 4. **G4, bounce from lights and emission, on by default.** After G3.
+   - Source state: the finite solve, receiver certificates, authored source
+     gains, bounce depth and apply gain are implemented. `low` is off;
+     `medium` and `high` select their matching cache tiers. The shared proof
+     allowance remains per residency, while each view owns its four-byte
+     deferred count. Each actual Views dispatch has an ordered reset and
+     fenced readback of that count; a capture waits only for the current receiver scope of views it
+     actually demands. Static primary results retain valid certificates across
+     cadence-off frames. The physical furnace, sealed-room, bleed and reset
+     observations still have to qualify these source contracts.
    - Delivers: `shade` with its finite solve and its generations, the views
      apply with proofs from the cache and launches from the primary march (the
      visibility record's L words), `fill` not applied while it is on; the
      `render.indirect` section with its levels, its `lights`, `emission`,
-     `screens` and `feedback` sources, `bounces`, its apply and its `bodies`
+     `screens`, `sky` and `feedback` sources, `bounces`, its apply and its `bodies`
      policy, the validator's bounds, vocabulary rows, generated schema and the
      default look; palette `bleed` and `receive` and the `bounce` to `fill`
      rename with the Moth migrated; a light's `bounce` in the light record;
-     screens through their existing analytic light alone; P15's reactivity and
+     screens through G7's acquired-image emission; P15's reactivity and
      settling restart on a published generation; the `indirect` debug view
      (indirect light alone over white albedo); a `captures` row's
      `indirect: on`, with its fixed cold solve; and `quality.puck`'s `indirect`
@@ -3150,6 +3168,11 @@ re-record explained in the same change.
      proof allowance in a moving view's, and every row zero at `low`.
 5. **G5, change classes and standing.** After G4 and P18-6; slots after
    P18-7.
+   - Source state: geometry, material, lighting and shadow changes reach their
+     existing owners separately. Body and placement participation, nested
+     budgets, slot identities and actual transformed contents are implemented.
+     The corresponding physical motion and relighting canaries and counted
+     rows remain qualification work.
    - Delivers: the dirty rules in place of G2's epoch reset, with stored path
      bounds where they narrow it; the cache's revision in `views`'
      lighting-visible signature; positional lights by their influence over
@@ -3181,10 +3204,17 @@ re-record explained in the same change.
      shadow-direction frame, nothing on a completed still world, and K + F
      slots charged during a fade.
 6. **G6, the sky through the cache.** After G4 and P18-9.
+   - Source state: one environment producer per residency reads acquired image
+     publications. A finite solve pins both declared map and coefficient
+     buffers with that publication and its fence. Certified world exits read
+     the physical sky, before artistic ambient or reflection gains; a new
+     publication starts a new solve rather than relabelling a completed bank.
+     Physical sky transport and its counted rows remain to be qualified.
    - Delivers: world exits reading the residency's environment map; the `sky` source,
      which when on replaces the harmonic ambient at the views pass and at hits;
      a sky change reaching the cache as lighting-visible; a lighting-visible
-     sky `view` layer lighting the world through the map.
+     panorama of an acquired screen lighting the world through the map.
+     The fitted `view` and `far` layer arms remain camera-only.
    - Done when: a law holds an empty fixture's explicitly allocated support
      under a constant sky to the sky's colour, and a two-colour sky to its
      cosine-weighted value (red leg: uniform weighting); an `indirect-sky`
@@ -3194,6 +3224,14 @@ re-record explained in the same change.
    - Counted-cost gate: a sky change retraces no stored ray.
 7. **G7, portals, screens and other worlds.** After G4; infinity views after
    P18-11.
+   - Source state: acquired screen pixels feed the shared reduction and its
+     pinned lighting snapshot. Authored source gains admit or exclude that
+     contribution. The finite component holds independent image copies across
+     two feedback rounds, recomposes derived screen and panorama inputs, then
+     waits for the final solve and its actual image publication before release.
+     Taint follows the pinned sources as well as current graph reads. These
+     lifecycle laws do not replace the actual portal-lighting and capture
+     qualification below.
    - Delivers: the screen emission reduction for every bound screen, read by the
      direct screen light and the cache, and the deletion of
      `ISdfScreenSources.Light`'s rendering readers, with that direct-light move
@@ -3226,6 +3264,10 @@ re-record explained in the same change.
      budget; a depth-two reader adds no work.
 8. **G8, asking why a surface is lit.** After G4 and the editor's E2, E4, E5
    and E6.
+   - Source state: the console, inspector, pick provenance, retained cache
+     inventory, budget, freeze and reset paths are implemented. Their CPU
+     evidence includes real offscreen and windowed World composition. Physical
+     source explanations must still agree with the rendered fixtures.
    - Delivers: `world.explain`'s indirect line, which reads the cached value at
      the pointer's hit through the shared GPU pick and runs G1's reference at
      that point where its program is supported, and names the level, the cell's
@@ -3243,6 +3285,10 @@ re-record explained in the same change.
    - Counted-cost gate: inspection adds no update row; freeze stops updates
      while the apply is still counted.
 9. **G9, the near field at `high`.** After G4; P15-5 has landed.
+   - Source state: the bounded near interval, certified continuation, explicit
+     source shading and captured-ray CPU comparison are implemented. A failed
+     proof retains the original cache estimate; it does not add an uncertified
+     light contribution. The near-field physical canaries remain open.
    - Delivers: per-pixel field rays no longer than the finest spacing (one for
      every four render pixels a frame, interleaved by the jitter index, 0.5 m,
      12 steps, absolute acceptance, exhaustion unresolved) launched from the
@@ -3261,6 +3307,11 @@ re-record explained in the same change.
      ray; zero below `high`.
 10. **G10, the tier defaults and the comparison.** The lead's call from the
     counted rows, beside P15-8 and P18-14.
+    - Source state: cache, screen and cone methods use the same authored source
+      controls and physical source helpers. The paired comparison workloads and
+      completion-aware collector are implemented. Actual recorded rows, their
+      interpretation and the resulting default decision remain open; no source
+      implementation or successful build supplies those measurements.
     - Delivers: the indirect legs of the counters workload recorded at each
       tier on the RTX 2060 and the RTX 4070; the ladder applied as far as the
       rows require; `quality.puck`'s `indirect` rows as decided; and the
@@ -3288,7 +3339,8 @@ re-record explained in the same change.
   coverage; it brings no sky or fog work back into `sdfLightStage`.
 - **P15.** G4 joins cache publication to P15-5's reactivity and settling and
   orders a capture's fixed solve before P15's fixed samples; cadence gaps alone
-  do not reset history. G9 reads P15-5's history. G10 is decided beside P15-8.
+  do not reset history. G9's result accumulates through P15-5; its hit lighting
+  never reads that colour history. G10 is decided beside P15-8.
 - **Puck.Maths' certified queries (M4).** Interval evaluation over the
   instruction set certifies a launch interval, a partition segment or a proof
   segment in one query, where the CPU model marches ball by ball. Nothing here
@@ -5949,11 +6001,14 @@ counted rows recorded in the same change.
      `tests/Puck.Counters` (a `puck.counters.ceilings.v1` document with its
      generated schema), exiting 1
      and naming the kind, pass and node over its ceiling; `puck counters --record`
-     records into it. Deterministic kinds and the required zeros of kernel kinds
-     (`requiredZero`) are shared by every device; every other
-     per-backend-deterministic kind is judged against the record of the device
-     the run is on, one record per device, and a device with no record fails by
-     name.
+     records into it. Deterministic kinds and nonconflicting required zeros of
+     kernel kinds (`requiredZero`) are shared by every device of their backend.
+     A fresh required zero whose count another retained device owns stays a
+     strict zero in the newly recorded device's record, preserving the other
+     device's readings.
+     Every other per-backend-deterministic kind is judged against the record of
+     the device the run is on, one record per device, and a device with no
+     record fails by name.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
@@ -6471,6 +6526,14 @@ The parity world ships its bakes, so captures never depend on a local bake.
 Which representation a placement uses follows P6's rule that representations
 are chosen by measured cost.
 
+**Qualification state.** The existing CPU and device sampling evidence remains
+applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
+two visits to the handover band, settled draw-count observations, and a paused
+authoritative-hash comparison around `world.bakes`. Those World observations
+still require both backends. The creation-bake product pin is checked after the
+final bake derivation fingerprint is current; a successful shader build alone
+does not establish that product.
+
 **Manifold extraction.** The extractor places one vertex per surface patch of a
 cell, not one per cell: a cell's patches are the connected pieces of the
 marching-cubes surface inside it, found from the eight corner signs alone, so a
@@ -6584,8 +6647,8 @@ study's commit messages.
 - **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
   pack the lights, sky block and open layer table into three
   World-group regions. Their HLSL structures are generated from the C#
-  records. Active shadow handoff controls occupy a fourth region. The 528-byte
-  pass block holds the light count, `shadowSlots` int4, configured stable
+  records. Active shadow handoff controls occupy a fourth region. The
+  generated pass block holds the light count, `shadowSlots` int4, configured stable
   count, active fade count, curvature shading and P18-13's amortization switch
   and two rejection masks; the sky and light records are read only by the
   kernels that use them.
@@ -7580,8 +7643,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      temporal visual changes, the off-switch, floor-tier dispatches, replaceable
      query tallies and the value/section-key class read-back.
      `sky-cadence` declares zero march work on drift frames, with cadence off
-     as its discriminating leg. Its Vulkan and Direct3D 12 runs, parity and
-     per-class floor-device counter re-records remain GPU verification work.
+     as its discriminating leg. Its Vulkan and Direct3D 12 runs hold, as do
+     `temporal-standing`'s standing and resumed-work observations. Parity and
+     per-class floor-device counter re-records remain open.
    - Counted-cost gate, per class, against the baseline P18-1 records: a
      meshless view at the floor tier runs 9 SDF compute dispatches (`mask`,
      `beam`, `cull-args`, `primary`, `surface`, `views`, `resolve` at the floor
@@ -7745,7 +7809,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      buffer capacity grow until the graph is replaced. The ceilings key each
      count by node, pass, detail and kind, and apply the same device rules and
      required zeros to detail rows as to pass totals.
-8. **P18-8, the open layer stack.** Landed, but for the GPU legs below.
+8. **P18-8, the open layer stack.** Implemented, including live panorama
+   publications; the remaining counted qualification is named below.
    - Landed: the layer record (`SdfSkyLayer`, 192 bytes: kind, blend, detail
      row, visibility, opacity, mask, mask softness, clock phase, mask band, a
      unit-quaternion transform and a 128-byte kind payload), a World-group table
@@ -7773,8 +7838,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      (`band` or `cone`, `feather`), `transform` (`turn`, `tilt`) and `clock`
      (whose phase moves an aurora, a noise field and a pattern) are its own. The
      environment map draws the layers the lighting sees, but a disc, and
-     re-renders when they, the frame or the tier move (`SdfSkyEnvironment` is its
-     reference for every lighting-capable kind). Each kind takes its reduced form below
+     re-renders when they, the frame, the tier or an acquired panorama's
+     completed publication changes. The CPU `SdfSkyEnvironment` reference covers
+     procedural kinds and explicitly refuses image-backed panoramas. The
+     environment producer binds the actual acquired images and carries their
+     publication and taint into the finite lighting solve. Each kind takes its reduced form below
      `high`: clouds one thickness tap and three octaves at `low`, shaded flat, and
      three octaves at `medium`; stars no twinkle at `low`; an aurora and a noise
      field fewer octaves. `world.sky-quality low|medium|high` (a session lever),
@@ -7783,10 +7851,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      sum lives in `field/sdf-noise.hlsli` (`sdfPeriodicFbm2`, `sdfPeriodicFbm3`),
      and the star and cloud constants are kind parameters. `skies.puck` holds the
      `clearDay`, `starryNight`, `polarNight` and `overcast` templates. Detail rows
-     are `SdfSkyDetails`, one set a composition: `run0` to `run2`, then a row a
-     layer label (its name, or its kind's, `#2` and on for repeats), rows only
-     growing, at most 32. The fixed composite order and the one-per-kind rule are
-     gone; fog is the air and appears at most once.
+     are `SdfSkyDetails`, one set a composition: `run0` to `run2`, `atmosphere`,
+     `indirect` and `indirect-near`, then a row per layer label (its name, or its
+     kind's, `#2` and on for repeats). Identities grow for the composition's
+     lifetime; retired labels keep their zero rows, and completed buffer slots
+     grow beyond the initial 32 rows when needed. The fixed composite order and
+     the one-per-kind rule are gone; fog is the air and appears at most once.
    - Laws: `SkyLayerTableLawTests` (every kind's packed record through its
      generated decoder; red: a decoder whose two members trade offsets),
      `SkyKindTableLawTests` (a fixture kind inserts only its own lines; no pass
@@ -7796,14 +7866,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      field-run, mask, clock, panorama and fog refusals), the domain rows of the new
      bindable fields, and `SdfWorkDetailLawTests` and `SdfSkySamplingLawTests`
      over the counted sites.
-   - Open: the GPU legs — the `sky-layers` canary (every kind, a tilted frame and
-     each blend), the sky device laws, parity, and the sky counters ceilings
-     (`puck counters --record`, whose detail rows are now `run0` to `run2` and the
-     layers' labels) — and the layer kernels' register counts, read from the
-     driver's pipeline statistics on a device, which decide the light variant;
-     the heavy kinds compile only into `sky` and `composite`, never the views
-     kernel. `view` and `far` layers and the bodies belong to P18-11; P18-9 supplies
-     the panel kind.
+   - Evidence and remaining work: the sky device laws, `sky-layers` and the
+     retained parity stations hold. Both backends distinguish a live panorama's
+     refreshed pixels and environment from its earlier publication. The owned
+     read-epoch image copy also has device red and restored evidence; holding a
+     lease alone does not freeze a live producer's pixels. The new counted rows
+     and their default decision remain open, including the floor-device run.
+     These pixel laws do not supply the driver's register counts needed to
+     choose a light kernel variant.
+     `view` and `far` layer routing belongs to P18-11; separate celestial body
+     authoring remains P18-7 work. P18-9 supplies the panel kind.
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
      `gradient`, `stars`, `clouds`, `aurora`, `noise`, `pattern` and
@@ -7838,7 +7910,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      identities and publish no counts, so recording gives their rows zero
      ceilings. Reports, comparisons and generated schemas carry detail labels;
      an absent measured detail or a detail without a ceiling fails the gate.
-9. **P18-9, lighting derived from the sky.** Implemented; GPU evidence remains open.
+9. **P18-9, lighting derived from the sky.** Implemented with device-law and
+   canary evidence on Vulkan and Direct3D 12; parity and floor-device ceilings
+   remain open.
    - The shared environment supplies cosine-convolved second-order SH ambient
      through the existing AO and map reflections with analytic panel layers.
      Both environment gains default to one; zero skips the corresponding
@@ -7855,9 +7929,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `gpu.environment.skipped` expose candidate work, including skipped device
      refreshes. Views count one harmonic evaluation, four reflection map loads
      and each analytic panel evaluation when their gains enable them.
-   - Open: the Vulkan and Direct3D 12 sky device laws, `ambient-from-sky`,
-     `sky-layers`, `sky-cycle` and `sky-environment`, all lit parity stations,
-     and recording the moved sky and surface-work ceilings on the floor device.
+   - The Vulkan and Direct3D 12 sky device laws and `ambient-from-sky`,
+     `sky-layers`, `sky-cycle` and `sky-environment` canaries hold, including
+     their opposite observations and discriminating legs. The lit parity
+     stations and recording the moved sky and surface-work ceilings on the
+     floor device remain open.
      The environment payload is 65,680 bytes; a refresh writes 8,201 texels.
      CPU evidence and withheld-fix arguments belong in the hand-back report.
    - Delivers: the display-code rule on the `environment` pass P18-5 lands (the
@@ -7882,10 +7958,15 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      camera-only change re-renders the map); `ambient-from-sky` holds a
      surface's ambient changing with a keyed sky colour; parity re-recorded,
      explained.
-   - Counted-cost gate: the `environment` pass's 4,096 texel evaluations and
-     one reduction dispatch per sky change crossing a display code, zero on a
-     still sky.
-10. **P18-10, the atmosphere.** Landed; its GPU legs are owed.
+   - Counted-cost gate: the `environment` pass samples 4,096 map directions
+     and runs one reduction per sky change crossing a display code, with no
+     work on a still sky. Actual per-layer work follows each layer's visible
+     domain and count sites; a refresh writes the fixed 8,201 map and coefficient
+     texels. The device fixtures hold the Stars domain to 1,984 evaluations and
+     the Noise plus constant-backdrop stack to 8,192, rather than assigning one
+     universal evaluation count to every layer.
+10. **P18-10, the atmosphere.** Implemented with device-law and canary evidence
+    on both backends; parity and floor-device ceilings remain open.
     - Landed: `render.atmosphere` (`WorldRenderAtmosphere`) with a `fog`
       (`density`, `color`, and a `height { base, falloff }` profile, the height
       fog), a `haze` (`amount` over the far distance, `anisotropy`, `height`)
@@ -7941,10 +8022,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       a wholly covered 16x8 image to 0, 128 and 384 with no kind, the fog, and
       the fog, the haze and the medium. A bounded medium's scatter adds no
       sample; its samples stay the composite's march steps.
-    - Open: the GPU legs (the device law, the `atmosphere`, `sky-*`,
-      `world-counters` and `kernel-counters` canaries, parity) and the sky
-      workloads' composite ceilings on the RTX 2060, which now count the
-      atmosphere row. A bounded medium's scatter casts no shadow of its own and
+    - The device law and the `atmosphere`, `sky-*`, `world-counters` and
+      `kernel-counters` canaries hold on Vulkan and Direct3D 12. Parity and the
+      sky workloads' composite ceilings on the RTX 2060, which count the
+      atmosphere row, remain open. A bounded medium's scatter casts no shadow of its own and
       the air's lights are not shadowed by geometry. The haze reads the
       directional lights as P18-7's bodies will bind them; P18-9's lighting from
       the sky changes none of it.
@@ -7952,10 +8033,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
     prerequisites are available: routed seats and eligible windows share an
     endpoint residency, and camera views render from the world's own residency.
     Other session screens retain separate residencies. The `view` and `far`
-    layer records, validation, fitting, planning and scene construction exist;
-    the binder does not yet route their rendered images or feed their demand
-    back from completed sky counts. The remaining work below is implementation,
-    not merely verification.
+    layer records, validation, fitting, planning and scene construction are
+    connected to the binder's existing observation and image-routing path.
+    Per-view fits use the final dressed extent and quality, and completed sky
+    counts feed demand. Live-edit cap refusal and the shared budget inventory
+    are implemented as part two. This uses the existing layer and prototype
+    vocabulary; P18-7's separate celestial bodies are not part of that binder
+    slice. The remaining image/admission qualification is distinguished below.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
@@ -7974,6 +8058,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       tainted view is withheld as a screen's is; a far planet's instance
       renders only its angular rect; a world authoring one infinity view past
       the cap is refused by name, and one at the cap boots.
+      Normal World captures fill external sources before recording. The windowed
+      observation compares that fill with the live source and an independent
+      nonexternal control; the neutral never-filling source law owns defensive
+      withholding.
     - Landed beneath the vocabulary: the neutral record the kinds and shapes
       lower to (`InfinityViewSpec`), the frame an instance renders for a viewer
       (`InfinityViewFit`: the anchor, the viewer's turn, the cone's bounding
@@ -8000,17 +8088,21 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       (`WorldEnvironmentResolve`) and to the `InfinityViewSpec`s the host renders
       (`WorldInfinityViewSpecs`, which carries a layer's sky-frame cone into the
       viewer's frame); and the console echo.
-      Still open: the frame's fit written into the layer each frame (the viewer's
-      basis, the rectangle and the screen the instance's image arrives on, through
-      `InfinityViewSampling.Describe`) and the binder's routing of that image,
-      which are the binder's screen sources for the instances (`ISdfScreenSources`
-      entries past the declared screens) and its reading back of the shown-texel
-      counts into `InfinityViewDemand`; the binder owning a `WorldInfinityViews`,
-      registering the scenes and applying `WorldInfinityViewPlan`; the document
-      edit refusal at a live edit; `world.budget` reporting
-      `WorldInfinityViewPlan.Describe`; the `view` and `far` body shapes (no body
-      vocabulary exists to bind them to); the `sky-portal` canary, the ceilings and
-      the GPU legs. The `panel` kind belongs to P18-9.
+      The binder owns these scenes, publishes fits per consumer, assigns image
+      slots by layer identity and feeds completed shown-texel counts back into
+      demand. The fitted table has eight 80-byte records, forty `float4` rows,
+      with paired image bindings. A `far` image carries premultiplied geometry
+      coverage; filtering and composition apply that coverage once. The live
+      plan and its cap are reported through `world.budget`.
+      A `far` layer selects existing placements of its named SDF prototypes;
+      their authored geometry and the layer's cone supply a bounded distant
+      shape. A `view` layer supplies a bounded view from a fixed source anchor.
+      These capabilities do not add the separate celestial body collection
+      specified by P18-7. That vocabulary remains open outside part two.
+      Part two still needs the `sky-portal` image/discriminator, actual at-cap
+      and over-cap admission, windowed live-source-to-capture-fill observations
+      and counted ceilings.
+      The `panel` kind belongs to P18-9.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the
@@ -8040,23 +8132,22 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       while the upper-run images keep their packed summaries; the composite
       filters the field costs and adds point and atmosphere work. Completed
       work is counted once, where executed, through `world.cost sky`.
-    - The incoming CPU evidence covers held and scrubbed clocks, the common
-      inspector formatter, muted automatic discs, completed sky cost rows,
-      and reload/source-write behavior with their fixes withheld. It does not
-      cover the unfinished rate, keyed-rate integration and invalid-command
-      red legs, or the changes that port those controls onto the open stack
-      and separate atmosphere. Those focused proofs remain owed: per-layer
-      held-clock phases, named and repeated row audition, atmosphere-only
-      inspector invalidation, and reload/save of the current rows. The combined
-      CPU selections must pass; accepted earlier red evidence need not be
-      repeated for unchanged behavior.
-    - Device verification remains owed: both backends of the timeline, cost
-      and edit GPU laws; the touched sky evaluation law, editor/sky canaries
-      and parity. The held-clock GPU
-      law requires no submission after the first frame. No GPU result follows
-      from a CPU law, and counted ceilings must be recorded from completed work.
+    - CPU withheld-fix evidence covers held and scrubbed clocks, rate changes,
+      keyed-rate integration, invalid-command refusal and per-layer held-clock
+      phases. It also covers named and repeated row audition, muted automatic
+      discs, the separate atmosphere during audition, atmosphere-only inspector
+      invalidation, completed sky cost rows and reload/source-write behavior.
+      Accepted earlier red evidence remains applicable to unchanged behavior.
+    - On Vulkan and Direct3D 12, the held-clock GPU law holds submissions at
+      the first frame, the cost law sees the muted gradient's evaluation
+      disappear, and the edit law observes reload changing the held image and
+      saving the current source. The sky evaluation law and editor/sky canaries
+      also hold. These checks do not establish scrub/run/rate image equivalence
+      or named and repeated layer audition images; those image probes remain
+      open, as do parity and counted ceiling recordings from completed work.
 13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
-    GPU qualification and floor-device ceiling recordings remain owed.
+    image qualification holds on both backends. The receiver-only shader
+    mutation, counted-quarter comparison and floor-device ceilings remain open.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
       reprojects the rest from a history of the K row. A receiver's identity
@@ -8142,7 +8233,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       laws hold the four rejection reasons, counted pixel and per-slot march
       detail rows, name identity through a reorder, slow light drift, handoffs,
       successful-submission metadata, the off-switch and the render-grid
-      allocation. GPU image and counted-cost qualification remain owed.
+      allocation. On Vulkan and Direct3D 12, the still, occluder, light, owner,
+      departure and return images stay within the original two-code mean bound;
+      the opposite observations and authored discriminator hold. The separate
+      receiver-only shader mutation and counted-cost qualification remain owed.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
       of the unamortized row plus its rejections, counted by reason and
       re-recorded lower; zero reprojected pixels on a frame where a slot
@@ -8163,10 +8257,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       both high-quality slots and the single medium-quality slot, zero counts
       in unused slots, and the corresponding shadow regions; its opposite
       observations and discriminating legs hold. This evidence qualifies the
-      per-slot counter correction; moving-shadow images, counted-cost savings
-      and floor-device ceiling recordings remain owed.
+      per-slot counter correction. The temporal canary separately qualifies
+      moving-shadow images; counted-cost savings and floor-device ceiling
+      recordings remain owed.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
+    - Source state: `skyFieldScale` selects the full or half sky field grid
+      independently of the view's render scale, through authored defaults,
+      presets and the live lever. The collector and paired sky/shadow matrix
+      are implemented. The actual RTX 4070 measurements and default decision
+      remain open; RTX 2060 hardware qualification remains a separate debt.
     - Delivers: the sky leg recorded at each tier and field scale in the
       configurations the floor-tier open decision lists, and `quality.puck`'s
       `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
@@ -8185,8 +8285,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 
 - **Sky evaluations.** The sky pass evaluates about (1 − h) × P field runs plus
   the dilated edge. Composite adds only its in-place fallbacks: its fog reads
-  the residency's environment map, whose 4,096 evaluations the upload pays once
-  per change of the map's layers, shared by every view (P18-5). Before it, the
+  the residency's environment map. A refresh samples 4,096 directions, with
+  each layer's work counted at its actual evaluation sites, shared by every
+  view (P18-5). Before it, the
   composite paid one gradient evaluation per fogged output pixel, 110,135 a
   frame on the 1920 by 1080 counters workload. Cost comparisons include both
   passes; a view that hits nothing and needs no fallback evaluates P field runs.
@@ -8200,10 +8301,11 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 - **Bounded media.** A moving volume changes the visual signature, so sky and
   composite render on frames whose presented tick moves it. Its integration
   stays outside the lit image and temporal history.
-- **Pass-block size and binding.** The pass block is 528 bytes, including the
-  light count, the shadow slot table, the stable and active fade counts, the
-  curvature shading and P18-13's amortization switch and rejection masks, and the lights and sky tables are referenced only by the
-  kernels that read them. Every
+- **Pass-block size and binding.** The generated pass layout includes the
+  light count, shadow slots and fade controls, curvature shading, P18-13's
+  amortization controls and the current indirect-lighting values. Its actual
+  bytes are accounted with the graph's resources. The lights and sky tables
+  are referenced only by the kernels that read them. Every
   region uploads only the words that changed, so the tables carry no upload
   cost beyond their changes.
 - **Clouds.** The cloud layer costs 128 hash evaluations per covered pixel (four
@@ -8279,8 +8381,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
   fixed current and prior 32-byte records per fade slot; presented-tick reads
   produce progress without advancing them. Each light's own occlusion deficit
   scales out or in while its radiance stays unchanged. P18-7 specifies the
-  accepted storage and counted GPU binding contract; the K + F GPU loop and
-  shade integration remain later work.
+  storage and counted GPU binding contract; the K + F GPU loop and shade
+  integration are implemented, while the separate celestial body authoring
+  remains open.
 - **Specular has one spelling.** A light-casting body's glint lives only in its
   light's lobe, and the reflection path leaves every light-casting body out, so
   no body's highlight is counted twice. Crescents and rings are therefore not
@@ -8454,11 +8557,12 @@ textures and impostor (P17) come before P6's choice between a bake and the field
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
-P18-6) run behind `resolve`; P18-2 to P18-6 are implemented, with P18-6's GPU
-verification pending. Its views of other worlds (P18-11) can build on the shared
+P18-6) run behind `resolve`; P18-2 to P18-6 are implemented, with P18-6's cadence
+canaries holding on both backends and its floor-device counters still open.
+Its views of other worlds (P18-11) can build on the shared
 residency for routed seats and eligible windows and on camera views of the
 world's own residency; other session screens still use separate residencies,
-and infinity-view routing and quality levers remain to be implemented. Its shadow
+and the binder routes infinity layers with per-view fits and quality levers. Its shadow
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
