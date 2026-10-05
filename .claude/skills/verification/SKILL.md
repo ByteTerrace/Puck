@@ -37,8 +37,12 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
-  The leased clone warms ignored shader bytecode from the caller only through
-  complete, hash-checked artifact pairs and the existing publication locks.
+  The leased clone warms ignored shader bytecode from the caller or registered
+  worktrees sharing its common Git directory, through complete, hash-checked
+  artifact pairs and the existing publication locks. It captures the original
+  sidecar identities before withholding and rewarms only those exact pairs after
+  source restoration. Missing, changed or busy donors leave ordinary compilation
+  in charge; no separate bytecode cache or manual artifact-copy flag is needed.
   Its normal build still validates source/include/recipe identities; do not
   copy managed outputs or alter timestamps to make a proof appear incremental.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`

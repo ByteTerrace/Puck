@@ -7,10 +7,14 @@ namespace Puck.Cli.Laws;
 
 /// <summary>A persistent shared-object clone, leased exclusively for one proof. The lease is outside the clone so
 /// replacing a damaged clone never releases it. Managed build outputs stay at the path that produced them. Complete
-/// shader artifact pairs may warm this clone from the caller; the normal build independently admits their content.
+/// shader artifact pairs may warm this clone from the caller or another registered worktree of the same repository;
+/// the normal build independently admits their content. Restoration reuses only captured original pair identities.
 /// One clone serves every worktree of a repository: it is keyed by, cloned from and fetched from the repository's common git
 /// directory, never a worktree root.</summary>
 internal sealed class LawProofTree(string tree, string source, string repository, FileStream lease) : IDisposable {
+    private Dictionary<string, byte[]>? m_originalShaders;
+    private string[] m_shaderDonors = [];
+
     public static string DefaultRoot => PuckUserDirectory.Resolve(name: "law-trees");
 
     /// <summary>The repository's common git directory this clone is keyed by and cloned from.</summary>
@@ -91,58 +95,117 @@ internal sealed class LawProofTree(string tree, string source, string repository
         }
     }
 
-    /// <summary>Warms only ignored shader artifact pairs while this proof owns the clone. The destination's normal
-    /// build remains the source/include/recipe authority, including after the proof withholds a shader change.</summary>
+    /// <summary>Warms only ignored shader artifact pairs while this proof owns the clone. The first call captures
+    /// original identities; subsequent calls admit only those exact pairs from the same repository's registered
+    /// worktrees. The destination's normal build remains the source/include/recipe authority.</summary>
     /// <param name="cancellationToken">Cancels discovery and copying between pairs.</param>
     public void WarmShaders(CancellationToken cancellationToken) {
         ObjectDisposedException.ThrowIf(condition: !lease.CanRead, instance: this);
+        var capture = m_originalShaders is null;
+        // An unavailable first capture must remain empty: a later call cannot adopt withheld build outputs as originals.
+        m_originalShaders ??= new Dictionary<string, byte[]>(comparer: PuckPaths.Comparer);
+        if (!capture && m_originalShaders.Count == 0) { return; }
         try {
             LawProofFiles.RequireUnlinkedPath(path: repository);
             LawProofFiles.RequireUnlinkedPath(path: Tree);
-            var projects = ReadGit(repository, ["ls-files", "-z", "--", "*.csproj"], cancellationToken);
-            var projectDirectories = projects.Select(selector: static path => (Path.GetDirectoryName(path: path) ?? string.Empty).Replace(oldChar: '\\', newChar: '/'))
-                .Where(predicate: static path => path.Length > 0 && !path.StartsWith(value: "experimental/", comparisonType: StringComparison.Ordinal)).ToHashSet(comparer: PuckPaths.Comparer);
-            var shaderDirectories = projectDirectories.Select(selector: static project => (project + "/Assets/Shaders/"))
-                .Where(predicate: path => Directory.Exists(path: Within(root: repository, path: path))).ToArray();
-            if (shaderDirectories.Length == 0) { return; }
-            // Restrict the ignored walk to tracked projects' shader directories: never walk bin/obj or worker trees.
-            var artifacts = ReadGit(repository, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", .. shaderDirectories], cancellationToken);
-            var candidates = artifacts.Where(predicate: path =>
-                (path.EndsWith(value: ".spv", comparisonType: StringComparison.Ordinal) || path.EndsWith(value: ".dxil", comparisonType: StringComparison.Ordinal)) &&
-                artifacts.Contains(item: (path + ".hash"))).ToArray();
-            if (candidates.Length == 0) { return; }
-
-            // Git names ignored paths even before they exist. Tracked destination files are excluded by this query.
-            var ignored = CliGit.RunAsync(repository: Tree, arguments: ["check-ignore", "-z", "--stdin"],
-                input: string.Join(separator: "\0", values: candidates.SelectMany(selector: static path => new[] { path, (path + ".hash") })) + '\0',
-                cancellationToken: cancellationToken).GetAwaiter().GetResult();
-            if (ignored.ExitCode is not (0 or 1)) { throw new IOException(message: ignored.Stderr.Trim()); }
-            var destinationIgnored = ignored.Stdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries).ToHashSet(comparer: PuckPaths.Comparer);
-            var copied = 0;
-
-            foreach (var group in candidates.Where(predicate: path => destinationIgnored.Contains(item: path) && destinationIgnored.Contains(item: (path + ".hash")))
-                .GroupBy(keySelector: static path => {
-                    var marker = path.IndexOf(value: "/Assets/Shaders/", comparisonType: PuckPaths.Comparison);
-                    return ((marker < 0) ? string.Empty : path[..marker]);
-                }, comparer: PuckPaths.Comparer)) {
+            if (capture) { m_shaderDonors = ShaderDonors(cancellationToken); }
+            var projectDirectories = capture
+                ? ReadGit(Tree, ["ls-files", "-z", "--", "*.csproj"], cancellationToken)
+                    .Select(selector: static path => (Path.GetDirectoryName(path: path) ?? string.Empty).Replace(oldChar: '\\', newChar: '/'))
+                    .Where(predicate: static path => path.Length > 0 && !path.StartsWith(value: "experimental/", comparisonType: StringComparison.Ordinal)).ToHashSet(comparer: PuckPaths.Comparer)
+                : m_originalShaders.Keys.Select(ShaderProject).ToHashSet(comparer: PuckPaths.Comparer);
+            var accepted = new HashSet<string>(comparer: PuckPaths.Comparer);
+            foreach (var donor in m_shaderDonors) {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!projectDirectories.Contains(item: group.Key)) { continue; }
                 try {
-                    copied += WarmProject(project: group.Key, artifacts: group, cancellationToken: cancellationToken);
+                    LawProofFiles.RequireUnlinkedPath(path: donor);
+                    if (!TryResolveSource(donor, out var common, out _) || !string.Equals(common, Source, PuckPaths.Comparison)) { continue; }
+                    var candidates = ShaderArtifacts(donor, projectDirectories, cancellationToken);
+                    if (candidates.Length == 0) { continue; }
+                    // Git names ignored paths even before they exist. Tracked destination files are excluded.
+                    var ignored = CliGit.RunAsync(repository: Tree, arguments: ["check-ignore", "-z", "--stdin"],
+                        input: string.Join(separator: "\0", values: candidates.SelectMany(selector: static path => new[] { path, (path + ".hash") })) + '\0',
+                        cancellationToken: cancellationToken).GetAwaiter().GetResult();
+                    if (ignored.ExitCode is not (0 or 1)) { throw new IOException(message: ignored.Stderr.Trim()); }
+                    var destinationIgnored = ignored.Stdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries).ToHashSet(comparer: PuckPaths.Comparer);
+                    var copied = 0;
+                    foreach (var group in candidates.Where(predicate: path => destinationIgnored.Contains(item: path) && destinationIgnored.Contains(item: (path + ".hash")))
+                        .GroupBy(keySelector: ShaderProject, comparer: PuckPaths.Comparer)) {
+                        if (!projectDirectories.Contains(item: group.Key)) { continue; }
+                        try {
+                            copied += WarmProject(donor, group.Key, group, accepted, capture, cancellationToken);
+                        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                            Console.Error.WriteLine(value: $"laws prove: shader warming skipped {group.Key}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+                        }
+                    }
+                    if (copied != 0) {
+                        Console.Error.WriteLine(value: $"laws prove: warmed {copied} shader artifact pair(s) from {CliPaths.ToDisplay(fullPath: donor)}; the normal build validates source, includes and recipe.");
+                    }
                 } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
-                    Console.Error.WriteLine(value: $"laws prove: shader warming skipped {group.Key}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+                    Console.Error.WriteLine(value: $"laws prove: shader donor unavailable {CliPaths.ToDisplay(fullPath: donor)}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
                 }
             }
-            if (copied != 0) {
-                Console.Error.WriteLine(value: $"laws prove: warmed {copied} shader artifact pair(s); the normal build validates source, includes and recipe.");
-            }
+            if (capture) { CaptureOriginalShaders(projectDirectories, cancellationToken); }
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
             Console.Error.WriteLine(value: $"laws prove: shader warming unavailable: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
     }
 
-    private int WarmProject(string project, IEnumerable<string> artifacts, CancellationToken cancellationToken) {
-        var sourceLock = Within(root: repository, path: $"{project}/obj/shader-publish.lock");
+    private string[] ShaderDonors(CancellationToken cancellationToken) {
+        var donors = new List<string> { repository };
+        var registered = CliGit.RunAsync(repository: repository, arguments: ["worktree", "list", "--porcelain", "-z"],
+            cancellationToken: cancellationToken).GetAwaiter().GetResult();
+        if (registered.ExitCode == 0) {
+            foreach (var entry in registered.Stdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+                if (entry.StartsWith(value: "worktree ", comparisonType: StringComparison.Ordinal)) { donors.Add(entry[9..]); }
+            }
+        }
+        return [.. donors.Select(path => PuckPaths.Normalize(Path.GetFullPath(path)))
+            .Where(path => !string.Equals(path, PuckPaths.Normalize(Tree), PuckPaths.Comparison)).Distinct(comparer: PuckPaths.Comparer)];
+    }
+    private static string ShaderProject(string artifact) {
+        var marker = artifact.IndexOf(value: "/Assets/Shaders/", comparisonType: PuckPaths.Comparison);
+        return ((marker < 0) ? string.Empty : artifact[..marker]);
+    }
+    private static string[] ShaderArtifacts(string root, HashSet<string> projects, CancellationToken cancellationToken) {
+        // Restrict every donor walk to the proven tree's tracked projects, never bin/obj or arbitrary worker folders.
+        var directories = projects.Select(selector: static project => (project + "/Assets/Shaders/"))
+            .Where(predicate: path => Directory.Exists(path: Within(root, path))).ToArray();
+        if (directories.Length == 0) { return []; }
+        var artifacts = ReadGit(root, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", .. directories], cancellationToken);
+        return [.. artifacts.Where(predicate: path =>
+            (path.EndsWith(value: ".spv", comparisonType: StringComparison.Ordinal) || path.EndsWith(value: ".dxil", comparisonType: StringComparison.Ordinal)) &&
+            artifacts.Contains(item: (path + ".hash")))];
+    }
+    private void CaptureOriginalShaders(HashSet<string> projects, CancellationToken cancellationToken) {
+        foreach (var group in ShaderArtifacts(Tree, projects, cancellationToken).GroupBy(ShaderProject, PuckPaths.Comparer)) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!projects.Contains(group.Key)) { continue; }
+            try {
+                var path = Within(Tree, $"{group.Key}/obj/shader-publish.lock");
+                if (!File.Exists(path)) { continue; }
+                using var publication = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                foreach (var artifact in group) {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (ReadPair(Tree, artifact, out var sidecar, out _)) { m_originalShaders![artifact] = sidecar; }
+                }
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                Console.Error.WriteLine(value: $"laws prove: original shader identity unavailable {group.Key}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+            }
+        }
+    }
+    private static bool ReadPair(string root, string artifact, out byte[] sidecar, out byte[] bytes) {
+        sidecar = bytes = [];
+        var source = Within(root, Path.ChangeExtension(artifact, ".hlsl"));
+        var binary = Within(root, artifact);
+        var hash = Within(root, artifact + ".hash");
+        if (!File.Exists(source) || !File.Exists(binary) || !File.Exists(hash)) { return false; }
+        sidecar = File.ReadAllBytes(hash);
+        bytes = File.ReadAllBytes(binary);
+        return CompletePair(sidecar, bytes);
+    }
+    private int WarmProject(string donor, string project, IEnumerable<string> artifacts, HashSet<string> accepted, bool capture, CancellationToken cancellationToken) {
+        var sourceLock = Within(root: donor, path: $"{project}/obj/shader-publish.lock");
         var destinationLock = Within(root: Tree, path: $"{project}/obj/shader-publish.lock");
         // A missing source lock is not evidence of a completed normal build. Do not create files in the caller.
         if (!File.Exists(path: sourceLock)) { return 0; }
@@ -154,19 +217,17 @@ internal sealed class LawProofTree(string tree, string source, string repository
 
         foreach (var artifact in artifacts) {
             cancellationToken.ThrowIfCancellationRequested();
-            var from = Within(root: repository, path: artifact);
+            if (accepted.Contains(artifact)) { continue; }
             var to = Within(root: Tree, path: artifact);
-            var fromSidecar = Within(root: repository, path: (artifact + ".hash"));
             var toSidecar = Within(root: Tree, path: (artifact + ".hash"));
             var source = Path.ChangeExtension(path: artifact, extension: ".hlsl");
-            if (!File.Exists(path: Within(root: repository, path: source)) || !File.Exists(path: Within(root: Tree, path: source)) ||
-                !File.Exists(path: from) || !File.Exists(path: fromSidecar)) { continue; }
-
-            var sidecar = File.ReadAllBytes(path: fromSidecar);
-            var bytes = File.ReadAllBytes(path: from);
-            if (!CompletePair(sidecar: sidecar, bytes: bytes)) { continue; }
+            if (!File.Exists(path: Within(root: Tree, path: source)) || !ReadPair(donor, artifact, out var sidecar, out var bytes)) { continue; }
+            if (!capture && (!m_originalShaders!.TryGetValue(artifact, out var original) || !sidecar.AsSpan().SequenceEqual(original))) { continue; }
             if (File.Exists(path: to) && File.Exists(path: toSidecar) && File.ReadAllBytes(path: toSidecar).AsSpan().SequenceEqual(other: sidecar) &&
-                File.ReadAllBytes(path: to).AsSpan().SequenceEqual(other: bytes)) { continue; }
+                File.ReadAllBytes(path: to).AsSpan().SequenceEqual(other: bytes)) {
+                accepted.Add(artifact);
+                continue;
+            }
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: to)!);
             var token = Guid.NewGuid().ToString(format: "N");
@@ -178,6 +239,7 @@ internal sealed class LawProofTree(string tree, string source, string repository
                 File.Delete(path: toSidecar);
                 File.Move(sourceFileName: temporary, destFileName: to, overwrite: true);
                 File.Move(sourceFileName: temporarySidecar, destFileName: toSidecar, overwrite: true);
+                accepted.Add(artifact);
                 copied++;
             } finally {
                 File.Delete(path: temporary);

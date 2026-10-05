@@ -1138,11 +1138,17 @@ removes untracked files Git does not ignore, and mirrors the caller's
 uncommitted and untracked files. Ignored managed build outputs stay in the clone at
 the paths where MSBuild produced them. Nothing copies or links the caller's
 `obj` or `bin`. Before withholding, the leased clone can warm its ignored shader
-outputs from the caller's complete `.spv`/`.dxil` and `.hash` pairs. Both project
-publication locks protect the copy; it rejects links, incomplete sidecars and
+outputs from complete `.spv`/`.dxil` and `.hash` pairs in the caller, then other
+registered worktrees sharing its common Git directory. This also serves a caller
+that has source but no built artifacts. Both project publication locks protect
+the copy; it rejects links, incomplete sidecars and
 bytecode whose actual hash differs. Whole files publish with the sidecar last,
 and an equal destination pair stays untouched. A busy publisher skips warming
-that project. Warming does not certify freshness: the normal build still checks
+that project. The proof captures its initial complete sidecar identities. After
+restoring source, it warms again using only those exact sidecars and matching
+bytecode from the same donors. If an original pair is no longer available, the
+normal build recompiles it. The proof retains identities, not another bytecode
+cache. Warming does not certify freshness: the normal build still checks
 the destination source, ordered includes, effective recipe and bytecode, so a
 withheld shader change recompiles. Git rewrites changed tracked files; unchanged files retain
 their timestamps, so MSBuild's ordinary incremental checks apply.
