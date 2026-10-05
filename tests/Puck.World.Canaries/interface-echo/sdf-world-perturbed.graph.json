@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 74,
+        "width": 97,
         "height": 1
       }
     }
@@ -142,6 +142,11 @@
           ],
           "description": "The sdf-world pass\u0027s frustumOffset sentinel."
         },
+        "geometryOnly": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s geometryOnly sentinel."
+        },
         "gridFlags": {
           "type": "uint",
           "default": 0,
@@ -231,6 +236,109 @@
           ],
           "description": "The sdf-world pass\u0027s imageExtent sentinel."
         },
+        "indirectAllocation": {
+          "type": "uint2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s indirectAllocation sentinel."
+        },
+        "indirectApply": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s indirectApply sentinel."
+        },
+        "indirectBodies": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectBodies sentinel."
+        },
+        "indirectCertificateRevision": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectCertificateRevision sentinel."
+        },
+        "indirectContact": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectContact sentinel."
+        },
+        "indirectEpoch": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectEpoch sentinel."
+        },
+        "indirectFeedbackGain": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectFeedbackGain sentinel."
+        },
+        "indirectFrame": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectFrame sentinel."
+        },
+        "indirectMethod": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectMethod sentinel."
+        },
+        "indirectNearEnabled": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectNearEnabled sentinel."
+        },
+        "indirectPickPixel": {
+          "type": "uint4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s indirectPickPixel sentinel."
+        },
+        "indirectPreviousPublication": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectPreviousPublication sentinel."
+        },
+        "indirectReadGeneration": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectReadGeneration sentinel."
+        },
+        "indirectReadPublication": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectReadPublication sentinel."
+        },
+        "indirectReceiverProofs": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectReceiverProofs sentinel."
+        },
+        "indirectSourceGains": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s indirectSourceGains sentinel."
+        },
+        "indirectSources": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectSources sentinel."
+        },
         "indirectTier": {
           "type": "uint",
           "default": 0,
@@ -254,6 +362,532 @@
           "default": 0,
           "description": "The sdf-world pass\u0027s lightCount sentinel."
         },
+        "lightMap": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s lightMap sentinel."
+        },
+        "lightMapCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s lightMapCount sentinel."
+        },
+        "lightMaps": {
+          "type": "float4",
+          "length": 84,
+          "default": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "description": "The sdf-world pass\u0027s lightMaps sentinel."
+        },
+        "lightSweepRadius": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s lightSweepRadius sentinel."
+        },
         "meshDraws": {
           "type": "uint",
           "default": 0,
@@ -263,6 +897,11 @@
           "type": "float",
           "default": 0,
           "description": "The sdf-world pass\u0027s nearDistance sentinel."
+        },
+        "preserveIndirectReceivers": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s preserveIndirectReceivers sentinel."
         },
         "previousView": {
           "type": "float4",

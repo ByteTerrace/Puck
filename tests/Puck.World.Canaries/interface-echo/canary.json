@@ -688,7 +688,7 @@
         "name": "sdf-world-every-member-reads-back-its-sentinel",
         "capture": "sdf-world.png",
         "extent": [
-          74,
+          97,
           1
         ],
         "region": [
@@ -764,7 +764,7 @@
         "name": "indirect-every-member-reads-back-its-sentinel",
         "capture": "indirect.png",
         "extent": [
-          80,
+          98,
           1
         ],
         "region": [
@@ -1772,7 +1772,7 @@
         "name": "sdf-world-every-member-reads-back-its-sentinel",
         "capture": "sdf-world.png",
         "extent": [
-          74,
+          97,
           1
         ],
         "region": [
@@ -1802,13 +1802,13 @@
         "name": "sdf-world-the-members-before-the-last-read-back",
         "capture": "sdf-world.png",
         "extent": [
-          74,
+          97,
           1
         ],
         "region": [
           0,
           0,
-          0.9864864864864865,
+          0.9896907216494846,
           1
         ],
         "reduce": "every",
@@ -1862,7 +1862,7 @@
         "name": "indirect-every-member-reads-back-its-sentinel",
         "capture": "indirect.png",
         "extent": [
-          80,
+          98,
           1
         ],
         "region": [
@@ -1922,13 +1922,13 @@
         "name": "indirect-the-members-before-the-last-read-back",
         "capture": "indirect.png",
         "extent": [
-          80,
+          98,
           1
         ],
         "region": [
           0,
           0,
-          0.9875,
+          0.9897959183673469,
           1
         ],
         "reduce": "every",
