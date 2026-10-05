@@ -1183,8 +1183,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         RebuildDriftedSources();
         PollOwedReadbacks();
         m_captureFootprints = frame.Footprints;
-        RefreshConvergenceDemand(m_captureInstance);
         PackagesBeginFrame(context: in context);
+        // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
+        RefreshConvergenceDemand(m_captureInstance);
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;

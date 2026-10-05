@@ -806,7 +806,10 @@ it produces, under the same requirement for its inputs. Until then
 when nothing is drawn over its output. Each instance counts its own passes.
 
 Every capture follows its captured root's current positive image footprints and
-all declared buffer dependencies, recursively. A reserved view with no image
+all declared buffer dependencies, recursively. The runtime refreshes this demand
+after package frame preparation, using the same placements the scheduler
+reads; clearing and rebuilding a live footprint list cannot temporarily release a
+contributing view's capture obligation. A reserved view with no image
 footprint contributes no completion obligation. Standing, deferred and
 previous-frame images with a positive footprint still contribute, as do standing
 buffer sources. Each participating package is notified once per request through

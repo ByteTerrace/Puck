@@ -50,6 +50,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [InlineData("previous")]
     [InlineData("buffer")]
     [InlineData("removed")]
+    [InlineData("prepared")]
     public void CaptureCompletionFollowsItsVisibleImagesAndBufferDependencies(string edge) {
         const string Inactive = "inactive";
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
@@ -61,7 +62,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             ? Runtime(gpu, recorders, NamedBufferInstances(), "main", null!, NamedBufferReader(null))
             : Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },
                 Instance("main", reads: [new(Producer: PackageView), new(Producer: Inactive, PreviousFrame: edge == "previous")])),
-                "main", null!, null!, Graph(ScreensGraph(false, "view"), ("view", PackageView)));
+                "main", null!, null!, Graph(ScreensGraph(false, "view"), ("view", edge == "prepared" ? Inactive : PackageView)));
         var footprints = new List<RenderGraphFootprint>();
         if (!buffer) {
             footprints.Add(new("main", PackageView, 1, 1));
@@ -76,7 +77,17 @@ public sealed partial class RenderGraphRuntimeLawTests {
         if (buffer) { runtime.Node(0).Paused = true; }
         var request = new FrameCaptureRequest(CaptureRequest().Path);
         runtime.RequestCapture(request);
-        var demanded = buffer || edge is "image" or "previous" or "removed";
+        if (edge == "prepared") {
+            // World clears its live placements before producing a frame, then its package composes them again.
+            // The captured image still depends on that prepared view, even on the first frozen frame.
+            footprints.RemoveAll(item => item.Producer == Inactive);
+            package.PrepareFootprints = () => {
+                if (!footprints.Any(item => item.Producer == Inactive)) {
+                    footprints.Add(new("main", Inactive, 1, 1));
+                }
+            };
+        }
+        var demanded = buffer || edge is "image" or "previous" or "removed" or "prepared";
         if (demanded) {
             frames.Next(3);
             Assert.False(request.Completion.IsCompleted);
@@ -100,6 +111,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         private readonly IRenderGraphPackageFactory m_inner = buffer ? new NamedBufferPackage() : new ViewPackage();
         public List<string> Started { get; } = [];
         public bool Ready { get; set; }
+        public Action? PrepareFootprints { get; set; }
+        public void BeginFrame(in FrameContext context) {
+            m_inner.BeginFrame(context: in context);
+            PrepareFootprints?.Invoke();
+        }
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
             m_inner.BuildAsync(context, cancellationToken);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
