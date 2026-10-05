@@ -46,6 +46,7 @@ internal sealed partial class WorldScreenBinder {
         foreach (var (key, root) in m_infinityRoots.ToArray()) {
             if (root.Epoch != m_infinityEpoch) {
                 foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry); }
+                m_renderProbe?.UnregisterInfinityPlan(root);
                 _ = m_infinityRoots.Remove(key);
                 continue;
             }
@@ -108,6 +109,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         root.Plan = plan;
+        m_renderProbe?.RegisterInfinityPlan(root, root.Name, plan);
         root.NestingDepth = depth;
         root.Subplans.Clear();
         foreach (var consumer in root.Consumers.Values) {
@@ -215,6 +217,7 @@ internal sealed partial class WorldScreenBinder {
     private void ReleaseInfinityRoots() {
         foreach (var root in m_infinityRoots.Values) {
             foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry); }
+            m_renderProbe?.UnregisterInfinityPlan(root);
         }
         m_infinityRoots.Clear();
         m_infinityOutputs.Clear();

@@ -2069,6 +2069,10 @@ domains contribute their aggregate per-tick budget once, not once per follower.
 `body.targets <body>` includes the selected route's status and waypoint. Both
 `world.navigation` and `world.budget` are server-safe under `--headless`;
 the latter names the absent renderer while retaining all authoritative costs.
+In a rendered host, each live infinity root adds its planned view count against
+the cap and its named depth or capacity fallbacks. Cameras sharing that root
+share its plan entry; removing the root withdraws it. The ordinary render
+budget reports those instances' allocations and completed dispatch counts.
 
 `world.counters [<source-or-prefix>] [--json]` is the one work-counter
 readout, registered in every host shape. It discovers every

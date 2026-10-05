@@ -206,6 +206,11 @@ expansions, extracted paths, and capacity refusals. A bounded sample is not glob
 neighbors, and a headless work count is not an FPS measurement. None of these
 verbs mutates the field.
 
+The windowed budget also lists each binder root's admitted infinity views against
+its cap and named fallbacks. Cameras sharing that root share one planned count;
+retiring the root withdraws its plan. Those scene counts are separate from the
+ordinary live render budget's actual GPU allocations and completed dispatches.
+
 Body command targets use the world's authored local-seat prefix, not the host's
 four-seat ceiling. A zero-seat world can address peer body 0 through the same
 designation and control verbs as any other active peer.
