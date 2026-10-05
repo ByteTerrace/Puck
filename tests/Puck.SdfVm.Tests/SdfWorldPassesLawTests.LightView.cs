@@ -36,9 +36,8 @@ public sealed partial class SdfWorldPassesLawTests {
         residency.ProduceFirstFrame(context: context);
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: [new RenderGraphInstance(Name: Light,
             Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 2).Passes.Count,
-            Reads: [], Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
-            OutputExtent = new RenderGraphPixelExtent(Width: 512, Height: 512),
-        }], set: out var set, refusal: out var setRefusal), userMessage: setRefusal?.Message);
+            Reads: [], Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld)],
+            set: out var set, refusal: out var setRefusal), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(deviceContext: gpu, graphs: new RenderGraphRuntimeGraph?[1],
             hostsOnDirectX: false, packages: packages, pipelines: pipelines.Pipelines, root: Light, set: set,
             runtime: out var runtime, refusal: out var refusal), userMessage: refusal?.Message);
