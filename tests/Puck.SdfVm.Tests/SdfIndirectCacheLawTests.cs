@@ -16,28 +16,28 @@ public sealed class SdfIndirectCacheLawTests {
     public void AnUnchangedBrickDirectoryOwesNoUploadAfterEveryRingSlotHasCaughtUp() {
         using var rig = new Rig();
 
-        for (var frame = 0; (frame < 16); frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
-        Assert.True(rig.Cache.IsComplete);
+        for (var frame = 0; (frame < 16); frame++) { rig.Cache.Plan(inputs: Inputs); rig.Cache.Submitted(); }
+        Assert.True(condition: rig.Cache.IsComplete);
         var region = rig.Cache.Regions[0];
 
         Assert.Equal(5120, region.ByteCount);
-        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(region.Contents[(256 * 16)..]));
-        Assert.Equal(192, BinaryPrimitives.ReadInt32LittleEndian(region.Contents[((256 * 16) + 4)..]));
-        for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) { region.Flush(slot); region.RecordCopy(0, slot); }
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(source: region.Contents[(256 * 16)..]));
+        Assert.Equal(192, BinaryPrimitives.ReadInt32LittleEndian(source: region.Contents[((256 * 16) + 4)..]));
+        for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) { region.Flush(slot: slot); region.RecordCopy(commandBuffer: 0, slot: slot); }
         var before = region.Contents.ToArray();
-        var writes = rig.Gpu.Count("IGpuStorageBuffer.Write(offset)");
-        var dispatches = rig.Gpu.Count("IGpuRecorder.Dispatch");
+        var writes = rig.Gpu.Count(key: "IGpuStorageBuffer.Write(offset)");
+        var dispatches = rig.Gpu.Count(key: "IGpuRecorder.Dispatch");
 
-        Assert.True((writes > 0));
+        Assert.True(condition: (writes > 0));
 
-        rig.Cache.Plan(Inputs);
-        Assert.False(rig.Cache.NeedsPublish);
-        for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) { region.Flush(slot); region.RecordCopy(0, slot); }
+        rig.Cache.Plan(inputs: Inputs);
+        Assert.False(condition: rig.Cache.NeedsPublish);
+        for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) { region.Flush(slot: slot); region.RecordCopy(commandBuffer: 0, slot: slot); }
         Assert.Equal(before, region.Contents.ToArray());
-        Assert.Equal(writes, rig.Gpu.Count("IGpuStorageBuffer.Write(offset)"));
-        Assert.Equal(dispatches, rig.Gpu.Count("IGpuRecorder.Dispatch"));
-        rig.Cache.Reset(2);
-        Assert.All(region.Contents[(256 * 16)..].ToArray(), value => Assert.Equal(byte.MaxValue, value));
+        Assert.Equal(writes, rig.Gpu.Count(key: "IGpuStorageBuffer.Write(offset)"));
+        Assert.Equal(dispatches, rig.Gpu.Count(key: "IGpuRecorder.Dispatch"));
+        rig.Cache.Reset(epoch: 2);
+        Assert.All(region.Contents[(256 * 16)..].ToArray(), value => Assert.Equal(actual: value, expected: byte.MaxValue));
     }
     [Fact]
     public void GeometryWaitsForThawAndAnAdmittedBatchThenWithdrawsEveryOldStratum() {

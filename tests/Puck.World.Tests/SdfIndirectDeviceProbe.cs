@@ -77,10 +77,10 @@ internal static class SdfIndirectDeviceProbe {
         for (var brick = 0; (brick < (absent.Length / 16)); brick++) { BinaryPrimitives.WriteInt32LittleEndian(destination: absent.AsSpan(start: ((brick * 16) + 12)), value: -1); }
         using var nearInputs = (worldParameters ? services.BufferFactory.CreateHostVisible(data: absent,
             name: default, usage: GpuBufferUsage.Storage) : null);
-        var absentBricks = (worldParameters ? new byte[SdfIndirectBrickTable.ByteLength(512)] : []);
+        var absentBricks = (worldParameters ? new byte[SdfIndirectBrickTable.ByteLength(capacity: 512)] : []);
 
         // Both tier directory offsets are absent; other tables retain their original zero-count fixture bytes.
-        absentBricks.AsSpan().Fill(byte.MaxValue);
+        absentBricks.AsSpan().Fill(value: byte.MaxValue);
         using var nearBricks = (worldParameters ? services.BufferFactory.CreateHostVisible(data: absentBricks,
             name: default, usage: GpuBufferUsage.Storage) : null);
         var buffers = new List<IGpuStorageBuffer>();

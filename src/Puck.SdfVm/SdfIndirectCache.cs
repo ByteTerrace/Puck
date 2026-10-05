@@ -37,7 +37,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
             m_free[level] = new SortedSet<int>(collection: Enumerable.Range(offset, layout.Pools[level]));
             offset += layout.Pools[level];
         }
-        m_bricks = new byte[SdfIndirectBrickTable.ByteLength(layout.BrickCapacity)];
+        m_bricks = new byte[SdfIndirectBrickTable.ByteLength(capacity: layout.BrickCapacity)];
         m_updates = new byte[((layout.TraceBudget + (2 * layout.ClassifyBudget)) * 16)];
         m_shadeUpdates = new byte[(layout.ShadeBudget * 16)];
         m_traceStates = new uint[layout.ProbeCapacity];
@@ -243,7 +243,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     private void ClearBricks() {
         Array.Clear(array: m_bricks);
         for (var slot = 0; (slot < Layout.BrickCapacity); slot++) { BinaryPrimitives.WriteInt32LittleEndian(destination: m_bricks.AsSpan(start: ((slot * 16) + 12)), value: -1); }
-        m_bricks.AsSpan((Layout.BrickCapacity * 16)).Fill(byte.MaxValue);
+        m_bricks.AsSpan(start: (Layout.BrickCapacity * 16)).Fill(value: byte.MaxValue);
     }
     private static void Write(byte[] bytes, int row, int x, int y, int z, int w) {
         var span = bytes.AsSpan(length: 16, start: (row * 16));
