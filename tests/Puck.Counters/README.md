@@ -6,7 +6,8 @@ reports and their exact shared-session provenance. Gate discovery routes its
 recorded workload/script associations through the batch once.
 The [sky default matrix](sky-defaults/README.md) declares separate sky-form,
 independent field-scale and binary-shadow observations through engine readiness;
-its measured reports and final defaults remain owed.
+its measured reports and chosen Full defaults hold on the RTX 4070; the selected
+images and RTX 2060 device qualification remain open.
 
 These workloads feed [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector),
 which runs the same offscreen world on Vulkan and Direct3D 12 and records the

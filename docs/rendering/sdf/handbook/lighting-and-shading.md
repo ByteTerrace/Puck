@@ -590,7 +590,12 @@ including a valid dark answer, without passing cached sky through the screen.
 A local clear interval cannot declare a sky exit, and an ordinary hit's unproved
 sky hemisphere retains the cache sky contribution. Both methods return independent categories
 before the receiver's material response. Their device laws and measured
-comparison remain open qualification work in the rendering plan.
+comparison remain open qualification work in the rendering plan. The
+both-backend furnace already holds the finite emission-and-feedback formula,
+its zero-feedback discriminator and its reset image. That result does not
+qualify the comparison methods, standing receiver work, Near images, sealed
+rooms or portal transport. The rendering plan names those remaining checks
+and the separate floor-device qualification.
 
 ## Ambient occlusion: three taps into the ambient fill
 

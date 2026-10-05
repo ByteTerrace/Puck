@@ -2895,7 +2895,8 @@ Pinned lighting snapshots and readbacks add their actual counted allocations;
 the table's small-buffer estimates remain subject to those final counts.
 The earlier eight-byte hit estimate cannot preserve the accepted
 geometry contract and is replaced by these actual layout counts. G4's solve and
-apply remain open until their GPU implementation and named qualification pass.
+apply are implemented; their physical observations and floor-device counted
+qualification keep the step open.
 
 *Field evaluations at `medium`, every pass, against today's ambient occlusion
 (about 2,100,000 a frame whenever `ambient` runs):*
@@ -3118,8 +3119,10 @@ re-record explained in the same change.
      deferred count. Each actual Views dispatch has an ordered reset and
      fenced readback of that count; a capture waits only for the current receiver scope of views it
      actually demands. Static primary results retain valid certificates across
-     cadence-off frames. The physical furnace, sealed-room, bleed and reset
-     observations still have to qualify these source contracts.
+     cadence-off frames. The furnace holds its finite-sweep formula, zero-feedback
+     discriminator and reset image on both backends. Sealed-room, bleed and
+     indirect-off observations and the current receiver-work qualification
+     remain open.
    - Delivers: `shade` with its finite solve and its generations, the views
      apply with proofs from the cache and launches from the primary march (the
      visibility record's L words), `fill` not applied while it is on; the
@@ -6993,7 +6996,9 @@ rows in `src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
   The rest light unshadowed, scaled by ambient occlusion as an unshadowed
   directional is today. K comes from the tier: `low` 0 (today's floor already
   turns shadows off), `medium` 1, `high` 2, with a maximum of 4. These current
-  preset rows do not settle P18-14. The boot row defaults to K = 1, F = 0,
+  preset rows are retained by P18-14's counted component comparison; that
+  comparison does not claim an entire preset frame's ceiling. The boot row
+  defaults to K = 1, F = 0,
   zero fade ticks and instant overflow, with the named pinned sun as an
   `always` candidate when lights are unauthored. Applying a preset changes its
   four shadow-policy fields together. The host computes and reports the full
@@ -8265,10 +8270,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
     - Source state: `skyFieldScale` selects the full or half sky field grid
       independently of the view's render scale, through authored defaults,
       presets and the live lever. The collector and paired sky/shadow matrix
-      are implemented. The actual RTX 4070 measurements and default decision
-      remain open; RTX 2060 hardware qualification remains a separate debt.
+      are implemented. On the RTX 4070, the thirty-six paired sky and shadow
+      observations are recorded and hold their ceilings. The chosen presets
+      retain field scale 1 at every tier, K = 0, 1 and 2, amortization off at
+      `low` and on at `medium` and `high`, zero fade slots and ticks, and instant
+      overflow. The matrix fixes the floor view scale and uses the High shadow
+      marcher for its binary-light component controls; these are not ceilings
+      for whole shipped presets. The selected Full images and parity remain
+      qualification work, and RTX 2060 hardware qualification remains separate.
     - Delivers: the sky leg recorded at each tier and field scale in the
-      configurations the floor-tier open decision lists, and `quality.puck`'s
+      declared matrix configurations, and `quality.puck`'s
       `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
       `shadowFadeTicks` and `shadowOverflow` rows as the lead
       decides beside P15-8.
@@ -8396,16 +8407,16 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
   name at validation and at a live edit. The RTX 2060's host-visible heap is
   already near full, so the fix and the cap land together.
 
-**Open decisions for the lead.**
+**Chosen sky defaults and floor-device qualification.**
 
-- **The floor tier's sky defaults (P18-14).** Gather, at 1920 by 1080 on the
-  RTX 2060's floor tier, each sky and shadow row for: the sky leg's drift,
-  twinkle and keyed frames at field scale 1 and 0.5; clouds at each reduced
-  form; shadow slots 0, 1 and 2 over the binary-star leg, each with P18-13's
-  amortization off and on where P15-5 has landed. Choose `low`, `medium` and
-  `high`'s `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
-  `shadowFadeTicks` and `shadowOverflow`. This
-  is decided beside P15-8, from the counted rows of both packages.
+- **The sky defaults (P18-14).** The RTX 4070 component matrix retains the
+  Full field at every tier and the existing shadow ladder. Half remains an
+  authored option; lower counts alone do not qualify its images. The
+  [sky-default matrix](../../tests/Puck.Counters/sky-defaults/README.md) owns
+  the observations and their limits. The same drift, twinkle, keyed, cloud
+  and binary-shadow inputs at 1920 by 1080 still require RTX 2060 device
+  records and passing checks. This floor qualification does not reopen a
+  measured default decision without contrary evidence.
 
 **Check:** every step's own check above, and together: an artist can author,
 key and live-edit a sky of any number of bodies and layers in any frame, from
@@ -8598,6 +8609,25 @@ programme is done.
   byte to the Windows build of the same commit.
 - **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
   run at `low` on floor hardware.
+- **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14
+  keep their RTX 2060 device checks open. First close the available RTX 4070
+  native laws, physical canaries, direct cap and live-source controls, parity
+  and indirect comparison; source preparation is not their verdict. Then use
+  the same candidate's successfully built private CLI and World artifact on
+  the RTX 2060, outside a remote session. Run the declared
+  [sky matrix](../../tests/Puck.Counters/sky-defaults/README.md) and
+  [indirect comparison](../../tests/Puck.Counters/indirect-comparison/README.md)
+  serially at their authored 1920 by 1080 output. Retain every backend's
+  transcript, script and completion identity, reject device recovery or an
+  unavailable required row, and record and check the saved paired reports
+  through the [counter guide](../../tests/Puck.Counters/README.md). Recording
+  preserves the other devices' records; never replace them with estimates.
+  Check actual active and retiring residency and graph bytes in `world.budget`,
+  the aperture's floor-device heap limits, the `split-seats` and `pipeline-fault`
+  controls, and the floor parity stations. The fixture READMEs own the
+  executable recipes. Only actual RTX 2060 qualification may remain after
+  the local software and RTX 4070 checks pass; this does not add P18-7 or
+  P18-11's separate body-authoring work to the part-two binder slice.
 - **Hardware: P12b-4's recorded camera run.** Keeps P12 open. A real camera
   feeding a screen on both backends, recorded.
 - **Hardware: P13b-4's recorded Windows editor click.** Keeps P13 open, and is
