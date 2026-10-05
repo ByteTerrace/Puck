@@ -5,6 +5,74 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 public sealed partial class RenderGraphRuntimeLawTests {
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("zero")]
+    [InlineData("image")]
+    [InlineData("previous")]
+    [InlineData("buffer")]
+    [InlineData("removed")]
+    public void CaptureCompletionFollowsItsVisibleImagesAndBufferDependencies(string edge) {
+        const string Inactive = "inactive";
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var recorders = new Recorders();
+        var buffer = edge == "buffer";
+        var package = new CaptureDemandPackage(buffer);
+        recorders.Registry.Register(buffer ? RenderGraphPackageCatalog.Indirect : RenderGraphPackageCatalog.SdfWorld, package);
+        using var runtime = buffer
+            ? Runtime(gpu, recorders, NamedBufferInstances(), "main", null!, NamedBufferReader(null))
+            : Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },
+                Instance("main", reads: [new(Producer: PackageView), new(Producer: Inactive, PreviousFrame: edge == "previous")])),
+                "main", null!, null!, Graph(ScreensGraph(false, "view"), ("view", PackageView)));
+        var footprints = new List<RenderGraphFootprint>();
+        if (!buffer) {
+            footprints.Add(new("main", PackageView, 1, 1));
+            if (edge != "absent") { footprints.Add(new("main", Inactive, edge == "zero" ? 0 : 1, 1)); }
+        }
+        var frames = new Frames(runtime, [new("main", 1, 1)], footprints);
+        if (edge == "previous") {
+            // The previous image is a real completed publication, then stands without current producer demand.
+            new Frames(runtime, [new("main", 1, 1), new(Inactive, 1, 1)], footprints).Settle();
+        }
+        frames.Settle();
+        if (buffer) { runtime.Node(0).Paused = true; }
+        var request = new FrameCaptureRequest(CaptureRequest().Path);
+        runtime.RequestCapture(request);
+        var demanded = buffer || edge is "image" or "previous" or "removed";
+        if (demanded) {
+            frames.Next(3);
+            Assert.False(request.Completion.IsCompleted);
+            Assert.Contains("pending demanded source", runtime.UnservedCaptureReason);
+            Assert.Single(package.Started, name => name == (buffer ? "pool" : Inactive));
+            // A standing buffer or previous image still owns its fence. Repeated demand never restarts that operation.
+            if (edge == "removed") { footprints.RemoveAll(item => item.Producer == Inactive); }
+            else { package.Ready = true; }
+        } else {
+            Assert.DoesNotContain(Inactive, package.Started);
+            Assert.Equal(0UL, runtime.NodeOf(Inactive)!.FrameCounter);
+        }
+        TestLiveness.Within(frames: 64, step: () => { frames.Next(); return request.Completion.IsCompleted; },
+            building: () => runtime.Instances.Instances.Any(instance => runtime.NodeOf(instance.Name)?.IsBuildingCandidate == true),
+            reason: () => runtime.UnservedCaptureReason);
+        Assert.Null(Outcome(request).Error);
+        if (demanded) { Assert.Single(package.Started, name => name == (buffer ? "pool" : Inactive)); }
+    }
+
+    private sealed class CaptureDemandPackage(bool buffer) : IRenderGraphPackageFactory {
+        private readonly IRenderGraphPackageFactory m_inner = buffer ? new NamedBufferPackage() : new ViewPackage();
+        public List<string> Started { get; } = [];
+        public bool Ready { get; set; }
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
+            m_inner.BuildAsync(context, cancellationToken);
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
+            m_inner.Create(context, built, groups);
+        public IShaderPipelineStorageCounter? CounterOf(string instance) => m_inner.CounterOf(instance);
+        public RenderGraphPackageFragment? FragmentOf(string instance) => m_inner.FragmentOf(instance);
+        public FrameRender CaptureReadinessOf(string instance) => Ready || (!buffer && instance == PackageView)
+            ? FrameRender.Rendered : FrameRender.Waiting("pending demanded source");
+        public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Started.Add(instance);
+    }
+
     [Fact]
     public void ConvergingCaptureRendersExactlyTheRequestedSamplesBeforeServing() {
         var gpu = new FakePipelineGpu();

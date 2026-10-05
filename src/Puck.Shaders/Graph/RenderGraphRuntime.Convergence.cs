@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -7,6 +8,10 @@ public sealed partial class RenderGraphRuntime {
     private Puck.Hosting.FrameContext? m_convergenceContext;
 
     private readonly HashSet<int> m_convergenceInstances = [];
+    private readonly HashSet<int> m_convergenceDemand = [];
+    private readonly HashSet<string> m_convergenceStarted = new(StringComparer.Ordinal);
+    private readonly Stack<int> m_convergencePending = new();
+    private IReadOnlyList<RenderGraphFootprint> m_captureFootprints = [];
 
     private bool CanConverge(int index) => ((m_producers[index] is null) && (m_sources[index] is null));
     // An encoder already owns the Nth image. Keep its existing dependency closure frozen across index changes,
@@ -20,18 +25,34 @@ public sealed partial class RenderGraphRuntime {
         foreach (var index in retained) { m_convergenceInstances.Add(item: index); }
     }
     private void BeginConvergence(int captured, FrameCaptureRequest request) {
-        var convergence = new RenderGraphConvergence(request: request);
-
-        m_convergence = convergence;
+        m_convergence = new RenderGraphConvergence(request: request);
         m_convergenceContext = null;
         m_convergenceInstances.Clear();
-        var pending = new Stack<int>();
-
-        pending.Push(item: captured);
-        while (pending.TryPop(result: out var index)) {
-            if (!m_convergenceInstances.Add(item: index)) {
-                continue;
+        m_convergenceStarted.Clear();
+        RefreshConvergenceDemand(captured);
+    }
+    // Capacity and declared reads do not imply visible image demand. Keep standing, deferred and previous-frame
+    // contributors, but require their actual positive footprint; buffer dependencies never need a pixel footprint.
+    // A package joins this request only once, so changing demand cannot restart its samples or finite source epoch.
+    private void RefreshConvergenceDemand(int captured) {
+        if (m_convergence is not { Request.Completion.IsCompleted: false } convergence ||
+            m_nodes[captured]?.PendingCapturePath == convergence.Request.Path) { return; }
+        m_convergenceDemand.Clear();
+        m_convergencePending.Clear();
+        m_convergencePending.Push(captured);
+        while (m_convergencePending.TryPop(out var index)) {
+            if (!m_convergenceDemand.Add(index)) { continue; }
+            foreach (var read in m_set.Reads[index]) {
+                if (read.Kind == ShaderPipelineResourceKind.Buffer || ShowsCaptureRead(index, read.Producer)) {
+                    m_convergencePending.Push(read.Producer);
+                }
             }
+        }
+        if (m_convergenceInstances.SetEquals(m_convergenceDemand)) { return; }
+        m_convergenceInstances.Clear();
+        m_convergenceInstances.UnionWith(m_convergenceDemand);
+        foreach (var index in m_convergenceInstances) {
+            if (!m_convergenceStarted.Add(m_set.Instances[index].Name)) { continue; }
             var packages = new HashSet<string>(comparer: StringComparer.Ordinal);
             if (m_set.Instances[index].ExternalPackage is { } declared &&
                 m_packages.TryGetFactory(declared, out var declaredFactory)) {
@@ -47,10 +68,17 @@ public sealed partial class RenderGraphRuntime {
                     }
                 }
             }
-            foreach (var read in m_set.Reads[index]) {
-                pending.Push(item: read.Producer);
-            }
         }
+    }
+    private bool ShowsCaptureRead(int consumer, int producer) {
+        var consumerName = m_set.Instances[consumer].Name;
+        var producerName = m_set.Instances[producer].Name;
+        for (var index = 0; index < m_captureFootprints.Count; index++) {
+            var footprint = m_captureFootprints[index];
+            if (footprint.Consumer == consumerName && footprint.Producer == producerName &&
+                footprint.Width > 0 && footprint.Height > 0) { return true; }
+        }
+        return false;
     }
     private Puck.Hosting.FrameContext ConvergenceContext(in Puck.Hosting.FrameContext context) {
         if (m_convergence is not { Request.Completion.IsCompleted: false }) {

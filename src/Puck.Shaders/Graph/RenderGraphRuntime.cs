@@ -1182,6 +1182,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         RebuildDriftedSources();
         PollOwedReadbacks();
+        m_captureFootprints = frame.Footprints;
+        RefreshConvergenceDemand(m_captureInstance);
         PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];
