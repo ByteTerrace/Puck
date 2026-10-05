@@ -14,9 +14,8 @@ public static class SdfIndirectBrickTable {
     /// <exception cref="OverflowException">The region length exceeds an array's index range.</exception>
     public static int ByteLength(int capacity) {
         ArgumentOutOfRangeException.ThrowIfNegative(capacity);
-        return checked(capacity * 5 * sizeof(int));
+        return checked(((capacity * 5) * sizeof(int)));
     }
-
     /// <summary>Indexes the placed pool records without moving them. Unused directory entries are minus one and
     /// follow every live key; the shader compares the referenced full key in <see cref="IrradianceBrickKey"/> order.</summary>
     /// <param name="table">The complete region; each absent pool record has minus one in its fourth word.</param>
@@ -28,23 +27,27 @@ public static class SdfIndirectBrickTable {
     public static void Index(byte[] table, int capacity) {
         ArgumentNullException.ThrowIfNull(table);
         if (table.Length != ByteLength(capacity)) { throw new ArgumentException("The brick table must include its complete slot directory.", nameof(table)); }
-        var directory = MemoryMarshal.Cast<byte, int>(table.AsSpan(capacity * 16));
+        var directory = MemoryMarshal.Cast<byte, int>(table.AsSpan((capacity * 16)));
+
         directory.Fill(-1);
         var count = 0;
-        for (var slot = 0; slot < capacity; slot++) {
-            if (BinaryPrimitives.ReadInt32LittleEndian(table.AsSpan(slot * 16 + 12)) != -1) { directory[count++] = slot; }
+
+        for (var slot = 0; (slot < capacity); slot++) {
+            if (BinaryPrimitives.ReadInt32LittleEndian(table.AsSpan(((slot * 16) + 12))) != -1) { directory[count++] = slot; }
         }
         directory[..count].Sort(new SlotOrder(table));
         // The temporary sorting span uses native integers; the published directory uses the region's little-endian words.
-        for (var index = 0; index < count; index++) {
-            BinaryPrimitives.WriteInt32LittleEndian(table.AsSpan(capacity * 16 + index * 4), directory[index]);
+        for (var index = 0; (index < count); index++) {
+            BinaryPrimitives.WriteInt32LittleEndian(table.AsSpan(((capacity * 16) + (index * 4))), directory[index]);
         }
     }
 
     private readonly struct SlotOrder(byte[] table) : IComparer<int> {
         public int Compare(int x, int y) => Key(x).CompareTo(Key(y));
+
         private IrradianceBrickKey Key(int slot) {
-            var row = table.AsSpan(slot * 16, 16);
+            var row = table.AsSpan((slot * 16), 16);
+
             return new(BinaryPrimitives.ReadInt32LittleEndian(row[12..]) & SdfIndirectLayout.BrickLevelMask,
                 BinaryPrimitives.ReadInt32LittleEndian(row), BinaryPrimitives.ReadInt32LittleEndian(row[4..]),
                 BinaryPrimitives.ReadInt32LittleEndian(row[8..]));

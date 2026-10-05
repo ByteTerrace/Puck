@@ -101,7 +101,7 @@ internal static class SdfIndirectDeviceProbe {
                     descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadWriteBuffer);
             }
             if (nearInputs is not null) {
-                foreach (var binding in nearPassBindings) { WriteNearBuffer(binding: binding, set: set, bricks: binding.Binding == bricksBinding); }
+                foreach (var binding in nearPassBindings) { WriteNearBuffer(binding: binding, set: set, bricks: (binding.Binding == bricksBinding)); }
             }
             services.Bindings.WriteBuffer(binding: 60, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 61, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
@@ -166,6 +166,7 @@ internal static class SdfIndirectDeviceProbe {
 
         void WriteNearBuffer(nint set, ShaderInterfaceBinding binding, bool bricks = false) {
             var buffer = (bricks ? nearBricks : nearInputs)!;
+
             services.Bindings.WriteBuffer(binding: binding.Binding, bufferHandle: buffer.BufferHandle,
                 bufferSize: ((buffer.SizeBytes / binding.ElementStride) * binding.ElementStride),
                 descriptorSetHandle: set, elementStride: binding.ElementStride, kind: GpuBindingKind.ReadOnlyBuffer);

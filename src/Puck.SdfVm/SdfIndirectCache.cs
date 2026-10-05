@@ -243,7 +243,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     private void ClearBricks() {
         Array.Clear(array: m_bricks);
         for (var slot = 0; (slot < Layout.BrickCapacity); slot++) { BinaryPrimitives.WriteInt32LittleEndian(destination: m_bricks.AsSpan(start: ((slot * 16) + 12)), value: -1); }
-        m_bricks.AsSpan(Layout.BrickCapacity * 16).Fill(byte.MaxValue);
+        m_bricks.AsSpan((Layout.BrickCapacity * 16)).Fill(byte.MaxValue);
     }
     private static void Write(byte[] bytes, int row, int x, int y, int z, int w) {
         var span = bytes.AsSpan(length: 16, start: (row * 16));
