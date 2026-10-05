@@ -124,7 +124,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 if (work.PassLabels[pass].EndsWith(comparisonType: StringComparison.Ordinal, value: "$views")) {
                     var transition = (work.TryGetPassCount(column: barriers, pass: pass, value: out var count) && (count > 0));
 
-                    Assert.Equal(actual: transition, expected: (change is "camera" or "shadow-direction"));
+                    // Views publishes receiver certificates even when its geometry predecessors stand.
+                    Assert.True(condition: transition);
                 }
             } else {
                 Assert.False(condition: work.TryGetPassCount(column: barriers, pass: pass, value: out _));
