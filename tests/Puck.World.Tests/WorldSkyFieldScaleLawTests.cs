@@ -100,11 +100,11 @@ public sealed class WorldSkyFieldScaleLawTests {
             documentId: "field"
             render {
               skyFieldScale: 0.5
-              low { shadows: "Off" ambientOcclusion: false renderScale: 1 skyFieldScale: 0.5 }
+              low { shadows: Off ambientOcclusion: false renderScale: 1 skyFieldScale: 0.5 }
             }
             """);
         var compilation = WorldCompiler.CompileFile(path: source, cancellationToken: TestContext.Current.CancellationToken);
-        Assert.True(compilation.Success, "The authored sky field fraction must compile.");
+        Assert.True(compilation.Success, compilation.Diagnostics.FormatReport(sourceText: File.ReadAllText(source), filePath: source));
         Assert.Equal(.5f, compilation.RequireJson()["render"]!["skyFieldScale"]!.GetValue<float>());
         Assert.Equal(.5f, compilation.RequireJson()["render"]!["low"]!["skyFieldScale"]!.GetValue<float>());
     }

@@ -67,7 +67,8 @@ public static class WorldApplicationDefaults {
     public const string WindowTitle = "Puck: World";
 }
 /// <summary>One graphics-quality preset — the bundle of render levers the <c>world.quality</c> verb writes for a named
-/// tier (the individual <c>world.shadows</c>/<c>.ao</c>/<c>.render-scale</c> verbs still override afterward).</summary>
+/// tier (the individual <c>world.shadows</c>/<c>.ao</c>/<c>.render-scale</c> verbs still override afterward).
+/// Omitted JSON members use these constructor defaults.</summary>
 /// <param name="Shadows">The soft-shadow tier the preset selects.</param>
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The scalar render-scale ceiling the preset selects.</param>
@@ -83,6 +84,7 @@ public static class WorldApplicationDefaults {
 /// <param name="Sky">The sky's quality tier the preset selects (<c>world.sky-quality</c>).</param>
 /// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
 /// <param name="SkyFieldScale">The independent sky field grid fraction, one or one half.</param>
+[method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
