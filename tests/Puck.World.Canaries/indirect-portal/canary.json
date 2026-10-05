@@ -1,0 +1,372 @@
+{
+  "id": "indirect-portal",
+  "title": "A red destination lights the white floor through its acquired portal image",
+  "binding": "A fixed camera looks at a white floor beside a window session onto a red emissive destination. Root analytic lights, material emission, sky and fill are zero. The enabled Screens category must appear in the same fenced floor pick and in the floor capture. The opposite changes only authored render.indirect.sources.screens to zero, while the destination still renders red. The root uses Medium and the existing current-source fence. The pointer station and conservative red image bounds require actual World confirmation; unsupported or absent incoming data fails rather than borrowing another response. This image canary does not substitute for finite mutual closure, whole-epoch acquired pixel immutability, cold-history equivalence, external-source taint, nested budget or warmed crossing laws.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "red-room.puck",
+    "README.md"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/indirect-portal/fixture.puck",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.explain",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-fenced-floor-incoming-screen-source",
+        "stream": "stdout",
+        "verb": "world.explain",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "screen-r",
+            "field": "screens",
+            "component": 0,
+            "line": "sources sky="
+          },
+          {
+            "name": "screen-g",
+            "field": "screens",
+            "component": 1,
+            "line": "sources sky="
+          },
+          {
+            "name": "screen-b",
+            "field": "screens",
+            "component": 2,
+            "line": "sources sky="
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "portal-radiance-reaches-the-floor",
+        "operator": "greater",
+        "left": {
+          "value": "screen-r"
+        },
+        "right": {
+          "literal": 0.001
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-destination-adds-no-g-source",
+        "operator": "equal",
+        "left": {
+          "value": "screen-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-destination-adds-no-b-source",
+        "operator": "equal",
+        "left": {
+          "value": "screen-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-floor-image-follows-screen-source-admission",
+        "capture": "floor.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.45,
+          0.45,
+          0.55,
+          0.55
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.01,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0.005,
+          0.005,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-shared-cache-is-fenced",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/indirect-portal/screens-off.puck",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.explain",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-fenced-floor-incoming-screen-source",
+        "stream": "stdout",
+        "verb": "world.explain",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "screen-r",
+            "field": "screens",
+            "component": 0,
+            "line": "sources sky="
+          },
+          {
+            "name": "screen-g",
+            "field": "screens",
+            "component": 1,
+            "line": "sources sky="
+          },
+          {
+            "name": "screen-b",
+            "field": "screens",
+            "component": 2,
+            "line": "sources sky="
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "portal-radiance-reaches-the-floor",
+        "operator": "equal",
+        "left": {
+          "value": "screen-r"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-destination-adds-no-g-source",
+        "operator": "equal",
+        "left": {
+          "value": "screen-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-destination-adds-no-b-source",
+        "operator": "equal",
+        "left": {
+          "value": "screen-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-floor-image-follows-screen-source-admission",
+        "capture": "floor.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.45,
+          0.45,
+          0.55,
+          0.55
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.005,
+          0.005,
+          0.005,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-shared-cache-is-fenced",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      }
+    ]
+  }
+}

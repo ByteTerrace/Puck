@@ -1,0 +1,4 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "indirect-portal-screens-off"
+render { indirect { sources { screens: 0 } } }

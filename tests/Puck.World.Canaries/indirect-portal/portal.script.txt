@@ -1,0 +1,15 @@
+# The actual current-source fence, rather than guessed warm ticks, arms each observation.
+world.cadence off
+world.quality medium
+world.indirect medium
+world.wait ready 25
+world.wait indirect 25
+world.view.pointer 48 48
+world.wait 4
+world.explain
+world.screenshot {run}/floor.png
+world.wait captures 5
+world.lighting
+world.nesting
+world.budget
+world.counters gpu
