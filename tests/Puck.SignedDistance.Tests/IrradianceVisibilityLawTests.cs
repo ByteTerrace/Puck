@@ -193,6 +193,7 @@ public sealed class IrradianceVisibilityLawTests {
         var field = IrradianceScenes.TableHall(halfWidth: 1.6, height: 0.8, thickness: 0.05);
         var reference = new IrradianceReference(exitDistance: 60.0, field: field, surfaces: surfaces);
         var rows = new List<string>();
+        var failing = new SortedSet<int>();
 
         for (var depth = 0; depth <= 2; depth++) {
             var estimate = reference.Estimate(bounces: depth, normal: Up, paths: 2048, point: point);
@@ -213,12 +214,42 @@ public sealed class IrradianceVisibilityLawTests {
                 }
 
                 paths.Add(first);
+                failing.Add(first);
             }
 
             rows.Add($"depth={depth}, unresolved={estimate.Unresolved}, irradiance={estimate.Irradiance}, first unresolved paths=[{string.Join(", ", paths)}]");
         }
 
+        foreach (var path in failing) {
+            rows.Add(TablePathDiagnostic(field, point, path));
+        }
+
         return $"The table reference must resolve every path. Fresh field: {string.Join("; ", rows)}";
+    }
+
+    // Inspect the same public query stages for a failed prefix path. These observations supply no expected energy
+    // and change neither the reference estimate nor the law's zero-unresolved predicate.
+    private static string TablePathDiagnostic(IrradianceField field, Double3 point, int path) {
+        var first = IrradianceCells.Launch(field: field, height: 0.004, normal: Up, surface: point);
+        if (first is null) { return $"path={path}, initial launch refused"; }
+        var direction = IrradianceReference.CosineDirection(normal: Up,
+            u: IrradianceReference.RadicalInverse(index: path, primeBase: 2),
+            v: IrradianceReference.RadicalInverse(index: path, primeBase: 3));
+        var hit = field.Cast(origin: first.Value.Point, direction: direction, maxDistance: 60.0);
+        if (hit.Kind != IrradianceRayKind.Hit || !field.TryGradient(hit.Point, out var gradient)) {
+            return $"path={path}, first ray={hit}";
+        }
+        var dot = Double3.Dot(gradient, direction);
+        var oriented = dot > 0.0 ? -gradient : gradient;
+        var outward = IrradianceCells.Launch(field: field, height: 0.004, normal: gradient, surface: hit.Point);
+        var reflected = IrradianceCells.Launch(field: field, height: 0.004, normal: oriented, surface: hit.Point);
+        var secondDirection = IrradianceReference.CosineDirection(normal: oriented,
+            u: IrradianceReference.RadicalInverse(index: path, primeBase: 5),
+            v: IrradianceReference.RadicalInverse(index: path, primeBase: 7));
+        var second = reflected is { } launch
+            ? field.Cast(origin: launch.Point, direction: secondDirection, maxDistance: 60.0).ToString()
+            : "launch refused";
+        return $"path={path}, first ray={hit}, gradient={gradient}, incoming dot={dot:R}, outward launch={outward}, oriented launch={reflected}, second ray={second}";
     }
 
     private static void HoldsDarkInside(IrradianceField field, Double3 center, (Double3 Point, Double3 Normal)[] inside, (Double3 Point, Double3 Normal) outside) {
