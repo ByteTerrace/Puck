@@ -6,7 +6,7 @@
   "backends": ["vulkan","directx"],
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
-  "fixtures": ["README.md", "../gi-common/base.puck"],
+  "fixtures": ["README.md", "base.puck"],
   "positive": {
     "world": "tests/Puck.World.Canaries/gi-furnace/fixture.puck",
     "script": "solve.script.txt",

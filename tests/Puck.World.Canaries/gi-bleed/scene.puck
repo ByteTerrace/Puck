@@ -1,5 +1,5 @@
 schema: "puck.world.definition.v1"
-basis: "../gi-common/base"
+basis: "../gi-furnace/base"
 documentId: "gi-bleed-scene"
 render {
   indirect { sources { lights: 1, emission: 0 } }

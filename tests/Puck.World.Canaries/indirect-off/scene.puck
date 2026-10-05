@@ -1,5 +1,5 @@
 schema: "puck.world.definition.v1"
-basis: "../gi-common/base"
+basis: "../gi-furnace/base"
 documentId: "indirect-off-scene"
 render { indirect { tier: off } }
 placements { placement "floor" { prototype: "floor", position [0, 0, 0] } }

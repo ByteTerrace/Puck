@@ -1,5 +1,5 @@
 schema: "puck.world.definition.v1"
-basis: "../gi-common/base"
+basis: "../gi-furnace/base"
 documentId: "gi-sealed-scene"
 render { farDistance: 32 }
 state { world { slot station = 0 } }
