@@ -19,7 +19,8 @@ public static partial class SdfWorldPackage {
     public const string LightMapCount = "lightMapCount";
 
     /// <summary>Creates one camera's depth-only fragment, retaining its traversal scratch and borrowing one bank for
-    /// all held/fading maps from the package owner.
+    /// all held/fading maps from the package owner. Traversal storage follows the package's native render extent,
+    /// independently of its buffer output's scheduler placeholder.
     /// Surface, ambient, shadow, material lighting, sky and color resolve stages are absent.</summary>
     /// <param name="maps">The held and incoming region capacity.</param>
     /// <returns>The depth-bank producer.</returns>
@@ -36,7 +37,7 @@ public static partial class SdfWorldPackage {
         var used = passes.SelectMany(selector: static pass => pass.Inputs.Concat(second: pass.Outputs)).Select(selector: static port => port.Name).ToHashSet(comparer: StringComparer.Ordinal);
         used.Add(item: Parts.Arguments);
         return new RenderGraphPackageFragment(InputVersions: [], OutputVersions: [IndirectLightDepth], Passes: passes,
-            Resources: [.. NativeFragment.Resources.Where(predicate: resource => used.Contains(item: resource.Name)),
+            Resources: [.. NativeFragment.Resources.Where(predicate: resource => used.Contains(item: resource.Name)).Select(selector: AtRenderExtent),
                 new ShaderPipelineResource(Name: IndirectLightDepth, Kind: ShaderPipelineResourceKind.Buffer,
                     StrideBytes: sizeof(float), SizeBytes: Math.Max(val1: sizeof(float), val2: ((ulong)maps * SdfIndirectLightLayout.MapBytes)))]);
     }

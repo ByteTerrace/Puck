@@ -22,7 +22,9 @@ public sealed partial class SdfPassPlanLawTests {
             SdfWorldPackage.Parts.Mesh, SdfWorldPackage.Parts.Primary, SdfWorldPackage.LightDepth], actual: plan.Pipeline.Passes.Select(selector: pass => pass.Package!.Part));
         Assert.All(collection: plan.Pipeline.Storages.Where(storage => !storage.Versions.Contains(SdfWorldPackage.IndirectLightDepth)),
             action: storage => Assert.True(condition: storage.Declaration.Retained));
-        var counts = new ShaderPipelineStorageCounts(Width: 512, Height: 512) {
+        // The real buffer producer has no output footprint. Its 1x1 placeholder must not shrink native traversal.
+        var counts = new ShaderPipelineStorageCounts(Width: 1, Height: 1) {
+            RenderWidth = 512, RenderHeight = 512,
             Viewports = 1, Tiles = ((512 / SdfWorldPackage.TileSize) * (512 / SdfWorldPackage.TileSize)), Instances = 256, InstanceMaskWords = 8,
         };
         var bank = Assert.Single(collection: plan.Pipeline.Storages, predicate: storage => storage.Versions.Contains(value: SdfWorldPackage.IndirectLightDepth));

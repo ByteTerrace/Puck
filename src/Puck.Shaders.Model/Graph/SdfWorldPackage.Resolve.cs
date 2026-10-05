@@ -84,6 +84,15 @@ public static partial class SdfWorldPackage {
     // composite reads them at the output extent.
     private static string[] SkyInputs => [CurrentColor, Parts.CullBounds];
 
+    // Traversal resources follow the package render grid, independently of a reconstructed image output or a
+    // buffer producer's placeholder extent. Keep images and counted per-pixel storage on that same basis.
+    private static ShaderPipelineResource AtRenderExtent(ShaderPipelineResource resource) => resource with {
+        Dimensions = ((resource.Dimensions is null) ? null : ShaderPipelineDimensions.Render()),
+        Count = ((resource.Count is null) ? null : [.. resource.Count.Select(selector: static term => term with {
+            Per = [.. term.Per.Select(selector: static basis => ((basis == ShaderPipelineCountBasis.Extent) ? ShaderPipelineCountBasis.RenderExtent : basis))],
+        })]),
+    };
+
     private static class ResolveFragment {
         internal static readonly RenderGraphPackageFragment Value = new(
             InputVersions: [],
@@ -91,12 +100,7 @@ public static partial class SdfWorldPackage {
             Resources: [
                 .. NativeFragment.Resources
                     .Where(predicate: static resource => !IsOutputExtent(name: resource.Name))
-                    .Select(selector: static resource => resource with {
-                        Dimensions = ((resource.Dimensions is null) ? null : ShaderPipelineDimensions.Render()),
-                        Count = ((resource.Count is null) ? null : [.. resource.Count.Select(selector: static term => term with {
-                            Per = [.. term.Per.Select(selector: static basis => ((basis == ShaderPipelineCountBasis.Extent) ? ShaderPipelineCountBasis.RenderExtent : basis))],
-                        })]),
-                    }),
+                    .Select(selector: AtRenderExtent),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, retained: true) with { Dimensions = ShaderPipelineDimensions.Render() },
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
                 Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: (2 * sizeof(uint))),

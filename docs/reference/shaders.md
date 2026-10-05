@@ -947,8 +947,11 @@ chain settles, then request the view's own rect subject to scheduler quantizatio
 and shrink hysteresis. The view's own package allocates traversal targets at its quantized
 render ceiling and records the current render grid inside those targets; a
 layout transition's dip moves only that grid, so it rebuilds and allocates
-nothing. A view whose ceiling is below native appends `resolve`, reconstructing
-color at the output extent before placement; `place` copies that output when
+nothing. An image output bounds that ceiling. A graph exporting only buffers has
+no output pixel footprint: its package states a positive allocation ceiling
+independently, as the light camera does at 512×512. Each recording still stays
+within that allocated ceiling. A view whose ceiling is below native appends
+`resolve`, reconstructing color at the output extent before placement; `place` copies that output when
 the scheduled extent equals the rect's pixels and otherwise resamples it again.
 A view at a native ceiling renders its output grid directly and does not dip. A
 view that reconstructs over time (`world.temporal`) resolves at any ceiling, and
