@@ -99,7 +99,7 @@ uint sdfIndirectIrradianceWordOffset(uint tier) { return tier == SdfIndirectTier
 uint sdfIndirectIrradianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 10485760u : (tier == SdfIndirectTierMedium ? 5242880u : 0u); }
 uint sdfIndirectPublicationWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140476416u : (tier == SdfIndirectTierMedium ? 25149440u : 0u); }
 uint sdfIndirectReceiverProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140541952u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
-uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 140541954u : (tier == SdfIndirectTierMedium ? 25182210u : 0u); }
+uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 140541953u : (tier == SdfIndirectTierMedium ? 25182209u : 0u); }
 uint sdfIndirectTraceEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 3440640u : (tier == SdfIndirectTierMedium ? 860160u : 0u); }
 uint sdfIndirectClassifyEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 460288u : (tier == SdfIndirectTierMedium ? 230144u : 0u); }
 static const float SdfIndirectSurfaceEpsilon = 0.001;

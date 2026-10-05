@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/bab7d48aaf3d38393913cd4b3811cf69959ff72fa3137f058358804706482721). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/0336eb7f6c50eb296e58707e1272862d30aec328b23bfb5c98e73e1db4a8a878). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -216,7 +216,7 @@ struct SdfWorldPass {
     [[vk::offset(1744)]] float lightSweepRadius;
     [[vk::offset(1748)]] uint meshDraws;
     [[vk::offset(1752)]] float nearDistance;
-    [[vk::offset(1756)]] uint _pad1756;
+    [[vk::offset(1756)]] uint preserveIndirectReceivers;
     [[vk::offset(1760)]] float4 previousView[6];
     [[vk::offset(1856)]] uint screenCount;
     [[vk::offset(1860)]] uint shadowAmortize;
@@ -252,27 +252,28 @@ struct SdfWorldPass {
 [[vk::binding(3, 3)]] StructuredBuffer<uint> indirectCache : register(t3, space3);
 [[vk::binding(4, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u4, space3);
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectPickRW : register(u5, space3);
-[[vk::binding(6, 3)]] StructuredBuffer<int4> indirectBricks : register(t6, space3);
-[[vk::binding(7, 3)]] StructuredBuffer<float4> indirectDirections : register(t7, space3);
-[[vk::binding(8, 3)]] StructuredBuffer<uint> indirectTraceStates : register(t8, space3);
-[[vk::binding(9, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u10, space3);
-[[vk::binding(11, 3)]] StructuredBuffer<uint> sdfSegmentTapes : register(t11, space3);
-[[vk::binding(12, 3)]] RWStructuredBuffer<uint> sdfSegmentTapesRW : register(u12, space3);
-[[vk::binding(13, 3)]] StructuredBuffer<float> tiles : register(t13, space3);
-[[vk::binding(14, 3)]] RWStructuredBuffer<float> tilesRW : register(u14, space3);
-[[vk::binding(15, 3)]] StructuredBuffer<uint> cullBounds : register(t15, space3);
-[[vk::binding(16, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u16, space3);
-[[vk::binding(17, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u17, space3);
-[[vk::binding(18, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t18, space3);
-[[vk::binding(19, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u19, space3);
-[[vk::binding(20, 3)]] RWStructuredBuffer<float> reactivityRW : register(u20, space3);
-[[vk::binding(21, 3)]] StructuredBuffer<uint> shadowHistory : register(t21, space3);
-[[vk::binding(22, 3)]] RWStructuredBuffer<uint> shadowHistoryRW : register(u22, space3);
-[[vk::binding(23, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u23, space3);
-[[vk::binding(24, 3)]] Texture2D<float4> screenSources[32] : register(t24, space3);
-[[vk::binding(56, 3)]] Texture2D<float4> meshVisibility : register(t56, space3);
-[[vk::binding(57, 3)]] RWStructuredBuffer<uint> workCounters : register(u57, space3);
+[[vk::binding(6, 3)]] RWStructuredBuffer<uint> indirectDeferredRW : register(u6, space3);
+[[vk::binding(7, 3)]] StructuredBuffer<int4> indirectBricks : register(t7, space3);
+[[vk::binding(8, 3)]] StructuredBuffer<float4> indirectDirections : register(t8, space3);
+[[vk::binding(9, 3)]] StructuredBuffer<uint> indirectTraceStates : register(t9, space3);
+[[vk::binding(10, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u11, space3);
+[[vk::binding(12, 3)]] StructuredBuffer<uint> sdfSegmentTapes : register(t12, space3);
+[[vk::binding(13, 3)]] RWStructuredBuffer<uint> sdfSegmentTapesRW : register(u13, space3);
+[[vk::binding(14, 3)]] StructuredBuffer<float> tiles : register(t14, space3);
+[[vk::binding(15, 3)]] RWStructuredBuffer<float> tilesRW : register(u15, space3);
+[[vk::binding(16, 3)]] StructuredBuffer<uint> cullBounds : register(t16, space3);
+[[vk::binding(17, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u17, space3);
+[[vk::binding(18, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u18, space3);
+[[vk::binding(19, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t19, space3);
+[[vk::binding(20, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u20, space3);
+[[vk::binding(21, 3)]] RWStructuredBuffer<float> reactivityRW : register(u21, space3);
+[[vk::binding(22, 3)]] StructuredBuffer<uint> shadowHistory : register(t22, space3);
+[[vk::binding(23, 3)]] RWStructuredBuffer<uint> shadowHistoryRW : register(u23, space3);
+[[vk::binding(24, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u24, space3);
+[[vk::binding(25, 3)]] Texture2D<float4> screenSources[32] : register(t25, space3);
+[[vk::binding(57, 3)]] Texture2D<float4> meshVisibility : register(t57, space3);
+[[vk::binding(58, 3)]] RWStructuredBuffer<uint> workCounters : register(u58, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/151f8c6442c18a30a0dbcf97c9401e24abf63a1e1d04db001cbe2bac7995a407). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/7d88ac9c633e926932a98ffa25210471d5eb841599cfd1507edd17b84bd038f5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -78,7 +78,7 @@ struct SdfMeshPass {
     [[vk::offset(1744)]] float lightSweepRadius;
     [[vk::offset(1748)]] uint meshDraws;
     [[vk::offset(1752)]] float nearDistance;
-    [[vk::offset(1756)]] uint _pad1756;
+    [[vk::offset(1756)]] uint preserveIndirectReceivers;
     [[vk::offset(1760)]] float4 previousView[6];
     [[vk::offset(1856)]] uint screenCount;
     [[vk::offset(1860)]] uint shadowAmortize;
