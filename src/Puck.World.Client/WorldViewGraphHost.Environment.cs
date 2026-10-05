@@ -1,7 +1,6 @@
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
-using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
@@ -59,10 +58,9 @@ public sealed partial class WorldViewGraphHost {
         foreach (var pair in desired.OrderBy(static pair => pair.Key, comparer: StringComparer.Ordinal)) {
             var source = sourceViews[pair.Key].Instance;
             var reads = SdfSkyEnvironmentGraph.ReadsOf(set: set, view: source.Name);
+            // The package fixes buffer sizes and dispatch dimensions; image OutputExtent does not apply.
             instances.Add(item: new RenderGraphInstance(Name: pair.Key, Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count,
-                Reads: reads, Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment) {
-                OutputExtent = new RenderGraphPixelExtent(Width: SdfSkyEnvironment.Size, Height: SdfSkyEnvironment.Size),
-            });
+                Reads: reads, Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment));
         }
         if (!RenderGraphInstanceSet.TryCreate(instances: instances, set: out var nextSet, refusal: out var refusal, nestingDepth: set.NestingDepth)) {
             throw new InvalidOperationException(message: refusal.Message);

@@ -82,7 +82,8 @@ public sealed partial class WorldViewGraphHost {
 }
 /// <summary>The buffer edges joining each view to its residency's cache and conservative light camera.</summary>
 public static class WorldIndirectGraph {
-    /// <summary>Adds a cache and depth-bank producer per residency, with both buffer edges for each enabled view.</summary>
+    /// <summary>Adds a cache and depth-bank producer per residency, with both buffer edges for each enabled view.
+    /// The light package supplies its native camera extent; these buffer producers declare no image extent.</summary>
     /// <param name="set">The composed views and image sources.</param>
     /// <param name="cacheByView">Enabled view names mapped to their residency's cache name.</param>
     /// <returns>The set with its cache producers and dependencies.</returns>
@@ -104,9 +105,7 @@ public static class WorldIndirectGraph {
                 }
             }
             instances.Add(item: new(Name: WorldViewNames.IndirectLight(cache: cache), Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 0).Passes.Count, Reads: [],
-                Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
-                OutputExtent = new RenderGraphPixelExtent(Width: SdfIndirectLightLayout.Resolution, Height: SdfIndirectLightLayout.Resolution),
-            });
+                Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld));
             var fragment = SdfWorldPackage.IndirectFragment(bytes: sizeof(uint));
             if (reads.Count > 1) { fragment = SdfSkyEnvironmentGraph.WithIndirectEnvironment(fragment); }
             instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: fragment.Passes.Count,

@@ -3,14 +3,43 @@ using Puck.Launcher;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>The session tier and graph edges own one cache per residency and none while off.</summary>
+/// <summary>The host composes its environment before the world view; the session tier and graph edges own one cache
+/// per residency and none while off. Buffer producers use their package's sizing contract.</summary>
 public sealed class WorldIndirectGraphLawTests {
+    [Fact]
+    public void TheHostComposesItsEnvironmentBufferBeforeTheWorldView() {
+        using var directory = new TemporaryDirectory(prefix: "world-environment-graph-");
+        using var residency = new SdfWorldResidency(pipelines: SdfTestPipelines.Cache(), frameSource: new UncapturedSource(),
+            kernels: SdfTestPipelines.Kernels(), name: "world", width: 1, height: 1, brickPoolVoxelCapacity: 0);
+        var views = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
+        using var environment = new SdfSkyEnvironmentPasses(views);
+        using var host = new WorldViewGraphHost(documentDirectory: directory.RootPath,
+            packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: directory.PathOf("pipelines")))) {
+            Pickers = views, Environment = environment,
+        };
+        using var instances = FakeGraphInstances.Attach(host: host, create: static name => new ShaderPipelineRenderNode(
+            deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false, name: name,
+            pipelines: new GpuPassPipelineCache(), width: 4));
+
+        host.Reconcile(views: new WorldViewDefaults());
+
+        var graph = instances.Instances;
+        var producer = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment);
+        Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
+        var world = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld);
+        var read = Assert.Single(world.Reads, edge => edge.Producer == producer.Name);
+        Assert.Equal(ShaderPipelineResourceKind.Buffer, read.Kind);
+        Assert.False(read.PreviousFrame);
+        Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf(producer.Name)) < graph.Order.ToList().IndexOf(graph.IndexOf(world.Name)));
+    }
+
     [Fact]
     public void TheSharedEnvironmentRunsBeforeTheFiniteSolvesPinPass() {
         Assert.True(RenderGraphInstanceSet.TryCreate([
@@ -94,5 +123,9 @@ public sealed class WorldIndirectGraphLawTests {
         public float? SessionMasterVolume => null;
 
         public void SetMasterVolume(float value) { }
+    }
+    private sealed class UncapturedSource : ISdfFrameSource {
+        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
+            throw new InvalidOperationException("Graph composition needs no captured frame or GPU submission.");
     }
 }
