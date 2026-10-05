@@ -10,8 +10,8 @@
   "requirements": [
     "gpu"
   ],
-  "timeoutSeconds": 75,
-  "fixtures": [],
+  "timeoutSeconds": 60,
+  "fixtures": ["README.md"],
   "positive": {
     "world": "tests/Puck.World.Canaries/indirect-body-motion/fixture.puck",
     "script": "positive.script.txt",

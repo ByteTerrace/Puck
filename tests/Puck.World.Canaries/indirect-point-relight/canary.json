@@ -10,8 +10,8 @@
   "requirements": [
     "gpu"
   ],
-  "timeoutSeconds": 75,
-  "fixtures": [],
+  "timeoutSeconds": 60,
+  "fixtures": ["README.md"],
   "positive": {
     "world": "tests/Puck.World.Canaries/indirect-point-relight/fixture.puck",
     "script": "positive.script.txt",
