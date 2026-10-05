@@ -120,14 +120,24 @@ public sealed class WorldInspectorLawTests {
             .Any(instance => root.Runtime.Producer(instance) is null && root.Runtime.Node(instance).IsBuildingCandidate);
         TestLiveness.Until(step: () => { Produce(); return probe.Residency!.IsReady; },
             wait: probe.Residency!.WaitPipelineBuilds, reason: () => probe.Residency!.NotReadyReason);
-        TestLiveness.Within(frames: 16, step: () => { Produce(); return views.DisplayView is not null; },
+        // PrepareGraph publishes the camera mapping before the root's compositor has necessarily installed. The
+        // post-production feed runs only after that root actually renders; a mapping alone cannot establish it.
+        TestLiveness.Within(frames: 16, step: () => {
+            Produce();
+            return root.Runtime.Render.IsRendered && views.DisplayView is { } displayed &&
+                views.Pickers?.HasRenderedResolvedView(displayed.Source.Name) == true;
+        },
             building: Building, reason: () => root.Runtime.Render.Reason);
         var display = Assert.IsType<SourceMapping>(views.DisplayView);
+        Assert.True(views.Pickers!.HasRenderedResolvedView(display.Source.Name), $"The displayed source '{display.Source.Name}' has no current rendered picker binding.");
         Assert.Equal(128, views.DisplayWidth);
         Assert.Equal(128, views.DisplayHeight);
         var pointer = registry.Submit("world.view.pointer 32 96");
         Assert.False(pointer.IsError, pointer.Output);
         Produce();
+        var positioned = registry.Submit("world.view.pointer");
+        Assert.False(positioned.IsError, positioned.Output);
+        Assert.Contains("position=32,96", positioned.Output);
         var request = registry.Submit("world.explain");
         Assert.False(request.IsError, request.Output);
         var settlement = Assert.IsType<CommandSettlement>(request.Settlement);
