@@ -360,6 +360,10 @@ decoding and normalize over known samples only. A sample with no known weight
 remains unresolved; an actual zero radiance remains known and keeps its weight.
 The immutable transport records, storage size and field-query budgets do not
 change when lighting support fails.
+The CPU cache model carries the same distinction as nullable samples in its two
+generations. Its radiance and probe queries return null for unresolved lighting;
+the unresolved hemisphere share includes missing reflected support. The independent
+path reference remains a separate physical oracle.
 
 `LightingSource` describes the active solve, while `PublishedLightingSource`
 describes the complete generation readers still see during a later solve.

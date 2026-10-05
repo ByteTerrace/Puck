@@ -113,6 +113,8 @@ produce. All directional and irradiance readers reject it before decoding;
 zero radiance remains known. Keep first-sweep and exact-zero-throughput hits
 independent of unused feedback proofs, and count failed lighting support through
 the existing unresolved row without changing immutable transport or ray budgets.
+Keep `IrradianceCacheModel`'s nullable generation samples consistent with that
+policy; its unknown-lighting share must not consult transport kind alone.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its

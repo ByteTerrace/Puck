@@ -104,6 +104,75 @@ public sealed class IrradianceFeedbackLawTests {
         }
     }
 
+    [InlineData(1.0, 0.75)]
+    [InlineData(0.0, 0.75)]
+    [InlineData(0.0, 0.0)]
+    [Theory]
+    public void MissingReflectedSupportIsUnknownWithoutDiscardingDirectOrZeroThroughput(double albedo, double emission) {
+        // Only the lattice cube 0..3 is allocated. Every inner wall lies at -.25 or 3.25, so a hit is real but
+        // its launched feedback cell needs an unallocated corner. The first sweep needs no such support.
+        var model = PartialRoom(albedo, emission, halfHeight: 1.75);
+        var probe = new IrradianceProbeKey(0, 1, 1, 1);
+        var up = new Double3(0, 1, 0);
+        var ray = model.NearestRayOf(probe, up);
+        var hit = model.HitsOf(probe)[ray];
+        Assert.Equal(IrradianceHitKind.Hit, hit.Kind);
+        Assert.Equal(-1, model.ReadableCorners(0, hit.Point, hit.Normal));
+
+        model.Solve(bounces: 0);
+        Assert.Equal(emission, model.RadianceOf(probe, ray)!.Value.X, precision: 9);
+        Assert.Equal(emission, model.ProbeIrradianceOf(probe, up)!.Value.X, precision: 9);
+        model.Solve(bounces: 1);
+        if (albedo == 0.0) {
+            Assert.Equal(emission, model.RadianceOf(probe, ray)!.Value.X, precision: 9);
+            Assert.Equal(emission, model.ProbeIrradianceOf(probe, up)!.Value.X, precision: 9);
+        } else {
+            Assert.Null(model.RadianceOf(probe, ray));
+            Assert.Null(model.ProbeIrradianceOf(probe, up));
+            Assert.Equal(1.0, model.UnresolvedShareOf(probe, up), precision: 9);
+        }
+    }
+
+    [Fact]
+    public void APartlySupportedRoomNormalizesItsKnownLightingWithoutInventingBlack() {
+        // The floor and ceiling now lie at .25 and 2.75, within allocated feedback cells. Side walls still
+        // have no support. Known rays must conserve the uniform finite series, excluding the unknown side rays.
+        var model = PartialRoom(albedo: 1.0, emission: 0.75, halfHeight: 1.25);
+        var probe = new IrradianceProbeKey(0, 1, 1, 1);
+        var up = new Double3(0, 1, 0);
+        model.Solve(bounces: 2);
+        var known = 0;
+        var unknown = 0;
+        var hits = model.HitsOf(probe);
+        for (var ray = 0; ray < hits.Count; ray++) {
+            if (hits[ray].Kind != IrradianceHitKind.Hit) { continue; }
+            if (model.RadianceOf(probe, ray) is { } value) {
+                Assert.Equal(2.25, value.X, precision: 9);
+                known++;
+            } else {
+                unknown++;
+            }
+        }
+        Assert.True(known > 0);
+        Assert.True(unknown > 0);
+        var share = model.UnresolvedShareOf(probe, up);
+        Assert.True(share > 0.0 && share < 1.0);
+        Assert.Equal(2.25, model.ProbeIrradianceOf(probe, up)!.Value.X, precision: 9);
+        Assert.Equal(2.25, model.ProbeIrradianceOf(probe, -up)!.Value.X, precision: 9);
+    }
+
+    private static IrradianceCacheModel PartialRoom(double albedo, double emission, double halfHeight) {
+        var model = new IrradianceCacheModel(
+            field: IrradianceScenes.Room(new Double3(1.5, 1.5, 1.5), new Double3(1.75, halfHeight, 1.75), thickness: 0.2),
+            levels: [Level],
+            options: new IrradianceModelOptions(ExitDistance: 100.0),
+            surfaces: IrradianceScenes.Uniform(albedo: albedo, emission: emission, sky: 0.0));
+        model.Allocate(level: 0, min: Double3.Zero, max: Double3.Zero);
+        model.Classify();
+        model.Trace();
+        return model;
+    }
+
     private static IrradianceCacheModel Furnace(double albedo, IrradianceSurfaces? surfaces = null) {
         var model = new IrradianceCacheModel(
             field: IrradianceScenes.Shell(inner: 3.0, thickness: 0.2),
