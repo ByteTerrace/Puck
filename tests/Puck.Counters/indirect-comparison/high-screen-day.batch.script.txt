@@ -11,4 +11,8 @@ world.wait indirect 180
 world.rate resume
 world.state.cell.set dayRunning $value 1
 world.wait 120
+# Retain actual body participation and disjoint residency bytes beside this counter response.
+body.where 0
+world.looks
+world.budget
 world.counters --json

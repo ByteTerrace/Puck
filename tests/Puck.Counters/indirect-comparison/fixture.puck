@@ -3,6 +3,33 @@ basis: "../../Puck.World.Canaries/indirect-near/scenes"
 documentId: "indirect-comparison"
 
 host { width: 1920, height: 1080 }
+
+// A real stationary body uses the tier's default participation: Receive at Medium, Cast at High.
+// The zero-seat catch-all layout below keeps both named cameras when this eager seat joins.
+bodies { localSeats: 1, capacity: 1, seatSpawns ["comparison-body"] }
+spawnPoints [{ id: "comparison-body", position [-0.12, 0, 0.15], yawDegrees: 0 }]
+channels [
+  { name: "forward", shape: Bipolar, role: MoveAdvance }
+  { name: "strafe", shape: Bipolar, role: MoveStrafe }
+  { name: "turn", shape: Bipolar, role: Turn }
+]
+bodyMotionPrograms [{ name: "stander", version: "puck.body.program.v1", kind: Motion,
+  operations [ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, IntegratePlanarAndVerticalVelocity, CommitPose] }]
+kits { rows [{ name: "stander", bodyMotionProgram: "stander",
+  motion { speed { value: 0 } turn { rate: 0 } holds [{ name: "air", bond: Free, hold: None }] },
+  collider: sphere(radius: 0.06), bodyContact: Overlap }] }
+defaultSeatKit: "stander"
+looks { rows [{ name: "comparison-body", source: creation(prototypeId: `comparison-body`), scale: 1,
+  motion { gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }] }
+prototypes {
+  prototype "comparison-body" { document {
+    schema: "puck.creation.v1"
+    name: "comparison-body"
+    palette [{ color: "#FF0000", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
+    shape Sphere "body" { material: 0, position [0, 0.06, 0], scale [0.06, 0.06, 0.06] }
+  } }
+}
+
 state {
   world {
     slot cameraPose = 0
