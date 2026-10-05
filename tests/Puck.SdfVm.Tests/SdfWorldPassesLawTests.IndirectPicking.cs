@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Illumination;
 using Puck.Testing;
 using Xunit;
 
