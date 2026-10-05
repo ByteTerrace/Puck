@@ -144,20 +144,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool Available { get; set; } = true;
         public bool Publishes { get; init; } = true;
         public bool Tainted { get; set; }
-        public ImageSourceDescriptor? Descriptor => inner.Descriptor;
-        public FrameRender Answer => inner.Answer;
-        public GpuPixelFormat Format => inner.Format;
-        public string? NotReadyReason => inner.NotReadyReason;
-        public string? PendingCapturePath => inner.PendingCapturePath;
-        public IGpuWorkSource Work => inner.Work;
-        public void Dispose() => inner.Dispose();
-        public void OnDeviceLost() => inner.OnDeviceLost();
-        public void RequestCapture(FrameCaptureRequest request) => inner.RequestCapture(request);
+        public ImageSourceDescriptor? Descriptor => Inner.Descriptor;
+        public FrameRender Answer => Inner.Answer;
+        public GpuPixelFormat Format => Inner.Format;
+        public string? NotReadyReason => Inner.NotReadyReason;
+        public string? PendingCapturePath => Inner.PendingCapturePath;
+        public IGpuWorkSource Work => Inner.Work;
+        public void Dispose() => Inner.Dispose();
+        public void OnDeviceLost() => Inner.OnDeviceLost();
+        public void RequestCapture(FrameCaptureRequest request) => Inner.RequestCapture(request);
         public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) =>
-            inner.Produce(context, width, height, reads);
+            Inner.Produce(context, width, height, reads);
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;
-            if (!Available || !inner.TryAcquireOutput(out output)) { return false; }
+            if (!Available || !Inner.TryAcquireOutput(out output)) { return false; }
             output = output with { Tainted = Tainted, Lease = output.Lease with { Publication = Publishes ? output.Lease.Publication : default } };
             return true;
         }
