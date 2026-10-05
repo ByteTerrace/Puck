@@ -60,7 +60,16 @@ public sealed partial class SdfWorldPassesLawTests {
         TestLiveness.Within(frames: 64, step: () => {
             _ = Produce();
             return residency.Tables?.Indirect is { LightingComplete: true } && completions > 0;
-        }, building: () => graph.Node(0).IsBuildingCandidate || graph.Node(1).IsBuildingCandidate, reason: () => graph.Render.Reason);
+        }, building: () => graph.Node(0).IsBuildingCandidate || graph.Node(1).IsBuildingCandidate, reason: InitialReadiness);
+        string InitialReadiness() {
+            var cache = residency.Tables?.Indirect;
+            return $"cadence={cadence}; reads={completions}; render={graph.Render.Completion}: {graph.Render.Reason}; " +
+                $"cache frame={cache?.Frame}, transport={cache?.IsComplete}, lighting={cache?.LightingComplete}, " +
+                $"stamp={cache?.PublishedStamp}, sweeps={cache?.CompletedSweeps}, publish={cache?.NeedsPublish}, " +
+                $"place={cache?.PlaceCount}, classify={cache?.ClassifyCount}, trace={cache?.TraceCount}, shade={cache?.ShadeCount}; " +
+                $"view frames={graph.Node(0).FrameCounter}, passes={graph.Node(0).Plan?.Passes.Count}, error={graph.Node(0).LastSwapError}; " +
+                $"producer frames={graph.Node(1).FrameCounter}, error={graph.Node(1).LastSwapError}";
+        }
         for (var settle = 0; settle < 4; settle++) { _ = Produce(); }
         for (var pending = 0; pending < 6; pending++) {
             Assert.False(Produce());
