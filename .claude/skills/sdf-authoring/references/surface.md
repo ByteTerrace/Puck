@@ -26,6 +26,12 @@ name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped
 The former palette `bounce` spelling is also unmapped; use `fill` for the
 artistic tint. A light's `bounce` is a separate transport gain.
 
+Indirect transport uses the signed field gradient toward positive, free space.
+The CPU reference, cache model and GPU march preserve that orientation at grazing
+edges; facing it toward the incoming ray can point into the solid. A reflected
+launch still needs a clear-interval certificate, and a failed certificate remains
+unknown rather than becoming a black reference sample.
+
 For painted metal with a clearcoat: a moderate `specular` around 0.35, a
 `roughness` in the 0.25 to 0.45 band, `metal` near 0 for paint over metal or near
 1 for bare metal, and `coat` around 0.3 to 0.5. None of it reads without

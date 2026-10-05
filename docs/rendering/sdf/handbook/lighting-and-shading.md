@@ -385,7 +385,12 @@ receiver's captured mask selects the final categories. A required launch or ray
 that fails remains unresolved and supplies no numerical divergence. Exactly zero
 diffuse reflectance skips direct and screen queries and later reflections that
 cannot contribute; every nonzero component retains those queries and the requested
-depth. Point-specific reflectance includes attenuation on reflected light and feedback, leaving
+depth. The CPU reference and cache keep each signed field gradient pointing toward
+positive, free space, as the GPU march does. A finite-stencil normal near an
+accepted grazing edge can follow the incoming ray; turning it to face that ray
+would launch the reflection into solid geometry. Launch certification still
+refuses an interval it cannot prove clear. Point-specific reflectance includes
+attenuation on reflected light and feedback, leaving
 emission independent. Explicit World explanations run this reference once for
 a supported cache pick, at the visible publication's sweep depth. Uncaptured
 screen/portal radiance, alternative rendered-frame sources, triangle meshes

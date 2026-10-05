@@ -193,9 +193,8 @@ public sealed class IrradianceReference {
             return Double3.Zero;
         }
 
-        if (Double3.Dot(a: hitNormal, b: direction) > 0.0) {
-            hitNormal = -hitNormal;
-        }
+        // The signed gradient points into free space. A finite-stencil normal at an accepted grazing edge can
+        // follow the incoming ray; flipping it would launch the reflection into the solid instead.
 
         var reflected = m_surfaces.Reflection(ray.Point, hitNormal, ray.Material);
         var direct = reflected == Double3.Zero ? Double3.Zero

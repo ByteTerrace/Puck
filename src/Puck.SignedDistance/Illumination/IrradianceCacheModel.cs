@@ -14,7 +14,7 @@ public enum IrradianceHitKind {
 /// <summary>One stored ray of a probe: a function of the geometry alone.</summary>
 /// <param name="Kind">What the ray ended on.</param>
 /// <param name="Point">The surface point, the continuation point, or the last proven point, in world units.</param>
-/// <param name="Normal">The surface's unit normal, facing the ray, for a hit.</param>
+/// <param name="Normal">The field's unit gradient toward positive, free space, for a hit.</param>
 /// <param name="Material">The surface's material for a hit.</param>
 public readonly record struct IrradianceHitRecord(IrradianceHitKind Kind, Double3 Point, Double3 Normal, int Material);
 /// <summary>The transport rules a model applies; each defaults on, and turning one off is the ablation a law uses to
@@ -309,7 +309,7 @@ public sealed class IrradianceCacheModel {
             var cast = m_field.Cast(direction: direction, maxDistance: reach, origin: origin);
 
             if (cast.Kind != IrradianceRayKind.Miss) {
-                hits[ray] = RecordOf(cast: cast, direction: direction);
+                hits[ray] = RecordOf(cast: cast);
 
                 continue;
             }
@@ -348,7 +348,7 @@ public sealed class IrradianceCacheModel {
                 var next = m_field.Cast(direction: direction, maxDistance: advance, origin: point);
 
                 if (next.Kind != IrradianceRayKind.Miss) {
-                    hits[ray] = RecordOf(cast: next, direction: direction);
+                    hits[ray] = RecordOf(cast: next);
 
                     break;
                 }
@@ -363,17 +363,14 @@ public sealed class IrradianceCacheModel {
         probe.Radiance[0] = new IrradianceContributions?[level.Rays];
         probe.Radiance[1] = new IrradianceContributions?[level.Rays];
     }
-    private IrradianceHitRecord RecordOf(IrradianceRay cast, Double3 direction) {
+    private IrradianceHitRecord RecordOf(IrradianceRay cast) {
         if ((cast.Kind == IrradianceRayKind.Unresolved) || !m_field.TryGradient(gradient: out var normal, point: cast.Point)) {
             UnresolvedRays++;
 
             return new IrradianceHitRecord(Kind: IrradianceHitKind.Unresolved, Material: 0, Normal: Double3.Zero, Point: cast.Point);
         }
 
-        if (Double3.Dot(a: normal, b: direction) > 0.0) {
-            normal = -normal;
-        }
-
+        // Keep the signed field's outward orientation, including finite-stencil normals at grazing edges.
         return new IrradianceHitRecord(Kind: IrradianceHitKind.Hit, Material: cast.Material, Normal: normal, Point: cast.Point);
     }
     // The coarser support a continuation at a point reads: the corners of the coarser cell the point reaches, each

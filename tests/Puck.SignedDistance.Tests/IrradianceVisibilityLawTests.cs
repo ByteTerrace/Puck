@@ -78,6 +78,8 @@ public sealed class IrradianceVisibilityLawTests {
         );
         var under = new Double3(X: 0.3, Y: 0.0, Z: 0.2);
         var open = new Double3(X: 3.5, Y: 0.0, Z: 0.1);
+        TableEdgeLaunchStaysOutside(field, surfaces, under, path: 1149);
+        TableEdgeLaunchStaysOutside(field, surfaces, under, path: 1443);
         var model = Solved(field: field, max: new Double3(X: 6.5, Y: 6.5, Z: 6.5), min: new Double3(X: -6.5, Y: -6.5, Z: -6.5), partition: true, surfaces: surfaces);
         var leaky = Solved(field: field, max: new Double3(X: 6.5, Y: 6.5, Z: 6.5), min: new Double3(X: -6.5, Y: -6.5, Z: -6.5), partition: false, surfaces: surfaces);
         var reference = new IrradianceReference(exitDistance: 60.0, field: field, surfaces: surfaces).Estimate(bounces: 2, normal: Up, paths: 2048, point: under);
@@ -98,7 +100,7 @@ public sealed class IrradianceVisibilityLawTests {
         var shaded = model.Irradiance(normal: Up, surface: under)!.Value.X;
         var lit = model.Irradiance(normal: Up, surface: open)!.Value.X;
 
-        Assert.True(condition: (reference.Unresolved == 0), userMessage: (reference.Unresolved == 0) ? null : TableReferenceDiagnostic(surfaces, under));
+        Assert.Equal(expected: 0, actual: reference.Unresolved);
         Assert.True(condition: (shaded < (0.5 * lit)));
         Assert.InRange(actual: shaded, high: (reference.Irradiance.X + 0.05), low: (reference.Irradiance.X - 0.05));
 
@@ -186,70 +188,28 @@ public sealed class IrradianceVisibilityLawTests {
         Assert.True(condition: (shaded > 0));
     }
 
-    // Failure-only diagnostics use the reference's own prefix estimates on a fresh field. Its path directions depend
-    // on path index and bounce, never total path count, so bisection identifies the same unresolved Halton path.
-    // The first failing depth locates its ray/launch stage; the public result does not distinguish those failures.
-    private static string TableReferenceDiagnostic(IrradianceSurfaces surfaces, Double3 point) {
-        var field = IrradianceScenes.TableHall(halfWidth: 1.6, height: 0.8, thickness: 0.05);
-        var reference = new IrradianceReference(exitDistance: 60.0, field: field, surfaces: surfaces);
-        var rows = new List<string>();
-        var failing = new SortedSet<int>();
-
-        for (var depth = 0; depth <= 2; depth++) {
-            var estimate = reference.Estimate(bounces: depth, normal: Up, paths: 2048, point: point);
-            var paths = new List<int>();
-
-            for (var ordinal = 1; ordinal <= Math.Min(estimate.Unresolved, 8); ordinal++) {
-                var first = 1;
-                var last = 2048;
-
-                while (first < last) {
-                    var middle = first + ((last - first) / 2);
-                    var prefix = reference.Estimate(bounces: depth, normal: Up, paths: middle, point: point);
-                    if (prefix.Unresolved >= ordinal) {
-                        last = middle;
-                    } else {
-                        first = middle + 1;
-                    }
-                }
-
-                paths.Add(first);
-                failing.Add(first);
-            }
-
-            rows.Add($"depth={depth}, unresolved={estimate.Unresolved}, irradiance={estimate.Irradiance}, first unresolved paths=[{string.Join(", ", paths)}]");
-        }
-
-        foreach (var path in failing) {
-            rows.Add(TablePathDiagnostic(field, point, path));
-        }
-
-        return $"The table reference must resolve every path. Fresh field: {string.Join("; ", rows)}";
-    }
-
-    // Inspect the same public query stages for a failed prefix path. These observations supply no expected energy
-    // and change neither the reference estimate nor the law's zero-unresolved predicate.
-    private static string TablePathDiagnostic(IrradianceField field, Double3 point, int path) {
+    // These two ordinary Halton paths graze the same table's lower +X edge. The accepted hit's finite-stencil
+    // gradient follows the incoming direction, but still points toward positive field values, outside the solid.
+    private static void TableEdgeLaunchStaysOutside(IrradianceField field, IrradianceSurfaces surfaces, Double3 point, int path) {
         var first = IrradianceCells.Launch(field: field, height: 0.004, normal: Up, surface: point);
-        if (first is null) { return $"path={path}, initial launch refused"; }
+        Assert.NotNull(first);
         var direction = IrradianceReference.CosineDirection(normal: Up,
             u: IrradianceReference.RadicalInverse(index: path, primeBase: 2),
             v: IrradianceReference.RadicalInverse(index: path, primeBase: 3));
         var hit = field.Cast(origin: first.Value.Point, direction: direction, maxDistance: 60.0);
-        if (hit.Kind != IrradianceRayKind.Hit || !field.TryGradient(hit.Point, out var gradient)) {
-            return $"path={path}, first ray={hit}";
-        }
-        var dot = Double3.Dot(gradient, direction);
-        var oriented = dot > 0.0 ? -gradient : gradient;
+        Assert.Equal(IrradianceRayKind.Hit, hit.Kind);
+        Assert.True(field.TryGradient(hit.Point, out var gradient));
+        Assert.True(Double3.Dot(gradient, direction) > 0.0);
         var outward = IrradianceCells.Launch(field: field, height: 0.004, normal: gradient, surface: hit.Point);
-        var reflected = IrradianceCells.Launch(field: field, height: 0.004, normal: oriented, surface: hit.Point);
-        var secondDirection = IrradianceReference.CosineDirection(normal: oriented,
-            u: IrradianceReference.RadicalInverse(index: path, primeBase: 5),
-            v: IrradianceReference.RadicalInverse(index: path, primeBase: 7));
-        var second = reflected is { } launch
-            ? field.Cast(origin: launch.Point, direction: secondDirection, maxDistance: 60.0).ToString()
-            : "launch refused";
-        return $"path={path}, first ray={hit}, gradient={gradient}, incoming dot={dot:R}, outward launch={outward}, oriented launch={reflected}, second ray={second}";
+        Assert.NotNull(outward);
+        Assert.True(field.TryClampedDistance(outward.Value.Point, out var clearance, out _));
+        Assert.True(clearance > 0.0);
+
+        // Facing the incoming ray would enter the solid. That failed launch remains unknown, never resolved black.
+        Assert.Null(IrradianceCells.Launch(field: field, height: 0.004, normal: -gradient, surface: hit.Point));
+        var refused = new IrradianceReference(field, surfaces, exitDistance: 60.0)
+            .Estimate(point: hit.Point, normal: -gradient, bounces: 1, paths: 1);
+        Assert.Equal(1, refused.Unresolved);
     }
 
     private static void HoldsDarkInside(IrradianceField field, Double3 center, (Double3 Point, Double3 Normal)[] inside, (Double3 Point, Double3 Normal) outside) {
