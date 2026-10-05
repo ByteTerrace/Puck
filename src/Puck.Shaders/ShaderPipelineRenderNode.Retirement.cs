@@ -14,7 +14,9 @@ namespace Puck.Shaders;
 // A downstream consumer reads a published surface or named buffer: the latest frame, or, one frame late, the one before
 // it. Each owned allocation behind those publications is taken out of the replaced objects and held, alone, while it
 // is still one of them. A newer publication displaces it; it then retires once the node's second submission after that has
-// completed, because every reader that could still sample it submitted its work before then.
+// completed, because every reader that could still sample it submitted its work before then. A graph runtime can instead
+// supply the actual final submission after every reader of a displaced borrowed buffer, so a standing producer needs no
+// further work to release its old package owner.
 public sealed partial class ShaderPipelineRenderNode {
     // How many of the node's own submissions after an output stops being published precede the one whose completion
     // retires it. A host replacing a whole node retires it by the same count of its successor's submissions.
@@ -429,11 +431,23 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = (m_retired.Count - 1); (index >= 0); index--) {
             var retired = m_retired[index];
 
-            if (retired.Fence is { IsSignaled: true }) {
+            if (retired.ReadersCompleted || retired.Fence is { IsSignaled: true }) {
                 retired.Dispose(node: this);
                 m_retired.RemoveAt(index: index);
             }
         }
+    }
+    /// <summary>Completes displaced borrowed publications against the runtime frame's final submission, ordered
+    /// after every reader. Called even when this producer stands. The submitter's slot owns the completion callback
+    /// until its fence has finished, so resetting or disposing that fence cannot erase the completion.</summary>
+    /// <param name="submitter">The last node that actually submitted this frame, or null when none did.</param>
+    internal void RetireAfterConsumers(ShaderPipelineRenderNode? submitter) {
+        foreach (var retired in m_retired) {
+            if (retired.AwaitingConsumers && submitter is not null) {
+                retired.ArmAfterConsumers(submitter);
+            }
+        }
+        RetireCompleted();
     }
     // Arms every queued retirement whose retiring submission is the one just made with that submission's fence.
     private void ArmRetirements(IGpuSubmissionFence fence) {
@@ -491,7 +505,8 @@ public sealed partial class ShaderPipelineRenderNode {
         RenderGraphReadEpoch? Epoch = null, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
     // Objects replaced by an install or a selection, or a held allocation no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when replaced, or, for a published allocation, the
-    // fence of the submission made RetirementLag submissions after it stopped being published.
+    // fence of the submission made RetirementLag submissions after it stopped being published. The runtime may
+    // replace that lag for displaced borrowed buffers with an actual frame's last reader submission.
     private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? allocation, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission, IGpuBuffer[]? publishedBorrowedBuffers = null) {
         private readonly IGpuBuffer[] m_publishedBorrowedBuffers = publishedBorrowedBuffers ?? [];
 
@@ -499,6 +514,18 @@ public sealed partial class ShaderPipelineRenderNode {
         public ulong Bytes { get; } = bytes;
         public IGpuSubmissionFence? Fence { get; set; } = fence;
         public bool HoldsBorrowedPublication { get; private set; } = publishedBorrowedBuffers is { Length: > 0 };
+        public bool AwaitingConsumers { get; private set; }
+        public bool ReadersCompleted { get; private set; }
+
+        public void ArmAfterConsumers(ShaderPipelineRenderNode submitter) {
+            AwaitingConsumers = false;
+            Fence = submitter.LatestSubmission;
+            submitter.HoldUntilLatestSubmission(new GpuImageLease(ImageViewHandle: 0, Release: CompleteReaders));
+        }
+        private void CompleteReaders(int _) {
+            ReadersCompleted = true;
+            Fence = null;
+        }
 
         public void ReleasePublication(ShaderPipelineRenderNode node) {
             if (!HoldsBorrowedPublication) { return; }
@@ -509,6 +536,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 if (node.IsPublishedBuffer(buffer.BufferHandle)) { return; }
             }
             HoldsBorrowedPublication = false;
+            AwaitingConsumers = !allTransferred;
             AfterSubmission = node.m_submissions + (allTransferred ? 0 : RetirementLag);
             Fence = allTransferred ? node.m_lastSubmissionFence : null;
         }

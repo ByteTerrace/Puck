@@ -1914,9 +1914,12 @@ counted beyond the replaced graph; displaced slots retire through the same reade
 lag as published images. Package-owned borrowed buffers retain their existing owner:
 the replaced package recorders stay alive while either publication names their
 buffers, unless the installed package already retains those same buffer objects.
-That owner transfer needs only the replaced producer's fence; actual displacement
-waits for the reader lag and its completed fence. The graph never takes or directly
-disposes those borrowed allocations.
+That owner transfer needs only the replaced producer's fence. After actual
+displacement, the runtime uses the last submission of the frame, ordered after
+every reader, and polls its completion even when the producer stands. The
+submitter's existing slot lifetime records completion before its fence is reused
+or disposed. A standalone node keeps the reader-lag fallback. The graph never
+takes or directly disposes those borrowed allocations.
 
 - A reload, an edit of the `views.graphs` row and a resize replace the graph.
   They are not steps. The paused instance builds and installs the new graph as

@@ -1489,6 +1489,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
         Complete();
 
+        // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
+        // retire displaced package owners against this actual reader fence, without another producer submission.
+        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter); }
+
         return Shown(
             image: RootImage(),
             submitter: submitter

@@ -184,11 +184,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(boundedBytes.Value, gpu.LiveBytes);
         }
         gpu.QueueHeld = true;
-        for (var step = 0; step < 4; step++) { node.Step(); frames.Next(); }
+        // Exactly two new publications displace the old current and previous buffers. The producer then stands;
+        // reader completion must retire its old owner without requiring any more producer submissions.
+        for (var step = 0; step < 2; step++) { node.Step(); frames.Next(); }
+        var standing = node.FrameCounter;
         Assert.NotEqual(held, producer.Written["secondary"]);
         Assert.All(original, item => Assert.Equal(0, item.DisposeCount));
         gpu.QueueHeld = false;
         frames.Next(2);
+        Assert.Equal(standing, node.FrameCounter);
         Assert.All(original, item => Assert.Equal(1, item.DisposeCount));
         runtime.Dispose();
         Assert.All(original, item => Assert.Equal(1, item.DisposeCount));
