@@ -12,7 +12,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [Fact]
     public void TheResidencyLightCameraPublishesAtNativeExtentAndStandsAfterItsRegionsFinish() {
         var naming = new RecordingGpuObjectNaming(isEnabled: true);
-        var gpu = new FakeGpuDevice(trackObjects: true, naming: naming);
+        var gpu = new FakeGpuDevice(trackObjects: true, naming: naming) { DistinctBuffers = true };
         var pipelines = SdfTestPipelines.Cache();
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

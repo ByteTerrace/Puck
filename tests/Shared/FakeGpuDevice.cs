@@ -94,6 +94,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
     /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
     public bool DistinctImages { get; set; }
+    /// <summary>Gets or sets whether buffers expose their unique tracked creation handles instead of the fixed
+    /// handle, so a law can associate actual published buffers with their disposal records. Requires object tracking.</summary>
+    public bool DistinctBuffers { get; set; }
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
     /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
     public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
@@ -748,7 +751,7 @@ internal sealed class FakeGpuDevice :
         IGpuReadbackBuffer,
         IGpuShaderModule,
         IGpuStorageBuffer {
-        public nint BufferHandle => 3;
+        public nint BufferHandle => gpu.DistinctBuffers ? (creation?.Handle ?? 3) : 3;
         public nint CommandBufferHandle => 2;
         public nint DescriptorSetLayoutHandle => 10;
         public IReadOnlyList<nint> GroupLayoutHandles => (groupLayouts ?? []);
