@@ -17,7 +17,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void IndirectInspectionWaitsForItsFenceAndKeepsItsEpochSourcesAndActualCensus(SdfIndirectTier tier, bool samePredecessor) {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
-        var source = Frame() with { FarDistance = 12f, IndirectTier = tier };
+        var source = Frame() with { FarDistance = 12f, IndirectTier = tier, IndirectApply = new(.25f, Vector3.UnitX, .5f) };
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: source), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "world", pipelines: pipelines, width: Extent);
@@ -121,6 +121,7 @@ public sealed partial class SdfWorldPassesLawTests {
         else { Assert.Null(result.NearSource); }
         Assert.Equal(SdfIndirectNearOutcome.Continuation, result.Near);
         Assert.Equal(SdfIndirectSources.Direct | SdfIndirectSources.Sky, result.SourcesEnabled);
+        Assert.Equal(new SdfIndirectApplication(.25f, Vector3.UnitX, .5f), result.Application);
         Assert.Equal(new Vector3(7, 0, 0), result.Position);
         Assert.Equal(0.125f, result.Clearance);
         Assert.Equal(new[] { 0.25f, 0.75f, 0, 0, 0, 0, 0, 0 }, result.Corners.Select(static corner => corner.Weight));

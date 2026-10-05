@@ -235,8 +235,14 @@ public sealed record SdfFrame(
     /// explicit policy wins. Static instances retain their normal casting and receiving policy.</summary>
     public SdfIndirectParticipation IndirectBodies { get; init; }
     /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
-    /// require their captured source publications; the default admits authored lights, feedback, emission and sky.</summary>
-    public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.Direct | SdfIndirectSources.Feedback | SdfIndirectSources.Emission | SdfIndirectSources.Sky;
+    /// require their captured source publications; the default admits all five categories.</summary>
+    public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
+    /// <summary>Gets the source gains captured by a finite solve. Zero also disables that category in authored frames.</summary>
+    public SdfIndirectGains IndirectGains { get; init; } = SdfIndirectGains.One;
+    /// <summary>Gets requested feedback sweeps after direct, capped by the actual tier. Null uses its layout limit.</summary>
+    public int? IndirectBounces { get; init; }
+    /// <summary>Gets receiver-only application controls, independent of the finite lighting source.</summary>
+    public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
     /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
     /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow

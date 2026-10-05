@@ -16,6 +16,7 @@ namespace Puck.World.Client;
 /// keys it lands in. Each cloud rate and the star twinkle's rate are integrated to the presented tick
 /// (<see cref="WorldStateMirror.Integrate(in BindableScalar, double)"/>), keyed or literal, so the environment carries
 /// offsets and a phase that never jump where a key changes a rate.
+/// The same bindings resolve <c>render.indirect</c>'s source gains and receiver application controls.
 /// <para>
 /// The environment re-resolves only when its definition moves, a slot one of its bindings or state clocks reads
 /// moves, or the presented tick moves while it reads a tick clock or a moving anchor, or integrates a rate; every other frame copies
@@ -79,7 +80,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     /// <param name="skyQuality">The sky's quality tier (<c>world.sky-quality</c>), or <see langword="null"/> for the
     /// definition's boot tier (<c>render.skyQuality</c>).</param>
     /// <param name="layers">Session-only solo and mute controls for the authored sky rows. Atmosphere remains separate.</param>
-    /// <returns>The lights and the sky.</returns>
+    /// <returns>The lights, sky and immutable indirect controls.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
     public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null, WorldSkyAudition? layers = null) {
@@ -124,6 +125,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                 mirror: mirror,
                 sky: m_sky
             );
+            WriteIndirect(mirror, definition.Render.Indirect);
             m_generation = mirror.Generation;
             m_resolvedAt = mirror.Revision;
             m_tick = mirror.Presented;
@@ -147,7 +149,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
-        return new WorldResolvedEnvironment(Lights: lights, Sky: sky);
+        return new WorldResolvedEnvironment(Lights: lights, Sky: sky, Indirect: m_indirect);
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
@@ -1018,8 +1020,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         into.Block.Reflection = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentReflection, mirror: mirror, scalar: environment?.Reflection, site: site);
     }
 }
-/// <summary>A frame's resolved lights and sky (<see cref="WorldEnvironmentResolve.Resolve"/>), which the frame carries as
-/// <see cref="SdfFrame.Lights"/> and <see cref="SdfFrame.Sky"/>.</summary>
+/// <summary>A frame's resolved lights, sky and indirect controls (<see cref="WorldEnvironmentResolve.Resolve"/>).</summary>
 /// <param name="Lights">The lights table.</param>
 /// <param name="Sky">The sky.</param>
-public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky);
+/// <param name="Indirect">The source, solve and receiver controls.</param>
+public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect);

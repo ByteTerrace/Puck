@@ -6,9 +6,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
-        if (definition.Render.Indirect is { } indirect && !Enum.IsDefined(indirect.Bodies)) {
-            errors.Add("render.indirect.bodies must be default, cast, receive or off.");
-        }
+        ValidateIndirect(definition, errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
         foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
             if (definition.Render.Preset(tier: tier) is { } preset) {

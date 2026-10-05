@@ -14,7 +14,7 @@ void CSMain() {
     workCounters[PuckWorkSkyTextureLoadsWord] = 0u;
     workCounters[PuckWorkSkyTextureLoadsWord + 1u] = 0u;
     DeviceMemoryBarrier();
-    float3 radiance = sdfIndirectSky(asuint(ray.w), ray.xyz, sources);
+    float3 radiance = sdfIndirectSky(asuint(ray.w), ray.xyz, sources, skyCases[2u * index + 1u].y);
     DeviceMemoryBarrier();
     skyResults[uint2(index, 0u)] = float4(radiance, (float)workCounters[PuckWorkSkyTextureLoadsWord]);
     skyResults[uint2(index, 1u)] = float4((float)workCounters[PuckWorkSkyTextureLoadsWord + 1u], 0.0, 0.0, 0.0);

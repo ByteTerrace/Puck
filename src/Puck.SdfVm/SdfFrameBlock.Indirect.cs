@@ -4,6 +4,27 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public static partial class SdfFrameBlock {
+    private static void WriteIndirectControls(Span<byte> block, SdfFrame frame) {
+        var gains = frame.IndirectGains;
+        var apply = frame.IndirectApply;
+        gains.Validate();
+        apply.Validate();
+        if (frame.IndirectBounces is { } bounces) {
+            ArgumentOutOfRangeException.ThrowIfNegative(bounces);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(bounces, SdfIndirectLayout.MaximumBounces);
+        }
+        var offset = Offset(SdfWorldPackage.IndirectSourceGains);
+        WriteSingle(block, offset, gains.Lights);
+        WriteSingle(block, offset + sizeof(float), gains.Emission);
+        WriteSingle(block, offset + 2 * sizeof(float), gains.Screens);
+        WriteSingle(block, offset + 3 * sizeof(float), gains.Sky);
+        WriteSingle(block, Offset(SdfWorldPackage.IndirectFeedbackGain), gains.Feedback);
+        offset = Offset(SdfWorldPackage.IndirectApply);
+        WriteVector3(block, offset, apply.Tint);
+        WriteSingle(block, offset + 3 * sizeof(float), apply.Intensity);
+        WriteSingle(block, Offset(SdfWorldPackage.IndirectContact), apply.Contact);
+    }
+
     /// <summary>Writes the exact cache allocation's completed lighting and receiver-proof publication.</summary>
     /// <param name="block">The world pass block.</param>
     /// <param name="cache">The cache bound by this graph edge, or null when the edge no longer names the current allocation.</param>

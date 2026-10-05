@@ -53,6 +53,13 @@ public sealed class WorldIndirectPickText {
         }
         var sources = pick.Sources;
         text.Append(CultureInfo.InvariantCulture,
+            $"apply intensity={pick.Application.Intensity:0.######} tint={Vector(pick.Application.Tint)} contact={pick.Application.Contact:0.######}; sources-before-apply\n");
+        if (pick.LightingSource is { } source) {
+            var gains = source.Gains;
+            text.Append(CultureInfo.InvariantCulture,
+                $"source-gains lights={gains.Lights:0.######} emission={gains.Emission:0.######} screens={gains.Screens:0.######} sky={gains.Sky:0.######} feedback={gains.Feedback:0.######}\n");
+        }
+        text.Append(CultureInfo.InvariantCulture,
             $"sources direct={Vector(sources.Direct)} emission={Vector(sources.Emission)}\nsources sky={Vector(sources.Sky)} screens={Vector(sources.Screens)}\nsources feedback={Vector(sources.Feedback)}\n");
         text.Append(CultureInfo.InvariantCulture,
             $"source-sequence={(pick.LightingSource?.Sequence ?? 0)} source-role={(pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation ? (pick.NearSource is null ? "cache-fallback-not-near-reference" : "current-near-publication") : pick.Method == SdfIndirectMethod.Cache ? "visible-cache-publication" : "cache-fallback-not-alternative-reference")}\n");
@@ -75,7 +82,7 @@ public sealed class WorldIndirectPickText {
                 ? "gpu-minus-reference=" + Vector(difference) + "\n"
                 : "gpu-minus-reference unavailable\n");
         }
-        text.Append("fields=prototypes[].palette[].fill,bleed,receive; render.lighting[].bounce\nfields=render.environment; render.sky.layers; screens[]; placements[].faceSources");
+        text.Append("fields=prototypes[].palette[].fill,bleed,receive; render.lighting[].bounce\nfields=render.indirect.sources,bounces,apply; render.environment; render.sky.layers; screens[]; placements[].faceSources");
         return text.ToString();
     }
 

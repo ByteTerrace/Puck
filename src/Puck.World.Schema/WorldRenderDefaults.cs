@@ -196,10 +196,39 @@ public sealed record WorldRenderDefaults(
         });
     }
 }
-/// <summary>The world's diffuse indirect-light participation defaults.</summary>
+/// <summary>Authored sources, finite solve depth and receiver application for the residency's indirect light cache.</summary>
 /// <param name="Bodies">Default makes moving bodies receive at medium and cast and receive at high. Receive omits
 /// their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.</param>
-public sealed record WorldRenderIndirect([property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>))] SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default);
+/// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
+/// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
+/// <param name="Apply">Bindable receiver-only controls. They do not change cached radiance.</param>
+public sealed record WorldRenderIndirect(
+    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>))] SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectSources? Sources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null);
+
+/// <summary>Gains applied once where each source enters transport; continuation never applies them a second time.</summary>
+/// <param name="Lights">Explicit diffuse light gain.</param>
+/// <param name="Emission">Material emission gain.</param>
+/// <param name="Screens">Acquired screen-face emission gain.</param>
+/// <param name="Sky">Physical radiance at certified world exits.</param>
+/// <param name="Feedback">Reflected preceding-sweep radiance gain, once per bounce.</param>
+public sealed record WorldRenderIndirectSources(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Lights = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Emission = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Screens = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Sky = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Feedback = null);
+
+/// <summary>Receiver-only controls; gains and tint channels lie in [0, 1] and default to one.</summary>
+/// <param name="Intensity">Final indirect diffuse gain.</param>
+/// <param name="Tint">Final indirect diffuse tint.</param>
+/// <param name="Contact">How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.</param>
+public sealed record WorldRenderIndirectApply(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Intensity = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Tint = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Contact = null);
 /// <summary>The lit path's lights and stylization as world data. Absent renders the pinned sun; present, the list
 /// is exactly the authored direct lights. Ambient comes from the sky through the environment gain. Every field of every light is optional individually and resolves to the engine's pinned default for its
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be

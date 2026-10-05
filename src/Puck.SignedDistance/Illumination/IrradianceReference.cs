@@ -25,21 +25,26 @@ public sealed class IrradianceReference {
     private readonly IrradianceField m_field;
     private readonly IrradianceSurfaces m_surfaces;
     private readonly double m_exitDistance;
+    private readonly double m_feedbackGain;
 
     /// <summary>Initializes a new instance of the <see cref="IrradianceReference"/> class.</summary>
     /// <param name="field">The field.</param>
     /// <param name="surfaces">The surfaces, direct light and sky.</param>
     /// <param name="exitDistance">The distance, in world units, past which a ray that met nothing has left the world and
     /// reads the sky: the far distance a camera treats as sky.</param>
+    /// <param name="feedbackGain">The finite gain in [0, 1] applied once at each reflected feedback hop.</param>
     /// <exception cref="ArgumentNullException"><paramref name="field"/> or <paramref name="surfaces"/> is
     /// <see langword="null"/>.</exception>
-    public IrradianceReference(IrradianceField field, IrradianceSurfaces surfaces, double exitDistance) {
+    /// <exception cref="ArgumentOutOfRangeException">The feedback gain is not finite or lies outside [0, 1].</exception>
+    public IrradianceReference(IrradianceField field, IrradianceSurfaces surfaces, double exitDistance, double feedbackGain = 1d) {
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: surfaces);
+        if (!double.IsFinite(feedbackGain) || feedbackGain < 0d || feedbackGain > 1d) { throw new ArgumentOutOfRangeException(nameof(feedbackGain)); }
 
         m_field = field;
         m_surfaces = surfaces;
         m_exitDistance = exitDistance;
+        m_feedbackGain = feedbackGain;
     }
 
     /// <summary>Estimates the normalized irradiance at a surface point.</summary>
@@ -199,9 +204,9 @@ public sealed class IrradianceReference {
             : m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
         var arriving = direct + screens;
         var feedback = Double3.Zero;
-        if (bounce < bounces && reflected != Double3.Zero) {
+        if (bounce < bounces && reflected != Double3.Zero && m_feedbackGain > 0d) {
             feedback = Incident(bounce: bounce + 1, bounces: bounces, normal: hitNormal, path: path,
-                point: ray.Point, resolved: out resolved, contributions: out _);
+                point: ray.Point, resolved: out resolved, contributions: out _) * m_feedbackGain;
             arriving += feedback;
         }
         var emission = m_surfaces.Emission(arg: ray.Material);

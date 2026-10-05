@@ -57,6 +57,7 @@ public sealed partial class SdfWorldTables {
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectMethod, SdfWorldPackage.IndirectSources, SdfWorldPackage.IndirectBodies,
+        SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectFeedbackGain, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
         SdfWorldPackage.GridObjectOrigin, SdfWorldPackage.GridObjectPitch, SdfWorldPackage.GridObjectFrame,

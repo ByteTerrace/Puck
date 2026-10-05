@@ -195,7 +195,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.incomingVisibility = incoming;
 
-            float3 radiance = worldSkyIrradiance(normal) * ambientOcclusion;
+            // Enabled physical sky transport replaces the unoccluded harmonic ambient; disabling that source
+            // retains the authored ambient look. Reflections, direct lights and atmosphere remain independent.
+            bool indirectSky = passGroup.indirectTier != SdfIndirectTierOff && (passGroup.indirectSources & SdfIndirectSourcesSky) != 0u;
+            float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
@@ -221,7 +224,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 
             SdfIndirectSources indirect = sdfIndirectApply(p, s, surfacePoint, normal);
             color += sdfIndirectSourceTotal(indirect) * shadeMaterial.albedo
-                * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * ambientOcclusion);
+                * passGroup.indirectApply.rgb
+                * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
+                    * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             // Authored fill is the indirect-off look. It never adds a second approximation while the cache is on.
             if (passGroup.indirectTier == SdfIndirectTierOff) {
                 color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));

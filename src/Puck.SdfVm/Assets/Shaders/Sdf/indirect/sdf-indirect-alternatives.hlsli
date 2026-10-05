@@ -159,7 +159,7 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
             // A local interval is not a sky exit. Keep its certified cache sky, including sealed-room darkness.
             sources.values[SdfIndirectSourceSky] = fallback.values[SdfIndirectSourceSky];
             if ((passGroup.indirectSources & SdfIndirectSourcesSky) != 0u && clearance > p.farDistance - travel) {
-                sources.values[SdfIndirectSourceSky] = sdfSkyPhysicalRadiance(direction) * visibility;
+                sources.values[SdfIndirectSourceSky] = sdfSkyPhysicalRadiance(direction) * (visibility * passGroup.indirectSourceGains.w);
             }
             return true;
         }

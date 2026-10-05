@@ -44,7 +44,7 @@ SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, ui
         SdfIndirectSources previous;
         if (mask != 0u && sdfIndirectIrradianceAt(surfacePoint, launched, surface.normal, level, mask,
             readGeneration, readPublication, previous)) {
-            result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous) * (feedbackGain * attenuation);
+            result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous) * (feedbackGain * attenuation * passGroup.indirectFeedbackGain);
         }
     }
     return result;
@@ -78,7 +78,7 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
         } else if (kind == SdfIndirectKindContinuation) {
             result = sdfIndirectShadeContinuation(endpoint, direction, hit.w, writeGeneration, writePublication);
         } else {
-            result.values[SdfIndirectSourceSky] = sdfIndirectSky(kind, direction, passGroup.indirectSources);
+            result.values[SdfIndirectSourceSky] = sdfIndirectSky(kind, direction, passGroup.indirectSources, passGroup.indirectSourceGains.w);
         }
         // Unresolved rays contribute no source and never enter the cosine denominator.
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {

@@ -76,7 +76,7 @@ bool sdfIndirectNearIncoming(float3 launched, float3 direction, out SdfIndirectS
     float attenuation;
     result = sdfIndirectDiffuse(surface, attenuation);
     float3 reflected = surface.material.albedo * (1.0 - surface.material.metal) * surface.material.bleed;
-    result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous) * attenuation;
+    result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous) * (attenuation * passGroup.indirectFeedbackGain);
     hitSurface = true;
     return true;
 }

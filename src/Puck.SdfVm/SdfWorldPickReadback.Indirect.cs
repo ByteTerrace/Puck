@@ -20,6 +20,11 @@ internal sealed partial class SdfWorldPickReadback {
         target.Cache = null;
         target.Lighting = null;
         target.PreviousLightingStamp = 0u;
+        var applyOffset = (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectApply);
+        static float ApplyWord(ReadOnlySpan<byte> bytes, int offset, int word) => BinaryPrimitives.ReadSingleLittleEndian(bytes[(offset + word * sizeof(float))..]);
+        target.Application = new SdfIndirectApplication(ApplyWord(block, applyOffset, 3),
+            new Vector3(ApplyWord(block, applyOffset, 0), ApplyWord(block, applyOffset, 1), ApplyWord(block, applyOffset, 2)),
+            BinaryPrimitives.ReadSingleLittleEndian(block[(int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectContact)..]));
         if (!target.Record || target.Request.Sample is null || cache is null || cacheVersion is null || diagnosticVersion is null) { return; }
         target.IndirectBuffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: IndirectBytes,
             name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "pick-indirect", index: slot));
@@ -65,6 +70,7 @@ internal sealed partial class SdfWorldPickReadback {
             new SdfIndirectPickSources(Vector(48), Vector(52), Vector(56), Vector(60), Vector(64)), cache, census, slot.Lighting) {
             Method = (SdfIndirectMethod)Word(51),
             SourcesEnabled = (SdfIndirectSources)Word(55),
+            Application = slot.Application,
             Near = (SdfIndirectNearOutcome)Word(59),
             NearDirection = Vector(68),
             NearPreviousPublication = Word(71),
@@ -84,5 +90,6 @@ internal sealed partial class SdfWorldPickReadback {
         public SdfIndirectCacheSnapshot? Cache;
         public SdfIndirectLightingSnapshot? Lighting;
         public uint PreviousLightingStamp;
+        public SdfIndirectApplication Application;
     }
 }

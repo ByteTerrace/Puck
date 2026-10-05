@@ -9,6 +9,14 @@ public static partial class SdfWorldPackage {
     public const string IndirectTier = "indirectTier";
     /// <summary>The enabled source-category bits, shared by the solve and every receiver algorithm.</summary>
     public const string IndirectSources = "indirectSources";
+    /// <summary>Origin gains for direct lights, material emission, screen emission and sky exits.</summary>
+    public const string IndirectSourceGains = "indirectSourceGains";
+    /// <summary>The gain applied once per reflected previous-bank hop.</summary>
+    public const string IndirectFeedbackGain = "indirectFeedbackGain";
+    /// <summary>Receiver-only tint RGB and intensity.</summary>
+    public const string IndirectApply = "indirectApply";
+    /// <summary>Receiver-only strength of existing ambient-occlusion attenuation.</summary>
+    public const string IndirectContact = "indirectContact";
     /// <summary>The dynamic-body policy; Default resolves against the actual bound cache tier.</summary>
     public const string IndirectBodies = "indirectBodies";
     /// <summary>The per-view counted comparison method: cache, screen-space samples or one-bounce field cones.</summary>

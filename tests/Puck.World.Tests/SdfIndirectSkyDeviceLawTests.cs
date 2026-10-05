@@ -30,14 +30,14 @@ public sealed class SdfIndirectSkyDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        (IrradianceHitKind Kind, SdfIndirectSources Sources, Vector3 Direction, bool Lit)[] cases = [
-            (IrradianceHitKind.Exit, SdfIndirectSources.Sky, Vector3.UnitY, true),
-            (IrradianceHitKind.Exit, SdfIndirectSources.All, -Vector3.UnitX, true),
-            (IrradianceHitKind.Exit, SdfIndirectSources.Sky, -Vector3.UnitY, true),
-            (IrradianceHitKind.Exit, SdfIndirectSources.Direct, Vector3.UnitY, false),
-            (IrradianceHitKind.Hit, SdfIndirectSources.All, Vector3.UnitY, false),
-            (IrradianceHitKind.Continuation, SdfIndirectSources.All, Vector3.UnitY, false),
-            (IrradianceHitKind.Unresolved, SdfIndirectSources.All, Vector3.UnitY, false),
+        (IrradianceHitKind Kind, SdfIndirectSources Sources, Vector3 Direction, bool Lit, float Gain)[] cases = [
+            (IrradianceHitKind.Exit, SdfIndirectSources.Sky, Vector3.UnitY, true, 1f),
+            (IrradianceHitKind.Exit, SdfIndirectSources.All, -Vector3.UnitX, true, .25f),
+            (IrradianceHitKind.Exit, SdfIndirectSources.Sky, -Vector3.UnitY, true, .5f),
+            (IrradianceHitKind.Exit, SdfIndirectSources.Direct, Vector3.UnitY, false, 1f),
+            (IrradianceHitKind.Hit, SdfIndirectSources.All, Vector3.UnitY, false, 1f),
+            (IrradianceHitKind.Continuation, SdfIndirectSources.All, Vector3.UnitY, false, 1f),
+            (IrradianceHitKind.Unresolved, SdfIndirectSources.All, Vector3.UnitY, false, 1f),
         ];
         var physical = new Vector3(.25f, .5f, 1f);
         var reflection = new Vector3(8f, 4f, 2f);
@@ -52,7 +52,7 @@ public sealed class SdfIndirectSkyDeviceLawTests {
         var rows = new Vector4[cases.Length * 2];
         for (var index = 0; index < cases.Length; index++) {
             rows[2 * index] = new Vector4(cases[index].Direction, BitConverter.UInt32BitsToSingle((uint)cases[index].Kind));
-            rows[2 * index + 1] = new Vector4(BitConverter.UInt32BitsToSingle((uint)cases[index].Sources), 0, 0, 0);
+            rows[2 * index + 1] = new Vector4(BitConverter.UInt32BitsToSingle((uint)cases[index].Sources), cases[index].Gain, 0, 0);
         }
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
@@ -61,7 +61,7 @@ public sealed class SdfIndirectSkyDeviceLawTests {
             Enumerable.Repeat(program, cases.Length).ToArray(), rows,
             passValues: new byte[SdfWorldInterfaces.IndirectParameters.SizeBytes], environment: map);
         for (var index = 0; index < cases.Length; index++) {
-            Assert.Equal(cases[index].Lit ? new Vector4(physical, 4f) : Vector4.Zero, results[index]);
+            Assert.Equal(cases[index].Lit ? new Vector4(physical * cases[index].Gain, 4f) : Vector4.Zero, results[index]);
             Assert.Equal(Vector4.Zero, results[cases.Length + index]);
         }
     }

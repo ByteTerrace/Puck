@@ -5,8 +5,8 @@
 #include "../isa/sdf-indirect-layout.hlsli"
 #include "../shade/sdf-sky-lighting.hlsli"
 
-float3 sdfIndirectSky(uint kind, float3 direction, uint sources) {
+float3 sdfIndirectSky(uint kind, float3 direction, uint sources, float gain) {
     if (kind != SdfIndirectKindExit || (sources & SdfIndirectSourcesSky) == 0u) { return 0.0; }
-    return sdfSkyPhysicalRadiance(direction);
+    return sdfSkyPhysicalRadiance(direction) * gain;
 }
 #endif

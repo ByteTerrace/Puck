@@ -1679,6 +1679,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             EnableCadenceGate = m_settings.CadenceGate,
             IndirectTier = m_settings.IndirectTier,
             IndirectBodies = m_client.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
+            IndirectSources = lighting.Indirect.Gains.Sources,
+            IndirectGains = lighting.Indirect.Gains,
+            IndirectBounces = lighting.Indirect.Bounces,
+            IndirectApply = lighting.Indirect.Apply,
             Volumes = m_volumes,
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,

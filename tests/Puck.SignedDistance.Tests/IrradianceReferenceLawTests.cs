@@ -11,6 +11,22 @@ namespace Puck.SignedDistance.Tests;
 // floor beside an emissive half-plane, and a floor under a finite emissive disc.
 public sealed class IrradianceReferenceLawTests {
     [Theory]
+    [InlineData(0d)]
+    [InlineData(.25d)]
+    [InlineData(1d)]
+    public void FeedbackGainScalesEachReflectedHopWithoutDimmingTheFirstSource(double gain) {
+        var field = IrradianceScenes.Shell(3, .2);
+        var surfaces = IrradianceScenes.Uniform(albedo: .5, emission: .75, sky: 9);
+        var reference = new IrradianceReference(field, surfaces, 100, feedbackGain: gain);
+        var result = reference.EstimateIncidentSources(Double3.Zero, new(0, 1, 0), bounces: 2, paths: 8);
+        var expected = .75 * (1 + .5 * gain + .25 * gain * gain);
+        Assert.Equal(0, result.Unresolved);
+        Assert.Equal(new Double3(.75, .75, .75), result.Contributions.Emission);
+        Assert.Equal(expected, result.Contributions.Total.X, precision: 9);
+        Assert.Equal(expected - .75, result.Contributions.Feedback.X, precision: 9);
+        Assert.Equal(gain == 0 ? 8L : 24L, field.Casts);
+    }
+    [Theory]
     [InlineData(1d, 1)]
     [InlineData(-1d, 256)]
     public void ACapturedFirstRaySelectsItsColoredHitAndKeepsEachSourceIndependent(double side, int paths) {

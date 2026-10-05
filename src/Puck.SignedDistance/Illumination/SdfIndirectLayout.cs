@@ -13,6 +13,8 @@ public enum SdfIndirectTier {
 }
 /// <summary>The residency cache's word layout and bounded schedule. The shader generator reads these values.</summary>
 public sealed class SdfIndirectLayout {
+    /// <summary>The greatest feedback depth supported by a cache tier, after its direct sweep.</summary>
+    public const int MaximumBounces = 4;
     /// <summary>The probes and cells a brick owns.</summary>
     public const int ProbesPerBrick = 64;
     /// <summary>The level bits in a live brick record's final word; minus one still marks an absent brick.</summary>
@@ -95,7 +97,7 @@ public sealed class SdfIndirectLayout {
         ClassifyBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4, _ => 8 };
         ShadeBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4096, _ => 8192 };
         ReceiverProofBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 32768, _ => 65536 };
-        BounceLimit = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2, _ => 4 };
+        BounceLimit = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2, _ => MaximumBounces };
         ProofCapacity = (ProbeCapacity * ProofsPerCell);
         CellWordOffset = (ProbeCapacity * ProbeWords);
         HitWordOffset = (CellWordOffset + (ProbeCapacity * CellWords));

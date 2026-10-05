@@ -28,6 +28,10 @@ public sealed class SdfIndirectLightingSnapshot {
     public IReadOnlyList<SdfLight> Lights { get; }
     /// <summary>Gets the active prefix of <see cref="Lights"/>.</summary>
     public int LightCount => m_frame.Lights.Count;
+    /// <summary>Gets the immutable gains applied at the source origins and reflected hops of this solve.</summary>
+    public SdfIndirectGains Gains => m_frame.IndirectGains;
+    /// <summary>Gets the authored feedback depth request. The publication's actual sweeps also obey its tier cap.</summary>
+    public int? Bounces => m_frame.IndirectBounces;
     /// <summary>Gets the exact geometry revisions at capture.</summary>
     public SdfLightGeometry Geometry { get; }
     /// <summary>Gets the capture sequence within this cache's source owner.</summary>

@@ -58,11 +58,11 @@ public static class WorldIndirectReference {
                 return baseSurfaces.Albedo(material);
             }
             var surfaces = new IrradianceSurfaces(albedo: Material,
-                emission: material => (frame.IndirectSources & SdfIndirectSources.Emission) != 0 ? baseSurfaces.Emission(material) : Double3.Zero,
-                direct: (position, normal, material) => (frame.IndirectSources & SdfIndirectSources.Direct) != 0 ? lighting.Direct(position, normal, material) : Double3.Zero,
-                sky: direction => ToDouble(SdfSkyEnvironment.Sample(sky, ToVector(direction))),
+                emission: material => (frame.IndirectSources & SdfIndirectSources.Emission) != 0 ? baseSurfaces.Emission(material) * frame.IndirectGains.Emission : Double3.Zero,
+                direct: (position, normal, material) => (frame.IndirectSources & SdfIndirectSources.Direct) != 0 ? lighting.Direct(position, normal, material) * frame.IndirectGains.Lights : Double3.Zero,
+                sky: direction => ToDouble(SdfSkyEnvironment.Sample(sky, ToVector(direction))) * frame.IndirectGains.Sky,
                 reflection: (position, normal, material) => Material(material) * lighting.Attenuation(position, normal));
-            var reference = new IrradianceReference(field, surfaces, frame.FarDistance);
+            var reference = new IrradianceReference(field, surfaces, frame.FarDistance, frame.IndirectGains.Feedback);
             var feedbackDepth = (frame.IndirectSources & SdfIndirectSources.Feedback) != 0 ? depth : 0;
             var sourceEstimate = near
                 ? reference.EstimateIncidentSources(ToDouble(pick.Launched), ToDouble(pick.NearDirection), feedbackDepth, paths)
@@ -71,6 +71,8 @@ public static class WorldIndirectReference {
             if (estimate.Unresolved != 0) {
                 return new(estimate, $"CPU reference has {estimate.Unresolved}/{paths} unresolved paths.", field.Samples, field.Casts, depth, sequence, null);
             }
+            // Both sides are incoming radiance. The captured receiver's application controls and material response
+            // are deliberately outside this source comparison; neither is reapplied to the pinned transport.
             var gpu = pick.Sources.Direct + pick.Sources.Feedback + pick.Sources.Emission + pick.Sources.Sky + pick.Sources.Screens;
             return new(estimate, null, field.Samples, field.Casts, depth, sequence, gpu - ToVector(estimate.Irradiance));
         } catch (NotSupportedException exception) { return Refused(exception.Message); }

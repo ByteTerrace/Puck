@@ -48,10 +48,10 @@ SdfIndirectSources sdfIndirectDiffuse(SdfShadeSurface surface, out float attenua
     }
     float3 reflected = surface.material.albedo * (1.0 - surface.material.metal) * surface.material.bleed;
     if ((passGroup.indirectSources & SdfIndirectSourcesDirect) != 0u) {
-        result.values[SdfIndirectSourceDirect] = reflected * direct * attenuation;
+        result.values[SdfIndirectSourceDirect] = reflected * direct * (attenuation * passGroup.indirectSourceGains.x);
     }
     if ((passGroup.indirectSources & SdfIndirectSourcesEmission) != 0u) {
-        result.values[SdfIndirectSourceEmission] = surface.material.albedo * surface.material.emissive * surface.material.bleed;
+        result.values[SdfIndirectSourceEmission] = surface.material.albedo * surface.material.emissive * surface.material.bleed * passGroup.indirectSourceGains.y;
     }
     return result;
 }

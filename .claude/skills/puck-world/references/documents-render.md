@@ -6,6 +6,16 @@ file is the decision/derivation prose the schema cannot state.
 
 ### `render` — the render defaults
 
+`render.indirect.sources` carries bindable `lights`, `emission`, `screens`, `sky`
+and `feedback` gains in [0, 1], each default one. Explicit screens=0 stays off
+even when an emitting image is bound. Structural `bounces` requests zero through
+four feedback sweeps after direct, capped by the active tier. `apply` holds bindable
+unit `intensity`, `tint` and `contact`; those receiver-only controls do not restart
+the solved cache. The ordinary generated document shape, scalar domains and
+environment binding path own validation, keys and state reads; add no separate
+indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+owns source and receiver semantics.
+
 `WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
 inert section. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
 `shadowFadeSlots`, `shadowFadeTicks`, `shadowOverflow`,
@@ -20,9 +30,9 @@ view takes only a row that names it. They override these boot levers for that
 view; session pins have no document member. `world.save` folds a moved lever back into the
 section when the world authors one (`WorldSessionLevers.Fold`), creates the
 section when the world omits it and the render-scale ceiling moved, and
-otherwise leaves an absent `render` section absent. Three members are read off the LIVE definition every frame instead,
+otherwise leaves an absent `render` section absent. Presentation fields are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
-`lighting`/`sky` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
+`lighting`/`sky`/`indirect` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40

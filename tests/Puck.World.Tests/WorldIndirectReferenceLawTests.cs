@@ -28,6 +28,7 @@ public sealed class WorldIndirectReferenceLawTests {
             FarDistance = 1f,
             IndirectTier = SdfIndirectTier.High,
             IndirectSources = SdfIndirectSources.Emission,
+            IndirectGains = SdfIndirectGains.One with { Emission = .25f },
         };
         var gpu = new FakeGpuDevice();
         var context = new FrameContext(AccumulatorTicks: 0UL, DeltaTicks: 0UL, ElapsedTicks: 0UL, FrameDeltaTicks: 0UL,
@@ -58,7 +59,7 @@ public sealed class WorldIndirectReferenceLawTests {
         var pick = new SdfIndirectPick(SdfIndirectPickStatus.Resolved, SdfIndirectTier.High, 0, 255,
             Vector3.Zero, new Vector3(0f, .004f, 0f), .004f, Vector3.UnitY,
             (uint)snapshot.PublishedGeneration, snapshot.PublishedStamp, [],
-            new SdfIndirectPickSources(default, default, Vector3.UnitX, default, default), snapshot, null, lighting) {
+            new SdfIndirectPickSources(default, default, .25f * Vector3.UnitX, default, default), snapshot, null, lighting) {
             Near = SdfIndirectNearOutcome.Hit,
             NearDirection = Vector3.UnitY,
             NearPreviousPublication = cache.PreviousPublishedStamp,
@@ -68,7 +69,7 @@ public sealed class WorldIndirectReferenceLawTests {
         var reference = WorldIndirectReference.Evaluate(pick, paths: 16);
         Assert.Null(reference.Refusal);
         Assert.NotNull(reference.Estimate);
-        Assert.Equal(new IrradianceEstimate(new Double3(1, 0, 0), 16, 0), reference.Estimate.Value);
+        Assert.Equal(new IrradianceEstimate(new Double3(.25, 0, 0), 16, 0), reference.Estimate.Value);
         Assert.True(reference.FieldQueries > 0);
         Assert.Equal(16L, reference.Casts);
         Assert.Equal(lighting.Sequence, reference.SourceSequence);

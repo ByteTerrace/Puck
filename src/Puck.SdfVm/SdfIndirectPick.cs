@@ -87,4 +87,7 @@ public sealed record SdfIndirectPick(SdfIndirectPickStatus Status, SdfIndirectTi
     /// source mask. A CPU reference preserves that solve's recursive transport, then masks its final categories
     /// with this captured receiver selection.</summary>
     public SdfIndirectSources SourcesEnabled { get; init; }
+    /// <summary>Gets the receiver-only tint, intensity and contact controls copied from the same submitted block.
+    /// Sources and the independent reference remain incoming radiance before these controls or material response.</summary>
+    public SdfIndirectApplication Application { get; init; } = SdfIndirectApplication.Default;
 }

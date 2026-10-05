@@ -27,6 +27,20 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// its document is validated.
 /// </summary>
 public static class WorldValueFields {
+    /// <summary>Explicit diffuse light admitted to indirect transport.</summary>
+    public static WorldValueField IndirectLights { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Lights), WorldValueDomain.Unit);
+    /// <summary>Material emission admitted to indirect transport.</summary>
+    public static WorldValueField IndirectEmission { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Emission), WorldValueDomain.Unit);
+    /// <summary>Acquired screen emission admitted to indirect transport.</summary>
+    public static WorldValueField IndirectScreens { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Screens), WorldValueDomain.Unit);
+    /// <summary>Certified world-exit sky radiance admitted to indirect transport.</summary>
+    public static WorldValueField IndirectSky { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Sky), WorldValueDomain.Unit);
+    /// <summary>Reflected previous-sweep radiance admitted at each feedback hit.</summary>
+    public static WorldValueField IndirectFeedback { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Feedback), WorldValueDomain.Unit);
+    /// <summary>Receiver-only indirect diffuse gain.</summary>
+    public static WorldValueField IndirectIntensity { get; } = new(typeof(WorldRenderIndirectApply), nameof(WorldRenderIndirectApply.Intensity), WorldValueDomain.Unit);
+    /// <summary>Receiver-only ambient-occlusion attenuation.</summary>
+    public static WorldValueField IndirectContact { get; } = new(typeof(WorldRenderIndirectApply), nameof(WorldRenderIndirectApply.Contact), WorldValueDomain.Unit);
     /// <summary>A light's indirect diffuse gain.</summary>
     public static WorldValueField LightBounce { get; } = new(typeof(WorldRenderLight), nameof(WorldRenderLight.Bounce), WorldValueDomain.NonNegative);
     /// <summary>A directional light's weight.</summary>
@@ -209,6 +223,7 @@ public static class WorldValueFields {
 
     /// <summary>Gets every field, in declaration order.</summary>
     public static IReadOnlyList<WorldValueField> All { get; } = [
+        IndirectLights, IndirectEmission, IndirectScreens, IndirectSky, IndirectFeedback, IndirectIntensity, IndirectContact,
         LightBounce,
         DirectionalWeight,
         DirectionalAngularRadius,

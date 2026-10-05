@@ -34,7 +34,7 @@ bool sdfIndirectScreenEmission(int material, float3 surfacePoint, float3 directi
         sdfScreenLights[row + a.y * SDF_SCREEN_EMISSION_EDGE + b.x].rgb, f.x);
     float3 bottom = lerp(sdfScreenLights[row + b.y * SDF_SCREEN_EMISSION_EDGE + a.x].rgb,
         sdfScreenLights[row + b.y * SDF_SCREEN_EMISSION_EDGE + b.x].rgb, f.x);
-    radiance = lerp(top, bottom, f.y);
+    radiance = lerp(top, bottom, f.y) * passGroup.indirectSourceGains.z;
     sdfIndirectLoads += 4u;
 #endif
     return true;

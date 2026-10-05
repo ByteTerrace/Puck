@@ -90,7 +90,15 @@ host color. Direct screen glow uses the mean only at the view's own surface;
 indirect screen-face hits use the pinned grid and exclude analytic screen lights.
 Preserve exact source publication and taint, same-world camera exclusion, and the
 CPU reference's explicit refusal until it can consume actual captured pixels.
-The default source mask includes physical Sky. Only certified world exits read
+The default source mask includes all five categories; screen admission still
+requires an actual acquired emitting source and preserves authored screens=0.
+`render.indirect.sources` binds five unit gains through the environment resolver.
+Apply each gain only at its origin, and feedback once per reflected hop, never
+on continuation or cache interpolation. Pin gains and requested `bounces` with
+the finite source; cap depth by the selected tier. Receiver-only `apply` intensity,
+tint and contact do not restart the solve. Picks retain those actual submitted
+controls; source/reference values remain incoming radiance before application.
+Physical Sky replaces harmonic ambient when enabled. Only certified world exits read
 its pinned full map, through the shared four-load radiance helper; never add
 unoccluded SH at a hit or apply artistic Ambient/Reflection gains to transport.
 Reflected previous-bank light at hits belongs to Feedback; disabled Sky and

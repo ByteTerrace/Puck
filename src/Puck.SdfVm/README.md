@@ -556,6 +556,15 @@ and CI runs it. The [`rendering` skill](../../.claude/skills/rendering/SKILL.md)
 carries the C#↔HLSL sync-pair contracts that are still written on both sides
 and must change together.
 
+## Indirect controls
+
+Indirect frames carry immutable source gains and requested finite bounce depth,
+with receiver-only application controls. World authors bind these through
+`render.indirect.sources`, `bounces` and `apply`; the existing environment resolver
+and generated common block deliver them to both solve and view passes. The
+[finite-solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+owns their ranges, source accounting, tier limits and captured reference semantics.
+
 ## Capture completion
 
 A caller creates a `FrameCaptureRequest` and arms it on a capture target:

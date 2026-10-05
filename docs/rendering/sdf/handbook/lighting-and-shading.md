@@ -304,7 +304,9 @@ collision-field values as an indirect comparison.
 The residency's `shade` pass follows placement, partition and transport over the
 same cache allocation. Once transport finishes, the shared `IrradianceSolveSchedule`
 visits coarser levels before finer ones, within the tier's probe allowance. The
-direct sweep starts from zero; medium then runs two feedback sweeps and high four.
+direct sweep starts from zero; medium permits two feedback sweeps and high four.
+`render.indirect.bounces` requests zero through four sweeps after direct, capped
+by the active tier; absent uses its limit. Disabled feedback performs direct only.
 A planned batch stays intact until successful submission, and only an entire
 sweep publishes a generation. Transport completion does not count as a lighting
 sweep. A completed unchanged solve schedules no further shade dispatch.
@@ -417,10 +419,28 @@ The `indirect` debug view shows the incident sum before those material factors.
 `SdfFrame.IndirectSources` carries one shared category mask into both the solve
 and receiver algorithms. Its bits follow the five stored categories: direct 1,
 feedback 2, emission 4, sky 8 and screens 16. The current default enables the
-first four; screen transport requires its captured publication path and explicit
-enablement. A source-mask edit is lighting-visible and does not retrace geometry.
+five; screen transport also requires its actual acquired emitting publication.
+An explicit zero screen gain stays disabled. A source-mask edit is lighting-visible and does not retrace geometry.
 Disabled categories are zero in newly solved records and receiver results,
 including an earlier complete bank retained while the new solve runs.
+
+World authors control `render.indirect.sources` with `lights`, `emission`,
+`screens`, `sky` and `feedback`. Each is a bindable gain in [0, 1], default one,
+using the ordinary scalar bindings and clock keys. A gain applies once where its
+source enters transport; feedback scales each reflected preceding-sweep hop.
+Continuation and cache interpolation never apply source gains again. The immutable
+solve captures these gains and its requested depth; the CPU reference reads that
+same capture and independently follows the finite paths.
+
+`render.indirect.apply` holds bindable `intensity`, `tint` and `contact`, all
+defaulting to one or white. These receiver-only values preserve the solved cache.
+Tint and intensity scale indirect diffuse after its source fold; contact blends
+existing AO from no attenuation at zero to full attenuation at one. Enabled
+physical Sky replaces harmonic ambient; disabling that source retains harmonic
+ambient. Direct lighting, reflections, fog and the material's own emission are
+independent. The fenced pick retains the submitted application controls, while
+its five sources and CPU comparison explicitly remain incoming radiance before
+application and receiver material response.
 
 Screen radiance comes from the acquired GPU image. The residency's existing
 environment producer reduces each admitted image into sixteen cell means and

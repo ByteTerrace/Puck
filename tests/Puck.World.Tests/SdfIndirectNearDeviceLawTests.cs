@@ -53,7 +53,7 @@ public sealed class SdfIndirectNearDeviceLawTests {
         Assert.DoesNotContain("[d3d12-debug]", output.ToString(), StringComparison.Ordinal);
     }
     private static Vector4[] Run(GpuDeviceServices services, string extension, IReadOnlyList<SdfProgram> programs,
-        Vector4[] rays, SdfIndirectSources sources = SdfIndirectSources.Emission, uint previous = 0) {
+        Vector4[] rays, SdfIndirectSources sources = SdfIndirectSources.Emission, uint previous = 0, float emissionGain = 1f) {
         var parameters = SdfWorldInterfaces.WorldParameters;
         var values = new byte[parameters.SizeBytes];
         void Write(string name, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(
@@ -61,6 +61,9 @@ public sealed class SdfIndirectNearDeviceLawTests {
         Write(SdfWorldPackage.IndirectTier, (uint)SdfIndirectTier.High);
         Write(SdfWorldPackage.IndirectBodies, (uint)SdfIndirectParticipation.Cast);
         Write(SdfWorldPackage.IndirectSources, (uint)sources);
+        var gainOffset = (int)parameters.BlockOffsetOf(SdfWorldPackage.IndirectSourceGains);
+        for (var channel = 0; channel < 4; channel++) { BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan(gainOffset + channel * sizeof(float)), channel == 1 ? emissionGain : 1f); }
+        BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan((int)parameters.BlockOffsetOf(SdfWorldPackage.IndirectFeedbackGain)), 1f);
         Write(SdfWorldPackage.IndirectNearEnabled, 1);
         Write(SdfWorldPackage.IndirectPreviousPublication, previous);
         return SdfIndirectDeviceProbe.Run(services, extension, "sdf-indirect-near-proof.comp", 11,
@@ -80,12 +83,12 @@ public sealed class SdfIndirectNearDeviceLawTests {
         Assert.Equal(1f, result[9].Y + result[10].Y);
     }
     private static void VerifyEmission(GpuDeviceServices services, string extension) {
-        var result = Run(services, extension, [Sphere(Center)], [Vector4.Zero, new(Vector3.UnitZ, 0)]);
+        var result = Run(services, extension, [Sphere(Center)], [Vector4.Zero, new(Vector3.UnitZ, 0)], emissionGain: .25f);
         Assert.Equal(1f, result[0].W);
-        Near(Emission, result[0], extension);
+        Near(Emission * .25f, result[0], extension);
         Assert.Equal(1f, result[1].Z);
         for (var source = 0; source < 5; source++) {
-            Near(source == 2 ? Emission : Vector3.Zero, result[2 + source], extension);
+            Near(source == 2 ? Emission * .25f : Vector3.Zero, result[2 + source], extension);
         }
     }
     private static void VerifyAllowance(GpuDeviceServices services, string extension) {

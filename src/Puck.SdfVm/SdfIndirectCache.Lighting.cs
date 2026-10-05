@@ -1,3 +1,4 @@
+using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
@@ -40,6 +41,7 @@ public sealed partial class SdfIndirectCache {
     /// <summary>Starts a finite direct and feedback solve after its source tables have been pinned. Every allocated
     /// probe participates; its shader class decides whether it contributes, without a host classification guess.</summary>
     /// <exception cref="InvalidOperationException">Transport or a prior solve is incomplete, or admission is frozen.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The captured bounce request lies outside the supported tier limits.</exception>
     public void BeginLighting() {
         if (!CanBeginLighting) { throw new InvalidOperationException("An indirect solve starts only after transport completes and the previous solve finishes."); }
         var levels = new IReadOnlyList<IrradianceProbeKey>[Layout.Levels.Count];
@@ -56,7 +58,12 @@ public sealed partial class SdfIndirectCache {
             }
             levels[level] = probes;
         }
-        m_solve = new IrradianceSolveSchedule(levels, Layout.BounceLimit, Layout.ShadeBudget, PublishedGeneration);
+        var frame = Lighting?.Frame;
+        var bounces = frame?.IndirectBounces ?? Layout.BounceLimit;
+        ArgumentOutOfRangeException.ThrowIfNegative(bounces);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(bounces, SdfIndirectLayout.MaximumBounces);
+        if (frame is not null && ((frame.IndirectSources & SdfIndirectSources.Feedback) == 0 || frame.IndirectGains.Feedback == 0f)) { bounces = 0; }
+        m_solve = new IrradianceSolveSchedule(levels, Math.Min(bounces, Layout.BounceLimit), Layout.ShadeBudget, PublishedGeneration);
         m_writeLightingStamp = checked(++m_nextLightingStamp);
         Count(name: "indirect.sweeps.restarted", amount: 1);
     }

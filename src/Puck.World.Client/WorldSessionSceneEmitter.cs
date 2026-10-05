@@ -559,6 +559,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // authority renders.
             FarDistance = m_dressedFarDistance,
             IndirectBodies = m_mirror.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
+            IndirectSources = environment.Indirect.Gains.Sources,
+            IndirectGains = environment.Indirect.Gains,
+            IndirectBounces = environment.Indirect.Bounces,
+            IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
             ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_mirror.Definition.Render),
             Sky = environment.Sky,
