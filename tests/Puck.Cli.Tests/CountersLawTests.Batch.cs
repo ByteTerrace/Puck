@@ -131,6 +131,7 @@ public sealed partial class CountersLawTests {
         }, out var observations, out var reason);
         if (defect == "valid") {
             Assert.True(succeeded, reason);
+            Assert.NotNull(observations);
             Assert.Equal(2, observations.Count);
             Assert.All(observations, observation => {
                 Assert.Equal("[engine: ready at tick 0]", observation.Completion);

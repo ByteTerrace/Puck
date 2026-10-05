@@ -351,7 +351,8 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             Barrier(buffer: map, destination: GpuAccess.ShaderRead, destinationStage: GpuStage.ComputeShader, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             Dispatch(groups: 1u, kernelSets: sets[1], pipeline: reducePipeline);
             if (seed is not null) {
-                Barrier(seed, GpuAccess.HostWrite, GpuStage.Host, GpuAccess.TransferRead, GpuStage.Transfer);
+                // The host-coherent seed is written before submission and has no prior GPU access.
+                Barrier(seed, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.TransferRead, GpuStage.Transfer);
                 Barrier(screens, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.TransferWrite, GpuStage.Transfer);
                 recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: seed.BufferHandle, destinationBufferHandle: screens.BufferHandle,
                     sizeBytes: screens.SizeBytes);

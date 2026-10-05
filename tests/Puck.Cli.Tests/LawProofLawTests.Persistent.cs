@@ -12,10 +12,10 @@ public sealed partial class LawProofLawTests {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
         using var shaders = ShaderCheckout(checkout: checkout);
-        const string shader = "src/Lib/Assets/Shaders/a.comp.hlsl";
+        const string Shader = "src/Lib/Assets/Shaders/a.comp.hlsl";
 
         checkout.Write(name: FixPath, text: "fixed");
-        if (withholdShader) { checkout.Write(name: shader, text: "fixed shader"); }
+        if (withholdShader) { checkout.Write(name: Shader, text: "fixed shader"); }
         var fix = checkout.Commit(message: "lib: fix");
         shaders.RequireSuccess(run: shaders.Run(target: "Build"));
         shaders.Write(path: "bin/managed.dll", text: "never transfer managed output");
@@ -38,7 +38,7 @@ public sealed partial class LawProofLawTests {
             },
         };
 
-        var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, shader] : [FixPath]), Revision: fix), runner: runner, scratch: scratch);
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, Shader] : [FixPath]), Revision: fix), runner: runner, scratch: scratch);
 
         Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
         Assert.Equal(expected: 2, actual: builds);
