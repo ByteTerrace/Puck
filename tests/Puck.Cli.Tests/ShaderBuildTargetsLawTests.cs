@@ -371,10 +371,10 @@ public sealed partial class ShaderBuildTargetsLawTests {
         public void ShaderProject(string body, string buildDependencies = "ResolveProjectReferences", string dxc = FakeDxc) {
             var project = XElement.Parse(text: $"<Project>{body}</Project>");
 
-            project.AddFirst(content: XElement.Parse(text: "<PropertyGroup><PuckComputeShaderDxilEnabled>false</PuckComputeShaderDxilEnabled></PropertyGroup>"));
-            project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
             WriteCompiler(mode: dxc);
-            project.Add(content: new XElement("PropertyGroup", new XElement("DxcCommand", CompilerPath)));
+            // Recipe item metadata is evaluated by the import, so the compiler must be selected before it.
+            project.AddFirst(content: new XElement("PropertyGroup", new XElement("PuckComputeShaderDxilEnabled", "false"), new XElement("DxcCommand", CompilerPath)));
+            project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());
         }
