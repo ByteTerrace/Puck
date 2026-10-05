@@ -59,19 +59,19 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         frame = frame with { DynamicTransforms = Array.AsReadOnly(Array.Empty<DynamicTransform>()) };
         Assert.Equal(removed, Signature());
 
-        frame = frame with { DynamicTransforms = new[] { identity } };
-        var previous = Signature();
+        // Each component changes independently; reverting the previous case must not supply its invalidation.
         foreach (var changed in new[] {
             identity with { Position = Vector3.UnitX },
             identity with { Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, .5f) },
             identity with { Lanes = Vector4.One },
         }) {
+            frame = frame with { DynamicTransforms = new[] { identity } };
+            var previous = Signature();
             frame = frame with { DynamicTransforms = new[] { changed } };
             var current = Signature();
             Assert.NotEqual(previous, current);
             frame = frame with { DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()) };
             Assert.Equal(current, Signature());
-            previous = current;
         }
 
         ulong Signature() {
