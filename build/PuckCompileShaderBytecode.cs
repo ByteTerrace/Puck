@@ -14,6 +14,7 @@ using Microsoft.Build.Utilities;
 public sealed class PuckCompileShaderBytecode : Task, ICancelableTask {
     private readonly object m_gate = new object();
     private readonly List<Exec> m_active = new List<Exec>();
+
     private bool m_stopping;
     private int m_next;
 
@@ -36,14 +37,15 @@ public sealed class PuckCompileShaderBytecode : Task, ICancelableTask {
             Log.LogError("PuckShaderCompileJobs must be a positive integer.");
             return false;
         }
-        if (string.IsNullOrWhiteSpace(Token) || Token.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) {
+        if (string.IsNullOrWhiteSpace(value: Token) || (Token.IndexOfAny(anyOf: Path.GetInvalidFileNameChars()) >= 0)) {
             Log.LogError("Shader compilation requires a valid invocation token.");
             return false;
         }
-        var workers = new Thread[Math.Min(Jobs, BytecodeFiles.Length)];
+        var workers = new Thread[Math.Min(val1: Jobs, val2: BytecodeFiles.Length)];
+
         try {
-            for (var index = 0; index < workers.Length; index++) {
-                workers[index] = new Thread(CompileNext) { IsBackground = true };
+            for (var index = 0; (index < workers.Length); index++) {
+                workers[index] = new Thread(start: CompileNext) { IsBackground = true };
                 workers[index].Start();
             }
         } catch (Exception exception) {
@@ -52,33 +54,33 @@ public sealed class PuckCompileShaderBytecode : Task, ICancelableTask {
         } finally {
             // Even a failure to start a later worker must drain every child already admitted by earlier workers.
             foreach (var worker in workers) {
-                if (worker != null && worker.IsAlive) { worker.Join(); }
+                if ((worker is not null) && worker.IsAlive) { worker.Join(); }
             }
         }
         if (!m_stopping && !Log.HasLoggedErrors) { return true; }
         foreach (var bytecode in BytecodeFiles) {
-            try { File.Delete(TemporaryPath(bytecode)); }
-            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException) {
-                Log.LogError("Could not remove shader temporary '{0}': {1}", TemporaryPath(bytecode), exception.Message);
+            try { File.Delete(path: TemporaryPath(bytecode: bytecode)); } catch (Exception exception) when (((exception is IOException) || (exception is UnauthorizedAccessException))) {
+                Log.LogError("Could not remove shader temporary '{0}': {1}", TemporaryPath(bytecode: bytecode), exception.Message);
             }
         }
         return false;
     }
 
-    private string TemporaryPath(ITaskItem bytecode) => bytecode.GetMetadata("FullPath") + "." + Token + ".tmp";
-
+    private string TemporaryPath(ITaskItem bytecode) => (((bytecode.GetMetadata(metadataName: "FullPath") + ".") + Token) + ".tmp");
     private void CompileNext() {
         while (true) {
             Exec child;
+
             lock (m_gate) {
-                if (m_stopping || m_next == BytecodeFiles.Length) { return; }
+                if (m_stopping || (m_next == BytecodeFiles.Length)) { return; }
                 var bytecode = BytecodeFiles[m_next++];
+
                 child = new Exec {
                     BuildEngine = BuildEngine,
                     WorkingDirectory = WorkingDirectory,
-                    Command = bytecode.GetMetadata("Recipe") + " -Fo \"" + TemporaryPath(bytecode) + "\" \"" + bytecode.GetMetadata("SourcePath") + "\""
+                    Command = (((((bytecode.GetMetadata(metadataName: "Recipe") + " -Fo \"") + TemporaryPath(bytecode: bytecode)) + "\" \"") + bytecode.GetMetadata(metadataName: "SourcePath")) + "\""),
                 };
-                m_active.Add(child);
+                m_active.Add(item: child);
             }
             try {
                 if (!child.Execute()) { Cancel(); }
@@ -86,7 +88,7 @@ public sealed class PuckCompileShaderBytecode : Task, ICancelableTask {
                 Log.LogError("Shader compiler failed: {0}", exception.Message);
                 Cancel();
             } finally {
-                lock (m_gate) { m_active.Remove(child); }
+                lock (m_gate) { m_active.Remove(item: child); }
             }
         }
     }
