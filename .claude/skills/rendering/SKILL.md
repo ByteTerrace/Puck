@@ -118,7 +118,14 @@ policy; its unknown-lighting share must not consult transport kind alone.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its
-one admission word, requested only by pending view scopes. Each view separately
+one admission word, requested only by pending view scopes. Each receiver
+claims an empty shared proof bucket before segment evaluation, through
+`sdf-indirect-proof.hlsli`. Pending/current publications defer without reading
+partial keys; earlier non-reusable occupants retain admitted uncached fallback.
+Every unsuccessful owner releases its claim. Never transfer failed support as
+a shared mask-zero proof or make colliding keys wait forever. Successful same-key
+contenders share field work; failed attempts may reacquire within the unchanged
+allowance. Trace keeps its designated source-ray ownership. Each view separately
 owns a four-byte deferred counter, explicitly transfer-cleared before Views and
 read back from its preserving compute-written version after the same fence.
 Views publishes its eight-word certificate through an explicit preserving

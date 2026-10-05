@@ -444,7 +444,15 @@ component proof and irradiance weights as the solve. A missing approach uses
 the bounded normal launch. All views share the tier's finite new-proof allowance;
 its admission counter resets once through the residency's existing trace pass,
 including frames with no new transport rays. Each view owns a separate four-byte
-deferred counter: an explicit transfer reset precedes Views, whose preserving
+deferred counter. Before evaluating a shared component proof, a receiver claims
+its empty hash slot. A pending or same-submission publication defers without
+reading its partial key or anchor; readers reuse only earlier complete positive
+proofs. An older occupied slot whose key or anchor does not support this receiver
+keeps the admitted uncached fallback, so hash collisions cannot starve it.
+Failed support, missing clearance or denied admission releases the transient
+claim. Failure does not become a shared negative proof; another receiver may
+try again within the unchanged admission allowance. Each view's
+deferred counter has an explicit transfer reset before Views, whose preserving
 compute-written version supplies that view's fenced readback. A different camera's
 deferred work never delays this view's completion. Each receiver retains
 its exact launch and completed result in the visibility record, independently
