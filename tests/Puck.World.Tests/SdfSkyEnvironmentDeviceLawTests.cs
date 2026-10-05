@@ -25,6 +25,8 @@ namespace Puck.World.Tests;
 /// The map counts one sky evaluation per lit layer inside its mask and the kind's directional domain, plus two plane texels
 /// written per direction, and the reduction nine texels and no evaluation; two runs on one device write the same bytes.
 /// Every binding the kernels do not read holds a filler of its kind.
+/// The live graph cases also hold actual copied pixels and their publication/taint across conversion-ring reuse,
+/// and require a lighting Panorama to refresh its map and coefficients only when its acquired source changes.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]

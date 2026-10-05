@@ -1,7 +1,7 @@
 {
   "id": "sdf-bake-impostor",
   "title": "A bake too small on screen for its mesh draws as its impostor card at a coarse level, a view records the card and not the mesh, and the card names each region's own material",
-  "binding": "The positive leg boots an offscreen 1024x576 world of one static prototype, two boxes of two materials, 281 units from a fixed camera, where its bake's bounding sphere spans about ten pixels, under the sixteen-pixel edge of its impostor's views and at their second level (BakeImpostorCanaryGeometryLawTests holds those numbers on the CPU). It turns world.bakes on and waits while the presentation's bake schedule bakes the prototype in the background. Until the bake lands the prototype draws through its field; once it is ready the static scene rebuilds and the placement emits two draws, its mesh and its impostor's card, bounded by the same sphere. The view records the card and not the mesh (sdf.mesh.lod.far counts, sdf.mesh.lod.near reads zero). The visibility view reads the middle pixels, and one pixel either side of the boxes' seam, as mesh, the kind a card's pixels carry. The material-id view then colors each pixel by the material it names; the leg turns world.bakes off, captures the field's own material ids, and holds the card's pixel on each side of the seam to the field's, so a card that names the first material everywhere, or a coarse texel that votes its misses, differs on one side. The discriminating leg is the same world with world.bakes off throughout: the pixels read as the field and no card is recorded (sdf.mesh.lod.far reads zero).",
+  "binding": "The positive leg boots an offscreen 1024x576 world of one static prototype, two boxes of two materials, 281 units from a fixed camera, where its bake's bounding sphere spans about ten pixels, under the sixteen-pixel edge of its impostor's views and at their second level (BakeImpostorCanaryGeometryLawTests holds those numbers on the CPU). It turns world.bakes on and waits while the presentation's bake schedule bakes the prototype in the background. Until the bake lands the prototype draws through its field; once it is ready the static scene rebuilds and the placement emits two draws, its mesh and its impostor's card, bounded by the same sphere. The view records the card and not the mesh (sdf.mesh.lod.far counts, sdf.mesh.lod.near reads zero). The visibility view reads the middle pixels, and one pixel either side of the boxes' seam, as mesh, the kind a card's pixels carry. The material-id view then colors each pixel by the material it names; the leg turns world.bakes off, captures the field's own material ids, and holds the card's pixel on each side of the seam to the field's, so a card that names the first material everywhere, or a coarse texel that votes its misses, differs on one side. The discriminating leg is the same world with world.bakes off throughout: the pixels read as the field and no card is recorded (sdf.mesh.lod.far reads zero). The authored camera then traverses 281, 170, 120, 170, 281 units: the 17.63-pixel middle diameter lies between the 16-pixel switch and 20-pixel return edge, while 120 is about 24.97 pixels. Two reads at each settled station isolate actual cumulative near/far draw increments from camera-mutation work. Positive card/card/mesh/mesh/card contrasts with the field-only companion. The representation lever is also sampled with authoritative hashes at one paused simulation tick; both hash and tick must agree. These added stations and paused controls remain unqualified until actual World runs; the original sampling device laws need no repeat.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -17,6 +17,16 @@
     "commands": [
       {
         "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -108,6 +118,161 @@
       {
         "verb": "world.wait",
         "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.bakes",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 12,
         "outcome": "accepted"
       }
     ],
@@ -261,6 +426,384 @@
         ],
         "maximumMeanCodes": 2,
         "holds": true
+      },
+      {
+        "type": "response",
+        "name": "representation-before-authoritative-hash",
+        "stream": "stdout",
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "field": "hash",
+            "name": "representation-before-hash"
+          },
+          {
+            "field": "tick",
+            "name": "representation-before-tick"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "representation-after-authoritative-hash",
+        "stream": "stdout",
+        "verb": "world.state.hash",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "field": "hash",
+            "name": "representation-after-hash"
+          },
+          {
+            "field": "tick",
+            "name": "representation-after-tick"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-bake-lever-keeps-the-authoritative-hash",
+        "operator": "equal",
+        "left": {
+          "value": "representation-before-hash"
+        },
+        "right": {
+          "value": "representation-after-hash"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-bake-lever-keeps-the-authoritative-tick",
+        "operator": "equal",
+        "left": {
+          "value": "representation-before-tick"
+        },
+        "right": {
+          "value": "representation-after-tick"
+        }
+      },
+      {
+        "type": "response",
+        "name": "far-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 3,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "far-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 4,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "far-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "far-near-after",
+          "minus": "far-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "far-counts-only-far",
+        "operator": "greater",
+        "left": {
+          "value": "far-far-after",
+          "minus": "far-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "held-card-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 5,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-card-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-card-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "held-card-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 6,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-card-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-card-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "held-card-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "held-card-near-after",
+          "minus": "held-card-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "held-card-counts-only-far",
+        "operator": "greater",
+        "left": {
+          "value": "held-card-far-after",
+          "minus": "held-card-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "near-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 7,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "near-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "near-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "near-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 8,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "near-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "near-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-counts-only-near",
+        "operator": "greater",
+        "left": {
+          "value": "near-near-after",
+          "minus": "near-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "near-far-after",
+          "minus": "near-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "held-mesh-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 9,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-mesh-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-mesh-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "held-mesh-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 10,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-mesh-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-mesh-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "held-mesh-counts-only-near",
+        "operator": "greater",
+        "left": {
+          "value": "held-mesh-near-after",
+          "minus": "held-mesh-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "held-mesh-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "held-mesh-far-after",
+          "minus": "held-mesh-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "far-again-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 11,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-again-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-again-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "far-again-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 12,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-again-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-again-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "far-again-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "far-again-near-after",
+          "minus": "far-again-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "far-again-counts-only-far",
+        "operator": "greater",
+        "left": {
+          "value": "far-again-far-after",
+          "minus": "far-again-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
       }
     ]
   },
@@ -270,6 +813,16 @@
     "commands": [
       {
         "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -316,6 +869,161 @@
       {
         "verb": "world.wait",
         "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.bakes",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 12,
         "outcome": "accepted"
       }
     ],
@@ -395,7 +1103,388 @@
         "match": "contains",
         "text": "sdf.bakes.drawn 1",
         "present": false
+      },
+      {
+        "type": "response",
+        "name": "representation-before-authoritative-hash",
+        "stream": "stdout",
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "field": "hash",
+            "name": "representation-before-hash"
+          },
+          {
+            "field": "tick",
+            "name": "representation-before-tick"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "representation-after-authoritative-hash",
+        "stream": "stdout",
+        "verb": "world.state.hash",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "field": "hash",
+            "name": "representation-after-hash"
+          },
+          {
+            "field": "tick",
+            "name": "representation-after-tick"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-bake-lever-keeps-the-authoritative-hash",
+        "operator": "equal",
+        "left": {
+          "value": "representation-before-hash"
+        },
+        "right": {
+          "value": "representation-after-hash"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-bake-lever-keeps-the-authoritative-tick",
+        "operator": "equal",
+        "left": {
+          "value": "representation-before-tick"
+        },
+        "right": {
+          "value": "representation-after-tick"
+        }
+      },
+      {
+        "type": "response",
+        "name": "far-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 3,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "far-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 4,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "far-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "far-near-after",
+          "minus": "far-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "far-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "far-far-after",
+          "minus": "far-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "held-card-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 5,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-card-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-card-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "held-card-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 6,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-card-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-card-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "held-card-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "held-card-near-after",
+          "minus": "held-card-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "held-card-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "held-card-far-after",
+          "minus": "held-card-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "near-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 7,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "near-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "near-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "near-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 8,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "near-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "near-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "near-near-after",
+          "minus": "near-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "near-far-after",
+          "minus": "near-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "held-mesh-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 9,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-mesh-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-mesh-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "held-mesh-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 10,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "held-mesh-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "held-mesh-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "held-mesh-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "held-mesh-near-after",
+          "minus": "held-mesh-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "held-mesh-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "held-mesh-far-after",
+          "minus": "held-mesh-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "response",
+        "name": "far-again-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 11,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-again-near-before"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-again-far-before"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "far-again-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 12,
+        "count": 12,
+        "extract": [
+          {
+            "field": "sdf.mesh.lod.near",
+            "line": "sdf.mesh.lod.near",
+            "name": "far-again-near-after"
+          },
+          {
+            "field": "sdf.mesh.lod.far",
+            "line": "sdf.mesh.lod.far",
+            "name": "far-again-far-after"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "far-again-counts-only-near",
+        "operator": "equal",
+        "left": {
+          "value": "far-again-near-after",
+          "minus": "far-again-near-before"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "far-again-counts-only-far",
+        "operator": "equal",
+        "left": {
+          "value": "far-again-far-after",
+          "minus": "far-again-far-before"
+        },
+        "right": {
+          "literal": 0
+        }
       }
     ]
-  }
+  },
+  "fixtures": [
+    "README.md"
+  ]
 }

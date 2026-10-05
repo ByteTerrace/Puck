@@ -1,5 +1,7 @@
 # Every frame renders, so the capture shows the scene as it stands.
 world.cadence off
+world.temporal off
+world.render-scale 1
 # The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
 world.wait ready 600
 # The bakes lever stays off: the prototype keeps drawing through its field and no card is recorded.
@@ -12,3 +14,42 @@ world.screenshot {run}/kind.png
 world.counters sdf.mesh.lod
 world.counters sdf.bakes
 world.wait 10
+
+# Same authoritative tick around the presentation-only representation lever.
+world.rate pause
+world.state.hash authoritative
+world.bakes off
+world.wait bakes 20
+world.state.hash authoritative
+world.rate resume
+# Each station reads twice after its camera settles: no mutation transition counts.
+# far: eye z=281.
+world.row.set cameras bake-cam rig.operations[0].subject.point [0,0.5,281]
+world.wait 6
+world.counters sdf.mesh.lod
+world.wait 4
+world.counters sdf.mesh.lod
+# held-card: eye z=170.
+world.row.set cameras bake-cam rig.operations[0].subject.point [0,0.5,170]
+world.wait 6
+world.counters sdf.mesh.lod
+world.wait 4
+world.counters sdf.mesh.lod
+# near: eye z=120.
+world.row.set cameras bake-cam rig.operations[0].subject.point [0,0.5,120]
+world.wait 6
+world.counters sdf.mesh.lod
+world.wait 4
+world.counters sdf.mesh.lod
+# held-mesh: eye z=170.
+world.row.set cameras bake-cam rig.operations[0].subject.point [0,0.5,170]
+world.wait 6
+world.counters sdf.mesh.lod
+world.wait 4
+world.counters sdf.mesh.lod
+# far-again: eye z=281.
+world.row.set cameras bake-cam rig.operations[0].subject.point [0,0.5,281]
+world.wait 6
+world.counters sdf.mesh.lod
+world.wait 4
+world.counters sdf.mesh.lod

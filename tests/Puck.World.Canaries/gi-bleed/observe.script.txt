@@ -1,0 +1,14 @@
+world.cadence off
+world.wait ready 25
+world.wait indirect 25
+world.view.pointer 64 64
+world.wait 4
+world.explain
+world.screenshot {run}/near.png
+world.wait captures 5
+world.state.cell.set station $value 1
+world.wait indirect 25
+world.wait 4
+world.explain
+world.screenshot {run}/far.png
+world.wait captures 5

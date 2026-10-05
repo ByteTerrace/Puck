@@ -1,0 +1,37 @@
+schema: "puck.world.definition.v1"
+documentId: "gi-physical-base"
+host {
+  backend: auto
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentation: offscreen
+  width: 128
+  height: 128
+  exitAfterSeconds: 0
+  targetHertz: 0
+  presentMode: Immediate
+}
+simulation { rateHz: 30 }
+render {
+  shadows: Off
+  shadowLights: 0
+  ambientOcclusion: false
+  temporal: false
+  dynamicResolution: false
+  renderScale: 1
+  farDistance: 16
+  indirect {
+    tier: medium
+    bounces: 0
+    sources { lights: 0, emission: 1, screens: 0, sky: 0, feedback: 0 }
+    apply { intensity: 1, tint: "#FFFFFF", contact: 0 }
+  }
+  environment { ambient: 0, reflection: 0 }
+  atmosphere { fog { density: 0 } }
+  lighting { lights [] }
+  sky { layers [gradient(stops: [
+    { elevation: -1, color: "#000000" }
+    { elevation: 1, color: "#000000" }
+  ])] }
+}
+hud { defaults { enabled: false } panels [] }

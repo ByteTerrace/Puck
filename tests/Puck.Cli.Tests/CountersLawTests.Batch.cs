@@ -78,6 +78,8 @@ public sealed partial class CountersLawTests {
     [InlineData("late")]
     [InlineData("deadline")]
     [InlineData("active-cache")]
+    [InlineData("late-disable")]
+    [InlineData("late-method")]
     [InlineData("prelude-wait")]
     [InlineData("unknown-completion")]
     public void SkyOnlyBatchesKeepEngineCompletionAndRefuseUnprovedWarmups(string defect) {
@@ -88,6 +90,12 @@ public sealed partial class CountersLawTests {
             var scriptPath = Path.Combine(directory.RootPath, "sky.script.txt");
             File.WriteAllText(scriptPath, File.ReadAllText(scriptPath).Replace("world.indirect off", "world.indirect medium", StringComparison.Ordinal));
         }
+        if (defect is "late-disable" or "late-method") {
+            var scriptPath = Path.Combine(directory.RootPath, "sky.script.txt");
+            var command = defect == "late-disable" ? "world.indirect off\n" : "world.indirect-method cache\n";
+            File.WriteAllText(scriptPath, File.ReadAllText(scriptPath).Replace(command, "", StringComparison.Ordinal)
+                .Replace("world.rate resume\n", "world.rate resume\n" + command, StringComparison.Ordinal));
+        }
         File.WriteAllText(Path.Combine(directory.RootPath, "prelude.script.txt"), "world.cadence on\nworld.quality low\n"
             + (defect == "prelude-wait" ? "world.wait ready 180\n" : ""));
         var manifest = new CountersBatchManifest("fixture.puck", [
@@ -97,7 +105,7 @@ public sealed partial class CountersLawTests {
         ]);
         var path = Path.Combine(directory.RootPath, "batch.json");
         File.WriteAllText(path, JsonSerializer.Serialize(manifest, CountersBatchInput.Json));
-        if (defect is "active-cache" or "prelude-wait" or "unknown-completion") {
+        if (defect is "active-cache" or "late-disable" or "late-method" or "prelude-wait" or "unknown-completion") {
             Assert.Throws<FormatException>(() => CountersBatchInput.Read(path, Path.Combine(directory.RootPath, "products")));
             return;
         }

@@ -1,0 +1,86 @@
+{
+  "id": "indirect-off",
+  "title": "Off preserves the exact authored fill before and after a completed solve",
+  "binding": "Source preparation. A static white receiver has green fill and no physical source. A completed Medium solve replaces fill with black, and returning to Off recovers the exact first image and a separate pristine Off boot. The companion changes only fill to black, so its On/Off images agree while its Off image differs from the filled reference. Temporal history, AO, dynamic resolution and sky lighting are disabled. Actual pixels and solve completion require the real backend run.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan","directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": ["README.md","scene.puck","../gi-common/base.puck"],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/indirect-off/fixture.puck",
+    "script": "toggle.script.txt",
+    "commands": [
+      {"verb":"world.cadence","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":3,"outcome":"accepted"},
+      {"verb":"world.indirect","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":5,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":6,"outcome":"accepted"},
+      {"verb":"world.indirect","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":3,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":8,"outcome":"accepted"}
+    ],
+    "expect": [
+      {"type":"line","name":"current-medium-solve","stream":"stderr","match":"contains","text":"[indirect: settled at tick","present":true},
+      {"type":"line","name":"no-unhandled","stream":"stderr","match":"contains","text":"Unhandled exception","present":false},
+      {"type":"imageDifference","name":"off-is-identical-after-completed-on","capture":"off-after.png","reference":"off-before.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":true},
+      {"type":"imageDifference","name":"off-is-identical-to-fresh-filled-boot","capture":"off-after.png","reference":"off-reference.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":true},
+      {"type":"imageDifference","name":"physical-indirect-replaces-fill","capture":"on.png","reference":"off-before.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":false}
+    ],
+    "relaunch": {
+      "sourceWorld": "tests/Puck.World.Canaries/indirect-off/fixture.puck",
+      "script": "reference.script.txt",
+      "commands": [
+        {"verb":"world.cadence","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
+        {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":3,"outcome":"accepted"}
+      ]
+    }
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/indirect-off/no-fill.puck",
+    "script": "toggle.script.txt",
+    "commands": [
+      {"verb":"world.cadence","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":3,"outcome":"accepted"},
+      {"verb":"world.indirect","occurrence":1,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":5,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":6,"outcome":"accepted"},
+      {"verb":"world.indirect","occurrence":2,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"world.screenshot","occurrence":3,"outcome":"accepted"},
+      {"verb":"world.wait","occurrence":8,"outcome":"accepted"}
+    ],
+    "expect": [
+      {"type":"line","name":"current-medium-solve","stream":"stderr","match":"contains","text":"[indirect: settled at tick","present":true},
+      {"type":"line","name":"no-unhandled","stream":"stderr","match":"contains","text":"Unhandled exception","present":false},
+      {"type":"imageDifference","name":"off-is-identical-after-completed-on","capture":"off-after.png","reference":"off-before.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":true},
+      {"type":"imageDifference","name":"off-is-identical-to-fresh-filled-boot","capture":"off-after.png","reference":"off-reference.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"physical-indirect-replaces-fill","capture":"on.png","reference":"off-before.png","extent":[128,128],"region":[0.4,0.4,0.6,0.6],"maximumMeanCodes":0,"holds":true}
+    ],
+    "relaunch": {
+      "sourceWorld": "tests/Puck.World.Canaries/indirect-off/fixture.puck",
+      "script": "reference.script.txt",
+      "commands": [
+        {"verb":"world.cadence","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
+        {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
+        {"verb":"world.wait","occurrence":3,"outcome":"accepted"}
+      ]
+    }
+  }
+}

@@ -77,14 +77,16 @@ internal static class CountersBatchInput {
                 }
                 var script = ReadScript(scriptPath);
                 var commands = Commands(script).ToArray();
+                var selected = Array.IndexOf(commands, $"world.indirect-method {observation.Method}");
                 var paused = Array.IndexOf(commands, "world.rate pause");
                 var warmed = Array.FindIndex(commands, line => line.StartsWith(waitPrefix, StringComparison.Ordinal));
                 var resumed = Array.IndexOf(commands, "world.rate resume");
                 var advanced = Array.IndexOf(commands, "world.wait 120");
+                // Completion must describe the selected method, before the active input begins.
                 if (commands.Count(line => line.StartsWith("world.counters", StringComparison.Ordinal)) != 1
                     || commands.LastOrDefault() != "world.counters --json"
                     || commands.Count(line => line.StartsWith("world.indirect-method", StringComparison.Ordinal)) != 1
-                    || !commands.Contains($"world.indirect-method {observation.Method}", StringComparer.Ordinal)
+                    || selected < 0 || selected >= warmed
                     || commands.Count(line => line.StartsWith(waitPrefix, StringComparison.Ordinal)) != 1
                     || commands.Count(line => line.StartsWith("world.wait ", StringComparison.Ordinal)) != 2
                     || commands.Count(line => line == "world.wait 120") != 1
@@ -93,10 +95,11 @@ internal static class CountersBatchInput {
                     || paused < 0 || warmed <= paused || resumed <= warmed || advanced <= resumed) {
                     throw new FormatException($"observation {observation.Name} must select its method, pause through its {group.Completion} completion, resume for 120 active ticks and end with its only JSON counters read");
                 }
+                var disabled = Array.IndexOf(commands, "world.indirect off");
                 if (group.Completion == "engine" && (observation.Method != "cache"
                     || commands.Count(line => line.StartsWith("world.indirect ", StringComparison.Ordinal)) != 1
-                    || !commands.Contains("world.indirect off", StringComparer.Ordinal))) {
-                    throw new FormatException($"observation {observation.Name} must disable indirect work when using engine completion");
+                    || disabled < 0 || disabled >= warmed)) {
+                    throw new FormatException($"observation {observation.Name} must disable indirect work before its engine completion");
                 }
                 observations.Add(new PreparedCountersObservation(observation, scriptPath, script, reportPath, ceilingsPath));
             }

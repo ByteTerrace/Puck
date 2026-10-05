@@ -1,0 +1,13 @@
+schema: "puck.world.definition.v1"
+basis: "scene"
+documentId: "indirect-off"
+prototypes {
+  prototype "floor" {
+    document {
+      schema: "puck.creation.v1"
+      name: "floor"
+      palette [{ color: "#FFFFFF", specular: 0, roughness: 1, fill: "#00FF00" }]
+      shape Box "floor" { material: 0, position [0, -0.025, 0], scale [2, 0.025, 2] }
+    }
+  }
+}

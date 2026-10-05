@@ -1,0 +1,24 @@
+schema: "puck.world.definition.v1"
+basis: "../editor-grid/fixture"
+documentId: "sky-artist-surface"
+host { width: 96, height: 96 }
+views {
+  seatRig "builder-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      anchor(subject: worldPoint(point: [0, 2, 4]))
+      lookAt(subject: worldPoint(point: [0, 10, -4]))
+      fieldOfView(fieldOfViewRadians: 0.7)
+    ]
+  }
+}
+render {
+  temporal: false
+  dynamicResolution: false
+  renderScale: 1
+  ambientOcclusion: false
+  environment { ambient: 0, reflection: 0 }
+  atmosphere { fog { density: 0.01 } }
+  sky { layers [gradient(name: "artist", stops: [{ elevation: -1, color: "#FF0000" }, { elevation: 1, color: "#FF0000" }])] }
+  low { temporal: false, dynamicResolution: false, renderScale: 1, ambientOcclusion: false }
+}

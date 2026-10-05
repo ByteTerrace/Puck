@@ -1,0 +1,4 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "indirect-sky-reference"
+render { indirect { tier: off } }

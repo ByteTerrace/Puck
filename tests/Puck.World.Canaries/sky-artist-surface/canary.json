@@ -1,0 +1,559 @@
+{
+  "id": "sky-artist-surface",
+  "title": "Saved sky and atmosphere rows reload into the actual comparison and inspector",
+  "binding": "One real editor-grid seat looks only at a fixed uniform sky. The positive changes red to blue and fog density0.01 to0.03 through existing row edits, saves a run-owned .puck file, loads that saved source and reloads its current origin before measuring against the held red frame. The opposite submits the original red and0.01 values through the same save/load/reload route; its held display stays unchanged. The initial/reloaded lighting echoes and the sole final inspector must contain their actual authored fog values; the inspector check ends at the next comparison response, so a lighting echo cannot satisfy it. This proves saved-current-source rendering and atmosphere inspector output; external file editing and preservation of surrounding source text remain the existing WorldSkyEdit laws, not an invented canary editing mechanism. The source is unqualified until the actual seat, camera and envelopes run on both backends.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "README.md"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-artist-surface/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.save",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.load",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.reload",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-initial-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "initial-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-initial-authored-air",
+        "operator": "equal",
+        "left": {
+          "value": "initial-air"
+        },
+        "right": {
+          "literal": 0.01
+        }
+      },
+      {
+        "type": "response",
+        "name": "the-reloaded-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "reloaded-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-reloaded-authored-air",
+        "operator": "equal",
+        "left": {
+          "value": "reloaded-air"
+        },
+        "right": {
+          "literal": 0.03
+        }
+      },
+      {
+        "type": "response",
+        "name": "the-actual-before-and-after-measurement",
+        "stream": "stdout",
+        "verb": "world.compare",
+        "occurrence": 2,
+        "count": 3,
+        "extract": [
+          {
+            "name": "changed",
+            "field": "changed-pixels"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-saved-reloaded-sky-changes-the-held-frame",
+        "operator": "greater",
+        "left": {
+          "value": "changed"
+        },
+        "right": {
+          "literal": 100
+        }
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-display-follows-the-reloaded-source",
+        "before": "before.png",
+        "after": "after.png",
+        "agree": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-reloaded-sky-has-its-authored-color",
+        "capture": "after.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.3,
+          0.3,
+          0.7,
+          0.7
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.1,
+          1
+        ],
+        "maximum": [
+          0.05,
+          0.05,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-rebuilt-render-engine-completes",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[engine: ready at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-sky-has-actual-completed-work",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work unavailable: no sky submission has completed",
+        "present": false
+      },
+      {
+        "type": "lines",
+        "name": "the-sole-inspector-contains-the-reloaded-air-before-comparison",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "[world.inspect: seat=1",
+          "fogDensity=0.03",
+          "[world.compare: seat=1 held=True mode=diff"
+        ]
+      },
+      {
+        "type": "response",
+        "name": "the-inspector-is-one-actual-response",
+        "stream": "stdout",
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "count": 1,
+        "extract": []
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-artist-surface/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.save",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.load",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.reload",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.compare",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-initial-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "initial-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-initial-authored-air",
+        "operator": "equal",
+        "left": {
+          "value": "initial-air"
+        },
+        "right": {
+          "literal": 0.01
+        }
+      },
+      {
+        "type": "response",
+        "name": "the-reloaded-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "reloaded-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-reloaded-authored-air",
+        "operator": "equal",
+        "left": {
+          "value": "reloaded-air"
+        },
+        "right": {
+          "literal": 0.01
+        }
+      },
+      {
+        "type": "response",
+        "name": "the-actual-before-and-after-measurement",
+        "stream": "stdout",
+        "verb": "world.compare",
+        "occurrence": 2,
+        "count": 3,
+        "extract": [
+          {
+            "name": "changed",
+            "field": "changed-pixels"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-saved-reloaded-sky-changes-the-held-frame",
+        "operator": "equal",
+        "left": {
+          "value": "changed"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-display-follows-the-reloaded-source",
+        "before": "before.png",
+        "after": "after.png",
+        "agree": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-reloaded-sky-has-its-authored-color",
+        "capture": "after.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.3,
+          0.3,
+          0.7,
+          0.7
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.1,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0.05,
+          0.05,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-rebuilt-render-engine-completes",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[engine: ready at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-sky-has-actual-completed-work",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work unavailable: no sky submission has completed",
+        "present": false
+      },
+      {
+        "type": "lines",
+        "name": "the-sole-inspector-contains-the-reloaded-air-before-comparison",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "[world.inspect: seat=1",
+          "fogDensity=0.01",
+          "[world.compare: seat=1 held=True mode=diff"
+        ]
+      },
+      {
+        "type": "response",
+        "name": "the-inspector-is-one-actual-response",
+        "stream": "stdout",
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "count": 1,
+        "extract": []
+      }
+    ]
+  }
+}
