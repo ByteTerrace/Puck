@@ -1,0 +1,16 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "indirect-near-unsealed"
+prototypes {
+  prototype "sealed-room" {
+    document {
+      // Remove only the two partition operands; retain the prepared receiver and emitter.
+      shape Sphere "receiver" { material: 0, scale [0.08, 0.08, 0.08] }
+      shape Sphere "exterior-emitter" {
+        material: 1
+        position [-1.1, 0, 0]
+        scale [0.2, 0.2, 0.2]
+      }
+    }
+  }
+}

@@ -16,7 +16,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var reader = NamedBufferReader(selected);
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
         var frames = new Frames(runtime, [new RenderGraphRoot(Instance: "main", Width: 1, Height: 1)], []);
+        runtime.Node(0).Paused = true;
         frames.Settle();
+        Assert.Equal(1UL, runtime.Node(0).FrameCounter);
+        runtime.Node(0).Paused = false;
         var handles = new HashSet<nint>();
 
         for (var frame = 0; frame < 6; frame++) {
@@ -30,6 +33,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         Assert.Equal(3, handles.Count);
         runtime.Node(0).Paused = true;
+        var pausedFrame = runtime.Node(0).FrameCounter;
         var held = producer.Written["secondary"];
         Assert.True(runtime.TryInstall("main", reader with { Inputs = [new(Version: "pool", Producer: "pool", Output: "secondary")] }, out var refusal), refusal?.Message);
         for (var frame = 0; frame < 4; frame++) {
@@ -38,7 +42,28 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Next();
             gpu.Recording = false;
             Assert.Equal(held, Assert.Single(gpu.DescriptorWrites, write => write.Binding == 1).Handle);
+            Assert.Equal(pausedFrame, runtime.Node(0).FrameCounter);
         }
+        runtime.Node(0).Step();
+        gpu.DescriptorWrites.Clear();
+        gpu.Recording = true;
+        frames.Next();
+        gpu.Recording = false;
+        Assert.Equal(pausedFrame + 1, runtime.Node(0).FrameCounter);
+        var stepped = producer.Written["secondary"];
+        Assert.NotEqual(held, stepped);
+        Assert.Equal(stepped, Assert.Single(gpu.DescriptorWrites, write => write.Binding == 1).Handle);
+        frames.Next(4);
+        Assert.Equal(pausedFrame + 1, runtime.Node(0).FrameCounter);
+        Assert.Equal(stepped, producer.Written["secondary"]);
+
+        runtime.Node(0).Reset();
+        frames.Next();
+        Assert.Equal(1UL, runtime.Node(0).FrameCounter);
+        var initialized = producer.Written["secondary"];
+        frames.Next(4);
+        Assert.Equal(1UL, runtime.Node(0).FrameCounter);
+        Assert.Equal(initialized, producer.Written["secondary"]);
     }
 
     [Theory]

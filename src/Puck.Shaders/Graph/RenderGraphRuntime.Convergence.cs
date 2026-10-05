@@ -73,7 +73,9 @@ public sealed partial class RenderGraphRuntime {
             foreach (var index in m_convergenceInstances) {
                 if (m_graphs[index] is not { } graph) { continue; }
                 var name = m_set.Instances[index].Name;
-                foreach (var pass in graph.Pipeline.Plan.Passes) {
+                var passes = graph.Pipeline.Plan.Passes;
+                for (var position = 0; position < passes.Count; position++) {
+                    var pass = passes[position];
                     if (pass.Package is not { } step || !m_packages.TryGetFactory(step.Package, out var factory)) { continue; }
                     var readiness = factory.CaptureReadinessOf(name);
                     if (readiness.Completion == Puck.Hosting.FrameCompletion.Refused) { return readiness; }

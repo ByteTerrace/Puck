@@ -1566,8 +1566,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         PollReadbacks();
         // A node with nothing published (never rendered, or reset) owes an initialization frame. That frame is its own
         // obligation: a step requested before it renders stays pending and advances one submission beyond it. A device
-        // loss unpublishes the image without owing one.
-        var published = (!m_lastSurface.IsEmpty || m_publicationLost);
+        // loss withdraws the output without owing one. A buffer publishes a frame without a display surface.
+        var published = (m_publishedFrame.HasValue || !m_lastSurface.IsEmpty || m_publicationLost);
         var stepping = (
             Paused &&
             (m_steps != 0) &&

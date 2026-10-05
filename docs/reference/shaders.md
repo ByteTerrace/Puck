@@ -1743,7 +1743,11 @@ more pieces of vocabulary:
   selectable.
 - A forwarding version can declare `preservesPredecessor` only when its package
   writer uses retained storage and preserves every predecessor-owned field.
-  Its writes must replace its own fields idempotently. Ordinary forwarding
+  Its writes must replace its own fields idempotently. A package can read the
+  predecessor buffer in the same pass while writing its preserving successor;
+  both ports share one storage and the planned compute read/write barriers.
+  Ordinary destructive forwarding and simultaneous image sampling remain refused.
+  Ordinary forwarding
   invalidates predecessor contents; preserving forwarding keeps their logical
   identities valid. Either write invalidates later derived versions, so an
   unchanged downstream signature cannot hide an upstream change.
@@ -1889,7 +1893,9 @@ when its graph installs, so a creation fault refuses the install by name and
 never escapes a produced frame.
 
 A paused instance (`pipeline.time pause`, or a time scale of zero) treats each
-host request as either a replacement or a step:
+host request as either a replacement or a step. A completed buffer frame counts
+as published even though it has no display surface: its consumers keep reading
+the same ring slot until a step, resume or reset produces another frame.
 
 - A reload, an edit of the `views.graphs` row and a resize replace the graph.
   They are not steps. The paused instance builds and installs the new graph as

@@ -107,7 +107,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     continue;
                 }
 
-                var signature = ((pass.Cadence is { CanStand: true }) ? pass.Package!.Signature(context: in context, reads: Reads) : null);
+                // Preparation sees the recording's acquired reads even when this pass's output cannot stand.
+                var signature = pass.Package?.Signature(context: in context, reads: Reads);
 
                 if (Stands(pass: pass, signature: signature)) {
                     SkipAccesses(pass: pass, slot: slot);

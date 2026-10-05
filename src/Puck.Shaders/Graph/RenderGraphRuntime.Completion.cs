@@ -63,7 +63,9 @@ public sealed partial class RenderGraphRuntime {
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
             Tainted: (m_taintedReads[index] is not null));
         if (m_set.Instances[index].Output == ShaderPipelineResourceKind.Image && m_graphs[index] is { } graph) {
-            foreach (var pass in graph.Pipeline.Plan.Passes) {
+            var passes = graph.Pipeline.Plan.Passes;
+            for (var position = 0; position < passes.Count; position++) {
+                var pass = passes[position];
                 if (pass.Package is { } step && m_packages.TryGetFactory(step.Package, out var factory)) {
                     factory.OutputPublished(m_set.Instances[index].Name, publication);
                 }

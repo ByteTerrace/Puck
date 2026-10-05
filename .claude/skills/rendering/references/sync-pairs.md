@@ -197,7 +197,10 @@ passes; content generations are not a second barrier tracker.
 Before setting `PreservesPredecessor` on a forwarding version, audit its actual
 shader writes: it must preserve predecessor-owned fields and replace its own
 fields idempotently. An accumulated query counter or an overwritten sky image
-violates that contract. Force a null signature for unversioned borrowed inputs
+violates that contract. A same-pass predecessor buffer read is legal only with
+this validated retained package contract; the planned output remains a compute
+read/write access. An ordinary destructive forward or sampled image overlap is
+still refused. Force a null signature for unversioned borrowed inputs
 and for demanded work whose recording must run, including readback, capture
 and temporal convergence. Existing dependency preparation retains its own
 counting and ordering. `GpuPassState.Standing` has no per-pass count, so timing

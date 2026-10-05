@@ -48,7 +48,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     public void AMutableEdgeRefusesHistoryAndGraphOwnedBufferRings(bool previous, bool borrowed) {
         var gpu = new FakeGpuDevice();
         using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
-        var recorders = new Recorders("cache.update");
+        var recorders = new Recorders("cache.update", Over);
         recorders.Registry.Register(factory: new BorrowedPackage(buffer) { OwnsBuffers = borrowed }, package: RenderGraphPackageCatalog.Indirect);
         var set = MutableBufferInstances(previous);
         Assert.False(RenderGraphRuntime.TryCreate(set, [MutableBufferGraph(), null], PackageView, recorders.Registry,
@@ -59,9 +59,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     [Fact]
     public void AMutableInputCannotStandOnAnUnchangedPackageSignature() {
-        var gpu = new FakeGpuDevice();
+        var gpu = new FakePipelineGpu();
         using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
-        var recorders = new Recorders("cache.update");
+        var recorders = new Recorders("cache.update", Over);
         var producer = new BorrowedPackage(buffer);
         recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
         using var runtime = Runtime(gpu, recorders, MutableBufferInstances(), PackageView, MutableBufferGraph(), null!);
@@ -73,11 +73,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
         ProducePackageFrame(runtime, frame++);
         var recorded = counter.Records;
         for (var index = 0; index < 3; index++) { ProducePackageFrame(runtime, frame++); }
-        Assert.Equal(recorded + 3, counter.Records);
+        // Both the mutable writer and the real publication pass execute; a standing writer would record fewer.
+        Assert.Equal(recorded + 6, counter.Records);
+        Assert.Equal(counter.PassRecords["update"].Output, counter.PassRecords["publish"].Input);
+        Assert.NotEqual(counter.PassRecords["update"].Output, counter.PassRecords["publish"].Output);
     }
 
     private static RenderGraphInstanceSet MutableBufferInstances(bool previous = false) => Set(
-        new RenderGraphInstance(Name: PackageView, Passes: 1, Reads: [new("cache", Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: previous)], Refresh: RenderGraphRefresh.EveryFrame),
+        new RenderGraphInstance(Name: PackageView, Passes: 2, Reads: [new("cache", Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: previous)], Refresh: RenderGraphRefresh.EveryFrame),
         new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
             Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
 
@@ -85,11 +88,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var package = new RenderGraphPackage(Id: "cache.update", Members: [], Summary: "Updates shared proofs.",
             Inputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeReadWrite, null, null)],
             Outputs: [RenderGraphPackagePort.Image(RenderGraphPortAccess.ComputeWrite)]);
-        var plan = new RenderGraphCompiler(new RenderGraphPackageCatalog([package])).Compile(new RenderGraphDefinition(
+        var plan = new RenderGraphCompiler(new RenderGraphPackageCatalog([package, Catalog.Packages.Single(static item => item.Id == Over)])).Compile(new RenderGraphDefinition(
             Name: "update", Schema: RenderGraphSchemas.Graph, Outputs: ["color"],
-            Resources: [Image("color") with { Retained = true }, new(Name: "cache", Kind: ShaderPipelineResourceKind.Buffer,
+            Resources: [Image("work") with { Retained = true }, Image("color"), new(Name: "cache", Kind: ShaderPipelineResourceKind.Buffer,
                 SizeBytes: 4096, Initialization: ShaderPipelineInitialization.External)],
-            Packages: [new(Name: "update", Package: "cache.update", Inputs: ["cache"], Outputs: ["color"])]));
+            Packages: [new(Name: "update", Package: "cache.update", Inputs: ["cache"], Outputs: ["work"]),
+                new(Name: "publish", Package: Over, Inputs: ["work"], Outputs: ["color"])]));
         return Graph(new CompiledShaderPipeline(plan.Pipeline, new Dictionary<string, CompiledShader>()), ("cache", "cache"));
     }
 }

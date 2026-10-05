@@ -18,6 +18,18 @@ reach and 12 steps, replacing the cache estimate over that interval.
 | `emission.script.txt`, `emission-off.script.txt` | One shared-picker explanation, capture and actual Near work row |
 | `canary.json` | The initial paired emission and fixed-first-ray reference contract |
 
+The sibling [furnace](../indirect-near-furnace/README.md),
+[bleed](../indirect-near-bleed/README.md),
+[gloss/fog](../indirect-near-gloss/README.md) and
+[sealed-room](../indirect-near-sealed/README.md) canaries reuse these prepared
+scenes with explicit source masks, finite depths and fenced explanation
+assertions. Their manifests strictly load, but the actual receiver stations,
+source values, backend observations and native shader discriminators remain
+owed. The sealed Near station adjusts its camera to put the unchanged exterior
+emitter inside the receiver's sampling hemisphere. The separate
+[shared-cache sealed canary](../gi-sealed/README.md) observes planar and curved
+partitions.
+
 The near source is a red wall 0.2m tall and 0.02m thick, beside a white floor,
 plus a 0.12m-diameter red object. Both are smaller than the finest 0.5m cache
 spacing. A horizontal white light illuminates their side without directly
@@ -42,8 +54,8 @@ The glossy source changes only the palette and fog. Its bounce must be compared
 before specular and fog composition against G1's diffuse reference. Equality of
 the final fogged and unfogged images would be the wrong assertion.
 
-The sources and scripts have not been compiled or run yet. Warm-up uses
-`world.wait indirect 180`: a newer produced frame and every active shared cache's
+The sources and scripts have not been compiled or run yet. The executable
+canaries use `world.wait indirect 25`: a newer produced frame and every active shared cache's
 current source fence, rather than a fixed elapsed tick count. Cadence is off so
 the bounded Near phase sequence continues to render. The actual GPU detail row
 is `indirect-near`; it counts field queries, loads, hashes and indirect

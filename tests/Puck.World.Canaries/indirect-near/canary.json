@@ -11,7 +11,7 @@
     "gpu"
   ],
   "timeoutSeconds": 60,
-  "fixtures": [],
+  "fixtures": ["README.md", "scenes.puck", "fixture.puck", "gloss-fog.puck", "no-bleed.puck", "positive.script.txt", "medium.script.txt", "no-bleed.script.txt"],
   "positive": {
     "world": "tests/Puck.World.Canaries/indirect-near/emission.puck",
     "script": "emission.script.txt",

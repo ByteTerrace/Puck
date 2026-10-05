@@ -30,7 +30,9 @@ public sealed partial class RenderGraphRuntime {
             m_set.Instances[index].Output != ShaderPipelineResourceKind.Image || m_graphs[index] is not { } graph ||
             m_current[index] is not { Frame: >= 0, StandsFor.IsOwn: true, Publication.IsKnown: true } output ||
             graph.Pipeline.Plan.Passes.Count == 0) { return false; }
-        foreach (var pass in graph.Pipeline.Plan.Passes) {
+        var passes = graph.Pipeline.Plan.Passes;
+        for (var position = 0; position < passes.Count; position++) {
+            var pass = passes[position];
             if (pass.Package is not { } package || !m_packages.TryGetFactory(package.Package, out var factory) ||
                 !factory.HoldsOutput(m_set.Instances[index].Name, output.Publication)) { return false; }
         }

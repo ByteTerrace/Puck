@@ -459,7 +459,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.bakes",
-            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). Ships off.",
+            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). By default, ready bakes draw when the loaded world ships them; fields draw otherwise.",
             handler: (context, args) => {
                 if (
                     (args.Count == 0) ||

@@ -7,7 +7,9 @@ public sealed partial class RenderGraphRuntime {
     private RenderGraphReadEpoch? ReadEpochOf(int index, string producer) {
         if (m_graphs[index] is not { } graph) { return null; }
         RenderGraphReadEpoch? selected = null;
-        foreach (var pass in graph.Pipeline.Plan.Passes) {
+        var passes = graph.Pipeline.Plan.Passes;
+        for (var position = 0; position < passes.Count; position++) {
+            var pass = passes[position];
             if (pass.Package is not { } step || !m_packages.TryGetFactory(step.Package, out var factory) ||
                 factory.ReadEpochOf(m_set.Instances[index].Name, producer) is not { IsActive: true } epoch) { continue; }
             if (selected is not null && !ReferenceEquals(selected, epoch)) {

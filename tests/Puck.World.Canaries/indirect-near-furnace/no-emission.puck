@@ -1,0 +1,10 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "indirect-near-furnace-dark"
+prototypes {
+  prototype "furnace" {
+    document {
+      palette [{ color: "#808080", emissive: 0, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
+    }
+  }
+}

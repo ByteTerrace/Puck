@@ -196,7 +196,9 @@ public sealed partial class ShaderPipelineCompiler {
             }
         }
 
-        // A pass that samples a version while writing its successor reads contents its own writes destroy.
+        // A simultaneous predecessor read is destructive unless a retained package buffer writer preserves all
+        // predecessor-owned fields. ValidateRetained checks that declaration against the actual root and writer.
+        // Sampled images still cannot share the successor write layout during one pass.
         foreach (var pass in definition.ShaderPasses) {
             foreach (var input in ReadsOf(pass: pass)) {
                 if (
@@ -205,6 +207,7 @@ public sealed partial class ShaderPipelineCompiler {
                         key: input.Name,
                         value: out var successor
                     ) &&
+                    !(resources[successor].PreservesPredecessor && (resources[successor].Kind == ShaderPipelineResourceKind.Buffer)) &&
                     pass.OutputReferences.Any(predicate: output => string.Equals(
                         a: output.Name,
                         b: successor,

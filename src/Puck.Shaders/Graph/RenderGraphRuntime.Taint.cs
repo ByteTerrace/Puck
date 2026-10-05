@@ -40,7 +40,9 @@ public sealed partial class RenderGraphRuntime {
     private void NotePackageTaint(int index) {
         if (m_graphs[index] is not { } graph) { return; }
         var name = m_set.Instances[index].Name;
-        foreach (var pass in graph.Pipeline.Plan.Passes) {
+        var passes = graph.Pipeline.Plan.Passes;
+        for (var position = 0; position < passes.Count; position++) {
+            var pass = passes[position];
             if (pass.Package is { } step && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(name)) {
                 NoteTaint(index, $"{name}'s retained package state", true);
                 return;

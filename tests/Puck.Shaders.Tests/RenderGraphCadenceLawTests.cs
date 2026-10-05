@@ -16,9 +16,9 @@ public sealed partial class RenderGraphCadenceLawTests {
         ["gain"] = new(Default: JsonDocument.Parse("1").RootElement, Type: ShaderValueType.Float),
     };
 
-    private static RenderGraphPackageCatalog Catalog(bool input = false) => new(packages: [
+    private static RenderGraphPackageCatalog Catalog(bool input = false, bool shadeReads = false) => new(packages: [
         new RenderGraphPackage(Id: Writer, Config: Config, Inputs: (input ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the first field."),
-        new RenderGraphPackage(Id: Shade, Inputs: [], Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the second field."),
+        new RenderGraphPackage(Id: Shade, Inputs: (shadeReads ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the second field."),
         new RenderGraphPackage(Id: Composite, Inputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)], Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], Members: [], Summary: "Reads both retained fields.")
     ]);
     private static RenderGraphDefinition Graph(bool preserve = true) => new(
@@ -52,6 +52,38 @@ public sealed partial class RenderGraphCadenceLawTests {
         return node;
     }
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void APackageCanReadItsForwardedBufferOnlyWhilePreservingPredecessorFields(bool preserve) {
+        var graph = Graph(preserve: preserve);
+        graph = graph with {
+            Packages = graph.Packages!.Select(static pass => ((pass.Name == "shade") ? pass with { Inputs = ["a"] } : pass)).ToArray(),
+        };
+        var compiler = new RenderGraphCompiler(Catalog(shadeReads: true));
+
+        if (!preserve) {
+            var failure = Assert.Throws<ShaderPipelineCompilationException>(() => compiler.Compile(definition: graph));
+            Assert.Contains(collection: failure.Diagnostics, filter: static diagnostic => (diagnostic.Code == "SHADERPIPE_DISCARDED_READ"));
+            return;
+        }
+        var plan = compiler.Compile(definition: graph).Pipeline;
+        var before = plan.FindResource(name: "a")!;
+        var after = plan.FindResource(name: "b")!;
+        var shade = Assert.Single(collection: plan.Passes, predicate: static pass => (pass.Name == "shade"));
+        var read = Assert.Single(collection: shade.Accesses, predicate: static access => (access.Version == "a"));
+        var write = Assert.Single(collection: shade.Accesses, predicate: static access => (access.Version == "b"));
+
+        Assert.Equal(before.Storage, after.Storage);
+        Assert.Equal(before.Storage, read.Storage);
+        Assert.Equal(read.Storage, write.Storage);
+        Assert.Equal(GpuAccess.ShaderRead, read.Use.Access);
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Use.Access);
+        Assert.Equal(GpuStage.ComputeShader, write.Use.Stage);
+        Assert.Equal(GpuImageLayout.Undefined, write.Use.Layout);
+        Assert.True(condition: read.Barrier.SourceAccess.HasFlag(GpuAccess.ShaderWrite));
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Barrier.DestinationAccess);
+    }
     [Fact]
     public void AStandingIntermediateKeepsItsLastWriteBeyondEveryFlightSlot() {
         var gpu = new FakePipelineGpu();

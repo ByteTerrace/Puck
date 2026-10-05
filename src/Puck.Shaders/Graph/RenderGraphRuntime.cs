@@ -1418,6 +1418,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             var rendered = node.FrameCounter;
             var submitted = node.SubmissionCount;
+            // Readback may complete inline in ProduceFrame. That still counts the final rendered sample of this request.
+            var converging = (index == m_captureInstance && IsConverging(index)) ? m_convergence : null;
             Surface surface;
 
             // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
@@ -1462,10 +1464,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             // A sample rendered at an extent the node was not asked for is one its capture never reads.
-            if ((node.FrameCounter != rendered) && (index == m_captureInstance) && IsConverging(index: index) &&
+            if ((node.FrameCounter != rendered) && converging is not null &&
                 CaptureReadiness.IsRendered &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
-                m_convergence!.Count();
+                converging.Count();
             }
 
             MarkRendered(
