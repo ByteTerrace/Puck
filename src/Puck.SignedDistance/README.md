@@ -16,7 +16,9 @@ then uses the same finite-bounce path fold and independent Halton reflections.
 It accepts one through 256 paths and zero through nine reflections; the ordinary
 hemisphere estimator retains its larger sampling counts. This reference reads
 the field directly and is independent of the renderer's twelve-query Near budget.
-A failed launch is unresolved. Point-specific reflectance can attenuate reflected
+A required launch that fails is unresolved. Exactly zero diffuse reflectance
+skips direct and screen queries and later reflections that cannot contribute;
+any nonzero component retains those queries and the requested depth. Point-specific reflectance can attenuate reflected
 light without attenuating self-emission. SdfProgram.Materials exposes the same
 snapshotted palette the packed shader reads, including immutable nested lists.
 

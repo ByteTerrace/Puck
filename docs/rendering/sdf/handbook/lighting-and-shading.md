@@ -353,9 +353,11 @@ It neither averages a new first hemisphere nor launches off the receiver again.
 This is an independent physical incoming reference, with actual field query
 counts, rather than a simulation of Near's twelve-query allowance.
 The solve source's mask applies during transport; a rendered
-receiver's captured mask selects the final categories. A failed launch or ray
-remains unresolved and supplies no numerical divergence. Point-specific
-reflectance includes attenuation on reflected light and feedback, leaving
+receiver's captured mask selects the final categories. A required launch or ray
+that fails remains unresolved and supplies no numerical divergence. Exactly zero
+diffuse reflectance skips direct and screen queries and later reflections that
+cannot contribute; every nonzero component retains those queries and the requested
+depth. Point-specific reflectance includes attenuation on reflected light and feedback, leaving
 emission independent. Explicit World explanations run this reference once for
 a supported cache pick, at the visible publication's sweep depth. Uncaptured
 screen/portal radiance, alternative rendered-frame sources, triangle meshes

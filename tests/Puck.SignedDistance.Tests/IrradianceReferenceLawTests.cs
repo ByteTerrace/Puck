@@ -78,6 +78,72 @@ public sealed class IrradianceReferenceLawTests {
     }
 
     [Fact]
+    public void AnExactlyNonReflectingHitKeepsItsEmissionWhenTheNextLaunchCannotResolve() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Vector3.UnitX, Emissive: 1f, Metal: 1f));
+        builder.Plane(Vector3.UnitY, 0f, material);
+        builder.Plane(-Vector3.UnitY, .0005f, material);
+        var program = builder.Build();
+        var origin = new Double3(0, .0001, 0);
+        var direction = new Double3(0, -1, 0);
+        var witness = new IrradianceField(program);
+        var hit = witness.Cast(origin, direction, 1);
+        Assert.Equal(IrradianceRayKind.Hit, hit.Kind);
+        Assert.True(witness.TryGradient(hit.Point, out var normal));
+        Assert.Equal(new Double3(0, 1, 0), normal);
+        // The first hit is certified, but its 0.001 m launch starts beyond the opposite wall of this 0.0005 m gap.
+        Assert.Null(IrradianceCells.Launch(witness, hit.Point, normal, .004));
+
+        var field = new IrradianceField(program);
+        var surfaces = IrradianceSurfaces.FromMaterials(program.Materials,
+            direct: static (_, _, _) => new(3, 4, 5), screens: static (_, _, _) => new(6, 7, 8));
+        var reference = new IrradianceReference(field, surfaces, 1);
+        var result = reference.EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
+        Assert.Equal(0, result.Unresolved);
+        Assert.Equal(new Double3(1, 0, 0), result.Contributions.Emission);
+        Assert.Equal(new Double3(1, 0, 0), result.Contributions.Total);
+        Assert.Equal(Double3.Zero, result.Contributions.Direct);
+        Assert.Equal(Double3.Zero, result.Contributions.Screens);
+        Assert.Equal(Double3.Zero, result.Contributions.Feedback);
+        Assert.Equal(4, field.Casts);
+        Assert.True(field.Samples > 0);
+
+        // Neither callback can contribute at zero reflectance, even if its independent visibility work refuses.
+        foreach (var directRefuses in new[] { true, false }) {
+            Func<Double3, Double3, int, Double3> direct = (_, _, _) => directRefuses
+                ? throw new InvalidOperationException("blocked direct visibility") : Double3.Zero;
+            Func<Double3, Double3, int, Double3> screens = (_, _, _) => directRefuses
+                ? Double3.Zero : throw new InvalidOperationException("blocked screen visibility");
+            var callbackField = new IrradianceField(program);
+            var callbackSurfaces = IrradianceSurfaces.FromMaterials(program.Materials, direct: direct, screens: screens);
+            var callbackResult = new IrradianceReference(callbackField, callbackSurfaces, 1)
+                .EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
+            Assert.Equal(result, callbackResult);
+            Assert.Equal(4, callbackField.Casts);
+            foreach (var nonzero in new[] { 1d, double.Epsilon }) {
+                var required = IrradianceSurfaces.FromMaterials(program.Materials, direct: direct, screens: screens,
+                    reflection: (_, _, _) => new(nonzero, 0, 0));
+                var exception = Assert.Throws<InvalidOperationException>(() =>
+                    new IrradianceReference(new IrradianceField(program), required, 1)
+                        .EstimateIncidentSources(origin, direction, bounces: 0, paths: 1));
+                Assert.Equal(directRefuses ? "blocked direct visibility" : "blocked screen visibility", exception.Message);
+            }
+        }
+
+        foreach (var reflectance in new[] { 1d, double.Epsilon }) {
+            var controlField = new IrradianceField(program);
+            var controlSurfaces = IrradianceSurfaces.FromMaterials(program.Materials,
+                reflection: (_, _, _) => new(reflectance, 0, 0));
+            var control = new IrradianceReference(controlField, controlSurfaces, 1)
+                .EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
+            Assert.Equal(4, control.Unresolved);
+            Assert.Equal(Double3.Zero, control.Contributions.Total);
+            Assert.Equal(4, controlField.Casts);
+            Assert.True(controlField.Samples > field.Samples);
+        }
+    }
+
+    [Fact]
     public void CapturedRayArgumentsRefuseBeforeAnyFieldQuery() {
         var field = Floor();
         var reference = new IrradianceReference(field, IrradianceScenes.Uniform(0, 0, 1), 8);

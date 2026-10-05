@@ -134,10 +134,17 @@ with that exact already-launched origin and direction, one through 256 paths and
 zero through nine later reflections. It shares the independent reference's
 attributed path fold; do not substitute a new receiver hemisphere, GPU cache
 colour, or the renderer's twelve-query budget for the physical answer.
+Stop recursive reference bounces only at exactly zero point reflectance, never
+an epsilon cutoff. Skip direct and screen queries at the same exact zero so
+irrelevant blocked visibility or continuation cannot erase independent emission;
+a required nonzero-reflection query or continuation must still resolve.
 Keep the continuation's outer eight-corner loop rolled: each corner invokes the
 complete directional-ray search. Preserve ascending accumulation, every source
 load and its counter; do not clone that search through forced unrolling or reduce
 its ray bound to shorten shader compilation.
+Keep Near's local-exit and secondary-hit routes at one full-field proof call,
+after selecting their endpoint or certified launch. Preserve early screen and
+refusal exits, the shared twelve-query budget and each route's exact source bank.
 
 `SdfIndirectParticipation` owns whole-instance casting and receiving. Keep its
 packed instance and mesh bits, frame body default, field queries and receiver

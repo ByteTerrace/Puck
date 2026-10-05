@@ -12,7 +12,8 @@ public readonly record struct IrradianceEstimate(Double3 Irradiance, int Paths, 
 /// with rays cast through <see cref="IrradianceField"/> (the one CPU interpreter), normals from its gradient, and the
 /// surfaces, direct light and sky its caller supplies. It is independent of the cache's lattice, cells and solve. Every
 /// path's samples come from a Halton sequence, a fixed pair of prime bases a bounce, so the estimate is the same on every
-/// run and machine; it accumulates in scalar double arithmetic in a written order.
+/// run and machine; it accumulates in scalar double arithmetic in a written order. Exactly zero diffuse reflectance
+/// skips direct and screen queries and later reflections that cannot contribute; the hit's emission remains independent.
 /// </summary>
 public sealed class IrradianceReference {
     private static readonly int[] Primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71];
@@ -191,16 +192,18 @@ public sealed class IrradianceReference {
             hitNormal = -hitNormal;
         }
 
-        var direct = m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
-        var screens = m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
+        var reflected = m_surfaces.Reflection(ray.Point, hitNormal, ray.Material);
+        var direct = reflected == Double3.Zero ? Double3.Zero
+            : m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
+        var screens = reflected == Double3.Zero ? Double3.Zero
+            : m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
         var arriving = direct + screens;
         var feedback = Double3.Zero;
-        if (bounce < bounces) {
+        if (bounce < bounces && reflected != Double3.Zero) {
             feedback = Incident(bounce: bounce + 1, bounces: bounces, normal: hitNormal, path: path,
                 point: ray.Point, resolved: out resolved, contributions: out _);
             arriving += feedback;
         }
-        var reflected = m_surfaces.Reflection(ray.Point, hitNormal, ray.Material);
         var emission = m_surfaces.Emission(arg: ray.Material);
         contributions = new(Double3.Multiply(reflected, direct), Double3.Multiply(reflected, feedback), emission,
             default, Double3.Multiply(reflected, screens));
