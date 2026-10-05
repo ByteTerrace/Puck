@@ -258,6 +258,14 @@ public interface IRenderGraphPackageFactory {
     /// <param name="publication">The actual retained publication, never a forwarded image or an absent output.</param>
     /// <returns>Whether the current publication must stand independently of newer graph inputs.</returns>
     bool HoldsOutput(string instance, GpuImagePublication publication) => false;
+    /// <summary>Returns the finite epoch that freezes an independent unbound image read, or null for a live read.
+    /// Consumers sharing an epoch acquire the same owned copy of a producer's actual pixels. A derived image that
+    /// advances the operation must remain live. The package owner disposes the epoch when its operation ends, replaces
+    /// an invalidated epoch, and invalidates ordinary cadence when a new epoch needs copies.</summary>
+    /// <param name="instance">The consuming instance.</param>
+    /// <param name="producer">The declared image producer being acquired.</param>
+    /// <returns>The shared epoch, or null when this read is not frozen.</returns>
+    RenderGraphReadEpoch? ReadEpochOf(string instance, string producer) => null;
     /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
     /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
     /// until its inputs move, so the runtime reports a frame such an instance cannot render as

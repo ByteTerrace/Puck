@@ -39,8 +39,18 @@ public sealed partial class SdfWorldTables {
     internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
     internal bool SkyEnvironmentOwes => m_skyEnvironment.Owes;
+    internal bool SkyEnvironmentCanRecord => m_skyEnvironment.CanRecord;
     internal bool SkyClosureInputsChanged => m_skyEnvironment.ClosureInputsChanged;
     internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
+    internal bool SkyEnvironmentUsesScreen(int screen) {
+        var count = Math.Min((int)m_skyRecord[0].LayerCount, m_skyLayerRecords.Length);
+        for (var index = 0; index < count; index++) {
+            ref var layer = ref m_skyLayerRecords[index];
+            if (layer.Kind == SdfSkyLayerKind.Panorama && layer.Opacity > 0f && SdfSkyEnvironment.IsLit(layer) &&
+                SdfSky.PayloadOf<SdfSkyPanorama>(ref layer).Screen == screen) { return true; }
+        }
+        return false;
+    }
 
     private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
     internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
@@ -106,6 +116,7 @@ public sealed partial class SdfWorldTables {
         public SdfEnvironmentSubmission? Submitted { get; private set; }
         public GpuImagePublication Completed { get; private set; }
         public bool ClosureInputsChanged { get; private set; }
+        public bool CanRecord { get; private set; } = true;
 
         public void Prepare(bool physical) {
             var sky = m_tables.m_skyRecord[0];
@@ -113,9 +124,9 @@ public sealed partial class SdfWorldTables {
             Demand = physical || sky.Ambient > 0f || sky.Reflection > 0f || sky.HazeExtinction > 0f ||
                 (sky.FogExtinction > 0f && (sky.AirFlags & SdfAir.FogColorAuthored) == 0);
             Owes = m_refresh.Owes(block: sky, layers: m_tables.m_skyLayerRecords, physical: physical);
-            if (m_tables.ScreenClosure is not null && Submitted is not null) {
+            if (m_tables.ScreenClosure is { } closure && Submitted is not null) {
                 ClosureInputsChanged |= Owes;
-                Owes = false;
+                Owes = Demand && closure.ProjectsSky;
             }
             if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }
@@ -123,8 +134,10 @@ public sealed partial class SdfWorldTables {
             Array.Clear(array: Screens);
             Array.Clear(array: m_sources);
             m_tainted = false;
+            CanRecord = true;
             var known = true;
             var changed = false;
+            var closure = m_tables.ScreenClosure;
             var layers = m_tables.m_skyLayerRecords;
             var count = Math.Min((int)m_tables.m_skyRecord[0].LayerCount, layers.Length);
             for (var index = 0; index < count; index++) {
@@ -140,20 +153,30 @@ public sealed partial class SdfWorldTables {
                     sources.ReadOf(view: view, screen: screen) is { } producer && reads is not null &&
                     reads.IndexOf(producer: producer) is var read and >= 0) {
                     var input = reads[read];
-                    m_tainted |= input.Tainted;
-                    m_sources[screen] = input.Publication;
-                    if (input.Lease.ImageViewHandle != 0 && !input.Publication.IsKnown) { known = false; }
+                    if (closure is { ZeroDerived: true } && (closure.DerivedSkyMask & (1u << screen)) != 0) {
+                        // Black radiance remains an opaque panorama layer: the shader still applies its exact authored
+                        // opacity, mask and order. The shared sampled filler supplies that initial dark boundary.
+                        Screens[screen] = false;
+                    } else {
+                        m_tainted |= input.Tainted;
+                        m_sources[screen] = input.Publication;
+                        if (input.Lease.ImageViewHandle != 0 && !input.Publication.IsKnown) { known = false; }
+                    }
+                }
+                if (closure is not null && (closure.DerivedSkyMask & (1u << screen)) != 0) {
+                    if (closure.ZeroDerived) { Screens[screen] = false; }
+                    else if (closure.ProjectsSky && !closure.Accepts(screen, m_sources[screen])) { CanRecord = false; }
                 }
                 var offset = screen * ScreenMappingByteLength;
-                if (!m_tables.m_screenMappingRegion.Contents.Slice(offset, ScreenMappingByteLength)
-                    .SequenceEqual(m_renderedMappings.AsSpan(offset, ScreenMappingByteLength))) { changed = true; }
+                var different = m_sources[screen] != m_renderedSources[screen] ||
+                    !m_tables.m_screenMappingRegion.Contents.Slice(offset, ScreenMappingByteLength)
+                        .SequenceEqual(m_renderedMappings.AsSpan(offset, ScreenMappingByteLength));
+                changed |= different;
+                if (closure is not null && Submitted is not null && (closure.DerivedSkyMask & (1u << screen)) == 0) { ClosureInputsChanged |= different; }
             }
-            changed |= !m_sources.AsSpan().SequenceEqual(m_renderedSources);
+            CanRecord &= known;
             Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: changed || !known);
-            if (m_tables.ScreenClosure is not null && Submitted is not null) {
-                ClosureInputsChanged |= Owes;
-                Owes = false;
-            }
+            if (closure is not null) { Owes = Demand && closure.ProjectsSky; }
             return known;
         }
         public long Publish(IGpuSubmissionFence fence) {
@@ -163,6 +186,7 @@ public sealed partial class SdfWorldTables {
             m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(m_renderedMappings);
             Owes = false;
             Submitted = new SdfEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Fence: fence, Tainted: m_tainted);
+            m_tables.ScreenClosure?.Projected();
             return Renders;
         }
         public void Poll() {

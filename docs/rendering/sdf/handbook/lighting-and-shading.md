@@ -465,13 +465,16 @@ geometry transport, then waits for a fresh finite solve of its capture-filled
 sources and that solve's exact completed fence. An older tainted bank keeps its
 taint even after clean image reductions arrive. A frozen indirect control
 refuses the cold capture without changing its retained bank.
-The existing view owner closes connected emitting world-camera reads in two
-finite rounds. Each epoch starts with dark derived screen records, retains
-independent reduced records, and waits for every participating solve's exact
+The existing view owner closes connected emitting world-camera and lighting-visible
+Panorama reads in two finite rounds. Each epoch starts with dark derived screen
+records and black derived Panorama radiance, retains independent reduced records,
+and waits for every participating solve's exact
 completed source. Destination images record their actual GI, environment and
 screen publications when Views submits. All required images then stand while
-the existing reduction rewrites only derived records; every real load and store
-is counted. The next solve starts only after all those reduction fences finish.
+the existing reduction rewrites only derived screen records. A derived Panorama
+reprojects the complete ordered layer stack over the same frozen independent
+pixels, preserving opacity, masks and blend order. Every real load and store is
+counted. The next solve starts only after both projection and reduction fences finish.
 The second reduction must feed a final complete solve and its required fenced
 images before the epoch releases its frozen frames; it triggers no third reduction.
 An edited completed component preserves a frozen participant's retained bank
@@ -482,11 +485,15 @@ scene change starts another epoch, and a capture resets the component even when
 it requests no extra convergence samples. Off participants require images and
 reductions, but no indirect-lighting fence.
 
-Whole-epoch freezing of independent pixels visible inside those camera images,
-and feedback through a lighting-visible world-derived Panorama, remain open.
-The reduced lighting inputs are immutable; a lease alone does not make a live
-producer's image immutable. Screen transport remains explicitly enabled until
-those source-freezing paths are complete.
+Independent images visible inside the participating camera views and lighting
+Panoramas share one owned copy per source for the whole epoch. The runtime copies
+the actual acquired image in the first consumer submission, retains its source
+publication and taint, and releases the original lease after the copy finishes.
+The same copies survive both rounds and capture convergence; their real bytes
+join the owning node's memory count and existing retirement. Later live images
+queue another epoch. Releasing a copy owner invalidates the whole epoch. Own-world
+cameras remain outside lighting feedback and keep their ordinary visual
+previous-frame policy. An authored zero screen-source gain stays excluded.
 
 An existing surface-picker request also copies a 288-byte receiver record and
 the allocated probe-state range under the visibility copy's fence. The answer

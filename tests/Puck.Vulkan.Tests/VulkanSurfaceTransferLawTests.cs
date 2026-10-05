@@ -14,7 +14,8 @@ namespace Puck.Vulkan.Tests;
 
 /// <summary>Pins, without a device, how the surface transfer objects hold resources on their device context's device:
 /// an upload or an import whose view creation is refused after its image exists destroys that image rather than leaking
-/// it, and a readback (<see cref="VulkanSurfaceReadback"/>) refuses a device other than the one it first read on and
+/// it, imports support sampling and copying their leased pixels, and a readback (<see cref="VulkanSurfaceReadback"/>)
+/// refuses a device other than the one it first read on and
 /// refuses its release after that device is destroyed (<see cref="VulkanDeviceOwnership"/>). The command tables resolve
 /// every entry point to a trap no law reaches; the image, view and command-resource APIs are fakes that record or
 /// refuse.</summary>
@@ -81,6 +82,8 @@ public sealed unsafe class VulkanSurfaceTransferLawTests {
             width: 1U
         ));
 
+        // VkImageUsageFlagBits: TRANSFER_SRC 0x1, SAMPLED 0x4, COLOR_ATTACHMENT 0x10.
+        Assert.Equal(expected: 0x15U, actual: Assert.Single(collection: memory.Imported).UsageFlags);
         Assert.Equal(
             actual: Assert.Single(collection: memory.Destroyed),
             expected: (ImageHandle, MemoryHandle)
@@ -218,17 +221,20 @@ public sealed unsafe class VulkanSurfaceTransferLawTests {
     }
     private sealed class RecordingExternalMemoryApi : IVulkanExternalMemoryApi {
         public List<(nint Image, nint Memory)> Destroyed { get; } = [];
+        public List<VulkanExternalImageImportRequest> Imported { get; } = [];
 
         public void DestroyImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle) {
             if (0 != imageHandle) {
                 Destroyed.Add(item: (imageHandle, memoryHandle));
             }
         }
-        public VulkanExternalImageImportResult ImportImage(VulkanExternalImageImportRequest request) =>
-            new(
+        public VulkanExternalImageImportResult ImportImage(VulkanExternalImageImportRequest request) {
+            Imported.Add(request);
+            return new(
                 ImageHandle: ImageHandle,
                 MemoryHandle: MemoryHandle
             );
+        }
     }
     // Refuses every view, as a device out of memory would, and records each destroy.
     private sealed class RefusingViewApi : IVulkanFramebufferSetApi {

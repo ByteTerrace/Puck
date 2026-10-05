@@ -54,7 +54,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
-    /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
+    /// objects waiting for the GPU to finish with them, published images held from a replaced graph, finite read-epoch
+    /// copies, and the staging
     /// buffer the capture readback holds once a capture has been served, plus package and timestamp readback buffers.</summary>
     public ulong OwnedBytes {
         get {
@@ -233,9 +234,9 @@ public sealed partial class ShaderPipelineRenderNode {
 
             // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
             // while it is the one the node publishes now, which a capture it serves without rendering reads.
-            if (held.Leased
+            if (held.Epoch is { IsActive: true } || (held.Leased
                 ? (held.Handle == m_lastSurface.ImageHandle)
-                : IsPublished(imageHandle: held.Handle)) {
+                : IsPublished(imageHandle: held.Handle))) {
                 continue;
             }
 
@@ -424,7 +425,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // An image behind a published surface, taken out of the objects that replaced it.
     // Leased marks an image another instance owns that the node publishes, held under the node's lease on it.
-    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes, bool Leased = false);
+    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes, bool Leased = false, RenderGraphReadEpoch? Epoch = null);
     // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
     // fence of the submission made RetirementLag submissions after it stopped being published.

@@ -8,7 +8,8 @@ namespace Puck.Vulkan;
 /// Samples a shared-handle surface — a texture another backend (Direct3D 12) rendered into shared
 /// GPU memory — without any CPU round-trip: it imports the shared NT handle into a Vulkan image bound to the
 /// same device memory, then hands back a shader-readable view. The image is imported once (the handle is stable
-/// across frames) and transitioned to the shader-read-only layout. This is the zero-copy alternative to
+/// across frames) with sampling and transfer-source usage, so a consumer may also copy its leased pixels into a finite
+/// snapshot, and is transitioned to the shader-read-only layout. This is the zero-copy alternative to
 /// <see cref="VulkanSurfaceUpload"/>. It imports no fence: a producer's writes are ordered before a Vulkan read by the
 /// shared fence the consumer imports on its own (<see cref="VulkanSharedFence"/>), whose wait rides the written slot's
 /// lease, or by the producer's CPU wait on a device that cannot share it, and a consumer holds the written slot through
@@ -200,6 +201,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
                 Instance: m_deviceContext.Instance.Commands,
                 PhysicalDeviceHandle: device.PhysicalDevice.Handle,
                 SharedHandle: sharedHandle,
+                UsageFlags: VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.TransferSource,
                 Width: width
             ));
 

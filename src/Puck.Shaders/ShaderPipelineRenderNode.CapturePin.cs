@@ -88,11 +88,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var command = BeginFrameCommands(slot: slot);
 
         commands.Clear();
-        recorder.TransitionImageLayout(command, source.ImageHandle, source.Layout, GpuImageLayout.TransferSource, GpuAccess.ShaderRead, GpuAccess.TransferRead, ShaderStages, GpuStage.Transfer);
-        recorder.TransitionImageLayout(command, copy.ImageHandle, GpuImageLayout.Undefined, GpuImageLayout.TransferDestination, GpuAccess.None, GpuAccess.TransferWrite, GpuStage.TopOfPipe, GpuStage.Transfer);
-        recorder.CopyImage(command, source.ImageHandle, copy.ImageHandle, source.Width, source.Height);
-        recorder.TransitionImageLayout(command, copy.ImageHandle, GpuImageLayout.TransferDestination, m_outputLayout, GpuAccess.TransferWrite, GpuAccess.ShaderRead, GpuStage.Transfer, ShaderStages);
-        recorder.TransitionImageLayout(command, source.ImageHandle, GpuImageLayout.TransferSource, source.Layout, GpuAccess.TransferRead, GpuAccess.ShaderRead, GpuStage.Transfer, ShaderStages);
+        RecordImageCopy(command, source.ImageHandle, source.Layout, copy.ImageHandle, source.Width, source.Height, m_outputLayout);
         recorder.EndCommandBuffer(commandBufferHandle: command);
         commands.Add(item: command);
         SubmitCounted(
@@ -111,5 +107,17 @@ public sealed partial class ShaderPipelineRenderNode {
         ));
         m_publishedLayout = m_outputLayout;
         m_publishedStateTick = m_captureSourceTick;
+    }
+
+    // Capture pinning and finite read epochs use the same counted, same-format device copy. The source is restored
+    // to its acquired layout, and the owned destination is sampleable before any consuming package records.
+    private void RecordImageCopy(nint command, nint source, GpuImageLayout sourceLayout, nint destination,
+        uint width, uint height, GpuImageLayout destinationLayout) {
+        var recorder = m_gpu.Recorder;
+        recorder.TransitionImageLayout(command, source, sourceLayout, GpuImageLayout.TransferSource, GpuAccess.ShaderRead, GpuAccess.TransferRead, ShaderStages, GpuStage.Transfer);
+        recorder.TransitionImageLayout(command, destination, GpuImageLayout.Undefined, GpuImageLayout.TransferDestination, GpuAccess.None, GpuAccess.TransferWrite, GpuStage.TopOfPipe, GpuStage.Transfer);
+        recorder.CopyImage(command, source, destination, width, height);
+        recorder.TransitionImageLayout(command, destination, GpuImageLayout.TransferDestination, destinationLayout, GpuAccess.TransferWrite, GpuAccess.ShaderRead, GpuStage.Transfer, ShaderStages);
+        recorder.TransitionImageLayout(command, source, GpuImageLayout.TransferSource, sourceLayout, GpuAccess.TransferRead, GpuAccess.ShaderRead, GpuStage.Transfer, ShaderStages);
     }
 }

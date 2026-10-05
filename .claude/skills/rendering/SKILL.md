@@ -2041,7 +2041,14 @@ for its own image (`OwnImageInput`), so feedback draws rather than closing a
 loop of standing outputs, and a capture a node serves without rendering while it
 publishes another instance's image reads a copy of that frame's image
 (`ShaderPipelineRenderNode.CapturePin.cs`): a lease pins lifetime, never
-pixels, and a node's slot ring cannot rotate past an image. An
+pixels, and a node's slot ring cannot rotate past an image. Finite operations
+freeze independent unbound reads with the shared `RenderGraphReadEpoch`/
+`ReadEpochOf` seam: the first recording consumer makes a counted same-format
+copy in its normal submission, all readers use that copy's original publication
+and taint, and only the copying submission holds the original lease. Live source
+changes queue through `Changed`; losing an owner invalidates the epoch. The
+operation must keep derived reads live and invalidate ordinary cadence when a
+new epoch needs copies. Never replace this with a long-held source lease. An
 external producer's output declares the layout its own submissions leave the
 image in (`RenderGraphExternalOutput.Layout`); a declared layout the producer
 does not leave it in shows only as Vulkan validation errors, since the
@@ -2708,18 +2715,24 @@ bank. `TaintedOf` carries actual retained-bank and history taint independently
 of current graph inputs. Do not count convergence or forward a capture while
 the retained source still waits, and do not require a lighting fence at Off.
 
-Emitting reads between different world residencies use the existing view owner's
-two-round screen closure. Its initial derived reductions are dark; independent
-reduced records stay fixed. Views records its actual GI/map/screen source tuple
+Emitting and lighting-visible Panorama reads between different world residencies
+use the existing view owner's two-round screen closure. Its initial derived
+reductions and Panorama radiance are dark; independent reduced records stay
+fixed. Views records its actual GI/map/screen source tuple
 at submission, and `OutputPublished` associates that tuple with the exact image
 publication. Required images use the package/runtime `HoldsOutput` seam to stand
 without another node submission, including during convergence; pass skips alone
 still rotate frame slots and cannot retain the exact image fence. Once all derived
-reductions complete their fences, the next solve may pin them. Do not replace that barrier with a tick
-delay, a latest-source lookup or a long-held mutable image lease. Independent
-pixels visible inside a camera and lit world-derived panoramas still require
-whole-epoch source freezing; this limitation is separate from reduced-record
-immutability and must not be claimed closed by the screen barrier alone.
+reductions and environment projections complete their fences, the next solve may
+pin them. Do not replace that barrier with a tick delay, a latest-source lookup or
+a long-held mutable image lease. Independent reads share the component's
+`RenderGraphReadEpoch` in both camera and environment consumers. Derived Panorama
+rounds reproject the complete ordered stack over those frozen copies; never add
+approximate per-layer maps or alter authored alpha to fake recomposition. The
+initial black sampled filler keeps the derived layer's original opacity. Copies
+remain held through final solve/image completion and capture convergence, with
+actual node-owned bytes and normal retirement. Own-world camera reads remain
+outside the lighting operator and keep their ordinary visual feedback policy.
 
 A scheduled capture may author `converge: N` (1 through 256). The graph runtime
 renders its dependencies through one frozen presentation snapshot, delays the

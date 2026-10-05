@@ -799,6 +799,18 @@ and submission fence without binding newer inputs or submitting the node, even
 during convergence. Capture readiness still waits for the operation to finish.
 Ordinary `IsUnchanged` cadence and individual pass skips do not provide this hold.
 
+A package can assign a shared `RenderGraphReadEpoch` to its independent unbound
+image reads through `ReadEpochOf`. The first recording consumer copies each
+producer's acquired image in its normal submission; subsequent consumers sample
+that owned copy, retaining the original publication and taint. Source leases last
+only through the copying submission. Live acquisitions still set the epoch's
+`Changed` flag, including when a source stops providing an image. Ending the epoch
+releases the copies through the node's existing counted retirement and reader
+leases. Losing a copy owner invalidates the whole epoch and consumers wait for a
+replacement; a view-only acquisition or unknown publication is refused by name.
+The owner chooses which reads are independent, keeps derived reads live, and
+invalidates its ordinary cadence when beginning an epoch that needs new copies.
+
 ### The default root graph
 
 The main view runs through the runtime. A world that authors no `views.root`

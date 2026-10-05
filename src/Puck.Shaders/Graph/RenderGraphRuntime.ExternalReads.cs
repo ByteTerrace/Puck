@@ -138,6 +138,9 @@ public sealed partial class RenderGraphRuntime {
             if (m_producers[producer] is { } external) {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
+                }
+                output = FrozenReadOf(index, m_set.Instances[producer].Name, output);
+                if (output.Lease.ImageViewHandle != 0) {
 
                     if (Withholds(
                         previousFrame: previousFrame,
@@ -178,28 +181,33 @@ public sealed partial class RenderGraphRuntime {
                     ? long.MaxValue
                     : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
+            var acquired = FrozenReadOf(index, m_set.Instances[producer].Name, new RenderGraphExternalOutput(
+                completed.Image, completed.Layout, LeaseOf(completed.Image) with { Publication = completed.Publication }, completed.Tainted));
 
             if (
-                completed.Image.IsSameDeviceImage &&
+                acquired.Image.IsSameDeviceImage &&
                 !Withholds(
                     previousFrame: previousFrame,
-                    tainted: completed.Tainted
+                    tainted: acquired.Tainted
                 )
             ) {
                 NoteTaint(
                     index: index,
                     producer: m_set.Instances[producer].Name,
-                    tainted: completed.Tainted
+                    tainted: acquired.Tainted
                 );
                 reads.Bind(
-                    image: completed.Image,
+                    image: acquired.Image,
                     index: position,
-                    layout: completed.Layout,
-                    lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication },
-                    tainted: completed.Tainted
+                    layout: acquired.Layout,
+                    lease: acquired.Lease,
+                    tainted: acquired.Tainted
                 );
-            } else if (!completed.Image.IsSameDeviceImage) {
-                NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
+            } else {
+                acquired.Lease.Retire();
+                if (!acquired.Image.IsSameDeviceImage) {
+                    NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
+                }
             }
         }
 

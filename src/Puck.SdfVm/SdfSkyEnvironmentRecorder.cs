@@ -51,7 +51,7 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         if (Screens && (!tables.ScreenEmissionCanRecord || tables.ScreenEmissionWriteMask == 0)) {
             return RenderGraphPackageOutcome.DrewNothing;
         }
-        if (!Screens && tables.ScreenClosure is not null && !tables.SkyEnvironmentOwes) {
+        if (!Screens && (!tables.SkyEnvironmentCanRecord || (tables.ScreenClosure is not null && !tables.SkyEnvironmentOwes))) {
             return RenderGraphPackageOutcome.DrewNothing;
         }
         var set = m_sets.PassSet(slot: recording.Slot);

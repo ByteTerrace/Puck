@@ -1373,6 +1373,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 index: index,
                 schedule: schedule
             );
+            if (PrepareReadEpochs(index, node) is { IsRendered: false } frozen) {
+                node.Reads?.RetireUntaken();
+                node.Reads = null;
+                m_unproduced++;
+                MarkProduction(index, frozen);
+                schedule.Next.Withdraw(index, prior);
+                continue;
+            }
             NotePackageTaint(index);
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
             if (
