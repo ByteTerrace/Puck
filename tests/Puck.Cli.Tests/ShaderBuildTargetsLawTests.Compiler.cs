@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Xml.Linq;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
