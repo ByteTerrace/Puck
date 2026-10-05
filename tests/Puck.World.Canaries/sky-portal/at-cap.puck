@@ -55,8 +55,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "planet"
       palette [{ color: "#0000FF", emissive: 1, metal: 1, roughness: 1, specular: 0 }]
-      shape Sphere "sphere" { material: 0, position: [0, 0, 0], scale: [20, 20, 20] }
+      shape Sphere "sphere" { material: 0, position [0, 0, 0], scale [20, 20, 20] }
     }
   }
 }
-placements { placement "planet" { prototype: "planet", position: [0, 0, -200] } }
+placements { placement "planet" { prototype: "planet", position [0, 0, -200] } }

@@ -19,8 +19,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "beacon"
       palette [{ color: "#FFFFFF", emissive: 1, metal: 1, roughness: 1, specular: 0 }]
-      shape Sphere "sphere" { material: 0, position: [0, 0, 0], scale: [1, 1, 1] }
+      shape Sphere "sphere" { material: 0, position [0, 0, 0], scale [1, 1, 1] }
     }
   }
 }
-placements { placement "beacon" { prototype: "beacon", position: [0, 0, -5] } }
+placements { placement "beacon" { prototype: "beacon", position [0, 0, -5] } }
