@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Shaders;
 
 // Versioned resources: each declared resource is one version with one writer, and a version naming `from` forwards its
