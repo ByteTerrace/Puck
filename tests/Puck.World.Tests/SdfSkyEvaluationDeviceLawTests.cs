@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// <c>gpu.sky.evaluations</c>. It writes every pixel's texel, an evaluated one's base in the lowest run's detail row and an
 /// unevaluated one's as a zero base the composite filters out in the plain row, counting each as one texel written. On a 16x8 lit image, every pixel covered evaluates nothing,
 /// every pixel uncovered evaluates 128, and the left half covered evaluates the right half and the covered column beside
-/// it, 72; each writes 128 texels. The lit image is read as written for every pixel, and every binding the pass does not
+/// it, 72; each writes 128 texels. At one-half field scale the same cases evaluate 0, 32 and 20, each writing 32 texels. The lit image is read as written for every pixel, and every binding the pass does not
 /// read holds a filler of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
@@ -44,16 +44,22 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         Assert.Equal(expected: (128L, 128L), actual: Run(covered: static _ => false, extension: extension, services: services));
         // Columns 0 to 7 covered: column 7 sees column 8 beside it, so columns 7 to 15 evaluate, nine of eight pixels.
         Assert.Equal(expected: (72L, 128L), actual: Run(covered: static x => (x < 8), extension: extension, services: services));
+        // Half field scale preserves the full lit footprint and its border; five of eight field columns see sky.
+        Assert.Equal((0L, 32L), Run(services, extension, static _ => true, divisor: 2));
+        Assert.Equal((32L, 32L), Run(services, extension, static _ => false, divisor: 2));
+        Assert.Equal((20L, 32L), Run(services, extension, static x => x < 8, divisor: 2));
     }
     // Runs the sky pass once over a lit image whose column x is covered when covered(x), and returns its counted sky
     // evaluations and texels written.
-    private static (long Evaluations, long Texels) Run(GpuDeviceServices services, string extension, Func<uint, bool> covered) {
+    private static (long Evaluations, long Texels) Run(GpuDeviceServices services, string extension, Func<uint, bool> covered, uint divisor = 1) {
         var parameters = SdfWorldInterfaces.SkyParameters;
         var block = new byte[parameters.SizeBytes];
 
         parameters.WriteExtent(block: block, height: Height, width: Width);
         void Word(string member, uint value, int lane = 0) => BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block.AsSpan(start: (((int)parameters.BlockOffsetOf(member: member)) + (lane * 4))), value: value);
+        Word(member: SdfWorldPackage.SkyFieldExtent, value: Width / divisor);
+        Word(lane: 1, member: SdfWorldPackage.SkyFieldExtent, value: Height / divisor);
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);

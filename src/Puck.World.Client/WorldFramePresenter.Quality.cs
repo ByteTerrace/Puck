@@ -7,6 +7,7 @@ namespace Puck.World.Client;
 public sealed partial class WorldFramePresenter {
     private SdfViewQuality ViewQuality() => new() {
         IndirectMethod = m_settings.IndirectMethod,
+        SkyFieldScale = m_settings.SkyFieldScale,
         // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the engine's 0
         // sentinel for full reach.
         DisableAmbientOcclusion = !m_settings.AmbientOcclusion,

@@ -69,6 +69,16 @@ public readonly record struct SdfViewQuality {
     /// <summary>The per-view method used by the counted indirect comparison. The default uses the residency cache.
     /// Quality restrictions retain the consumer's method; this selector changes no simulation or cache geometry.</summary>
     public SdfIndirectMethod IndirectMethod { get; init; }
+    /// <summary>The sky field's grid fraction: one or one half; zero selects the full default.
+    /// It changes neither the scene render grid nor retained field allocation capacity.</summary>
+    public float SkyFieldScale { get; init; }
+    /// <summary>Gets the validated sky field fraction, with the default zero reading as one.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The field scale is neither zero, one nor one half.</exception>
+    public float SkyFieldFraction => SkyFieldScale switch {
+        0f or 1f => 1f,
+        .5f => .5f,
+        _ => throw new ArgumentOutOfRangeException(nameof(SkyFieldScale)),
+    };
     /// <summary>Publishes only geometry, with premultiplied color and its coverage in alpha, for a far sky layer.
     /// The composite omits background sky and air on uncovered rays. Restrictions retain the consumer's output form.</summary>
     public bool GeometryOnly { get; init; }
@@ -114,6 +124,7 @@ public readonly record struct SdfViewQuality {
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
         IndirectMethod = IndirectMethod,
+        SkyFieldScale = MathF.Min(SkyFieldFraction, other.SkyFieldFraction),
         GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableFarBound = (DisableFarBound || other.DisableFarBound),

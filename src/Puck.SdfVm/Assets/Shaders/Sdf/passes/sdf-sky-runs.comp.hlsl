@@ -1,5 +1,5 @@
-// The sky's field runs, one invocation a render-grid pixel: evaluated only where the pixel or one of its eight neighbours
-// is not wholly covered by the color views wrote, the one-pixel dilation that keeps every texel the composite reads beside
+// The sky's field runs, one invocation a field-grid texel: evaluated only where its complete lit footprint or its one-pixel
+// border is not wholly covered by the color views wrote, the dilation that keeps every texel the composite reads beside
 // an edge evaluated. The stack's lowest field run, when it opens with one, composes over nothing, so it writes its offset
 // alone (skyBaseRW, black when the stack opens with a point layer); each upper field run writes its scale and offset as
 // six half floats across the upper images (skyUpper0RW to skyUpper2RW), only as many as the stack has upper runs
@@ -11,20 +11,25 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (any(id.xy >= passGroup.extent)) {
+    if (any(id.xy >= passGroup.skyFieldExtent)) {
         return;
     }
 
     bool seen = false;
 
-    [unroll] for (int dy = -1; dy <= 1; dy++) {
-        [unroll] for (int dx = -1; dx <= 1; dx++) {
-            seen = (seen || (sdfSkyPassLit((int2(id.xy) + int2(dx, dy))).a < 1.0));
+    // Include the complete lit footprint and its one-pixel border. A reduced field texel cannot hide an
+    // uncovered lit sample at an edge, including an odd-sized final footprint.
+    int2 first = int2((id.xy * passGroup.imageExtent) / passGroup.skyFieldExtent) - 1;
+    int2 last = int2(((id.xy + 1u) * passGroup.imageExtent + passGroup.skyFieldExtent - 1u) / passGroup.skyFieldExtent);
+    [loop] for (int y = first.y; y <= last.y; y++) {
+        [loop] for (int x = first.x; x <= last.x; x++) {
+            uint2 pixel = uint2(clamp(int2(x, y), int2(0, 0), int2(passGroup.imageExtent) - 1));
+            seen = seen || (sdfSkyPassCurrent(pixel) ? lit.Load(int3(pixel, 0)).a < 1.0 : true);
         }
     }
 
     if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost))) {
-        float3 direction = sdfSkyPassDirection(sdfSkyPassView(), id.xy);
+        float3 direction = cameraRayDirection(sdfSkyPassView(), (float2(id.xy) + 0.5) / float2(passGroup.skyFieldExtent));
         uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
         float3 base;
         float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS];

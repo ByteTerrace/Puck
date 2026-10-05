@@ -55,7 +55,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString("0.###", CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
     }
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
@@ -860,8 +860,25 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.sky-field-scale",
+            description: "Sets the sky field grid independently of the scene grid: world.sky-field-scale [1|0.5]. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.sky-field-scale: {settings.SkyFieldScale.ToString("0.###", CultureInfo.InvariantCulture)}]");
+                if (args.Count == 0) { return Echo(); }
+                float? scale = args.Count == 1 ? args[0].ToString() switch {
+                    "1" => 1f,
+                    "0.5" => .5f,
+                    _ => null,
+                } : null;
+                if (scale is not { } chosen) { return CommandResult.Usage(form: "1|0.5", verb: "world.sky-field-scale"); }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.SkyFieldScale,
+                    a: chosen, formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality and indirect-tier levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality, sky-field-scale and indirect-tier levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -918,6 +935,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     name: WorldSessionLevers.SkyQuality,
                     a: ((double)preset.Sky)
                 );
+                SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
                 SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, (double)(preset.Indirect ?? (tier switch {
                     QualityTier.Low => SdfIndirectTier.Off,
                     QualityTier.Medium => SdfIndirectTier.Medium,

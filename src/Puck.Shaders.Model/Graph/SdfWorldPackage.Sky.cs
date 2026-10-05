@@ -10,6 +10,8 @@ public static partial class SdfWorldPackage {
     public const int SkyViewBytes = (SkyViewCount * SkyViewRows * 16);
     /// <summary>The fitted infinity records for the consumer this pass renders (<c>float4[40]</c>).</summary>
     public const string SkyViews = "skyViews";
+    /// <summary>The active sky field grid, independent of the lit view's render grid and composite output.</summary>
+    public const string SkyFieldExtent = "skyFieldExtent";
     /// <summary>The infinity images read under this consumer's existing graph-read leases, one per sky-layer slot.</summary>
     public const string SkyViewImages = "skyViewImages";
     /// <summary>The pass-block value the sky and composite passes read, one when the lit image and the surface transport
@@ -55,6 +57,7 @@ public static partial class SdfWorldPackage {
         internal static readonly IReadOnlyList<ShaderInterfaceMember> Members = [
             .. Values,
             Value(name: ResolvedSurface, type: ShaderValueType.Uint),
+            Value(name: SkyFieldExtent, type: ShaderValueType.Uint2),
             ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SkyViews, type: ShaderValueType.Float4, length: (SkyViewCount * SkyViewRows)),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SkyViewCount, name: SkyViewImages, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),

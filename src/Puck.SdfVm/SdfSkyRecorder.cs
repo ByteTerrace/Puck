@@ -9,7 +9,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The sky's field runs and the composite (SdfWorldPackage.Parts.Sky and Parts.Composite), which read the sky interface
-// (SdfWorldInterfaces.SkyParameters). The sky runs on the render grid, reading the color views writes with the dispatch box
+// (SdfWorldInterfaces.SkyParameters). The sky runs on its independent full or ceil-half field grid, reading the color views writes with the dispatch box
 // it is current inside, in every fragment; the composite runs at the output extent, reading a native view's lit image with
 // the visibility records and the box, or a reduced or temporal view's resolved lit image and surface transport. Both bind
 // the residency's World set, whose tables hold the sky block and layer table, the volumes and the dynamic transforms, and a
@@ -25,6 +25,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         Destination: ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: member.Name)),
         Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
+    private static readonly int SkyFieldExtentOffset = (int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(SdfWorldPackage.SkyFieldExtent);
     private static readonly int SkyViewsOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews));
     // The interface's image members a port reads through, and those a port writes through.
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
@@ -98,6 +99,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: value);
+        hash.Add(value: BitConverter.SingleToUInt32Bits(frame.Views[index].Quality.SkyFieldFraction));
         foreach (var binding in frame.Views[index].SkyViews ?? []) {
             var parameters = binding.Parameters;
 
@@ -136,6 +138,11 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));
         }
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[ResolvedSurfaceOffset..], value: ((m_resolved && (m_kernel == SdfKernel.Composite)) ? 1u : 0u));
+        var fieldFraction = frame.Views[index].Quality.SkyFieldFraction;
+        var fieldWidth = fieldFraction == .5f ? (recording.RenderWidth + 1u) / 2u : recording.RenderWidth;
+        var fieldHeight = fieldFraction == .5f ? (recording.RenderHeight + 1u) / 2u : recording.RenderHeight;
+        BinaryPrimitives.WriteUInt32LittleEndian(recording.PassBlock[SkyFieldExtentOffset..], fieldWidth);
+        BinaryPrimitives.WriteUInt32LittleEndian(recording.PassBlock[(SkyFieldExtentOffset + sizeof(uint))..], fieldHeight);
         var set = m_sets.PassSet(slot: recording.Slot);
 
         m_work.Write(passSet: set, recording: recording);
@@ -153,7 +160,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             group: ((uint)ShaderInterfaceGroup.World),
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
+        var dispatchWidth = m_kernel == SdfKernel.Sky ? fieldWidth : recording.Width;
+        var dispatchHeight = m_kernel == SdfKernel.Sky ? fieldHeight : recording.Height;
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((dispatchWidth + 7) / 8), groupCountY: ((dispatchHeight + 7) / 8), groupCountZ: 1);
         m_recordedView = index;
         return RenderGraphPackageOutcome.Drew;
     }

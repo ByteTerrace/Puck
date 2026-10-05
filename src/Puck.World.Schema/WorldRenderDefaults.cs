@@ -82,6 +82,7 @@ public static class WorldApplicationDefaults {
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 /// <param name="Sky">The sky's quality tier the preset selects (<c>world.sky-quality</c>).</param>
 /// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
+/// <param name="SkyFieldScale">The independent sky field grid fraction, one or one half.</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
@@ -95,7 +96,8 @@ public readonly record struct WorldQualityPreset(
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
     WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter,
     WorldSkyTier Sky = WorldSkyTier.High,
-    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null
+    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null,
+    float SkyFieldScale = 1f
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -143,6 +145,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyQuality">The sky's boot quality tier (<c>world.sky-quality</c>): a layer below it writes no entry, and
 /// below <see cref="WorldSkyTier.High"/> each kind draws its reduced form.</param>
 /// <param name="Indirect">The world's diffuse indirect-light participation defaults.</param>
+/// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
@@ -166,7 +169,8 @@ public sealed record WorldRenderDefaults(
     uint ShadowFadeTicks = 0,
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
     WorldSkyTier SkyQuality = WorldSkyTier.High,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
+    float SkyFieldScale = 1f
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing

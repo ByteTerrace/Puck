@@ -714,3 +714,9 @@ pixels with the origin at the bottom-left; clocks and feedback remain
 presentation state.
 See [the World workflow](../../../../src/Puck.World/README.md#shader-pipelines)
 and [the pipeline contract](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development).
+
+The independent sky field lever is `world.sky-field-scale 1|0.5`. It is an
+admitted render session lever, echoed with no arguments and folded by save
+into `render.skyFieldScale`; quality presets author `skyFieldScale`. It moves
+only the field dispatch and composite grid. Scene resolution and retained
+field allocation capacity stay unchanged.

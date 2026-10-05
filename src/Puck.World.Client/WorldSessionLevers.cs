@@ -48,6 +48,8 @@ public static partial class WorldSessionLevers {
     public const string ShadowSlots = "shadow-slots";
     /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
     public const string SkyQuality = "sky-quality";
+    /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
+    public const string SkyFieldScale = "sky-field-scale";
     /// <summary>The target present rate in Hz, 0 meaning automatic display pacing (<c>world.target</c>), folding into
     /// <c>host</c>.</summary>
     public const string TargetHertz = "target";
@@ -141,6 +143,13 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
+        sink.Register(name: SkyFieldScale, setter: lever => {
+            if (lever.A is not (1d or .5d)) {
+                Console.Error.WriteLine("[world.sky-field-scale: expected 1|0.5 — lever dropped]");
+                return;
+            }
+            settings.SkyFieldScale = (float)lever.A;
+        });
         sink.Register(
             name: SkyQuality,
             setter: lever => settings.SkyQuality = (((int)lever.A) switch {

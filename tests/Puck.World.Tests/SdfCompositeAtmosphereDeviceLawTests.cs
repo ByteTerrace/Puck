@@ -77,6 +77,8 @@ public sealed partial class SdfCompositeAtmosphereDeviceLawTests {
 
         if (coverageProbe is not null) { forward = -Vector3.UnitZ; up = Vector3.UnitY; }
 
+        Word(member: SdfWorldPackage.SkyFieldExtent, value: Width);
+        Word(lane: 1, member: SdfWorldPackage.SkyFieldExtent, value: Height);
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);

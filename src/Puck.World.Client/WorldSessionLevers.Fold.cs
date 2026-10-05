@@ -85,7 +85,7 @@ public static partial class WorldSessionLevers {
     // Shadow reach folds to its tier; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
-            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium)) {
+            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f)) {
             return null;
         }
 
@@ -106,6 +106,7 @@ public static partial class WorldSessionLevers {
             Temporal = settings.Temporal,
             ShadowAmortize = settings.ShadowAmortize,
             SkyQuality = settings.SkyQuality,
+            SkyFieldScale = settings.SkyFieldScale,
             DynamicResolution = settings.DynamicResolution,
         });
 

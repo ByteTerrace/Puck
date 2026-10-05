@@ -74,7 +74,7 @@ ViewportData sdfSkyPassView() {
 // own texel and reads it alone. The base is read at every tap and counts its load in the lowest run's row; each upper run
 // reads the upper images holding its six half floats (its scale, then its offset) and counts them in its own row.
 bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS], out float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS]) {
-    int2 grid = int2(passGroup.imageExtent);
+    int2 grid = int2(passGroup.skyFieldExtent);
     float2 position = ((((float2(pixel) + 0.5) * float2(grid)) / float2(passGroup.extent)) - 0.5);
     int2 origin = int2(floor(position));
     float2 fraction = (position - float2(origin));
