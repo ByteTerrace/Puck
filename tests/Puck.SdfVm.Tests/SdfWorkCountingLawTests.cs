@@ -4,6 +4,7 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
+/// These source-contract laws inspect counted access and forwarding sites; they do not establish numerical GPU readback.
 /// Every SDF kernel counts its own work where it does it (<c>frame/sdf-work.hlsli</c>). A texel counts where a pass writes
 /// one: every store to a pixel's visibility record goes through <c>sdfVisibilityStoreWord</c>, which marks the pixel
 /// written, and every write to the output image marks it too, so a stage that returns before it stores (the ambient
