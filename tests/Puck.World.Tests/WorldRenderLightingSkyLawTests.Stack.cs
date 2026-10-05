@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 // with its kind's blend and visibility unless it states its own, its opacity, mask, transform and lowest tier; the sky
 // frame and the sky's quality tier reach the block; and the validator refuses by name a stack its passes cannot draw: a
 // field run past the upper runs, a mask that is neither or both of a band and a cone, a clock the timeline does not
-// declare, a panorama of an undeclared screen or one the lighting would see, and a layer named for a fixed
+// declare, a panorama of an undeclared screen, and a layer named for a fixed
 // work-counter row (a field run's or the atmosphere's), which its row could not hold apart.
 public sealed partial class WorldRenderLightingSkyLawTests {
     [Fact]
@@ -129,7 +129,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void SkyPanorama_LitOrOfAnUndeclaredScreen_RefusesByName_ControlDeclaredClean() {
+    public void SkyPanorama_OfAnUndeclaredScreen_RefusesByName_ControlDeclaredClean() {
         Laws.RefusalWithControl(
             lawId: "render.sky.panorama-screen",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
@@ -139,15 +139,30 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Panorama(Screen: Fixtures.TestPatternScreenIndex)]) },
             }))
         );
-        Laws.RefusalWithControl(
-            lawId: "render.sky.panorama-camera",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Panorama(Screen: Fixtures.TestPatternScreenIndex) { Visibility = WorldSkyVisibility.Both }]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Panorama(Screen: Fixtures.TestPatternScreenIndex) { Visibility = WorldSkyVisibility.Camera }]) },
-            }))
-        );
+    }
+    [Theory]
+    [InlineData(WorldSkyVisibility.Camera, SdfSkyVisibility.Camera)]
+    [InlineData(WorldSkyVisibility.Lighting, SdfSkyVisibility.Lighting)]
+    [InlineData(WorldSkyVisibility.Both, SdfSkyVisibility.Both)]
+    public void ADeclaredPanoramaAdmitsAndPacksItsAuthoredVisibility(WorldSkyVisibility visibility, SdfSkyVisibility expected) {
+        var definition = Fixtures.BuildDocument() with {
+            RenderRaw = BaseDefaults() with {
+                Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Panorama(
+                    Screen: Fixtures.TestPatternScreenIndex, Name: "source", Intensity: 0.7f) { Visibility = visibility }]),
+            },
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidate(definition, neighbours: null, reason: out var reason), reason);
+        var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
+            definition: definition, mirror: ClientFixtures.StateMirror(definition), revision: 0);
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+        environment.Sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: environment.Lights);
+        var panorama = Assert.Single(layers.Take((int)block.LayerCount), layer => layer.Kind == SdfSkyLayerKind.Panorama);
+
+        Assert.Equal(expected, panorama.Visibility);
+        var parameters = SdfSky.PayloadOf<SdfSkyPanorama>(ref panorama);
+        Assert.Equal(Fixtures.TestPatternScreenIndex, parameters.Screen);
+        Assert.Equal(0.7f, parameters.Intensity);
     }
     [Fact]
     public void SkyLayerName_AFixedRowsLabel_RefusesByName_ControlOtherNameClean() {

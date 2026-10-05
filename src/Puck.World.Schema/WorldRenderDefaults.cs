@@ -667,8 +667,9 @@ public abstract record WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
-    /// <summary>The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. The camera
-    /// alone sees it, since the environment map binds no screen.</summary>
+    /// <summary>The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. Visibility
+    /// defaults to the camera; lighting visibility projects the same acquired image into the residency's environment,
+    /// following its completed publication and capture taint.</summary>
     /// <param name="Screen">The screen's surface index (<see cref="WorldScreen.Index"/>), a screen the world declares.
     /// Required.</param>
     /// <param name="Projection">How a direction maps to the image. Absent is equirectangular.</param>

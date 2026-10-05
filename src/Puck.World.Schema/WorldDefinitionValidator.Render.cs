@@ -525,10 +525,6 @@ public static partial class WorldDefinitionValidator {
                         } else {
                             errors.Add(item: $"{layerPath}.screen is required: a panorama samples the image a declared screen shows.");
                         }
-                        if ((WorldSkyLayers.VisibilityOf(layer: panorama) & SdfSkyVisibility.Lighting) != 0) {
-                            errors.Add(item: $"{layerPath}.visibility lets the lighting see a panorama; the environment map binds no screen, so a panorama is seen by the camera alone.");
-                        }
-
                         break;
                     }
                 case WorldRenderSkyLayer.Clouds clouds: {
