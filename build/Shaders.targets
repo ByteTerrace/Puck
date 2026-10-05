@@ -145,32 +145,32 @@
          references Puck.Shaders.Generator, whose build writes those from the model before this target runs. -->
     <ItemGroup>
         <_PuckShaderBytecode Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
-            <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcVertexSpirv)</Recipe>
             <Enabled>$(PuckShaderSpirvEnabled)</Enabled>
         </_PuckShaderBytecode>
         <_PuckShaderBytecode Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
-            <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcVertexDxil)</Recipe>
             <Enabled>$(PuckShaderDxilEnabled)</Enabled>
         </_PuckShaderBytecode>
         <_PuckShaderBytecode Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
-            <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcFragmentSpirv)</Recipe>
             <Enabled>$(PuckShaderSpirvEnabled)</Enabled>
         </_PuckShaderBytecode>
         <_PuckShaderBytecode Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
-            <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcFragmentDxil)</Recipe>
             <Enabled>$(PuckShaderDxilEnabled)</Enabled>
         </_PuckShaderBytecode>
         <_PuckShaderBytecode Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
-            <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcComputeSpirv)</Recipe>
             <Enabled>$(PuckShaderSpirvEnabled)</Enabled>
         </_PuckShaderBytecode>
         <_PuckShaderBytecode Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
-            <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
+            <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcComputeDxil)</Recipe>
             <Enabled>$(PuckComputeShaderDxilEnabled)</Enabled>
         </_PuckShaderBytecode>
