@@ -15,10 +15,12 @@ public sealed class WorldCountersIndirectSourceLawTests {
     [Fact]
     public void TheIndirectSourceReportsScheduledWorkWithoutInventingProofEvents() {
         var work = new WorkCounterSet(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
+
         work.Add(kind: SdfIndirectWork.Rays, amount: 128);
         work.Add(kind: SdfIndirectWork.Probes, amount: 2);
 
         var services = new ServiceCollection();
+
         _ = services.AddWorldCounters();
         _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: work);
 
@@ -31,15 +33,18 @@ public sealed class WorldCountersIndirectSourceLawTests {
 
         using var document = JsonDocument.Parse(json: result.Output["[world.counters: ".Length..^1]);
         var source = Assert.Single(collection: document.RootElement.GetProperty(propertyName: "sources").EnumerateArray());
+
         Assert.Equal(expected: "sdf.indirect", actual: source.GetProperty(propertyName: "name").GetString());
 
         var counts = source.GetProperty(propertyName: "counts");
+
         Assert.Equal(expected: 128L, actual: counts.GetProperty(propertyName: "indirect.rays.scheduled").GetInt64());
         Assert.Equal(expected: 2L, actual: counts.GetProperty(propertyName: "indirect.probes.scheduled").GetInt64());
         Assert.Equal(expected: 0L, actual: counts.GetProperty(propertyName: "indirect.light.regions").GetInt64());
 
         var legend = document.RootElement.GetProperty(propertyName: "kinds");
         var rays = legend.GetProperty(propertyName: "indirect.rays.scheduled");
+
         Assert.Equal(expected: "rays", actual: rays.GetProperty(propertyName: "unit").GetString());
         Assert.Equal(expected: "deterministic", actual: rays.GetProperty(propertyName: "class").GetString());
 
