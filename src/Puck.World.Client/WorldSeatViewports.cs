@@ -36,10 +36,9 @@ public enum WorldSeatPointerPlace : byte {
 /// or the camera (which would fork the frame source's own resolution). Session-only presentation state.
 /// </summary>
 /// <remarks>Single-threaded by the same contract the overlay stores document: the frame source writes during frame
-/// produce, the cursor feed reads during the overlay's <c>FeedTick</c>, which the unified overlay invokes AFTER
-/// the inner producer's frame (so it sees THIS frame's cameras), and the pointer-ray capture reads before the next
-/// frame's ticks (so it sees the cameras of the frame on screen under the pointer), all on the launcher's window-pump
-/// thread.</remarks>
+/// produce, and the cursor feed reads after that frame's cameras and panes are composed, in both windowed and
+/// offscreen GPU hosts. Pointer-ray capture reads before the next frame's ticks, so it sees the cameras of the frame
+/// on screen under the pointer. These reads and writes share the launcher's presentation thread.</remarks>
 public sealed class WorldSeatViewports {
     private readonly WorldSeatView[] m_seats = new WorldSeatView[PlayerRoster.MaxSlots];
 

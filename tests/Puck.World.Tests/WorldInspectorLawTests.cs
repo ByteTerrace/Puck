@@ -6,6 +6,8 @@ using Puck.Overlays;
 using Puck.Testing;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -16,17 +18,25 @@ namespace Puck.World.Tests;
 
 [Collection(AllocationCollection.Name)]
 public sealed class WorldInspectorLawTests {
-    [Fact]
-    public void RealInspectorCommandAndPanelShareOneTextWithoutCreatingADevice() {
+    [Theory]
+    [InlineData(WorldHostPresentation.Windowed)]
+    [InlineData(WorldHostPresentation.Offscreen)]
+    public void RealInspectorCommandAndPanelShareOneTextWithoutCreatingADevice(WorldHostPresentation presentation) {
         using var files = new TemporaryDirectory();
-        var builder = WorldBootHarness.Compose(files, WorldHostPresentation.Windowed,
-            "tests/Puck.World.Canaries/editor-grid/fixture.puck");
+        var builder = WorldBootHarness.Compose(files, presentation,
+            presentation == WorldHostPresentation.Offscreen
+                ? "tests/Puck.World.Canaries/gi-furnace/fixture.puck"
+                : "tests/Puck.World.Canaries/editor-grid/fixture.puck",
+            edit: definition => definition with {
+                RenderRaw = definition.Render with { Indirect = new WorldRenderIndirect(Tier: SdfIndirectTier.Off) },
+            });
         // Exercise the registered inspector module with its real presentation dependencies. Recording and other
         // window-only commands consume Program's host inputs, outside this device-sealed composition fixture.
         for (var index = (builder.Services.Count - 1); (index >= 0); index--) {
             var descriptor = builder.Services[index];
 
-            if ((descriptor.ServiceType == typeof(ICommandModule)) && (descriptor.ImplementationType?.Name != "WorldInspectionCommandModule")) {
+            if ((descriptor.ServiceType == typeof(ICommandModule)) &&
+                (descriptor.ImplementationType?.Name is not ("WorldInspectionCommandModule" or "WorldViewCommandModule"))) {
                 builder.Services.RemoveAt(index: index);
             }
         }
@@ -88,6 +98,49 @@ public sealed class WorldInspectorLawTests {
         Assert.Null(unrendered.Settlement);
         Assert.Equal(0, picker.RequestIdentity);
         Assert.False(picker.Pending);
+        if (presentation == WorldHostPresentation.Offscreen) { InspectOffscreenDisplay(host.Services, registry); }
+    }
+    // The neutral device supplies zero readback pixels. This exercises the actual boot renderer, display mapping,
+    // console route and fenced request; the real furnace canary judges the physical surface and indirect answer.
+    private static void InspectOffscreenDisplay(IServiceProvider services, CommandRegistry registry) {
+        using var root = Assert.IsType<RenderGraphRuntimeNode>(WorldRenderRoot.Build(sp: services, overlay: null));
+        var probe = services.GetRequiredService<WorldRenderProbe>();
+        var views = services.GetRequiredService<WorldViewGraphHost>();
+        var device = services.GetRequiredService<IGpuDeviceContext>();
+        var host = new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device });
+        var index = 0UL;
+        void Produce() {
+            var frame = new FrameContext(AccumulatorTicks: 0UL, DeltaTicks: 1680UL, ElapsedTicks: index++ * 1680UL,
+                FrameDeltaTicks: 1680UL, Host: host, StepTicks: 1680UL, TargetHeight: 128, TargetWidth: 128);
+            _ = root.ProduceFrame(frame);
+            Assert.NotEqual(FrameCompletion.Refused, root.Runtime.Render.Completion);
+            Assert.Null(probe.Residency!.Refusal);
+        }
+        bool Building() => Enumerable.Range(0, root.Runtime.Instances.Instances.Count)
+            .Any(instance => root.Runtime.Producer(instance) is null && root.Runtime.Node(instance).IsBuildingCandidate);
+        TestLiveness.Until(step: () => { Produce(); return probe.Residency!.IsReady; },
+            wait: probe.Residency!.WaitPipelineBuilds, reason: () => probe.Residency!.NotReadyReason);
+        TestLiveness.Within(frames: 16, step: () => { Produce(); return views.DisplayView is not null; },
+            building: Building, reason: () => root.Runtime.Render.Reason);
+        var display = Assert.IsType<SourceMapping>(views.DisplayView);
+        Assert.Equal(128, views.DisplayWidth);
+        Assert.Equal(128, views.DisplayHeight);
+        var pointer = registry.Submit("world.view.pointer 32 96");
+        Assert.False(pointer.IsError, pointer.Output);
+        Produce();
+        var request = registry.Submit("world.explain");
+        Assert.False(request.IsError, request.Output);
+        var settlement = Assert.IsType<CommandSettlement>(request.Settlement);
+        var picker = Assert.IsType<SdfWorldPicker>(views.FindPicker(display.Source.Name));
+        Assert.True(picker.Pending || picker.InFlight);
+        TestLiveness.Within(frames: 16, step: () => { Produce(); return settlement.IsSettled; },
+            building: Building, reason: () => root.Runtime.Render.Reason);
+        var result = CommandResult.Settling(settlement);
+        Assert.False(result.IsError, result.Output);
+        Assert.Contains("pixel=32,96/128,128", result.Output);
+        Assert.False(registry.Submit("world.view.pointer clear").IsError);
+        Produce();
+        Assert.True(registry.Submit("world.explain").IsError);
     }
     [Fact]
     public void FormatterNamesCapturedPlacementMaterialAndPixelCostWithoutSteadyAllocation() {

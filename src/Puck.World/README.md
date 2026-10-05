@@ -25,6 +25,12 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
 ## Presentation inspection
 
+Both windowed and offscreen GPU hosts use the same inspection feed and rendered
+view picker. `world.view.pointer <x> <y>` supplies a Console-only inspection
+point in client pixels (display pixels offscreen); `clear` returns to hardware
+input. The point follows the published pane or whole-display view even without
+a local seat or drawn HUD cursor. A true headless host refuses GPU inspection.
+
 `world.inspect on|off` toggles the acting seat's editor panel; bare
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,

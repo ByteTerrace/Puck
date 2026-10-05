@@ -39,7 +39,7 @@ internal sealed class WorldOverlayGlyphs {
 /// instances — its <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an
 /// authored <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/>
 /// drives the runtime from then on, frame by frame.</summary>
-internal static class WorldRenderRoot {
+public static class WorldRenderRoot {
     /// <summary>Builds the render root and records it, and the world's residency, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
@@ -283,6 +283,12 @@ internal static class WorldRenderRoot {
             runtime: runtime,
             width: width
         ) {
+            // The windowed overlay ticks these feeds immediately before drawing them. A root without an overlay
+            // still follows the same published views and polls explanation fences, including on retained frames.
+            FrameProduced = (overlaid ? null : () => {
+                sp.GetRequiredService<WorldCursorFeed>().Tick();
+                sp.GetRequiredService<WorldInspector>().Tick();
+            }),
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,

@@ -406,6 +406,9 @@ Free Cam do not alter the logical movement basis.
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover (a HUD panel, else the
   display pane the picker hovers), and system-release generation.
+  The host Console can supply `<x> <y>` or `clear` for inspection. Both GPU
+  shapes resolve that point through the published panes or whole-display view,
+  even without a drawn HUD cursor; offscreen coordinates are display pixels.
 - `world.view.pick <instance> [<x> <y>]` — the presentation automation seam to
   an SDF view's GPU pick. With normalized coordinates in [0, 1) it requests a
   pick at that point of the instance's image and echoes the request id as

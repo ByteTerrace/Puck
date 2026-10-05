@@ -940,7 +940,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the whole back buffer), then into
     // the instance's pixels through the mapping its pane last published (WorldViewGraphHost.PublishPanes), the pane as the
     // display last showed it, which reports a point off the pane too, so a drag that leaves it keeps tracking. The
-    // position moves only while the pointer is pressed. No pointer feed (an offscreen boot), no reported position yet, or
+    // position moves only while the pointer is pressed. No pointer feed, no reported hardware position (as offscreen), or
     // a pane that published no mapping leaves the state untouched.
     private void UpdatePipelinePointer(WorldViewGraphHost.Entry entry, string name, uint width, uint height) {
         if (

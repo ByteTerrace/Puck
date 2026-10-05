@@ -79,7 +79,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
     }
     private CommandResult DescribePointer() {
         if (cursorFeed is not { } feed) {
-            return CommandResult.Error(output: "[world.view.pointer: requires a windowed boot — headless registers this verb for vocabulary parity only]");
+            return CommandResult.Error(output: "[world.view.pointer: requires a GPU presentation]");
         }
 
         var status = feed.Status;

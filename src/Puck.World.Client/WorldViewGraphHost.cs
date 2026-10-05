@@ -43,7 +43,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Gets the synthesized root graph the runtime runs, which a live <c>views.post</c> or pane change recomposes,
     /// or <see langword="null"/> when the document names its own root or no runtime is attached.</summary>
     public WorldRootGraph? Synthesized => m_synthesized;
-    /// <summary>A non-destructive pointer read, absent in an offscreen host.</summary>
+    /// <summary>A non-destructive pointer read; an offscreen host reports no hardware position or press.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
     /// <summary>Completed compilation reports, delivered only from the presentation thread.</summary>
     public Action<string, string>? Report { get; set; }

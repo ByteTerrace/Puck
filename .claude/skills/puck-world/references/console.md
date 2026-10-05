@@ -46,7 +46,11 @@ safe only because the desktop's authority always resolves boot.
 seat or pane's existing GPU picker. It suspends that picker's ordinary hover
 demand until the exact surfaced answer's fence completes, and settles on route
 loss, supersession or shutdown. It evaluates the captured publication's CPU
-reference once. Inspector and echo use the same cached indirect formatter;
+reference once. Windowed and offscreen hosts tick the same feed after camera
+and pane composition. A Console `world.view.pointer <x> <y>` override also
+selects a published whole-display view without a seat or visible HUD cursor;
+it never injects a hardware press. True headless presentation still refuses.
+Inspector and echo use the same cached indirect formatter;
 the HUD never evaluates a reference. `world.lighting` qualifies the retained
 fenced census separately from its live host allocation inventory. None of these
 reads infers GPU classifications from host schedule counts. The application

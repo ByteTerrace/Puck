@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.World.Client;
 
@@ -49,7 +50,7 @@ internal sealed partial class WorldCursorFeed : IDisposable {
 
     // Resolve the pointer once even when no continuous consumer is enabled. Explanation takes one surfaced demand
     // from this same route; ordinary hover never overwrites it while its fence is outstanding.
-    private void DemandGpuHover(bool shown, int slot, SourceMapping? pane, float localX, float localY, bool inside) {
+    private void DemandGpuHover(bool shown, int slot, SourceMapping? pane, System.Numerics.Vector2 position, float localX, float localY, bool inside) {
         SdfWorldPicker? picker = null;
         string? instance = null;
 
@@ -64,6 +65,18 @@ internal sealed partial class WorldCursorFeed : IDisposable {
             } else if (inside) {
                 instance = (m_viewports.Seat(slot: slot).RenderInstance ?? WorldViewGraphs.WorldInstance);
                 picker = m_panes.FindPicker(instance: instance);
+            } else if (m_pointerOverride.HasValue && (m_panes.DisplayView is { } display)) {
+                var point = DisplayPosition(position);
+                var hit = display.MapDisplayPoint(
+                    point: new FixedVector2(FixedQ4816.FromDouble(point.X), FixedQ4816.FromDouble(point.Y)),
+                    displayWidth: m_panes.DisplayWidth, displayHeight: m_panes.DisplayHeight);
+
+                if (hit.IsOnSource) {
+                    localX = ((float)(((double)hit.Coordinate.X) / display.SourceWidth));
+                    localY = ((float)(((double)hit.Coordinate.Y) / display.SourceHeight));
+                    instance = display.Source.Name;
+                    picker = m_panes.FindPicker(instance: instance);
+                }
             }
         }
         if (!float.IsFinite(localX) || !float.IsFinite(localY) || (localX < 0) || (localX >= 1) || (localY < 0) || (localY >= 1)) { picker = null; }

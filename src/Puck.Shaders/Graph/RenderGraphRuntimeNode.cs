@@ -49,6 +49,11 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
     /// <summary>Gets how many frames the node has produced, the next frame's <see cref="RenderGraphFrame.Index"/>.</summary>
     public long FramesProduced => m_frame;
+    /// <summary>Gets or sets the callback invoked after a successful runtime frame production, before its root frame
+    /// is returned. It runs for standing rendered frames too, after graph preparation and scheduling have published
+    /// their state. A refused or not-yet-renderable frame does not invoke it; GPU completion still requires the
+    /// submission's fence.</summary>
+    public Action? FrameProduced { get; init; }
     /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
     /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
     /// dispose only after the device context is released here instead; its later disposal by the container is a
@@ -120,6 +125,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                     : ((long)(context.ElapsedTicks / context.StepTicks)))
             )
         );
+
+        if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
 
         return new RootFrame(
             Render: Runtime.Render,
