@@ -56,10 +56,10 @@ completed-work scope honestly: a retained older node submission is not a claim
 that the current scheduled frame executed that work. Actual current field extents,
 finite values and the corresponding image evidence are also qualification duties.
 
-No reports, ceilings, measured zeros or tier choices are authored here. The new
-field-scale control, fixture compilation, engine batch cases, current backend
-observations and chosen defaults remain unqualified. After inspecting a measured
-passing paired set, record and check each saved report against its declared
+The batch runs on Vulkan and Direct3D 12 on the RTX 4070. Its thirty-six ceilings
+files record actual paired observations, including measured zero values; every
+saved report holds its recorded ceilings. Image quality and the resulting tier
+choices remain open. Record and check saved reports against their declared
 ceilings without launching the batch again. For the first observation:
 
 ```text
@@ -72,5 +72,5 @@ pairs. An initial batch `--check` refuses while any declared ceilings are missin
 a future batch `--check` collects fresh observations against the recorded set.
 Keep this phase separate from the
 [G10 indirect comparison](../indirect-comparison/README.md), whose warm-up proves
-current shared-cache fences. RTX 4070 results and final tier decisions must close
-locally; only RTX 2060 hardware qualification may remain as device debt.
+current shared-cache fences. Final tier decisions must close locally; only RTX
+2060 hardware qualification may remain as device debt.
