@@ -353,10 +353,10 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             if (seed is not null) {
                 // The host-coherent seed is written before submission and has no prior GPU access.
                 Barrier(seed, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.TransferRead, GpuStage.Transfer);
-                Barrier(screens, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.TransferWrite, GpuStage.Transfer);
+                Barrier(screens, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.CopyWrite, GpuStage.Transfer);
                 recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: seed.BufferHandle, destinationBufferHandle: screens.BufferHandle,
                     sizeBytes: screens.SizeBytes);
-                Barrier(screens, GpuAccess.TransferWrite, GpuStage.Transfer, GpuAccess.ShaderWrite, GpuStage.ComputeShader);
+                Barrier(screens, GpuAccess.CopyWrite, GpuStage.Transfer, GpuAccess.ShaderWrite, GpuStage.ComputeShader);
             } else {
                 Barrier(buffer: screens, destination: GpuAccess.ShaderWrite, destinationStage: GpuStage.ComputeShader, source: GpuAccess.None, sourceStage: GpuStage.TopOfPipe);
             }
