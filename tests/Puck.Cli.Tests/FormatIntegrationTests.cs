@@ -9,6 +9,29 @@ namespace Puck.Cli.Tests;
 
 public sealed class FormatIntegrationTests {
     [Fact]
+    public void AnInlineTaskResolvesSdkTasksWithoutExecutingItsBody() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-format-inline-task-");
+        var source = Path.Combine(path1: scratch.RootPath, path2: "Probe.cs");
+
+        File.WriteAllText(path: source, contents: """
+            using System;
+            using Microsoft.Build.Tasks;
+            using Microsoft.Build.Utilities;
+
+            public sealed class Probe : Task {
+                public Exec Compiler { get; } = new Exec();
+                public override bool Execute() => throw new InvalidOperationException("The formatter must never execute me.");
+            }
+            """);
+        Assert.Equal(expected: 0, actual: FormatFileProject.Run(
+            file: source, selected: FormatPasses.DefaultSelection(), check: false));
+        var result = File.ReadAllText(path: source);
+
+        Assert.Contains(expectedSubstring: "message:", actualString: result, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "public Exec Compiler", actualString: result, comparisonType: StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AStandaloneAppIsFormattedAndCompiledWithoutExecutingItsBody() {
         using var scratch = new TemporaryDirectory(prefix: "puck-format-file-app-");
 

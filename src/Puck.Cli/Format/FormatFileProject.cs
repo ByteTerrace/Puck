@@ -75,10 +75,11 @@ internal static class FormatFileProject {
                 );
                 // An MSBuild inline task (a RoslynCodeTaskFactory <Code Source=...> under build/) is compiled by no
                 // project: the factory compiles it against the running SDK's MSBuild assemblies, with no implicit usings
-                // and none of this repository's analyzers, and its disposable project does the same.
+                // and none of this repository's analyzers, and its disposable project does the same. Tasks such as
+                // Exec belong to Tasks.Core beside the Framework and Utilities.Core task APIs.
                 File.WriteAllText(
                     contents: (IsInlineTask(source: original)
-                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /></ItemGroup></Project>"
+                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll\" /></ItemGroup></Project>"
                         : "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType></PropertyGroup></Project>"
                     ),
                     path: project
