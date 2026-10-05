@@ -22,6 +22,19 @@ internal static partial class CountersReading {
             && line[(separator + 2)..^1].Split(" | ", StringSplitOptions.None).All(ValidIndirectIdentity);
     }
 
+    /// <summary>Reads the existing engine-ready verdict for a sky-only observation. This establishes installed
+    /// pipelines and completed initial frames, not an indirect source fence.</summary>
+    /// <param name="line">The exact stderr completion line.</param>
+    /// <param name="tick">The reported completed tick, or zero when the line refuses.</param>
+    /// <returns>Whether the line is the complete named ready verdict with an unsigned tick.</returns>
+    public static bool TryReadEngineCompletion(string line, out ulong tick) {
+        tick = 0;
+        const string Prefix = "[engine: ready at tick ";
+        return line.StartsWith(Prefix, StringComparison.Ordinal) && line.EndsWith(']')
+            && ulong.TryParse(line.AsSpan(Prefix.Length, line.Length - Prefix.Length - 1), NumberStyles.None,
+                CultureInfo.InvariantCulture, out tick);
+    }
+
     private static bool ValidIndirectIdentity(string identity) {
         var match = IndirectIdentity.Match(identity);
         return match.Success

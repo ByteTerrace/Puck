@@ -1,0 +1,15 @@
+# Actual raw shared-session reading; GPU rows are newest completed submissions.
+world.indirect-method cache
+world.quality low
+world.indirect off
+world.sky-field-scale 0.5
+world.state.cell.set skyRunning $value 0
+world.state.cell.set binaryRunning $value 0
+world.state.cell.set skyPhase $value 0.0
+world.state.cell.set binaryPhase $value 0.0
+world.row.set render sky {"layers":[{"$type":"gradient","name":"air","stops":[{"elevation":-1,"color":"#101829"},{"elevation":0,"color":"#243455"},{"elevation":1,"color":"#071020"}]},{"$type":"sunDisc","name":"sun","light":0,"radius":0.045,"intensity":2},{"$type":"stars","name":"stars","density":32,"brightness":4,"seed":3,"twinkle":{"share":1,"depth":0.8,"rate":1}},{"$type":"clouds","name":"clouds","coverage":0.4,"softness":0.2,"scale":0.5,"seed":5,"color":"#91A5C8","drift":[0,0],"shear":[0,0],"spin":0,"curl":0.3}]}
+world.rate pause
+world.wait ready 180
+world.rate resume
+world.wait 120
+world.counters --json

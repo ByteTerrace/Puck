@@ -4,6 +4,9 @@ The [indirect comparison batch](indirect-comparison/README.md) collects named
 method/input observations in four serial boots, retaining ordinary paired
 reports and their exact shared-session provenance. Gate discovery routes its
 recorded workload/script associations through the batch once.
+The [sky default matrix](sky-defaults/README.md) declares separate sky-form,
+independent field-scale and binary-shadow observations through engine readiness;
+its measured reports and final defaults remain owed.
 
 These workloads feed [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector),
 which runs the same offscreen world on Vulkan and Direct3D 12 and records the

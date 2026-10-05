@@ -1,0 +1,286 @@
+{
+  "schema": "puck.counters.batch.v1",
+  "world": "fixture.puck",
+  "groups": [
+    {
+      "name": "low",
+      "prelude": "low.prelude.script.txt",
+      "completion": "engine",
+      "observations": [
+        {
+          "name": "low-still-full",
+          "method": "cache",
+          "script": "low-still-full.script.txt",
+          "report": "low-still-full.report.json",
+          "ceilings": "low-still-full.ceilings.json"
+        },
+        {
+          "name": "low-still-half",
+          "method": "cache",
+          "script": "low-still-half.script.txt",
+          "report": "low-still-half.report.json",
+          "ceilings": "low-still-half.ceilings.json"
+        },
+        {
+          "name": "low-drift-full",
+          "method": "cache",
+          "script": "low-drift-full.script.txt",
+          "report": "low-drift-full.report.json",
+          "ceilings": "low-drift-full.ceilings.json"
+        },
+        {
+          "name": "low-drift-half",
+          "method": "cache",
+          "script": "low-drift-half.script.txt",
+          "report": "low-drift-half.report.json",
+          "ceilings": "low-drift-half.ceilings.json"
+        },
+        {
+          "name": "low-twinkle-full",
+          "method": "cache",
+          "script": "low-twinkle-full.script.txt",
+          "report": "low-twinkle-full.report.json",
+          "ceilings": "low-twinkle-full.ceilings.json"
+        },
+        {
+          "name": "low-twinkle-half",
+          "method": "cache",
+          "script": "low-twinkle-half.script.txt",
+          "report": "low-twinkle-half.report.json",
+          "ceilings": "low-twinkle-half.ceilings.json"
+        },
+        {
+          "name": "low-keyed-full",
+          "method": "cache",
+          "script": "low-keyed-full.script.txt",
+          "report": "low-keyed-full.report.json",
+          "ceilings": "low-keyed-full.ceilings.json"
+        },
+        {
+          "name": "low-keyed-half",
+          "method": "cache",
+          "script": "low-keyed-half.script.txt",
+          "report": "low-keyed-half.report.json",
+          "ceilings": "low-keyed-half.ceilings.json"
+        },
+        {
+          "name": "low-clouds-full",
+          "method": "cache",
+          "script": "low-clouds-full.script.txt",
+          "report": "low-clouds-full.report.json",
+          "ceilings": "low-clouds-full.ceilings.json"
+        },
+        {
+          "name": "low-clouds-half",
+          "method": "cache",
+          "script": "low-clouds-half.script.txt",
+          "report": "low-clouds-half.report.json",
+          "ceilings": "low-clouds-half.ceilings.json"
+        }
+      ]
+    },
+    {
+      "name": "medium",
+      "prelude": "medium.prelude.script.txt",
+      "completion": "engine",
+      "observations": [
+        {
+          "name": "medium-still-full",
+          "method": "cache",
+          "script": "medium-still-full.script.txt",
+          "report": "medium-still-full.report.json",
+          "ceilings": "medium-still-full.ceilings.json"
+        },
+        {
+          "name": "medium-still-half",
+          "method": "cache",
+          "script": "medium-still-half.script.txt",
+          "report": "medium-still-half.report.json",
+          "ceilings": "medium-still-half.ceilings.json"
+        },
+        {
+          "name": "medium-drift-full",
+          "method": "cache",
+          "script": "medium-drift-full.script.txt",
+          "report": "medium-drift-full.report.json",
+          "ceilings": "medium-drift-full.ceilings.json"
+        },
+        {
+          "name": "medium-drift-half",
+          "method": "cache",
+          "script": "medium-drift-half.script.txt",
+          "report": "medium-drift-half.report.json",
+          "ceilings": "medium-drift-half.ceilings.json"
+        },
+        {
+          "name": "medium-twinkle-full",
+          "method": "cache",
+          "script": "medium-twinkle-full.script.txt",
+          "report": "medium-twinkle-full.report.json",
+          "ceilings": "medium-twinkle-full.ceilings.json"
+        },
+        {
+          "name": "medium-twinkle-half",
+          "method": "cache",
+          "script": "medium-twinkle-half.script.txt",
+          "report": "medium-twinkle-half.report.json",
+          "ceilings": "medium-twinkle-half.ceilings.json"
+        },
+        {
+          "name": "medium-keyed-full",
+          "method": "cache",
+          "script": "medium-keyed-full.script.txt",
+          "report": "medium-keyed-full.report.json",
+          "ceilings": "medium-keyed-full.ceilings.json"
+        },
+        {
+          "name": "medium-keyed-half",
+          "method": "cache",
+          "script": "medium-keyed-half.script.txt",
+          "report": "medium-keyed-half.report.json",
+          "ceilings": "medium-keyed-half.ceilings.json"
+        },
+        {
+          "name": "medium-clouds-full",
+          "method": "cache",
+          "script": "medium-clouds-full.script.txt",
+          "report": "medium-clouds-full.report.json",
+          "ceilings": "medium-clouds-full.ceilings.json"
+        },
+        {
+          "name": "medium-clouds-half",
+          "method": "cache",
+          "script": "medium-clouds-half.script.txt",
+          "report": "medium-clouds-half.report.json",
+          "ceilings": "medium-clouds-half.ceilings.json"
+        }
+      ]
+    },
+    {
+      "name": "high",
+      "prelude": "high.prelude.script.txt",
+      "completion": "engine",
+      "observations": [
+        {
+          "name": "high-still-full",
+          "method": "cache",
+          "script": "high-still-full.script.txt",
+          "report": "high-still-full.report.json",
+          "ceilings": "high-still-full.ceilings.json"
+        },
+        {
+          "name": "high-still-half",
+          "method": "cache",
+          "script": "high-still-half.script.txt",
+          "report": "high-still-half.report.json",
+          "ceilings": "high-still-half.ceilings.json"
+        },
+        {
+          "name": "high-drift-full",
+          "method": "cache",
+          "script": "high-drift-full.script.txt",
+          "report": "high-drift-full.report.json",
+          "ceilings": "high-drift-full.ceilings.json"
+        },
+        {
+          "name": "high-drift-half",
+          "method": "cache",
+          "script": "high-drift-half.script.txt",
+          "report": "high-drift-half.report.json",
+          "ceilings": "high-drift-half.ceilings.json"
+        },
+        {
+          "name": "high-twinkle-full",
+          "method": "cache",
+          "script": "high-twinkle-full.script.txt",
+          "report": "high-twinkle-full.report.json",
+          "ceilings": "high-twinkle-full.ceilings.json"
+        },
+        {
+          "name": "high-twinkle-half",
+          "method": "cache",
+          "script": "high-twinkle-half.script.txt",
+          "report": "high-twinkle-half.report.json",
+          "ceilings": "high-twinkle-half.ceilings.json"
+        },
+        {
+          "name": "high-keyed-full",
+          "method": "cache",
+          "script": "high-keyed-full.script.txt",
+          "report": "high-keyed-full.report.json",
+          "ceilings": "high-keyed-full.ceilings.json"
+        },
+        {
+          "name": "high-keyed-half",
+          "method": "cache",
+          "script": "high-keyed-half.script.txt",
+          "report": "high-keyed-half.report.json",
+          "ceilings": "high-keyed-half.ceilings.json"
+        },
+        {
+          "name": "high-clouds-full",
+          "method": "cache",
+          "script": "high-clouds-full.script.txt",
+          "report": "high-clouds-full.report.json",
+          "ceilings": "high-clouds-full.ceilings.json"
+        },
+        {
+          "name": "high-clouds-half",
+          "method": "cache",
+          "script": "high-clouds-half.script.txt",
+          "report": "high-clouds-half.report.json",
+          "ceilings": "high-clouds-half.ceilings.json"
+        }
+      ]
+    },
+    {
+      "name": "binary-shadow",
+      "prelude": "shadow.prelude.script.txt",
+      "completion": "engine",
+      "observations": [
+        {
+          "name": "binary-k0-every-frame",
+          "method": "cache",
+          "script": "binary-k0-every-frame.script.txt",
+          "report": "binary-k0-every-frame.report.json",
+          "ceilings": "binary-k0-every-frame.ceilings.json"
+        },
+        {
+          "name": "binary-k0-amortized",
+          "method": "cache",
+          "script": "binary-k0-amortized.script.txt",
+          "report": "binary-k0-amortized.report.json",
+          "ceilings": "binary-k0-amortized.ceilings.json"
+        },
+        {
+          "name": "binary-k1-every-frame",
+          "method": "cache",
+          "script": "binary-k1-every-frame.script.txt",
+          "report": "binary-k1-every-frame.report.json",
+          "ceilings": "binary-k1-every-frame.ceilings.json"
+        },
+        {
+          "name": "binary-k1-amortized",
+          "method": "cache",
+          "script": "binary-k1-amortized.script.txt",
+          "report": "binary-k1-amortized.report.json",
+          "ceilings": "binary-k1-amortized.ceilings.json"
+        },
+        {
+          "name": "binary-k2-every-frame",
+          "method": "cache",
+          "script": "binary-k2-every-frame.script.txt",
+          "report": "binary-k2-every-frame.report.json",
+          "ceilings": "binary-k2-every-frame.ceilings.json"
+        },
+        {
+          "name": "binary-k2-amortized",
+          "method": "cache",
+          "script": "binary-k2-amortized.script.txt",
+          "report": "binary-k2-amortized.report.json",
+          "ceilings": "binary-k2-amortized.ceilings.json"
+        }
+      ]
+    }
+  ]
+}

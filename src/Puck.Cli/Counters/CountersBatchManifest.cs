@@ -12,12 +12,16 @@ internal sealed record CountersBatchManifest(string World, IReadOnlyList<Counter
     [JsonRequired]
     public string Schema { get; init; } = SchemaVersion;
 }
-internal sealed record CountersBatchGroup(string Name, string Prelude, IReadOnlyList<CountersBatchObservation> Observations);
+internal sealed record CountersBatchGroup(string Name, string Prelude, IReadOnlyList<CountersBatchObservation> Observations) {
+    // Sky-only work waits for the existing engine verdict without installing an indirect cache.
+    public string Completion { get; init; } = "indirect";
+}
 internal sealed record CountersBatchObservation(string Name, string Method, string Script, string Report, string Ceilings);
 internal sealed record PreparedCountersObservation(CountersBatchObservation Definition, string ScriptPath, string Script,
     string ReportPath, string CeilingsPath);
 internal sealed record PreparedCountersGroup(string Name, string PreludePath, string Prelude,
     IReadOnlyList<PreparedCountersObservation> Observations) {
+    public string Completion { get; init; } = "indirect";
     public string Script => Prelude + string.Concat(Observations.Select(observation => observation.Script));
 }
 internal sealed record PreparedCountersBatch(string WorldPath, IReadOnlyList<PreparedCountersGroup> Groups, string ManifestHash);
@@ -47,13 +51,17 @@ internal static class CountersBatchInput {
         var groupNames = new HashSet<string>(PuckPaths.Comparer);
         foreach (var group in manifest.Groups) {
             if (group is null || !IsName(group.Name) || !groupNames.Add(group.Name)
-                || group.Observations is not { Count: > 0 }) {
-                throw new FormatException("each group needs a unique file-safe name and at least one observation");
+                || group.Observations is not { Count: > 0 } || group.Completion is not ("indirect" or "engine")) {
+                throw new FormatException("each group needs a unique file-safe name, observations and an indirect or engine completion");
             }
             var preludePath = SourcePath(home, group.Prelude);
             var prelude = ReadScript(preludePath);
             if (Commands(prelude).Any(line => line.StartsWith("world.counters", StringComparison.Ordinal))) {
                 throw new FormatException($"group {group.Name}'s prelude contains a counters response");
+            }
+            var waitPrefix = group.Completion == "engine" ? "world.wait ready " : "world.wait indirect ";
+            if (Commands(prelude).Any(line => line.StartsWith(waitPrefix, StringComparison.Ordinal))) {
+                throw new FormatException($"group {group.Name}'s prelude contains an observation completion wait");
             }
             var observations = new List<PreparedCountersObservation>();
             foreach (var observation in group.Observations) {
@@ -70,24 +78,29 @@ internal static class CountersBatchInput {
                 var script = ReadScript(scriptPath);
                 var commands = Commands(script).ToArray();
                 var paused = Array.IndexOf(commands, "world.rate pause");
-                var warmed = Array.FindIndex(commands, line => line.StartsWith("world.wait indirect ", StringComparison.Ordinal));
+                var warmed = Array.FindIndex(commands, line => line.StartsWith(waitPrefix, StringComparison.Ordinal));
                 var resumed = Array.IndexOf(commands, "world.rate resume");
                 var advanced = Array.IndexOf(commands, "world.wait 120");
                 if (commands.Count(line => line.StartsWith("world.counters", StringComparison.Ordinal)) != 1
                     || commands.LastOrDefault() != "world.counters --json"
                     || commands.Count(line => line.StartsWith("world.indirect-method", StringComparison.Ordinal)) != 1
                     || !commands.Contains($"world.indirect-method {observation.Method}", StringComparer.Ordinal)
-                    || commands.Count(line => line.StartsWith("world.wait indirect ", StringComparison.Ordinal)) != 1
+                    || commands.Count(line => line.StartsWith(waitPrefix, StringComparison.Ordinal)) != 1
                     || commands.Count(line => line.StartsWith("world.wait ", StringComparison.Ordinal)) != 2
                     || commands.Count(line => line == "world.wait 120") != 1
                     || commands.Count(line => line == "world.rate pause") != 1
                     || commands.Count(line => line == "world.rate resume") != 1
                     || paused < 0 || warmed <= paused || resumed <= warmed || advanced <= resumed) {
-                    throw new FormatException($"observation {observation.Name} must select its method, pause through its current indirect fence, resume for 120 active ticks and end with its only JSON counters read");
+                    throw new FormatException($"observation {observation.Name} must select its method, pause through its {group.Completion} completion, resume for 120 active ticks and end with its only JSON counters read");
+                }
+                if (group.Completion == "engine" && (observation.Method != "cache"
+                    || commands.Count(line => line.StartsWith("world.indirect ", StringComparison.Ordinal)) != 1
+                    || !commands.Contains("world.indirect off", StringComparer.Ordinal))) {
+                    throw new FormatException($"observation {observation.Name} must disable indirect work when using engine completion");
                 }
                 observations.Add(new PreparedCountersObservation(observation, scriptPath, script, reportPath, ceilingsPath));
             }
-            groups.Add(new PreparedCountersGroup(group.Name, preludePath, prelude, observations));
+            groups.Add(new PreparedCountersGroup(group.Name, preludePath, prelude, observations) { Completion = group.Completion });
         }
         if (reports.Overlaps(ceilings)) { throw new FormatException("a report output names a ceilings file"); }
         foreach (var report in reports) {

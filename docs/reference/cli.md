@@ -2062,7 +2062,8 @@ different sources, a note on standard error says so.
 ### Named counter batches
 
 `--batch` reads a `puck.counters.batch.v1` manifest with `world` and ordered
-`groups`. Each group names a `prelude` script and ordered `observations`; each
+`groups`. Each group names a `prelude` script, ordered `observations` and its
+`completion` (`indirect` by default, or `engine` for sky-only work). Each
 observation names its `name`, `method` (`cache`, `screen` or `cone`), `script`,
 `report` and `ceilings`. Input and ceiling paths are relative to the manifest.
 Report paths are relative to the output directory, must stay within it and
@@ -2079,6 +2080,14 @@ with its only `world.counters --json` read. The indirect wait requires a newer
 produced frame and the actual current shared-cache source fence; it does not
 promise admission of every view's receiver. Keeping simulation paused through
 warm-up preserves fixed input ticks for the existing backend comparisons.
+An `engine` group instead uses the existing `world.wait ready <seconds>` verdict
+and must explicitly select `cache` and `world.indirect off` in each observation.
+It establishes installed pipelines and completed initial frames; it makes no
+indirect-source convergence claim. Its prelude contains no ready wait, so each
+retained ready verdict belongs to exactly one observation. An indirect group's
+prelude likewise contains no indirect wait. Both forms retain 120 active input
+ticks, exact completion ticks and diagnostic transcript lines; a missing,
+malformed, wrong-kind or deadline verdict refuses the collection.
 The complete resolve, boot and collection phase has a fifteen-minute cap.
 
 Every observation produces an ordinary paired `puck.counters.report.v1` report;

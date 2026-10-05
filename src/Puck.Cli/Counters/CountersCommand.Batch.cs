@@ -119,7 +119,7 @@ internal static partial class CountersCommand {
         Func<PreparedCountersGroup, string, CliProcessResult?> runLeg,
         [NotNullWhen(true)] out IReadOnlyList<CollectedCountersObservation>? observations, out string reason) {
         observations = null;
-        if (batch.Groups.Count == 0 || batch.Groups.Any(group => group.Observations.Count == 0)) {
+        if (batch.Groups.Count == 0 || batch.Groups.Any(group => group.Observations.Count == 0 || group.Completion is not ("indirect" or "engine"))) {
             reason = "a batch must contain nonempty observation groups";
             return false;
         }
@@ -135,11 +135,13 @@ internal static partial class CountersCommand {
                     .Select(line => line.Line).ToArray();
                 var stderr = process.OutputLines.Where(line => line.Stream == CliProcessOutputStream.Stderr)
                     .Select(line => line.Line).ToArray();
+                var completionPrefix = group.Completion == "engine" ? "[engine: ready at tick " : "[indirect: settled at tick ";
+                var failurePrefix = group.Completion == "engine" ? "[engine: not ready" : "[indirect: not settled";
                 var completions = stderr.Select((line, index) => (Line: line, Number: index + 1))
-                    .Where(item => item.Line.StartsWith("[indirect: settled at tick ", StringComparison.Ordinal)).ToArray();
+                    .Where(item => item.Line.StartsWith(completionPrefix, StringComparison.Ordinal)).ToArray();
                 if (completions.Length != group.Observations.Count
-                    || stderr.Any(line => line.StartsWith("[indirect: not settled", StringComparison.Ordinal))) {
-                    reason = $"group {group.Name} on {backend}: expected {group.Observations.Count} current-source indirect completion verdicts, found {completions.Length}";
+                    || stderr.Any(line => line.StartsWith(failurePrefix, StringComparison.Ordinal))) {
+                    reason = $"group {group.Name} on {backend}: expected {group.Observations.Count} {group.Completion} completion verdicts, found {completions.Length}";
                     return false;
                 }
                 if (!CountersReading.TryReadIndexed(stdout, group.Observations.Select(item => item.Definition.Method).ToArray(),
@@ -148,9 +150,11 @@ internal static partial class CountersCommand {
                     return false;
                 }
                 for (var index = 0; index < readings.Count; index++) {
-                    if (!CountersReading.TryReadIndirectCompletion(completions[index].Line, out var warmTick)
-                        || warmTick > ulong.MaxValue - 120 || readings[index].Tick < warmTick + 120) {
-                        reason = $"group {group.Name} on {backend}: observation {index + 1} lacks a trustworthy fenced warm-up before its active input";
+                    var completed = group.Completion == "engine"
+                        ? CountersReading.TryReadEngineCompletion(completions[index].Line, out var warmTick)
+                        : CountersReading.TryReadIndirectCompletion(completions[index].Line, out warmTick);
+                    if (!completed || warmTick > ulong.MaxValue - 120 || readings[index].Tick < warmTick + 120) {
+                        reason = $"group {group.Name} on {backend}: observation {index + 1} lacks its trustworthy {group.Completion} completion before its active input";
                         return false;
                     }
                     collected.Add(new CollectedCountersObservation(group, group.Observations[index], backend, readings[index],

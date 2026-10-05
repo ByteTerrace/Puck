@@ -1,0 +1,3 @@
+world.cadence on
+world.indirect off
+world.render-scale auto off

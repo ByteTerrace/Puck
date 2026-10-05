@@ -71,6 +71,72 @@ public sealed partial class CountersLawTests {
     }
 
     [Theory]
+    [InlineData("valid")]
+    [InlineData("missing")]
+    [InlineData("foreign")]
+    [InlineData("malformed")]
+    [InlineData("late")]
+    [InlineData("deadline")]
+    [InlineData("active-cache")]
+    [InlineData("prelude-wait")]
+    [InlineData("unknown-completion")]
+    public void SkyOnlyBatchesKeepEngineCompletionAndRefuseUnprovedWarmups(string defect) {
+        using var directory = new TemporaryDirectory(prefix: "puck-gfx-sky-batch-law-");
+        File.WriteAllText(Path.Combine(directory.RootPath, "sky.script.txt"),
+            "world.indirect-method cache\nworld.indirect off\nworld.rate pause\nworld.wait ready 180\nworld.rate resume\nworld.wait 120\nworld.counters --json\n");
+        if (defect == "active-cache") {
+            var scriptPath = Path.Combine(directory.RootPath, "sky.script.txt");
+            File.WriteAllText(scriptPath, File.ReadAllText(scriptPath).Replace("world.indirect off", "world.indirect medium", StringComparison.Ordinal));
+        }
+        File.WriteAllText(Path.Combine(directory.RootPath, "prelude.script.txt"), "world.cadence on\nworld.quality low\n"
+            + (defect == "prelude-wait" ? "world.wait ready 180\n" : ""));
+        var manifest = new CountersBatchManifest("fixture.puck", [
+            new CountersBatchGroup("sky", "prelude.script.txt", [
+                new CountersBatchObservation("sky-low", "cache", "sky.script.txt", "sky-low.json", "sky-low.ceilings.json"),
+            ]) { Completion = defect == "unknown-completion" ? "timer" : "engine" },
+        ]);
+        var path = Path.Combine(directory.RootPath, "batch.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(manifest, CountersBatchInput.Json));
+        if (defect is "active-cache" or "prelude-wait" or "unknown-completion") {
+            Assert.Throws<FormatException>(() => CountersBatchInput.Read(path, Path.Combine(directory.RootPath, "products")));
+            return;
+        }
+        var batch = CountersBatchInput.Read(path, Path.Combine(directory.RootPath, "products"));
+        var group = Assert.Single(batch.Groups);
+        Assert.Equal("engine", group.Completion);
+        Assert.Contains("world.indirect off", group.Script, StringComparison.Ordinal);
+        Assert.DoesNotContain("world.wait indirect", group.Script, StringComparison.Ordinal);
+        var succeeded = CountersCommand.TryCollectBatch(batch, 1920, 1080, "toolchain", (selected, backend) => {
+            var transcript = BatchTranscript(selected, backend);
+            var completion = defect switch {
+                "foreign" => "[indirect: settled at tick 0: residency=world allocation=1 epoch=1 generation=0 stamp=1 source=1]",
+                "malformed" => "[engine: ready at tick unknown]",
+                "late" => "[engine: ready at tick 1]",
+                "deadline" => "[engine: not ready after 180 seconds, so world.wait released: pipeline pending]",
+                _ => "[engine: ready at tick 0]",
+            };
+            var lines = transcript.OutputLines.Where(line => line.Stream == CliProcessOutputStream.Stdout).ToList();
+            if (defect != "missing") {
+                lines.Add(new CliProcessOutputLine(completion, lines.Count, CliProcessOutputStream.Stderr, lines.Count));
+            }
+            return transcript with { OutputLines = lines.ToArray(), Stderr = defect == "missing" ? "" : completion };
+        }, out var observations, out var reason);
+        if (defect == "valid") {
+            Assert.True(succeeded, reason);
+            Assert.Equal(2, observations.Count);
+            Assert.All(observations, observation => {
+                Assert.Equal("[engine: ready at tick 0]", observation.Completion);
+                Assert.Equal(120UL, observation.Reading.Tick);
+                Assert.Equal("cache", observation.Reading.Method);
+            });
+        } else {
+            Assert.False(succeeded);
+            Assert.Null(observations);
+            Assert.NotEmpty(reason);
+        }
+    }
+
+    [Theory]
     [InlineData("missing")]
     [InlineData("extra")]
     [InlineData("json")]
