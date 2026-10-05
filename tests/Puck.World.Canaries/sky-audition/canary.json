@@ -1,0 +1,679 @@
+{
+  "id": "sky-audition",
+  "title": "Named repeated sky rows audition independently and timeline previews alter their actual images",
+  "binding": "Three named gradient rows make row identity directly visible. The first two solo as red and blue; mute removes only the selected blue row and unmute restores it. The third reads a one-second authored section clock. At zero and half-period it differs, hold preserves it, run at rate one changes it, and rate zero stands. Unknown row and negative rate refuse without changing source. The opposite leg runs at rate zero, so only the running image agreement changes. Actual images, timing and command results await real World qualification.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "README.md"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-audition/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 11,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 6,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "repeated-gradient-rows-have-independent-images",
+        "before": "red.png",
+        "after": "blue.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "muting-the-solo-row-removes-it",
+        "before": "blue.png",
+        "after": "muted.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "unmuting-restores-that-row",
+        "before": "blue.png",
+        "after": "blue-again.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "scrubbing-changes-the-keyed-sky",
+        "before": "zero.png",
+        "after": "half.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "holding-preserves-the-keyed-sky",
+        "before": "half.png",
+        "after": "held.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "run-and-positive-rate-move-the-keyed-sky",
+        "before": "zero.png",
+        "after": "running.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "rate-zero-stops-the-presented-clock",
+        "before": "running.png",
+        "after": "stopped.png",
+        "agree": true
+      },
+      {
+        "type": "line",
+        "name": "the-red-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[0] name=red type=gradient",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-blue-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[1] name=blue type=gradient",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-clocked-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[2] name=clocked type=gradient",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-audition/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 11,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 6,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.sky-layer",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "repeated-gradient-rows-have-independent-images",
+        "before": "red.png",
+        "after": "blue.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "muting-the-solo-row-removes-it",
+        "before": "blue.png",
+        "after": "muted.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "unmuting-restores-that-row",
+        "before": "blue.png",
+        "after": "blue-again.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "scrubbing-changes-the-keyed-sky",
+        "before": "zero.png",
+        "after": "half.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "holding-preserves-the-keyed-sky",
+        "before": "half.png",
+        "after": "held.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "run-and-positive-rate-move-the-keyed-sky",
+        "before": "zero.png",
+        "after": "running.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "rate-zero-stops-the-presented-clock",
+        "before": "running.png",
+        "after": "stopped.png",
+        "agree": true
+      },
+      {
+        "type": "line",
+        "name": "the-red-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[0] name=red type=gradient",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-blue-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[1] name=blue type=gradient",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-clocked-row-keeps-its-name-and-index",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sky[2] name=clocked type=gradient",
+        "present": true
+      }
+    ]
+  }
+}

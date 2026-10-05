@@ -1,0 +1,50 @@
+schema: "puck.world.definition.v1"
+host {
+  backend: auto
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  presentMode: Immediate
+  width: 96
+  height: 96
+  exitAfterSeconds: 0
+  targetHertz: 0
+}
+views {
+  nestingDepth: 2
+  layout "world" {
+    seatCount: 0
+    slots [{ camera: "eye", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}
+cameras [{
+  name: "eye"
+  renderWidth: 96
+  renderHeight: 96
+  rig {
+    name: "eye"
+    version: "puck.camera.program.v1"
+    operations [
+      anchor(subject: worldPoint(point: [0, 0, 0]))
+      lookAt(subject: worldPoint(point: [0, 0, -1]))
+      fieldOfView(fieldOfViewRadians: 1)
+    ]
+  }
+}]
+render {
+  atmosphere { fog { density: 0 } }
+  sky {
+    layers [
+      gradient(name: "red", stops: [{ elevation: -1, color: "#FF0000" }, { elevation: 1, color: "#FF0000" }])
+      gradient(name: "blue", stops: [{ elevation: -1, color: "#0000FF" }, { elevation: 1, color: "#0000FF" }])
+      gradient(name: "clocked", stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])
+    ]
+    clock: "second"
+    keys [
+      { at: 0, layers { clocked: gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }]) } }
+      { at: 0.5, layers { clocked: gradient(stops: [{ elevation: -1, color: "#FFFFFF" }, { elevation: 1, color: "#FFFFFF" }]) } }
+    ]
+  }
+}
+timeline { clocks [{ name: "second", periodSeconds: 1 }] }

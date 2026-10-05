@@ -1,0 +1,26 @@
+schema: "puck.world.definition.v1"
+documentId: "sky-portal-lobby"
+admission [{
+  algorithm: ""
+  disclosure: Replica
+  domain: "*"
+  grants [{ budget: 64, capability: Observe, subject: "all" }]
+  mode: FederatedAuthority
+  publicKey: ""
+  subject: null
+}]
+render {
+  atmosphere { fog { density: 0 } }
+  sky { layers [gradient(stops: [{ elevation: -1, color: "#00FF00" }, { elevation: 1, color: "#00FF00" }])] }
+}
+prototypes {
+  prototype "beacon" {
+    document {
+      schema: "puck.creation.v1"
+      name: "beacon"
+      palette [{ color: "#FFFFFF", emissive: 1, metal: 1, roughness: 1, specular: 0 }]
+      shape Sphere "sphere" { material: 0, position: [0, 0, 0], scale: [1, 1, 1] }
+    }
+  }
+}
+placements { placement "beacon" { prototype: "beacon", position: [0, 0, -5] } }

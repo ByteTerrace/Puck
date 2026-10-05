@@ -1,0 +1,35 @@
+world.wait ready 60
+world.temporal off
+world.sky-quality high
+world.wait 12
+world.screenshot {run}/lobby.png
+world.wait captures 30
+world.row.set cameras eye rig.operations[0].subject.point [3,0,0]
+world.row.set cameras eye rig.operations[1].subject.point [3,0,-1]
+world.wait 12
+world.screenshot {run}/translated.png
+world.wait captures 30
+world.row.set cameras eye rig.operations[1].subject.point [3,0,1]
+world.wait 12
+world.screenshot {run}/turned.png
+world.wait captures 30
+world.row.set cameras eye rig.operations[0].subject.point [0,0,0]
+world.row.set cameras eye rig.operations[1].subject.point [0,0,-1]
+world.row.set render sky {"layers":[{"type":"gradient","name":"base","stops":[{"elevation":-1,"color":"#FF0000"},{"elevation":1,"color":"#FF0000"}]}]}
+world.wait 12
+world.screenshot {run}/removed.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"type":"gradient","name":"base","stops":[{"elevation":-1,"color":"#FF0000"},{"elevation":1,"color":"#FF0000"}]},{"type":"view","name":"lobby","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"}]}
+world.wait 12
+world.screenshot {run}/reopened.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"type":"gradient","name":"base","stops":[{"elevation":-1,"color":"#FF0000"},{"elevation":1,"color":"#FF0000"}]},{"type":"view","name":"lobby","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"far","name":"planet","prototypes":["planet"],"refresh":1,"scale":1,"farDistance":1000,"mask":{"cone":{"toward":[0,0,-1],"spread":0.15}}}]}
+world.wait 12
+world.screenshot {run}/far.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"type":"view","name":"over0","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over1","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over2","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over3","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over4","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over5","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over6","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over7","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"},{"type":"view","name":"over8","destination":"lobby","anchor":[0,0,0],"refresh":1,"scale":1,"fallback":"#FF00FF"}]}
+world.wait 12
+world.screenshot {run}/after-refusal.png
+world.wait captures 30
+world.lighting
+world.budget
