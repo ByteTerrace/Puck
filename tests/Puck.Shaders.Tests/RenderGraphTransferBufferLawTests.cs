@@ -51,7 +51,7 @@ public sealed class RenderGraphTransferBufferLawTests {
         ]);
         return new RenderGraphCompiler(catalog).Compile(new RenderGraphDefinition(Name: "transfer", Schema: RenderGraphSchemas.Graph,
             Resources: [new(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 256, History: history,
-                    Initialization: history ? ShaderPipelineInitialization.Zero : ShaderPipelineInitialization.None),
+                    Initialization: history ? ShaderPipelineInitialization.Zero : ShaderPipelineInitialization.Undefined),
                 new(Name: "snapshot", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 256, History: outputHistory),
                 new(Name: "result", Format: nameof(GpuPixelFormat.R8G8B8A8Unorm), Dimensions: ShaderPipelineDimensions.Relative())],
             Outputs: ["result"], Packages: [new(Name: "write", Package: "write", Inputs: [], Outputs: ["source"]),
