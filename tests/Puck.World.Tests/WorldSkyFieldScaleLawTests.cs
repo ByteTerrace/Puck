@@ -105,8 +105,8 @@ public sealed class WorldSkyFieldScaleLawTests {
             """);
         var compilation = WorldCompiler.CompileFile(path: source, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(compilation.Success, compilation.Diagnostics.FormatReport(sourceText: File.ReadAllText(source), filePath: source));
-        Assert.Equal(.5f, compilation.RequireJson()["render"]!["skyFieldScale"]!.GetValue<float>());
-        Assert.Equal(.5f, compilation.RequireJson()["render"]!["low"]!["skyFieldScale"]!.GetValue<float>());
+        Assert.Equal(.5m, compilation.RequireJson()["render"]!["skyFieldScale"]!.GetValue<decimal>());
+        Assert.Equal(.5m, compilation.RequireJson()["render"]!["low"]!["skyFieldScale"]!.GetValue<decimal>());
     }
 
     private sealed class Audio : IWorldAudioLever {
