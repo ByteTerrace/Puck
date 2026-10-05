@@ -267,7 +267,7 @@ public sealed partial class SdfWorldPassesLawTests {
         public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
         public string? NotReadyReason => m_image is null ? "no panorama image" : null;
         public string? PendingCapturePath => null;
-        public IGpuWorkSource Work { get; } = new GpuWorkLedger(name: "closure-panorama", framesInFlight: 3);
+        public IGpuWorkSource Work { get; } = new GpuWorkLedger(name: "closure.panorama", framesInFlight: 3);
         public void Dispose() { m_image?.Dispose(); m_image = null; }
         public void OnDeviceLost() => Dispose();
         public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
