@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 /// <summary>What a node resolves its counted buffers against (<see cref="ShaderPipelineResource.Count"/>): the counts of
