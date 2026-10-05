@@ -2849,23 +2849,24 @@ slots, never K alone.
 | Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
 | Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
 | Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
-| Shared per-frame receiver-proof admission and deferred counters | 8 |
+| Shared per-frame receiver-proof admission counter | 4 |
 | **Total before qualification** | **≤ 137,429,000** |
 
 A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
 height in the terminal word; the view's launch uses the visibility record's
 reserved L word. Each irradiance generation also stamps its probes, so a reused
 brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
-probe and the same full identities require 562,167,816 cache bytes, including
+probe and the same full identities require 562,167,812 cache bytes, including
 proofs, both irradiance generations and all High levels' directional radiance. Three
 slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
-total to 600,965,128 bytes. Held fading owners add their explicitly counted map
+total to 600,965,124 bytes. Held fading owners add their explicitly counted map
 regions. The tables and constant rings must satisfy the recorded bounds; these
 are allocation counts, not a claim that the tier has passed hardware qualification.
 The receiver certificate adds 32 bytes per allocated ordinary-view pixel beyond
 its surface fields: 66,355,200 bytes per native 1920×1080 consumer, in addition
 to these residency and light-view totals. Each allocated completion-readback
-slot also owns four host-visible bytes. Graph memory includes both additions.
+slot also owns four host-visible bytes, and each enabled view owns a separate
+four-byte device-local deferred counter. Graph memory includes these additions.
 
 G2's traced cache uses a 16-byte hit record: full float distance, an octahedral
 normal word, the full material identity and a terminal/proof/launch word. The
