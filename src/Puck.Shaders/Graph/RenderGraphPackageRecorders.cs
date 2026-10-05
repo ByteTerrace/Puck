@@ -250,6 +250,14 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
     bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => false;
+    /// <summary>Holds the instance's own image publication while a finite package operation consumes it. Every pass
+    /// must consent. The runtime keeps that exact image and submission fence without binding inputs or submitting,
+    /// even during convergence; capture readiness still determines when capture samples may resume. A package must
+    /// release the hold when the operation ends, its source changes, or its graph is released.</summary>
+    /// <param name="instance">The instance whose existing image would otherwise render again.</param>
+    /// <param name="publication">The actual retained publication, never a forwarded image or an absent output.</param>
+    /// <returns>Whether the current publication must stand independently of newer graph inputs.</returns>
+    bool HoldsOutput(string instance, GpuImagePublication publication) => false;
     /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
     /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
     /// until its inputs move, so the runtime reports a frame such an instance cannot render as
@@ -263,6 +271,11 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance whose next output is being prepared or whose recording just submitted.</param>
     /// <returns>Whether retained source state or history contributes external content.</returns>
     bool TaintedOf(string instance) => false;
+    /// <summary>Observes the exact image publication the runtime has just retained for an instance. Forwarded images
+    /// retain their acquired owner's publication; standing output never acquires a synthetic consumer identity.</summary>
+    /// <param name="instance">The instance whose output contains this package.</param>
+    /// <param name="publication">The actual retained image publication, paired with its existing graph lease.</param>
+    void OutputPublished(string instance, GpuImagePublication publication) { }
     /// <summary>Answers whether an armed capture may consume this instance's current retained state. A finite producer
     /// waits until its exact capture source has completed; a permanent refusal preserves its named refusal.</summary>
     /// <param name="instance">An instance in the capture's existing dependency closure.</param>

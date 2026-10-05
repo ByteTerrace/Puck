@@ -466,6 +466,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool Unchanged { get; set; }
         public bool RetainedTainted { get; set; }
         public FrameRender CaptureState { get; set; } = FrameRender.Rendered;
+        public bool HoldOutput { get; set; }
+        public GpuImagePublication Publication { get; private set; }
+        public bool HoldsOutput(string instance, GpuImagePublication publication) => HoldOutput && publication == Publication;
+        public void OutputPublished(string instance, GpuImagePublication publication) => Publication = publication;
         public bool TaintedOf(string instance) => RetainedTainted;
         public FrameRender CaptureReadinessOf(string instance) => CaptureState;
         // The unread frames each cadence question and each recording carried, in order.

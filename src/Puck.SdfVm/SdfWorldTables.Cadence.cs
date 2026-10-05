@@ -50,6 +50,10 @@ public sealed partial class SdfWorldTables {
     private ulong m_shadowSignature;
     private ulong m_visualSignature;
 
+    // The existing packed-source identities, excluding the derived environment/reduction publication counters.
+    internal (ulong Program, ulong Geometry, ulong Lighting, ulong Shadow, ulong Visual) ClosureSceneSignature =>
+        (m_programRevision, m_geometrySignature, m_lightingSignature, m_shadowSignature, m_visualSignature);
+
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.LightCount, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectMethod, SdfWorldPackage.IndirectSources, SdfWorldPackage.IndirectBodies,

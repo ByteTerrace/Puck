@@ -409,38 +409,40 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
-        BindScreens(
-            frame: frame,
-            tables: tables
-        );
+        if (m_screenClosureFrame is null) {
+            BindScreens(
+                frame: frame,
+                tables: tables
+            );
 
-        foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
-            if (provider() is { } transform) {
-                tables.SetScreenSurface(
-                    screenIndex: screenIndex,
-                    origin: transform.Origin,
-                    right: transform.Right,
-                    up: transform.Up,
-                    halfWidth: transform.HalfWidth,
-                    halfHeight: transform.HalfHeight
-                );
-            }
-        }
-
-        // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
-        // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
-        if (m_frameSource.ScreenDecals is { } screenDecals) {
-            foreach (var (screenIndex, provider) in screenDecals) {
-                if (provider() is { } decal) {
-                    tables.SetScreenDecal(
+            foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
+                if (provider() is { } transform) {
+                    tables.SetScreenSurface(
                         screenIndex: screenIndex,
-                        columns: decal.Columns,
-                        rows: decal.Rows,
-                        distanceRange: decal.DistanceRange,
-                        cellWords: decal.Cells.Span
+                        origin: transform.Origin,
+                        right: transform.Right,
+                        up: transform.Up,
+                        halfWidth: transform.HalfWidth,
+                        halfHeight: transform.HalfHeight
                     );
-                } else {
-                    tables.ClearScreenDecal(screenIndex: screenIndex);
+                }
+            }
+
+            // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
+            // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
+            if (m_frameSource.ScreenDecals is { } screenDecals) {
+                foreach (var (screenIndex, provider) in screenDecals) {
+                    if (provider() is { } decal) {
+                        tables.SetScreenDecal(
+                            screenIndex: screenIndex,
+                            columns: decal.Columns,
+                            rows: decal.Rows,
+                            distanceRange: decal.DistanceRange,
+                            cellWords: decal.Cells.Span
+                        );
+                    } else {
+                        tables.ClearScreenDecal(screenIndex: screenIndex);
+                    }
                 }
             }
         }
@@ -694,6 +696,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
     // the live tables, whose Ready flip bumps the source's content revision so the capture emits the brick this frame.
     private void Capture(in FrameContext context) {
+        if (m_screenClosureFrame is { } closure) {
+            m_frame = closure;
+            m_pendingFrame = null;
+            return;
+        }
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
         }

@@ -690,12 +690,12 @@ package and `OverlayPackage` serves `overlay`.
 
 An instance whose `ExternalPackage` names a package no external producer or
 upload serves, but a recorder does, is a package instance: when the package
-runs as a fragment with no input port and one image output, the runtime makes
-its graph, one pass named after the package id running it, whose output is the
-instance's, declared as the fragment declares its output version, and renders
-it on a node like any graph instance. Any other package is refused by name.
+runs as a fragment with exported outputs, the runtime makes its graph, one pass
+named after the package id running it, and exposes the fragment's declared
+inputs and outputs. The first output is the instance's default. It renders on a
+node like any graph instance; a package without such a fragment is refused by name.
 Before it schedules each frame the runtime asks the package of every instance
-whose graph binds no input and runs only package passes whether anything it
+whose inputs stand unchanged and whose graph runs only package passes whether anything it
 renders from changed since its latest render
 (`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
 whose packages saw a change unchanged (`RenderGraphFrame.Unchanged`), except one
@@ -789,6 +789,15 @@ including a request with no extra convergence samples. A package's
 finite-source completion; a refusal fails the request by name. `TaintedOf`
 also joins the graph's acquired-input taint, so an older retained result or
 history cannot become clean merely because a newer input is clean.
+After retaining an image output, `OutputPublished` reports that same publication
+to its package factories. A forwarded image keeps its acquired producer and
+sequence. An owner can associate already-submitted source state with that image;
+looking up a newer source during the callback would mislabel the pixels.
+For a finite operation, every package in an image instance can agree to
+`HoldsOutput` for that exact own publication. The runtime then keeps its image
+and submission fence without binding newer inputs or submitting the node, even
+during convergence. Capture readiness still waits for the operation to finish.
+Ordinary `IsUnchanged` cadence and individual pass skips do not provide this hold.
 
 ### The default root graph
 

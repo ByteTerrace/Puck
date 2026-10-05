@@ -48,6 +48,7 @@ public sealed partial class SdfWorldTables {
             (!m_tables.SkyEnvironmentOwes && m_tables.SubmittedSkyEnvironment is { } submitted &&
                 submitted.Publication == m_environment && m_environment.IsKnown)) &&
             ((frame.IndirectSources & SdfIndirectSources.Screens) == 0 ||
+                (m_tables.ScreenClosure is { HoldsLighting: true } && m_screens.IsKnown) ||
                 (!m_tables.ScreenEmissionOwes && m_tables.SubmittedScreenEmission is { } screens &&
                     screens.Publication == m_screens && m_screens.IsKnown));
 

@@ -39,6 +39,7 @@ public sealed partial class SdfWorldTables {
     internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
     internal bool SkyEnvironmentOwes => m_skyEnvironment.Owes;
+    internal bool SkyClosureInputsChanged => m_skyEnvironment.ClosureInputsChanged;
     internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
 
     private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
@@ -104,6 +105,7 @@ public sealed partial class SdfWorldTables {
         public long Renders { get; private set; }
         public SdfEnvironmentSubmission? Submitted { get; private set; }
         public GpuImagePublication Completed { get; private set; }
+        public bool ClosureInputsChanged { get; private set; }
 
         public void Prepare(bool physical) {
             var sky = m_tables.m_skyRecord[0];
@@ -111,6 +113,10 @@ public sealed partial class SdfWorldTables {
             Demand = physical || sky.Ambient > 0f || sky.Reflection > 0f || sky.HazeExtinction > 0f ||
                 (sky.FogExtinction > 0f && (sky.AirFlags & SdfAir.FogColorAuthored) == 0);
             Owes = m_refresh.Owes(block: sky, layers: m_tables.m_skyLayerRecords, physical: physical);
+            if (m_tables.ScreenClosure is not null && Submitted is not null) {
+                ClosureInputsChanged |= Owes;
+                Owes = false;
+            }
             if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }
         public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
@@ -144,6 +150,10 @@ public sealed partial class SdfWorldTables {
             }
             changed |= !m_sources.AsSpan().SequenceEqual(m_renderedSources);
             Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: changed || !known);
+            if (m_tables.ScreenClosure is not null && Submitted is not null) {
+                ClosureInputsChanged |= Owes;
+                Owes = false;
+            }
             return known;
         }
         public long Publish(IGpuSubmissionFence fence) {
@@ -173,6 +183,7 @@ public sealed partial class SdfWorldTables {
             Submitted = null;
             Completed = default;
         }
+        public void RestartClosure() { ClosureInputsChanged = false; Forget(); }
         public void Dispose() { Forget(); Coefficients.Dispose(); Map.Dispose(); }
     }
 }

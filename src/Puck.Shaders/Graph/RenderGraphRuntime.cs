@@ -1249,6 +1249,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var index = renders[position];
             var row = schedule.Instances[index];
 
+            // A finite package operation owns this exact image until its sibling work finishes. Pass-level skips
+            // still submit and rotate frame slots, so the hold must precede binding and the node's submission path.
+            if (PackagesHoldOutput(index)) {
+                m_unproduced++;
+                m_historySucceeded[index] = true;
+                MarkCurrent(index);
+                continue;
+            }
+
             // The display encoder may still be building after the last requested sample. Keep the contributing
             // images alive until readback completes; another render would silently capture a later jitter sample.
             if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {

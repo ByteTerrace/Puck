@@ -48,6 +48,12 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         var tables = m_built.Residency.Submit(context: recording.Context);
         if (Screens) { _ = tables.ScreenEmissionSignature(m_built.Residency, m_built.View, recording.Reads); }
         else { _ = tables.SkyEnvironmentSignature(residency: m_built.Residency, view: m_built.View, reads: recording.Reads); }
+        if (Screens && (!tables.ScreenEmissionCanRecord || tables.ScreenEmissionWriteMask == 0)) {
+            return RenderGraphPackageOutcome.DrewNothing;
+        }
+        if (!Screens && tables.ScreenClosure is not null && !tables.SkyEnvironmentOwes) {
+            return RenderGraphPackageOutcome.DrewNothing;
+        }
         var set = m_sets.PassSet(slot: recording.Slot);
         tables.BindSkyEnvironment(set: set, bindings: m_context.Services.Bindings);
         var emissionMask = 0u;
@@ -61,6 +67,7 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         }
         SdfWorldInterfaces.EnvironmentParameters.WriteExtent(block: recording.PassBlock, width: SdfSkyEnvironment.Size, height: SdfSkyEnvironment.Size);
         BinaryPrimitives.WriteUInt32LittleEndian(recording.PassBlock[(int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(SdfKernelInterfaces.ScreenEmissionMask)..], emissionMask);
+        BinaryPrimitives.WriteUInt32LittleEndian(recording.PassBlock[(int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(SdfKernelInterfaces.ScreenEmissionWriteMask)..], tables.ScreenEmissionWriteMask);
         m_work.Write(passSet: set, recording: recording);
         var pipeline = tables.Pipeline(kernel: Kernel);
         recording.Recorder.BindPipeline(commandBufferHandle: recording.CommandBuffer, bindPoint: GpuBindPoint.Compute, pipelineHandle: pipeline.Handle);

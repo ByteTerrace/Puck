@@ -9,6 +9,8 @@ groupshared float4 sdfScreenSums[64];
 [numthreads(64, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint screen = group.x;
+    // Whole-group decision: retained independent records are neither loaded nor rewritten in a derived round.
+    if ((passGroup.screenEmissionWriteMask & (1u << screen)) == 0u) { return; }
     uint cell = lane / 4u;
     uint row = screen * SDF_SCREEN_EMISSION_RECORDS;
     ScreenMappingData mapping = worldScreenMapping(screen);

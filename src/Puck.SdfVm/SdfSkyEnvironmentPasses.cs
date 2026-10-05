@@ -27,6 +27,7 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
             if (m_instances.TryGetValue(key: name, value: out var previous)) {
                 if (ReferenceEquals(objA: previous.Residency, objB: residency)) {
                     m_instances[name] = previous with { View = view };
+                    views.RegisterEnvironment(name: name, residency: residency, view: view);
                     return;
                 }
                 views.UnregisterEnvironment(residency: previous.Residency);
@@ -34,7 +35,7 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
             }
             residency.Retain();
             m_instances[name] = new Registration(Residency: residency, View: view);
-            views.RegisterEnvironment(name: name, residency: residency);
+            views.RegisterEnvironment(name: name, residency: residency, view: view);
         }
     }
     /// <summary>Releases a producer that no view reads.</summary>

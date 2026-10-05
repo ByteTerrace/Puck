@@ -62,6 +62,13 @@ public sealed partial class RenderGraphRuntime {
             Publication: publication,
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
             Tainted: (m_taintedReads[index] is not null));
+        if (m_set.Instances[index].Output == ShaderPipelineResourceKind.Image && m_graphs[index] is { } graph) {
+            foreach (var pass in graph.Pipeline.Plan.Passes) {
+                if (pass.Package is { } step && m_packages.TryGetFactory(step.Package, out var factory)) {
+                    factory.OutputPublished(m_set.Instances[index].Name, publication);
+                }
+            }
+        }
     }
     private void MarkCurrent(int index) {
         m_stale[index] = null;
@@ -71,9 +78,9 @@ public sealed partial class RenderGraphRuntime {
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
     }
-    // Whether an instance presents its last image on purpose: a paused node renders only when stepped, so that image is
-    // its output for every frame until then, both for its own standing and for an instance that reads it.
-    private bool Stands(int index) => (m_nodes[index] is { Paused: true });
+    // A paused node or a finite package hold presents its exact previous image on purpose. Its readers consume that
+    // standing publication, not an absent render at the latest scheduled frame.
+    private bool Stands(int index) => (m_nodes[index] is { Paused: true }) || PackagesHoldOutput(index);
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
     // This is the one place a graph instance's refusal becomes Refused: a package's refusal of the instance
     // (IRenderGraphPackageFactory.RefusalOf, such as an SDF residency's refused tables), the node's refused build or a

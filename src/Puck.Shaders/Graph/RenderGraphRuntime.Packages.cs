@@ -23,6 +23,20 @@ public sealed partial class RenderGraphRuntime {
     // The instances the frame being scheduled declares unchanged, reused frame to frame.
     private readonly List<string> m_unchanged = [];
 
+    // Unlike ordinary cadence, a finite package operation may need its submitted image to remain immutable while
+    // sibling producers advance. Only an own image whose whole graph consents can stand across those input changes.
+    private bool PackagesHoldOutput(int index) {
+        if (m_sources[index] is not null || m_producers[index] is not null || m_nodes[index] is not { IsReady: true } ||
+            m_set.Instances[index].Output != ShaderPipelineResourceKind.Image || m_graphs[index] is not { } graph ||
+            m_current[index] is not { Frame: >= 0, StandsFor.IsOwn: true, Publication.IsKnown: true } output ||
+            graph.Pipeline.Plan.Passes.Count == 0) { return false; }
+        foreach (var pass in graph.Pipeline.Plan.Passes) {
+            if (pass.Package is not { } package || !m_packages.TryGetFactory(package.Package, out var factory) ||
+                !factory.HoldsOutput(m_set.Instances[index].Name, output.Publication)) { return false; }
+        }
+        return true;
+    }
+
     // Whether an instance renders its package's graph on a node: an external instance whose package no producer or upload
     // serves and a recorder does.
     private static bool RunsPackage(RenderGraphInstance instance, RenderGraphPackageRecorders packages) => (

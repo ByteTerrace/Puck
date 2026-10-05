@@ -103,6 +103,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool m_disposed;
     private bool m_sourceTainted;
     private bool m_readsHistory;
+    private SdfViewLightingSource m_recordedLighting;
+    private bool m_lightingSubmitted;
 
     private readonly SdfWorldPickReadback? m_pick;
 
@@ -260,6 +262,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // - the shadow part a view whose soft shadows are off or a frame that has no shadow slots, when views reads nothing
     //   of the record's shadow row.
     public bool Skips(in FrameContext context) {
+        if (m_owner.HoldsScreenClosureImage(m_context.Instance)) { return true; }
         if (m_view.LightView) {
             Follow();
             m_owner.Begin(residency: m_view.Residency);
@@ -302,6 +305,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public void Submitted() {
         if (m_part == SdfWorldPackage.Parts.Views && !m_view.LightView) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
+            m_lightingSubmitted = true;
         }
         if (m_part == SdfWorldPackage.LightDepth) { m_view.Residency.SubmitLightView(); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
@@ -352,7 +356,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WriteIndirect(recording.PassBlock, !m_view.LightView && m_part == SdfWorldPackage.Parts.Primary
             ? tables.Indirect : BoundIndirect(recording, tables));
         if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Views) {
-            SdfFrameBlock.WriteIndirectNear(recording.PassBlock, BoundIndirect(recording, tables), frame, residency.IsIndirectReady);
+            var boundIndirect = BoundIndirect(recording, tables);
+            SdfFrameBlock.WriteIndirectNear(recording.PassBlock, boundIndirect, frame, residency.IsIndirectReady);
+            m_recordedLighting = new(boundIndirect?.PublishedLightingSource, boundIndirect?.PublishedStamp ?? 0u,
+                m_owner.ClosureEpochOf(residency), tables.SubmittedSkyEnvironment?.Publication ?? default,
+                tables.SubmittedScreenEmission?.Publication ?? default);
         }
         if (m_view.LightView) {
             SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: default, historyFrames: 0, temporal: false);
@@ -415,7 +423,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         return false;
     }
     public ulong ReadbackBytes => m_pick?.ReadbackBytes ?? 0UL;
-    public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
+    public void Submitted(int slot, IGpuSubmissionFence fence) {
+        if (m_lightingSubmitted) {
+            m_owner.SubmittedLighting(m_context.Instance, m_recordedLighting, fence);
+            m_lightingSubmitted = false;
+        }
+        m_pick?.Submitted(fence: fence, slot: slot);
+    }
 
     private int InputIndexOf(string member) {
         for (var index = 0; (index < m_inputs.Length); index++) {

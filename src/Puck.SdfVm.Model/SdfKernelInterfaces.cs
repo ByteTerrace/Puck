@@ -68,6 +68,8 @@ public sealed class SdfKernelInterfaces {
     public const string ScreenEmissionWritten = "sdfScreenEmissionRW";
     /// <summary>The screen slots whose images were actually acquired for the reduction.</summary>
     public const string ScreenEmissionMask = "screenEmissionMask";
+    /// <summary>The records this reduction may rewrite; other records retain the preceding frozen input.</summary>
+    public const string ScreenEmissionWriteMask = "screenEmissionWriteMask";
     /// <summary>The sky's layer table: <see cref="SdfSky.MaxLayers"/> <see cref="SdfSkyLayer"/> records, read by the sky
     /// and composite passes and the environment map's kernel.</summary>
     public const string SkyLayers = "sdfSkyLayers";
@@ -175,6 +177,7 @@ public sealed class SdfKernelInterfaces {
     /// reduction reads acquired image descriptors and writes its separate cell and whole-image means.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> EnvironmentMembers { get; } = [
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionMask, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionWriteMask, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),

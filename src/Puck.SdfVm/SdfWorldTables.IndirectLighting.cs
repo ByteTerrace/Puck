@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     private void PlanIndirectLighting(SdfIndirectCache cache, SdfFrame frame) {
-        if (cache.CanBeginLighting && (!cache.HasLightingCycle || cache.Lighting is null || !cache.Lighting.Matches(frame))) {
+        if (ScreenClosure is not { HoldsLighting: true } && cache.CanBeginLighting &&
+            (!cache.HasLightingCycle || cache.Lighting is null || !cache.Lighting.Matches(frame))) {
             var lighting = EnsureIndirectLighting(cache);
             lighting.Capture(frame);
             // CPU source regions are staged before the upload. An image-backed environment is produced afterward;
@@ -73,7 +74,7 @@ public sealed partial class SdfWorldTables {
             return MatchesScene(frame);
         }
 
-        private bool MatchesScene(SdfFrame frame) {
+        internal bool MatchesScene(SdfFrame frame) {
             if (m_frame is not { } held || m_geometry != m_tables.LightGeometry || m_programRevision != m_tables.m_programRevision ||
                 m_values.ScreenCount != m_tables.PassValues.ScreenCount || held.FarDistance != frame.FarDistance ||
                 held.DisableScreenLights != frame.DisableScreenLights || held.EnableShadowProxy != frame.EnableShadowProxy ||

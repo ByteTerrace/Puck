@@ -43,6 +43,7 @@ public sealed partial class WorldViewGraphHost {
                 sourceViews[name] = (resolved.View, instance);
             }
         }
+        Pickers.ObserveViews(m_environmentViews.Keys);
         foreach (var pair in m_environmentResidencies) {
             if (!desired.TryGetValue(key: pair.Key, value: out var next) || !ReferenceEquals(objA: pair.Value, objB: next)) {
                 Environment.Unregister(name: pair.Key);

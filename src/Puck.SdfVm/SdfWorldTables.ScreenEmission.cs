@@ -11,6 +11,13 @@ public sealed partial class SdfWorldTables {
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Submitted;
+    /// <summary>Gets the latest screen reduction whose actual submission fence has completed.</summary>
+    public GpuImagePublication CompletedScreenEmission { get { m_screenEmission.Poll(); return m_screenEmission.Completed; } }
+    internal SdfScreenClosureMember? ScreenClosure { get; set; }
+    internal bool ScreenClosureInputsChanged => m_screenEmission.IndependentChanged;
+    internal uint ScreenEmissionWriteMask => ScreenClosure?.WriteMask ?? uint.MaxValue;
+    internal bool ScreenEmissionCanRecord => m_screenEmission.CanRecord;
+    internal void RestartScreenClosureSources() { m_screenEmission.Forget(); m_skyEnvironment.RestartClosure(); }
     internal bool ScreenEmissionOwes => m_screenEmission.Owes;
     internal bool ScreenEmissionHasImages => m_screenBound.Any(static bound => bound);
     internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
@@ -24,8 +31,8 @@ public sealed partial class SdfWorldTables {
         private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly byte[] m_mappings = new byte[MaxScreenSurfaces * ScreenMappingByteLength];
-        private GpuImagePublication m_completed;
-        private bool m_tainted;
+        private readonly bool[] m_tainted = new bool[MaxScreenSurfaces];
+        private readonly bool[] m_renderedTainted = new bool[MaxScreenSurfaces];
 
         public ScreenEmissionPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             m_tables = tables;
@@ -37,45 +44,78 @@ public sealed partial class SdfWorldTables {
         public bool Owes { get; private set; } = true;
         public long Renders { get; private set; }
         public SdfEnvironmentSubmission? Submitted { get; private set; }
+        public GpuImagePublication Completed { get; private set; }
+        public bool IndependentChanged { get; private set; }
+        public bool CanRecord { get; private set; } = true;
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
             Poll();
             Array.Clear(m_sources);
             Array.Clear(Screens);
-            m_tainted = false;
+            Array.Clear(m_tainted);
             var known = true;
+            CanRecord = true;
+            IndependentChanged = false;
+            var closure = m_tables.ScreenClosure;
             if (residency.ScreenSources is { } sources) {
                 foreach (var screen in sources.Screens) {
                     if (!sources.Emits(screen) || sources.ReadOf(view, screen) is not { } producer || reads is null) { continue; }
                     var index = reads.IndexOf(producer);
                     if (index < 0) { continue; }
                     var input = reads[index];
-                    m_tainted |= input.Tainted;
+                    m_tainted[screen] = input.Tainted;
                     Screens[screen] = input.Lease.ImageViewHandle != 0;
                     m_sources[screen] = input.Publication;
-                    if (Screens[screen] && !input.Publication.IsKnown) { known = false; }
                 }
             }
-            Owes = Submitted is null || !known || !m_sources.AsSpan().SequenceEqual(m_renderedSources) ||
-                !m_tables.m_screenMappingRegion.Contents.SequenceEqual(m_mappings);
+            var changed = false;
+            for (var screen = 0; screen < MaxScreenSurfaces; screen++) {
+                var bit = 1u << screen;
+                var offset = screen * ScreenMappingByteLength;
+                var different = m_sources[screen] != m_renderedSources[screen] || m_tainted[screen] != m_renderedTainted[screen] ||
+                    !m_tables.m_screenMappingRegion.Contents.Slice(offset, ScreenMappingByteLength)
+                        .SequenceEqual(m_mappings.AsSpan(offset, ScreenMappingByteLength));
+                changed |= different;
+                if (closure is null) {
+                    known &= !Screens[screen] || m_sources[screen].IsKnown;
+                    continue;
+                }
+                if ((closure.DerivedMask & bit) == 0) { IndependentChanged |= different; }
+                if ((closure.WriteMask & bit) == 0) { Screens[screen] = false; continue; }
+                if ((closure.DerivedMask & bit) == 0) {
+                    known &= !Screens[screen] || m_sources[screen].IsKnown;
+                    continue;
+                }
+                if (closure.ZeroDerived) { Screens[screen] = false; m_sources[screen] = default; m_tainted[screen] = false; }
+                else if (!closure.Accepts(screen, m_sources[screen])) { CanRecord = false; }
+            }
+            CanRecord &= known;
+            Owes = closure is null ? Submitted is null || !known || changed : closure.WriteMask != 0;
             return known ? unchecked((ulong)(Renders + (Owes ? 1 : 0))) : null;
         }
         public long Publish(IGpuSubmissionFence fence) {
-            m_sources.CopyTo(m_renderedSources, 0);
-            m_tables.m_screenMappingRegion.Contents.CopyTo(m_mappings);
+            var writeMask = m_tables.ScreenEmissionWriteMask;
+            for (var screen = 0; screen < MaxScreenSurfaces; screen++) {
+                if ((writeMask & (1u << screen)) == 0) { continue; }
+                m_renderedSources[screen] = m_sources[screen];
+                m_renderedTainted[screen] = m_tainted[screen];
+                var offset = screen * ScreenMappingByteLength;
+                m_tables.m_screenMappingRegion.Contents.Slice(offset, ScreenMappingByteLength).CopyTo(m_mappings.AsSpan(offset, ScreenMappingByteLength));
+            }
             Owes = false;
-            Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_tainted);
+            Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_renderedTainted.Any(static tainted => tainted));
+            m_tables.ScreenClosure?.Published();
             return Renders;
         }
-        private void Poll() {
-            if (Submitted is { } submitted && submitted.Publication != m_completed && submitted.Fence.IsSignaled) {
-                m_completed = submitted.Publication;
+        public void Poll() {
+            if (Submitted is { } submitted && submitted.Publication != Completed && submitted.Fence.IsSignaled) {
+                Completed = submitted.Publication;
             }
         }
         public void Withdraw(long sequence) {
-            if (Submitted is { } submitted && submitted.Sequence == sequence && submitted.Publication != m_completed) { Forget(); }
+            if (Submitted is { } submitted && submitted.Sequence == sequence && submitted.Publication != Completed) { Forget(); }
         }
-        public void Forget() { Submitted = null; m_completed = default; Owes = true; }
+        public void Forget() { Submitted = null; Completed = default; Owes = true; }
         public void Dispose() { Forget(); Buffer.Dispose(); }
     }
 }
