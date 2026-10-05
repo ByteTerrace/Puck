@@ -2734,8 +2734,11 @@ backends.
 ## Converging captures
 
 Every capture, including `converge: 0`, notifies its existing dependency closure
-through `BeginConvergence`. SDF views reset radiance publication and temporal
-history while retaining geometry transport. The package's `CaptureReadinessOf`
+through `BeginConvergence`. SDF views reset radiance publication while retaining
+geometry transport. A clean ordinary capture retains temporal history and its
+normal sample counter; explicit convergence or retained tainted history resets
+the sequence. A changed indirect publication still invalidates temporal history
+through its existing epoch. The package's `CaptureReadinessOf`
 waits for the exact filled-source finite solve and its completed view fence;
 an indirect-frozen control refuses by name without thawing or altering its
 bank. `TaintedOf` carries actual retained-bank and history taint independently

@@ -657,6 +657,13 @@ Cadence gaps in a consumer do not park its nested views. Every recording carries
 The count is part of the epoch, so a temporal view shown again starts
 a new epoch while a spatial view's still output stands without a render.
 
+A plain capture (`converge: 0`) observes the next normal temporal sample and
+keeps clean color and shadow history. An explicit converging capture starts its
+sample sequence at zero; any capture also discards retained tainted history
+before recording filled inputs. Every capture still starts the existing cold
+indirect solve and source epoch. A changed indirect publication invalidates
+temporal history through the usual history epoch comparison.
+
 The [`temporal-standing` canary](../../../../tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another
 convergence period, during which the World submits new shading and resolve

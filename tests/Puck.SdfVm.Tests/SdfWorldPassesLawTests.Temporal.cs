@@ -12,6 +12,42 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     private const string Feed = "test.feed";
 
+    [InlineData(0, false)]
+    [InlineData(4, false)]
+    [InlineData(0, true)]
+    [Theory]
+    public void AnOrdinaryCaptureKeepsCleanHistoryWhileConvergenceAndTaintRestartIt(int samples, bool tainted) {
+        using var rig = new TemporalRig(views: 1, feed: tainted, temporal: true);
+
+        rig.Produce();
+        var preceding = rig.HistoryFrames();
+
+        Assert.NotEqual(expected: 0u, actual: preceding);
+        Assert.True(condition: rig.PreviousValid());
+        Assert.Equal(expected: tainted, actual: rig.Passes.TaintedOf(instance: "world"));
+        if (tainted) { rig.Filling = true; }
+        var request = new FrameCaptureRequest(converge: samples, path: "unused-capture-history-law.png");
+        var convergence = new RenderGraphConvergence(request: request);
+
+        // Exercise the package's capture notification without asking the fake device to write a PNG. The recorded
+        // production pass block must retain the ordinary sequence, or start the requested clean sequence at zero.
+        rig.Passes.BeginConvergence(instance: "world", convergence: convergence);
+        rig.Produce();
+        var restart = ((samples > 0) || tainted);
+        var first = (restart ? 0u : (preceding + 1u));
+
+        Assert.Equal(expected: first, actual: rig.HistoryFrames());
+        Assert.Equal(expected: !restart, actual: rig.PreviousValid());
+        Assert.Equal(expected: SdfTemporalHistory.Sample(index: first), actual: rig.Jitter());
+        Assert.False(condition: rig.Passes.TaintedOf(instance: "world"));
+        if (convergence.IsActive) { convergence.Count(); }
+        rig.Produce();
+        Assert.Equal(expected: (first + 1u), actual: rig.HistoryFrames());
+        Assert.True(condition: rig.PreviousValid());
+        Assert.Equal(expected: SdfTemporalHistory.Sample(index: (first + 1u)), actual: rig.Jitter());
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
+    }
+
     [Fact]
     public void FollowingAViewOrCrossingToAnotherResidencyRestartsTheSequenceWithoutARebuild() {
         using var rig = new TemporalRig(views: 2, secondResidency: true);
