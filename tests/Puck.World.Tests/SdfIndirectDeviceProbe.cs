@@ -151,7 +151,7 @@ internal static class SdfIndirectDeviceProbe {
 
                 recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: MemoryMarshal.AsBytes(span: pushed), offset: 0,
                     pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
-                var groups = (dispatchGroups is null ? (X: 1u, Y: 1u, Z: 1u) : dispatchGroups[index]);
+                var groups = ((dispatchGroups is null) ? (X: 1u, Y: 1u, Z: 1u) : dispatchGroups[index]);
 
                 recorder.Dispatch(commandBufferHandle: command, groupCountX: groups.X, groupCountY: groups.Y, groupCountZ: groups.Z);
                 recorder.MemoryBarrier(commandBufferHandle: command, destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
