@@ -76,7 +76,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // A changed counter can mean larger scratch or a replaced residency. Its old recorders cannot render current data.
-    private bool CountsChanged => (
+    internal bool CountsChanged => (
         ((m_installedCounter is { } counter) && (counter.Revision != m_installedCountRevision)) ||
         ((m_installedRenderExtent is { } extent) && (extent.Revision != m_installedRenderRevision))
     );

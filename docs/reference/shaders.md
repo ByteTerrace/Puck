@@ -706,8 +706,11 @@ whose inputs stand unchanged and whose graph runs only package passes whether an
 renders from changed since its latest render
 (`IRenderGraphPackageFactory.IsUnchanged`), and declares the instances none of
 whose packages saw a change unchanged (`RenderGraphFrame.Unchanged`), except one
-a pending capture reads, which only a render serves. A device loss reaches every
-package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
+a pending capture reads, which only a render serves. Standing also requires the
+installed allocation's counter and render-extent revisions to match their current
+values. An equal-size owner replacement therefore keeps its node scheduled until
+the new storage installs, even when the package's content is unchanged. A device
+loss reaches every package's factory (`IRenderGraphPackageFactory.OnDeviceLost`).
 
 A node given an export (`ShaderPipelineRenderNode.Export`, an
 `IShaderPipelineOutputExport`) renders at the export's extent whatever extent it

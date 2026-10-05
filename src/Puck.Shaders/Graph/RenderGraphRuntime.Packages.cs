@@ -205,10 +205,11 @@ public sealed partial class RenderGraphRuntime {
         }
         return true;
     }
-    // Cadence may stand only after the scheduled pixel extent has installed. Fractions alone miss a display resize,
-    // and a node still drawing its old graph while the new one builds must keep being polled until that build installs.
+    // Cadence may stand only after the current allocation revisions and scheduled pixel extent have installed.
+    // A counter change must reach ProduceFrame's rebuild check even when the package's content is unchanged;
+    // the node keeps being polled until the matching build installs, including buffer graphs with no pixel footprint.
     private bool MatchesAllocatedExtent(int index, in RenderGraphFrame frame) {
-        if (m_nodes[index] is not { IsReady: true } node) {
+        if (m_nodes[index] is not { IsReady: true } node || node.CountsChanged) {
             return false;
         }
         if (m_set.Instances[index].Output == ShaderPipelineResourceKind.Buffer) {
