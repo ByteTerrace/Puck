@@ -5,9 +5,12 @@ through the existing document basis. Its 1920×1080 output has two 960×1080
 views, two named shadow-capable directional lights, native scale and temporal
 reconstruction. The second view stays fixed while the first exercises one
 input class. One eager local-seat body wears a red creation look, a sphere of
-radius 0.06 m resting on the study floor at (-0.12, 0, 0.15). Its zero-speed kit
-keeps the pose still. Authored `render.indirect.bodies: Cast` makes it cast and
-receive in both measured tiers. The ordinary Medium default remains Receive
+radius 0.06 m resting on the study floor at (-0.12, 0, 0.15). Its ordinary
+motion kit has positive speed and turn rate, an explicit shaping row and
+collision settings. Zero movement input keeps the pose still; the
+seat rig/control satisfy body admission while the catch-all layout still
+selects the two named cameras. Authored `render.indirect.bodies: Cast` makes
+it cast and receive in both measured tiers. The ordinary Medium default remains Receive
 and High remains Cast; the final count-based default decision is separate from
 this comparison override. The existing zero-seat catch-all layout keeps the
 two named cameras when the seat joins. The static study, furnace and sealed

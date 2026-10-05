@@ -8,6 +8,13 @@ host { width: 1920, height: 1080 }
 // The zero-seat catch-all layout below keeps both named cameras when this eager seat joins.
 bodies { localSeats: 1, capacity: 1, seatSpawns ["comparison-body"] }
 spawnPoints [{ id: "comparison-body", position [-0.12, 0, 0.15], yawDegrees: 0 }]
+collision {
+  requirements []
+  contactSkin: 0.02
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  gradientProbe: 0
+}
 channels [
   { name: "forward", shape: Bipolar, role: MoveAdvance }
   { name: "strafe", shape: Bipolar, role: MoveStrafe }
@@ -16,7 +23,8 @@ channels [
 bodyMotionPrograms [{ name: "stander", version: "puck.body.program.v1", kind: Motion,
   operations [ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, IntegratePlanarAndVerticalVelocity, CommitPose] }]
 kits { rows [{ name: "stander", bodyMotionProgram: "stander",
-  motion { speed { value: 0 } turn { rate: 0 } holds [{ name: "air", bond: Free, hold: None }] },
+  motion { speed { value: 4 } turn { rate: 2.5 } shaping [{ along {} }],
+    holds [{ name: "air", bond: Free, hold: None }] },
   collider: sphere(radius: 0.06), bodyContact: Overlap }] }
 defaultSeatKit: "stander"
 looks { rows [{ name: "comparison-body", source: creation(prototypeId: `comparison-body`), scale: 1,
@@ -145,6 +153,15 @@ cameras [
   }
 ]
 views {
+  seatControl { yawReference: World, minPitch: -0.35, maxPitch: 1.2 }
+  seatRig "comparison-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
   layout "study" {
     seatCount: 0
     slots [
