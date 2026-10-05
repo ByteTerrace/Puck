@@ -102,7 +102,7 @@ public sealed partial class LawProofLawTests {
             var result = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath, Shader], Revision: fix), runner: runner, scratch: scratch);
             Assert.True(condition: result.ExitCode == CliExit.Success, userMessage: result.Error);
             Assert.Equal(expected: 2, actual: builds);
-            Assert.Single(collection: result.Error.Split('\n').Where(line => line.Contains("warmed 1 shader artifact pair(s)", StringComparison.Ordinal)));
+            Assert.Single(collection: result.Error.Split('\n'), predicate: line => line.Contains("warmed 1 shader artifact pair(s)", StringComparison.Ordinal));
         } finally {
             publisher?.Dispose();
             checkout.Write(name: Shader, text: "fixed shader");
