@@ -4,7 +4,7 @@ documentId: "indirect-comparison"
 
 host { width: 1920, height: 1080 }
 
-// A real stationary body uses the tier's default participation: Receive at Medium, Cast at High.
+// Both measured tiers explicitly cast and receive through this real stationary body.
 // The zero-seat catch-all layout below keeps both named cameras when this eager seat joins.
 bodies { localSeats: 1, capacity: 1, seatSpawns ["comparison-body"] }
 spawnPoints [{ id: "comparison-body", position [-0.12, 0, 0.15], yawDegrees: 0 }]
@@ -51,6 +51,7 @@ rule "advance-orbit" {
   orbitYaw += 0.005
 }
 render {
+  indirect { bodies: Cast }
   lighting {
     lights [
       directional(name: "source-key", direction: {

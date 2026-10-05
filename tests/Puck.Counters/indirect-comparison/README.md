@@ -4,10 +4,12 @@ This workload reuses the [G9 scenes](../../Puck.World.Canaries/indirect-near/REA
 through the existing document basis. Its 1920×1080 output has two 960×1080
 views, two named shadow-capable directional lights, native scale and temporal
 reconstruction. The second view stays fixed while the first exercises one
-input class. One eager local-seat body wears a red creation look, a 0.06 m
-sphere resting on the study floor at (-0.12, 0, 0.15). Its zero-speed kit keeps
-the pose still; its default indirect participation receives at Medium and
-casts and receives at High. The existing zero-seat catch-all layout keeps the
+input class. One eager local-seat body wears a red creation look, a sphere of
+radius 0.06 m resting on the study floor at (-0.12, 0, 0.15). Its zero-speed kit
+keeps the pose still. Authored `render.indirect.bodies: Cast` makes it cast and
+receive in both measured tiers. The ordinary Medium default remains Receive
+and High remains Cast; the final count-based default decision is separate from
+this comparison override. The existing zero-seat catch-all layout keeps the
 two named cameras when the seat joins. The static study, furnace and sealed
 room are unchanged. The [body-motion canary](../../Puck.World.Canaries/indirect-body-motion/README.md)
 separately exercises movement. No alternate shader or model lives here.
