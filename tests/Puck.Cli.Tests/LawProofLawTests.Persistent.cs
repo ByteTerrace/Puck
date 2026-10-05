@@ -90,7 +90,7 @@ public sealed partial class LawProofLawTests {
     private static ShaderBuildTargetsLawTests.Fixture ShaderCheckout(GitScratchCheckout checkout) {
         // A synthetic clone carries the repository's file contract as well as its SDK pin.
         checkout.Write(name: ".gitattributes", text: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: ".gitattributes")));
-        checkout.Write(name: ".gitignore", text: "bin/\nobj/\n*.spv\n*.dxil\n*.hash\ncompiles.txt\n");
+        checkout.Write(name: ".gitignore", text: "bin/\nobj/\n*.spv\n*.dxil\n*.hash\ncompiles.txt\nstarted/\n");
         checkout.Write(name: "src/Lib/Lib.csproj", text: "<Project />\n");
         var shaders = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: checkout.Root, path2: "src/Lib"));
         shaders.Write(path: "Assets/Shaders/a.comp.hlsl", text: "original shader");
