@@ -16,6 +16,18 @@
         via buildTransitive/ByteTerrace.Puck.Shaders.targets (src/Puck.Shaders/Puck.Shaders.csproj packs it there).
         Never fork the two paths — a change here reaches both consumers identically.
     -->
+    <UsingTask AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" TaskFactory="RoslynCodeTaskFactory" TaskName="PuckCompileShaderBytecode">
+        <ParameterGroup>
+            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+            <Token ParameterType="System.String" Required="true" />
+            <WorkingDirectory ParameterType="System.String" Required="true" />
+            <Jobs ParameterType="System.Int32" />
+        </ParameterGroup>
+        <Task>
+            <Reference Include="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" />
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckCompileShaderBytecode.cs" Type="Class" />
+        </Task>
+    </UsingTask>
     <UsingTask
         AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
@@ -111,6 +123,9 @@
         <!-- The lock belongs to the source-tree bytecode, which all configurations and intermediate-output paths share. -->
         <_PuckShaderPublishLock>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'obj', 'shader-publish.lock'))</_PuckShaderPublishLock>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
+        <!-- Compiler concurrency is per project. Keep serial by default; a bounded single-node build can opt into
+             more compiler workers without multiplying them across parallel project nodes. -->
+        <PuckShaderCompileJobs Condition="'$(PuckShaderCompileJobs)' == ''">1</PuckShaderCompileJobs>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
         <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">true</PuckShaderSpirvEnabled>
@@ -139,6 +154,8 @@
          Content admission checks source, recipe and bytecode against the existing sidecar. File timestamps do not
          select compiles: restoring equal inputs leaves valid outputs alone. The source hash covers that .hlsl plus
          every @(ShaderInclude), in item order, conservatively invalidating all kernels when any include changes.
+         PuckShaderCompileJobs bounds compiler children within this project (one by default). All selected recipes
+         finish before publication; failure/cancellation drains their children before invocation-owned cleanup.
          Only actual successful compiles publish sidecars; collection independently verifies their content and recipe.
 
          Kernels compile after ResolveProjectReferences, so every project a consumer references is built first. A kernel
@@ -201,7 +218,7 @@
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
         <Error Condition="'@(_PuckCompiledBytecode)' != '' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path/to/dxc&quot;." />
-        <Exec Condition="'%(_PuckCompiledBytecode.Identity)' != ''" Command="%(_PuckCompiledBytecode.Recipe) -Fo &quot;%(_PuckCompiledBytecode.FullPath).$(_PuckShaderToken).tmp&quot; &quot;%(_PuckCompiledBytecode.SourcePath)&quot;" />
+        <PuckCompileShaderBytecode Condition="'@(_PuckCompiledBytecode)' != ''" BytecodeFiles="@(_PuckCompiledBytecode)" Token="$(_PuckShaderToken)" WorkingDirectory="$(MSBuildProjectDirectory)" Jobs="$(PuckShaderCompileJobs)" />
         <PuckWriteShaderHashSidecars Condition="'@(_PuckCompiledBytecode)' != ''" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" LockFile="$(_PuckShaderPublishLock)" Token="$(_PuckShaderToken)" />
         <Delete Files="@(_PuckTemporaryBytecode)" />
         <OnError ExecuteTargets="CleanShaderTemporaries" />

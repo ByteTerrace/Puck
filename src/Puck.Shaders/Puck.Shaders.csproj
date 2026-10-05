@@ -17,6 +17,7 @@
         <ProjectReference Include="../Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
     </ItemGroup>
     <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)../../build/PuckCompileShaderBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckCompileShaderBytecode.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)../../build/PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive/PuckShaderHashSidecars.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)../../build/PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckDirect3D11KernelBytecode.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)../../build/Shaders.targets" Pack="true" PackagePath="buildTransitive/ByteTerrace.Puck.Shaders.targets" Visible="false" />

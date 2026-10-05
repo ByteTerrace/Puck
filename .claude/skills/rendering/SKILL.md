@@ -2584,6 +2584,17 @@ pacing, and when briefing a review of such a change.
 
 ## Verifying
 
+For a required cold shader build under an exclusive heavy grant, normal MSBuild
+supports `-p:PuckShaderCompileJobs=4` with `-m:1 -nodeReuse:false
+--disable-build-servers` on the 32 GB, 16-thread lead machine. The default is one
+compiler per project. Keep MSBuild single-node when increasing compiler workers;
+otherwise project-level parallelism multiplies the per-project limit. Preserve
+both enabled backend families and the exact generated recipe. Source/include,
+recipe and bytecode admission still selects all genuinely stale outputs, and
+workers join before the existing publication transaction. Use the host load
+governor and report the actual build's memory and elapsed costs; do not promise
+a timing from the worker count or add competing builds.
+
 The [`verification`](../verification/SKILL.md) skill owns the gate route, the
 CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which
 checks a render change owes. Say plainly what a change was not checked against. Only `puck parity`'s

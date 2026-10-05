@@ -6,52 +6,9 @@ namespace Puck.Cli.Tests;
 
 /// <summary>Exercises the shipped MSBuild targets in isolated projects. A CPU-only stand-in for DXC writes a complete
 /// output and can fail a later batch; the real sidecar tasks, incremental gates and pack collection still run.</summary>
-public sealed class ShaderBuildTargetsLawTests {
-    private const string FakeDxc = """
-        <UsingTask TaskName="Exec" Override="true" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
-          <ParameterGroup>
-            <Command Required="true" />
-            <ConsoleToMSBuild ParameterType="System.Boolean" />
-            <IgnoreExitCode ParameterType="System.Boolean" />
-            <StandardErrorImportance />
-            <StandardOutputImportance />
-            <ExitCode ParameterType="System.Int32" Output="true" />
-          </ParameterGroup>
-          <Task><Code Type="Fragment" Language="cs"><![CDATA[
-            ExitCode = 0;
-            if (Command.Contains("--version")) { return true; }
-            var output = Command.Split('"')[3];
-            File.WriteAllText(output, "compiled bytecode");
-            File.AppendAllText("compiles.txt", output + "\n");
-            if (Command.Contains("b.comp.hlsl")) {
-                ExitCode = 1;
-                Log.LogError("deliberate compiler failure");
-                return false;
-            }
-            return true;
-          ]]></Code></Task>
-        </UsingTask>
-        """;
-    // A stand-in for DXC whose output names the process that wrote it, so two builds of one source publish different
-    // bytes.
-    private const string ProcessDxc = """
-        <UsingTask TaskName="Exec" Override="true" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
-          <ParameterGroup>
-            <Command Required="true" />
-            <ConsoleToMSBuild ParameterType="System.Boolean" />
-            <IgnoreExitCode ParameterType="System.Boolean" />
-            <StandardErrorImportance />
-            <StandardOutputImportance />
-            <ExitCode ParameterType="System.Int32" Output="true" />
-          </ParameterGroup>
-          <Task><Code Type="Fragment" Language="cs"><![CDATA[
-            ExitCode = 0;
-            if (Command.Contains("--version")) { return true; }
-            File.WriteAllText(Command.Split('"')[3], "compiled by process " + System.Diagnostics.Process.GetCurrentProcess().Id);
-            return true;
-          ]]></Code></Task>
-        </UsingTask>
-        """;
+public sealed partial class ShaderBuildTargetsLawTests {
+    private const string FakeDxc = "normal";
+    private const string ProcessDxc = "process";
 
     [Fact]
     public async Task TwoInterleavedPublishersLeaveABytecodeAndSidecarOfOneGeneration() {
@@ -177,7 +134,7 @@ public sealed class ShaderBuildTargetsLawTests {
             if (commitSidecar) {
                 var sourceHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "source")));
                 var bytecodeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "bytecode")));
-                var recipeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: ".spv\n\"dxc\" fixture-recipe")));
+                var recipeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: $".spv\n\"{fixture.CompilerPath}\" fixture-recipe")));
 
                 fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: $"source:{sourceHash}\nrecipe:{recipeHash}\nbytecode:{bytecodeHash}\n");
             }
@@ -383,13 +340,14 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.True(condition: waiting.IsSet, userMessage: "The process ended without observing contention on the source tree's publication lock.");
     }
 
-    internal sealed class Fixture : IDisposable {
+    internal sealed partial class Fixture : IDisposable {
         private readonly TemporaryDirectory? m_directory;
 
         public Fixture(string? root = null) {
             m_directory = ((root is null) ? new TemporaryDirectory(prefix: "puck-shader-targets-") : null);
             Root = (root ?? m_directory!.RootPath);
             _ = Directory.CreateDirectory(path: Root);
+            _ = Directory.CreateDirectory(path: PathOf(path: "started"));
             var pin = PathOf(path: "global.json");
 
             if (File.Exists(path: pin)) {
@@ -401,6 +359,7 @@ public sealed class ShaderBuildTargetsLawTests {
         }
 
         public string Root { get; }
+        public string CompilerPath { get; private set; } = "";
 
         public string PathOf(string path) => Path.Combine(path1: Root, path2: path);
         public void Write(string path, string text) {
@@ -414,7 +373,8 @@ public sealed class ShaderBuildTargetsLawTests {
 
             project.AddFirst(content: XElement.Parse(text: "<PropertyGroup><PuckComputeShaderDxilEnabled>false</PuckComputeShaderDxilEnabled></PropertyGroup>"));
             project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
-            project.Add(content: XElement.Parse(text: dxc));
+            WriteCompiler(mode: dxc);
+            project.Add(content: new XElement("PropertyGroup", new XElement("DxcCommand", CompilerPath)));
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());
         }
