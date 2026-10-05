@@ -10,15 +10,22 @@ without replacing the installed image. The opposite leg deliberately moves the d
 anchor with the consumer and changes only the translation agreement.
 
 `at-cap.puck` and `at-cap.script.txt` are a separate bounded boot recipe for eight named
-views at one-eighth scale. They are not executed by the two image legs. The present
-`world.budget` command does not expose the binder's live infinity plan; its count/cap
-formatter still needs command wiring before a transcript can assert that count.
+views at one-eighth scale. They are not executed by the two image legs. The live
+`world.budget` inventory names each root's planned scene count and cap.
+The script requires two planned scenes after the Far layer lands. It reports the
+Far producer rendered at 30 by 30 pixels, then unread at that retained extent after
+the camera turns away. The raw cone fit spans 27 pixels on the 96-pixel consumer;
+the existing sixteenth-step footprint quantization rounds its actual target to 30.
+Cadence is disabled and render scale pinned to one for this observation.
 
 Run only these selected legs with the candidate's private CLI under the lead's serial GPU
 grant. The authored image bounds, frame settlement and cap companion have not run yet.
-The source fixture does not establish zero work after demand disappears, exact dispatch
-extents, or tainted infinity capture refusal. Those require actual completed count/capture
-observations. No test-only source mask or invented body vocabulary is used.
+The source fixture asserts actual scheduled extent and unread status; these remain
+unmeasured until the real run. Unread excludes a scheduled render, while its ordinary
+ledger can still show an older completed submission: it is not a fresh zero-count
+readback. Tainted infinity capture refusal needs a separate windowed external source
+observation because an offscreen host always fills external inputs. No test-only
+source mask or invented body vocabulary is used.
 
 The minimal selected run is:
 

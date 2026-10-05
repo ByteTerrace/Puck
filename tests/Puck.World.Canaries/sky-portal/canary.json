@@ -1,7 +1,7 @@
 {
   "id": "sky-portal",
   "title": "A named destination keeps its anchor under viewer translation, follows viewer rotation, and Far coverage leaves the surrounding sky visible",
-  "binding": "The fixed camera observes an admitted lobby with a white emissive beacon over green sky. Moving only the consuming camera must preserve the destination image; turning it changes the rays. Removal and reopening exercise lifetime. A blue Far sphere outside the root march distance covers its angular cone while the destination remains visible around it. A nine-view live edit is refused without changing the installed image. The opposite leg deliberately translates the destination anchor with the consumer; only the translation agreement changes. These source-authored observations await the actual World run. Dispatch extents, demand-zero work and tainted capture withholding are separate pending evidence.",
+  "binding": "The fixed camera observes an admitted lobby with a white emissive beacon over green sky. Moving only the consuming camera must preserve the destination image; turning it changes the rays. Removal and reopening exercise lifetime. A blue Far sphere outside the root march distance covers its angular cone while the destination remains visible around it. A nine-view live edit is refused without changing the installed image. The opposite leg deliberately translates the destination anchor with the consumer; only the translation agreement changes. These source-authored observations await the actual World run. The live budget must name two planned infinity scenes, the Far producer rendered at its quantized 30-by-30 extent, and unread after the consumer turns away. Unread is an actual scheduler status, not a fresh zero-work readback. All observations await the real World run; tainted capture withholding needs a windowed external-source leg.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -28,6 +28,16 @@
       },
       {
         "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -194,6 +204,21 @@
       {
         "verb": "world.budget",
         "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 2,
         "outcome": "accepted"
       }
     ],
@@ -330,6 +355,30 @@
         "match": "contains",
         "text": "infinity view 9",
         "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-root-reports-two-planned-infinity-scenes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "world: infinity views: 2 of 8",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-far-scene-renders-its-quantized-angular-extent",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet rendered 30x30",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "turning-away-removes-the-far-render-demand",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet unread 30x30",
+        "present": true
       }
     ]
   },
@@ -344,6 +393,16 @@
       },
       {
         "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -521,6 +580,21 @@
         "verb": "world.budget",
         "occurrence": 1,
         "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 2,
+        "outcome": "accepted"
       }
     ],
     "expect": [
@@ -655,6 +729,30 @@
         "stream": "stderr",
         "match": "contains",
         "text": "infinity view 9",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-root-reports-two-planned-infinity-scenes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "world: infinity views: 2 of 8",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-far-scene-renders-its-quantized-angular-extent",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet rendered 30x30",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "turning-away-removes-the-far-render-demand",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet unread 30x30",
         "present": true
       }
     ]

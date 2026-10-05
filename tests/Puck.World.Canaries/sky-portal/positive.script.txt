@@ -1,5 +1,7 @@
 world.wait ready 60
 world.temporal off
+world.cadence off
+world.render-scale 1
 world.sky-quality high
 world.wait 12
 world.screenshot {run}/lobby.png
@@ -32,4 +34,7 @@ world.wait 12
 world.screenshot {run}/after-refusal.png
 world.wait captures 30
 world.lighting
+world.budget
+world.row.set cameras eye rig.operations[1].subject.point [0,0,1]
+world.wait 12
 world.budget
