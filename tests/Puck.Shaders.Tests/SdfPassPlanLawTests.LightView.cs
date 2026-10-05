@@ -10,7 +10,11 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Equal(expected: 4_194_304UL, actual: Assert.Single(collection: fragment.Resources,
             predicate: resource => (resource.Name == SdfWorldPackage.IndirectLightDepth)).SizeBytes);
         var package = RenderGraphPackageCatalog.Engine.Packages.Single(predicate: item => (item.Id == RenderGraphPackageCatalog.SdfWorld));
-        var plan = new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [package with { Fragment = fragment }])).Compile(definition: new RenderGraphDefinition(
+        var plan = new RenderGraphCompiler(packages: new RenderGraphPackageCatalog(packages: [package with {
+            Fragment = fragment,
+            // This selected camera fragment publishes its depth bank, rather than the catalog's ordinary color image.
+            Outputs = [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(float))],
+        }])).Compile(definition: new RenderGraphDefinition(
             Name: "light", Schema: RenderGraphSchemas.Graph, Outputs: [SdfWorldPackage.IndirectLightDepth],
             Resources: [new ShaderPipelineResource(Name: SdfWorldPackage.IndirectLightDepth, Kind: ShaderPipelineResourceKind.Buffer,
                 StrideBytes: sizeof(float), SizeBytes: (4UL * 512 * 512 * sizeof(float)), Retained: true)],

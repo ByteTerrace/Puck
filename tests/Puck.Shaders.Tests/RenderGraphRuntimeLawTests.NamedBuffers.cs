@@ -18,7 +18,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
         var frames = new Frames(runtime, [new RenderGraphRoot(Instance: "main", Width: 1, Height: 1)], []);
         runtime.Node(0).Paused = true;
-        frames.Settle();
+        // A paused producer initializes once, then holds; it cannot join the reader in an all-writers settle frame.
+        TestLiveness.Until(
+            reason: () => "The paused buffer producer or its reader never initialized.",
+            step: () => {
+                frames.Next();
+                return runtime.Node(0).FrameCounter > 0 && runtime.Node(1).FrameCounter > 0;
+            }
+        );
         Assert.Equal(1UL, runtime.Node(0).FrameCounter);
         runtime.Node(0).Paused = false;
         var handles = new HashSet<nint>();
@@ -199,6 +206,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 ["primary"] = primary, ["secondary"] = secondary, ["private"] = scratch,
             },
         };
+        // Keep the private allocation live through a real dependency, so its installed owner is part of the bound.
+        producer.Fragment = producer.Fragment with {
+            Passes = [.. producer.Fragment.Passes.Select(pass => pass.Name == "primary"
+                ? pass with { Inputs = ["private"], InputAccesses = [RenderGraphPortAccess.ComputeRead] } : pass)],
+        };
         var recorders = new Recorders();
         recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
         var set = NamedBufferInstances();
@@ -206,6 +218,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
         var frames = new Frames(runtime, [new RenderGraphRoot(Instance: "main", Width: 1, Height: 1)], []);
         frames.Settle();
+        Assert.Equal(2, primary.References);
+        Assert.Equal(2, secondary.References);
+        Assert.Equal(2, scratch.References);
         var node = runtime.Node(0);
         node.Paused = true;
         var publishedFrame = node.FrameCounter;

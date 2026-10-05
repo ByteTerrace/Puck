@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 

@@ -62,7 +62,10 @@ public sealed partial class SdfPassPlanLawTests {
         };
         if (indirect) { fragment = SdfWorldPackage.WithIndirect(fragment, 4096); }
         var package = RenderGraphPackageCatalog.Engine.Packages.Single(item => item.Id == RenderGraphPackageCatalog.SdfWorld) with {
-            Fragment = fragment,
+            // The instance graph owns external inputs; fragment expansion contributes private and output versions.
+            Fragment = fragment with {
+                Resources = [.. fragment.Resources.Where(resource => !fragment.InputVersions.Contains(resource.Name))],
+            },
             Inputs = indirect ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeReadWrite, strideBytes: 4, count: null)] : [],
         };
         var plan = new RenderGraphCompiler(new RenderGraphPackageCatalog(packages: [package])).Compile(definition: new RenderGraphDefinition(
