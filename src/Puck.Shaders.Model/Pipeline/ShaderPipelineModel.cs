@@ -566,7 +566,7 @@ public sealed record ShaderPipelinePackagePass(
     bool CountsKernelWork = false
 ) {
     /// <summary>Gets whether each port access is declared once per reference, reads on the inputs and writes on the
-    /// outputs.</summary>
+    /// outputs, including declared buffer transfers.</summary>
     public bool HasValidAccesses => (
         (Members is not null) &&
         (InputAccesses is not null) &&
@@ -574,7 +574,7 @@ public sealed record ShaderPipelinePackagePass(
         (InputAccesses.Count == Inputs.Count) &&
         InputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled or RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead)) &&
         (OutputAccesses.Count == Outputs.Count) &&
-        OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite))
+        OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite or RenderGraphPortAccess.TransferWrite))
     );
 
     /// <summary>Returns how the pass reaches the version at an input position.</summary>
