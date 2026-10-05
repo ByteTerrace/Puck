@@ -34,6 +34,53 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         );
     }
     [Fact]
+    public void CopiedTransformRowsKeepCadenceWhileActualRowsAndCountChangesInvalidateIt() {
+        using var rig = new Rig();
+        var frame = rig.Frame;
+        var empty = Signature();
+        rig.Engine.SubmitUpload();
+        var poses = rig.Engine.PoseRevision;
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(Array.Empty<DynamicTransform>()) };
+        Assert.Equal(empty, Signature());
+        rig.Engine.SubmitUpload();
+        Assert.Equal(poses + 1, rig.Engine.PoseRevision);
+
+        // Adding or removing an identity row changes the active count even though the always-bound empty row
+        // already contains those same bytes. Collection copies still reseed history without changing geometry.
+        var identity = new DynamicTransform(Vector3.Zero, Quaternion.Identity);
+        frame = frame with { DynamicTransforms = new[] { identity } };
+        var populated = Signature();
+        Assert.NotEqual(empty, populated);
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()) };
+        Assert.Equal(populated, Signature());
+        frame = frame with { DynamicTransforms = Array.Empty<DynamicTransform>() };
+        var removed = Signature();
+        Assert.NotEqual(populated, removed);
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(Array.Empty<DynamicTransform>()) };
+        Assert.Equal(removed, Signature());
+
+        frame = frame with { DynamicTransforms = new[] { identity } };
+        var previous = Signature();
+        foreach (var changed in new[] {
+            identity with { Position = Vector3.UnitX },
+            identity with { Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, .5f) },
+            identity with { Lanes = Vector4.One },
+        }) {
+            frame = frame with { DynamicTransforms = new[] { changed } };
+            var current = Signature();
+            Assert.NotEqual(previous, current);
+            frame = frame with { DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()) };
+            Assert.Equal(current, Signature());
+            previous = current;
+        }
+
+        ulong Signature() {
+            rig.Engine.Pack(frame);
+            rig.Engine.UpdateTablesSignature();
+            return rig.Engine.ViewSignature(frame, 0);
+        }
+    }
+    [Fact]
     public void AViewsCadenceSignatureTracksOnlyItsOwnQuality() {
         using var rig = new Rig();
         var views = new[] { rig.Frame.Views[0], rig.Frame.Views[0] };

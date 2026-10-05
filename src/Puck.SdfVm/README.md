@@ -585,6 +585,11 @@ thawing or changing its retained bank; an off tier needs no lighting fence.
 Retained source and temporal-history taint remain independent of newer clean
 graph inputs.
 
+Freezing or releasing a source may replace its transform collection with an
+identical copy. That replacement reseeds motion history, while geometry cadence
+changes only for different packed rows or an active row-count change. Snapshot
+ownership alone does not restart a completed screen-lighting closure.
+
 A readback `DeviceLostException` completes the request with that failure and
 is then rethrown so the host can rebuild the graphics device. Ordinary PNG or
 filesystem failures remain result data and do not interrupt rendering.

@@ -2733,6 +2733,9 @@ initial black sampled filler keeps the derived layer's original opacity. Copies
 remain held through final solve/image completion and capture convergence, with
 actual node-owned bytes and normal retirement. Own-world camera reads remain
 outside the lighting operator and keep their ordinary visual feedback policy.
+Transform snapshot copies retain the same geometry cadence when their packed
+rows and active count match. Collection ownership changes may reseed previous
+poses; they must not restart the completed lighting component by themselves.
 
 A scheduled capture may author `converge: N` (1 through 256). The graph runtime
 renders its dependencies through one frozen presentation snapshot, delays the

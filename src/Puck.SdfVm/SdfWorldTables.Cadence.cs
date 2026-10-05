@@ -23,8 +23,8 @@ namespace Puck.SdfVm;
 //   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
-//   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
-//                          re-hashed. Also covers the frame instance grid (a pure function of these transforms + the
+//   - m_dynamicTransformRevision : bumped when packed transform contents or the active row count changes, so the table
+//                          is never re-hashed. Also covers the frame instance grid (a pure function of these transforms + the
 //                          program).
 //   - m_meshRevision     : the mesh draws the mesh pass rasterizes and primary bounds its march by.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag

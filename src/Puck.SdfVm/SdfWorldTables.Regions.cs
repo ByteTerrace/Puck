@@ -46,8 +46,8 @@ public sealed partial class SdfWorldTables {
     private GpuRegion m_instanceGridRegion;
     // Whether the dynamic-transform region has been packed whole once: its first frame packs every slot.
     private bool m_dynamicTransformsPacked;
-    // One more whenever a dynamic-transform slot is packed: the cadence signature folds this in place of hashing the
-    // whole table.
+    // One more when packed transform contents or the active row count changes. Replacing a source collection with
+    // identical rows only reseeds motion history; the cadence signature does not treat that copy as a geometry edit.
     private ulong m_dynamicTransformRevision;
 
     // The moved set these tables last consumed transforms from, the serial of that frame, and the scratch the rows owed

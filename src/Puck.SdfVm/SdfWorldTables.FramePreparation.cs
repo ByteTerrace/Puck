@@ -5,6 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
+    private int m_packedTransformCount;
+
     // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
     // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — the table
     // SDF_OP_TRANSFORM_DYNAMIC indexes by slot; the region owes the words of each packed row that changed. The packed
@@ -14,7 +16,7 @@ public sealed partial class SdfWorldTables {
     // table, and when the last consumed frame has left the producer's history; no unpacked row is compared. An empty
     // list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
     // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
-    // options grew the table to. Returns whether any row was packed.
+    // options grew the table to. Returns whether the active row count or any packed row changed.
     private bool PackDynamicTransforms(SdfFrame frame) {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
@@ -24,6 +26,7 @@ public sealed partial class SdfWorldTables {
         );
         var everything = (
             !m_dynamicTransformsPacked ||
+            m_packedTransformCount != count ||
             !ReferenceEquals(
             objA: moved,
             objB: m_movedTransformsSource
@@ -49,6 +52,8 @@ public sealed partial class SdfWorldTables {
         m_movedTransformsTable = transforms;
 
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
+        var changed = !m_dynamicTransformsPacked || m_packedTransformCount != count;
+        m_packedTransformCount = count;
 
         if (everything) {
             // Which owners changed is unknown when every row is owed, so every previous row is seeded.
@@ -57,7 +62,7 @@ public sealed partial class SdfWorldTables {
             if (count == 0) {
                 floats.Clear();
                 floats[7] = 1f; // identity quaternion
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: 0
                 );
@@ -68,19 +73,17 @@ public sealed partial class SdfWorldTables {
                     floats: floats,
                     transform: transforms[index]
                 );
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: index
                 );
             }
 
             m_dynamicTransformsPacked = true;
-            m_dynamicTransformRevision++;
+            if (changed) { m_dynamicTransformRevision++; }
 
-            return true;
+            return changed;
         }
-
-        var packed = false;
 
         for (var run = 0; (run < m_owedTransforms.Count); run++) {
             var start = m_owedTransforms.Start(index: run);
@@ -94,26 +97,27 @@ public sealed partial class SdfWorldTables {
                     floats: floats,
                     transform: transforms[index]
                 );
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: index
                 );
-                packed = true;
             }
         }
 
-        if (packed) {
+        if (changed) {
             m_dynamicTransformRevision++;
         }
 
-        return packed;
+        return changed;
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
-    private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+    private bool WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
         MarkIndirectTransform(floats, slot);
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
             m_changedTransforms.Add(length: 1, start: slot);
+            return true;
         }
+        return false;
     }
 
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
