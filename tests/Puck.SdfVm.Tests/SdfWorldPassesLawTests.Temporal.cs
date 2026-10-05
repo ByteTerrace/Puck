@@ -490,7 +490,8 @@ public sealed partial class SdfWorldPassesLawTests {
             var set = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == 3u)).Select(selector: static bind => bind.Set).Distinct().ToArray()[^5];
 
             m_gpu.SetBinds = null;
-            return BitConverter.ToUInt32(m_gpu.Memory(bufferHandle: m_gpu.BufferAt(binding: 0, set: set)), Offset(member: member));
+            return BitConverter.ToUInt32(m_gpu.Memory(bufferHandle: m_gpu.BufferAt(binding: 0, set: set)),
+                (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
         }
 
         public bool ShadowsEnabled {
@@ -580,9 +581,10 @@ public sealed partial class SdfWorldPassesLawTests {
             Second?.Dispose();
         }
 
-        // The pass block the latest recorded pass bound, which every part of a frame writes the same temporal values to.
+        // The latest bound block belongs to the composite. Its temporal values match the world passes, but its sky
+        // interface has different offsets, so read the layout that the production sky recorder actually wrote.
         private byte[] Block() => m_gpu.Memory(bufferHandle: m_gpu.BufferAt(set: m_gpu.BoundSet(group: 3), binding: 0));
-        private static int Offset(string member) => ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
+        private static int Offset(string member) => ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: member));
     }
     // An external producer handing out one image, tainted until it fills.
     private sealed class TaintingFeed(UploadModelGpu gpu) : IRenderGraphExternalProducer {
