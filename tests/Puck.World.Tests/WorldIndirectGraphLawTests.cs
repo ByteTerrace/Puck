@@ -33,11 +33,16 @@ public sealed class WorldIndirectGraphLawTests {
         var graph = instances.Instances;
         var producer = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment);
         Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
-        var world = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld);
-        var read = Assert.Single(world.Reads, edge => edge.Producer == producer.Name);
-        Assert.Equal(ShaderPipelineResourceKind.Buffer, read.Kind);
-        Assert.False(read.PreviousFrame);
-        Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf(producer.Name)) < graph.Order.ToList().IndexOf(graph.IndexOf(world.Name)));
+        var worlds = graph.Instances.Where(instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld).ToArray();
+        Assert.Equal(4, worlds.Length);
+        Assert.Contains(worlds, instance => instance.Name == "world");
+        Assert.All(worlds, world => {
+            Assert.Equal(ShaderPipelineResourceKind.Image, world.Output);
+            var read = Assert.Single(world.Reads, edge => edge.Producer == producer.Name);
+            Assert.Equal(ShaderPipelineResourceKind.Buffer, read.Kind);
+            Assert.False(read.PreviousFrame);
+            Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf(producer.Name)) < graph.Order.ToList().IndexOf(graph.IndexOf(world.Name)));
+        });
     }
 
     [Fact]
