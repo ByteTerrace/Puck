@@ -13,6 +13,9 @@
     "targetHertz": 0
   },
   "render": {
+    "indirect": {
+      "tier": "Off"
+    },
     "shadows": "High",
     "shadowLights": 2,
     "shadowFadeSlots": 0,
