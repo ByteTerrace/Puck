@@ -3318,6 +3318,15 @@ re-record explained in the same change.
       completion-aware collector are implemented. Actual recorded rows, their
       interpretation and the resulting default decision remain open; no source
       implementation or successful build supplies those measurements.
+      Live Medium Vulkan comparison runs on the RTX 4070 lose and recreate
+      the device, including with the native pipeline cache already populated.
+      Those runs supply no qualifying rows or defaults. Frozen continuous
+      views hold, but freezing disables both receiver admission and renewed
+      producer work, so it does not identify the cause. Isolated full-volume
+      admission holds on both backends. The separate direct-field, wrapped-field
+      and admission-plus-field diagnostic is source-reviewed; its build and
+      device runs remain open. Close the live failure before repeating the
+      comparison or the remaining physical campaign.
     - Delivers: the indirect legs of the counters workload recorded at each
       tier on the RTX 2060 and the RTX 4070; the ladder applied as far as the
       rows require; `quality.puck`'s `indirect` rows as decided; and the
@@ -8244,7 +8253,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       allocation. On Vulkan and Direct3D 12, the still, occluder, light, owner,
       departure and return images stay within the original two-code mean bound;
       the opposite observations and authored discriminator hold. The separate
-      receiver-only shader mutation and counted-cost qualification remain owed.
+      receiver-only shader mutation has discriminating red and restored image
+      evidence on Vulkan. Counted-cost qualification remains owed.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
       of the unamortized row plus its rejections, counted by reason and
       re-recorded lower; zero reprojected pixels on a frame where a slot
