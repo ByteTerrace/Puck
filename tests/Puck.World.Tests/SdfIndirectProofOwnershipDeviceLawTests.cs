@@ -36,7 +36,7 @@ public sealed class SdfIndirectProofOwnershipDeviceLawTests {
             Enumerable.Repeat(count: Count, element: program).ToArray(), rows);
 
         // All 64 lanes ask for the same component. Exactly one clear-field query publishes the positive proof;
-        // the other lanes defer, then reuse its complete publication on the next submission.
+        // the other lanes defer, then reuse its complete publication in a barrier-separated phase with a newer stamp.
         Expect(0, new(w: 9, x: 1, y: 1, z: 63), new(w: 1, x: 1, y: 255, z: 2340), new(w: 9, x: 0, y: 64, z: 0), new(w: 1, x: 0, y: 16320, z: 2340));
         // Pending/current stamps carry poisoned payloads. Neither key nor anchor is usable before an older stamp.
         Expect(1, new(w: -1, x: 0, y: 0, z: 64), new(w: 1, x: 0, y: 0, z: 2112), new(w: 10, x: 1, y: 1, z: 63), new(w: 1, x: 1, y: 255, z: 2340));

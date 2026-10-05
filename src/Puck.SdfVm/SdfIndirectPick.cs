@@ -14,7 +14,7 @@ public enum SdfIndirectPickStatus {
     Unresolved,
     /// <summary>The receiver read a published lighting generation.</summary>
     Resolved,
-    /// <summary>The shared frame allowance admitted no new proof for this receiver.</summary>
+    /// <summary>The receiver awaits proof admission or an earlier complete shared proof.</summary>
     Deferred,
     /// <summary>The selected pixel did not perform diffuse shading, for example a miss, screen or geometric debug view.</summary>
     NotShaded,
