@@ -249,7 +249,15 @@ public sealed partial class ShaderBuildTargetsLawTests {
             case "source": File.WriteAllText(path: source, contents: "changed source"); break;
             case "include": File.WriteAllText(path: include, contents: "changed declaration"); break;
             case "options": properties = ["PuckDxcComputeSpirv=-spirv -O3 -T cs_6_6 -E main -D CHANGED_RECIPE=1"]; break;
-            case "command": properties = ["DxcCommand=another-dxc"]; break;
+            case "command":
+                // A distinct real command changes the recipe while running the same controlled compiler behavior.
+                var alternate = fixture.PathOf(path: "another-dxc" + Path.GetExtension(path: fixture.CompilerPath));
+                File.Copy(sourceFileName: fixture.CompilerPath, destFileName: alternate);
+                if (!OperatingSystem.IsWindows()) {
+                    File.SetUnixFileMode(path: alternate, mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                }
+                properties = [$"DxcCommand={Puck.Abstractions.PuckPaths.Normalize(path: alternate)}"];
+                break;
             case "bytecode": File.WriteAllText(path: bytecode, contents: "corrupted compiled bytes"); break;
             case "sidecar": File.AppendAllText(path: sidecar, contents: File.ReadAllText(path: sidecar)); break;
             case "recipe-missing": File.WriteAllLines(path: sidecar, contents: File.ReadAllLines(path: sidecar).Where(predicate: static line => !line.StartsWith(value: "recipe:", comparisonType: StringComparison.Ordinal))); break;
