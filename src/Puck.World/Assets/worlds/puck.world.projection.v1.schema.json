@@ -182,27 +182,33 @@
             },
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowAmortize": {
               "description": "Whether secondary shadows reuse valid K history (world.shadow-amortize).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "dynamicResolution": {
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowLights": {
               "description": "The number of held shadow slots, from 0 through 4.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeSlots": {
               "description": "The number of additional shadow handoff slots, from 0 through 2.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeTicks": {
               "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowOverflow": {
               "description": "How a crossing proceeds when its handoff capacity is occupied.",
@@ -210,6 +216,7 @@
                 "instant",
                 "queue"
               ],
+              "default": "instant",
               "title": "WorldShadowOverflow"
             },
             "renderScaleFloor": {
@@ -221,6 +228,7 @@
                 "Quarter",
                 "Eighth"
               ],
+              "default": "Quarter",
               "title": "WorldRenderScaleTier"
             },
             "sky": {
@@ -230,9 +238,31 @@
                 "medium",
                 "high"
               ],
+              "default": "high",
               "title": "WorldSkyTier"
+            },
+            "indirect": {
+              "description": "The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.",
+              "enum": [
+                "Off",
+                "Medium",
+                "High",
+                null
+              ],
+              "default": null,
+              "title": "SdfIndirectTier"
+            },
+            "skyFieldScale": {
+              "description": "The independent sky field grid fraction, one or one half.",
+              "type": "number",
+              "default": 1
             }
           },
+          "required": [
+            "shadows",
+            "ambientOcclusion",
+            "renderScale"
+          ],
           "additionalProperties": false,
           "default": null,
           "title": "WorldQualityPreset"
@@ -264,27 +294,33 @@
             },
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowAmortize": {
               "description": "Whether secondary shadows reuse valid K history (world.shadow-amortize).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "dynamicResolution": {
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowLights": {
               "description": "The number of held shadow slots, from 0 through 4.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeSlots": {
               "description": "The number of additional shadow handoff slots, from 0 through 2.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeTicks": {
               "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowOverflow": {
               "description": "How a crossing proceeds when its handoff capacity is occupied.",
@@ -292,6 +328,7 @@
                 "instant",
                 "queue"
               ],
+              "default": "instant",
               "title": "WorldShadowOverflow"
             },
             "renderScaleFloor": {
@@ -303,6 +340,7 @@
                 "Quarter",
                 "Eighth"
               ],
+              "default": "Quarter",
               "title": "WorldRenderScaleTier"
             },
             "sky": {
@@ -312,9 +350,31 @@
                 "medium",
                 "high"
               ],
+              "default": "high",
               "title": "WorldSkyTier"
+            },
+            "indirect": {
+              "description": "The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.",
+              "enum": [
+                "Off",
+                "Medium",
+                "High",
+                null
+              ],
+              "default": null,
+              "title": "SdfIndirectTier"
+            },
+            "skyFieldScale": {
+              "description": "The independent sky field grid fraction, one or one half.",
+              "type": "number",
+              "default": 1
             }
           },
+          "required": [
+            "shadows",
+            "ambientOcclusion",
+            "renderScale"
+          ],
           "additionalProperties": false,
           "default": null,
           "title": "WorldQualityPreset"
@@ -346,27 +406,33 @@
             },
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowAmortize": {
               "description": "Whether secondary shadows reuse valid K history (world.shadow-amortize).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "dynamicResolution": {
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
-              "type": "boolean"
+              "type": "boolean",
+              "default": false
             },
             "shadowLights": {
               "description": "The number of held shadow slots, from 0 through 4.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeSlots": {
               "description": "The number of additional shadow handoff slots, from 0 through 2.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowFadeTicks": {
               "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
-              "type": "integer"
+              "type": "integer",
+              "default": 0
             },
             "shadowOverflow": {
               "description": "How a crossing proceeds when its handoff capacity is occupied.",
@@ -374,6 +440,7 @@
                 "instant",
                 "queue"
               ],
+              "default": "instant",
               "title": "WorldShadowOverflow"
             },
             "renderScaleFloor": {
@@ -385,6 +452,7 @@
                 "Quarter",
                 "Eighth"
               ],
+              "default": "Quarter",
               "title": "WorldRenderScaleTier"
             },
             "sky": {
@@ -394,9 +462,31 @@
                 "medium",
                 "high"
               ],
+              "default": "high",
               "title": "WorldSkyTier"
+            },
+            "indirect": {
+              "description": "The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.",
+              "enum": [
+                "Off",
+                "Medium",
+                "High",
+                null
+              ],
+              "default": null,
+              "title": "SdfIndirectTier"
+            },
+            "skyFieldScale": {
+              "description": "The independent sky field grid fraction, one or one half.",
+              "type": "number",
+              "default": 1
             }
           },
+          "required": [
+            "shadows",
+            "ambientOcclusion",
+            "renderScale"
+          ],
           "additionalProperties": false,
           "default": null,
           "title": "WorldQualityPreset"
@@ -8500,6 +8590,497 @@
           ],
           "default": "high",
           "title": "WorldSkyTier"
+        },
+        "indirect": {
+          "description": "The world\u0027s diffuse indirect-light participation defaults.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "bodies": {
+              "description": "Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.",
+              "enum": [
+                "Default",
+                "Cast",
+                "Receive",
+                "Off"
+              ],
+              "default": "Default",
+              "title": "SdfIndirectParticipation"
+            },
+            "sources": {
+              "description": "Bindable source gains in [0, 1]; absent gains are one.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "lights": {
+                  "description": "Explicit diffuse light gain.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "emission": {
+                  "description": "Material emission gain.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "screens": {
+                  "description": "Acquired screen-face emission gain.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "sky": {
+                  "description": "Physical radiance at certified world exits.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "feedback": {
+                  "description": "Reflected preceding-sweep radiance gain, once per bounce.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderIndirectSources"
+            },
+            "bounces": {
+              "description": "Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier\u0027s limit.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            },
+            "apply": {
+              "description": "Bindable receiver-only controls. They do not change cached radiance.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "intensity": {
+                  "description": "Final indirect diffuse gain.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "tint": {
+                  "description": "Final indirect diffuse tint.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "contact": {
+                  "description": "How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderIndirectApply"
+            },
+            "tier": {
+              "description": "The boot cache tier, Medium by default. The live session lever and selected quality preset override it.",
+              "enum": [
+                "Off",
+                "Medium",
+                "High"
+              ],
+              "default": "Medium",
+              "title": "SdfIndirectTier"
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirect"
+        },
+        "skyFieldScale": {
+          "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
+          "type": "number",
+          "default": 1
         }
       },
       "additionalProperties": false,
@@ -23746,6 +24327,17 @@
             "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
             "type": "integer",
             "default": 0
+          },
+          "indirect": {
+            "description": "The whole placement\u0027s indirect-light policy. Default follows static casting or the world\u0027s moving-body default; Receive receives without casting, Cast does both, and Off does neither.",
+            "enum": [
+              "Default",
+              "Cast",
+              "Receive",
+              "Off"
+            ],
+            "default": "Default",
+            "title": "SdfIndirectParticipation"
           }
         },
         "required": [
@@ -40229,6 +40821,17 @@
                               "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
                               "type": "integer",
                               "default": 0
+                            },
+                            "indirect": {
+                              "description": "The whole placement\u0027s indirect-light policy. Default follows static casting or the world\u0027s moving-body default; Receive receives without casting, Cast does both, and Off does neither.",
+                              "enum": [
+                                "Default",
+                                "Cast",
+                                "Receive",
+                                "Off"
+                              ],
+                              "default": "Default",
+                              "title": "SdfIndirectParticipation"
                             }
                           },
                           "required": [

@@ -1052,7 +1052,7 @@
                   "properties": {
                     "inset": {
                       "type": "number",
-                      "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
+                      "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy\u0027s primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
                     },
                     "depth": {
                       "type": "number",

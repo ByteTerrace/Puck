@@ -404,6 +404,110 @@
       ],
       "default": "high",
       "title": "WorldSkyTier"
+    },
+    "indirect": {
+      "description": "The world\u0027s diffuse indirect-light participation defaults.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "bodies": {
+          "$ref": "./common.schema.json#/$defs/SdfIndirectParticipation",
+          "description": "Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.",
+          "default": "Default"
+        },
+        "sources": {
+          "description": "Bindable source gains in [0, 1]; absent gains are one.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "lights": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Explicit diffuse light gain.",
+              "default": null
+            },
+            "emission": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Material emission gain.",
+              "default": null
+            },
+            "screens": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Acquired screen-face emission gain.",
+              "default": null
+            },
+            "sky": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Physical radiance at certified world exits.",
+              "default": null
+            },
+            "feedback": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Reflected preceding-sweep radiance gain, once per bounce.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirectSources"
+        },
+        "bounces": {
+          "description": "Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier\u0027s limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "apply": {
+          "description": "Bindable receiver-only controls. They do not change cached radiance.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "intensity": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Final indirect diffuse gain.",
+              "default": null
+            },
+            "tint": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "Final indirect diffuse tint.",
+              "default": null
+            },
+            "contact": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirectApply"
+        },
+        "tier": {
+          "description": "The boot cache tier, Medium by default. The live session lever and selected quality preset override it.",
+          "enum": [
+            "Off",
+            "Medium",
+            "High"
+          ],
+          "default": "Medium",
+          "title": "SdfIndirectTier"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderIndirect"
+    },
+    "skyFieldScale": {
+      "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
+      "type": "number",
+      "default": 1
     }
   },
   "additionalProperties": false,

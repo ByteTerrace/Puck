@@ -1985,6 +1985,13 @@ export type RulePoolIteration = {
 
 export type SafeName = string;
 
+/**
+ * An independently composable instance's participation in diffuse indirect lighting.
+ */
+export type SdfIndirectParticipation = "Default" | "Cast" | "Receive" | "Off";
+
+export type SdfIndirectTier = "Off" | "Medium" | "High";
+
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
@@ -7044,6 +7051,10 @@ export type WorldPlacement = {
    * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
    */
   holding?: number;
+  /**
+   * The whole placement's indirect-light policy. Default follows static casting or the world's moving-body default; Receive receives without casting, Cast does both, and Off does neither.
+   */
+  indirect?: SdfIndirectParticipation;
 };
 
 /**
@@ -8165,7 +8176,7 @@ export type WorldPrototype = {
        */
       panel?: {
         /**
-         * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
+         * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
          */
         inset: number;
         /**
@@ -8774,15 +8785,15 @@ export type WorldQualityPreset = {
   /**
    * The soft-shadow tier the preset selects.
    */
-  shadows?: ShadowTier;
+  shadows: ShadowTier;
   /**
    * Whether the preset enables ambient occlusion.
    */
-  ambientOcclusion?: boolean;
+  ambientOcclusion: boolean;
   /**
    * The scalar render-scale ceiling the preset selects.
    */
-  renderScale?: number;
+  renderScale: number;
   /**
    * Whether the preset reconstructs the world's views over time (world.temporal).
    */
@@ -8819,6 +8830,14 @@ export type WorldQualityPreset = {
    * The sky's quality tier the preset selects (world.sky-quality).
    */
   sky?: WorldSkyTier;
+  /**
+   * The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.
+   */
+  indirect?: SdfIndirectTier | null;
+  /**
+   * The independent sky field grid fraction, one or one half.
+   */
+  skyFieldScale?: number;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -9082,6 +9101,14 @@ export type WorldRenderDefaults = {
    * The sky's boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.
    */
   skyQuality?: WorldSkyTier;
+  /**
+   * The world's diffuse indirect-light participation defaults.
+   */
+  indirect?: WorldRenderIndirect | null;
+  /**
+   * The boot sky field grid fraction, one or one half, independent of view render scale.
+   */
+  skyFieldScale?: number;
 };
 
 export type WorldRenderEnvironment = {
@@ -9123,6 +9150,67 @@ export type WorldRenderHaze = {
    * The haze's height profile, the amount taken at its base. Absent is a haze alike at every height.
    */
   height?: WorldRenderAirHeight | null;
+};
+
+export type WorldRenderIndirect = {
+  /**
+   * Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.
+   */
+  bodies?: SdfIndirectParticipation;
+  /**
+   * Bindable source gains in [0, 1]; absent gains are one.
+   */
+  sources?: WorldRenderIndirectSources | null;
+  /**
+   * Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.
+   */
+  bounces?: number | null;
+  /**
+   * Bindable receiver-only controls. They do not change cached radiance.
+   */
+  apply?: WorldRenderIndirectApply | null;
+  /**
+   * The boot cache tier, Medium by default. The live session lever and selected quality preset override it.
+   */
+  tier?: SdfIndirectTier;
+};
+
+export type WorldRenderIndirectApply = {
+  /**
+   * Final indirect diffuse gain.
+   */
+  intensity?: BindableScalar;
+  /**
+   * Final indirect diffuse tint.
+   */
+  tint?: BindableColor;
+  /**
+   * How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.
+   */
+  contact?: BindableScalar;
+};
+
+export type WorldRenderIndirectSources = {
+  /**
+   * Explicit diffuse light gain.
+   */
+  lights?: BindableScalar;
+  /**
+   * Material emission gain.
+   */
+  emission?: BindableScalar;
+  /**
+   * Acquired screen-face emission gain.
+   */
+  screens?: BindableScalar;
+  /**
+   * Physical radiance at certified world exits.
+   */
+  sky?: BindableScalar;
+  /**
+   * Reflected preceding-sweep radiance gain, once per bounce.
+   */
+  feedback?: BindableScalar;
 };
 
 /**
