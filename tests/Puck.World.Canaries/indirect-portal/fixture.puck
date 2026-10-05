@@ -60,7 +60,7 @@ prototypes {
       name: "portal"
       behavior { faces [{ name: "glass", shapeId: 0, defaultSource: null }] }
       palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 0 }]
-      shape Box "panel" { material: 0, scale [1.2, 1, 0.05] }
+      shape Box "panel" { material: 0, position [0, 0, 0], scale [1.2, 1, 0.05] }
     }
   }
   prototype "receiver" {
@@ -68,7 +68,7 @@ prototypes {
       schema: "puck.creation.v1"
       name: "receiver"
       palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
-      shape Box "floor" { material: 0, scale [3, 0.05, 3] }
+      shape Box "floor" { material: 0, position [0, 0, 0], scale [3, 0.05, 3] }
     }
   }
 }
