@@ -58,9 +58,10 @@ finite values and the corresponding image evidence are also qualification duties
 
 The batch runs on Vulkan and Direct3D 12 on the RTX 4070. Its thirty-six ceilings
 files record actual paired observations, including measured zero values; every
-saved report holds its recorded ceilings. Image quality and the resulting tier
-choices remain open. Record and check saved reports against their declared
-ceilings without launching the batch again. For the first observation:
+saved report holds its recorded ceilings. The shipped choice below retains the
+Full image path; the remaining current-image canaries must qualify that path.
+Record and check saved reports against their declared ceilings without launching the
+batch again. For the first observation:
 
 ```text
 dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/sky-defaults/low-still-full.report.json --ceilings tests/Puck.Counters/sky-defaults/low-still-full.ceilings.json --record
@@ -74,3 +75,37 @@ Keep this phase separate from the
 [G10 indirect comparison](../indirect-comparison/README.md), whose warm-up proves
 current shared-cache fences. Final tier decisions must close locally; only RTX
 2060 hardware qualification may remain as device debt.
+
+The shipped presets choose Full (`skyFieldScale: 1`) at Low, Medium and High.
+Half remains available through authoring and `world.sky-field-scale`, but its
+lower counts do not establish its image quality. The choice keeps the existing
+Full image path while recording the alternative's cost. It introduces no Half
+image qualification claim.
+
+For the matched still observations on both backends, the sky field's evaluations
+fall from 874,268 at Full to 219,181 at Half, and its writes from 2,336,056 to
+584,522. Including `views`, `sky`, `composite` and the environment map's 4,096
+evaluations, totals fall from 4,061,464 to 3,406,377, while texture loads change
+from 18,969,608 to 18,965,670. These are
+newest completed submission counts, not a per-tick delta. Field work falls by
+about three quarters; the complete sky path does not. Full-size field storage
+remains allocated at Half, so these rows establish no allocation saving.
+
+Shadow defaults remain K=0 with amortization off at Low, K=1 with amortization
+on at Medium, and K=2 with amortization on at High. Fade capacity and duration
+remain zero with instant overflow. At the measured K=2 Vulkan snapshot, slot 1
+march steps fall from 29,739,077 to 7,494,414 with amortization; Direct3D 12
+records 29,739,076 and 7,494,696. Slot 0 still marches its complete
+primary shadow and accounts for the rest of the shadow total. Shadow writes
+increase from 1,641,600 to 4,924,800
+because the history/reprojection path writes its additional records. K=0 has
+no shadow work, and K=1 has no secondary reuse; small differing slot-0 snapshots
+are not an exact-equality control. Rejection and image correctness remain the
+existing temporal-shadow canary's job, not an inference from these savings.
+
+These are component controls: every sky tier holds the floor view scale, and
+the binary group uses the High shadow marcher even for K=1. Their ceilings do
+not describe an entire shipped Medium or High preset frame. The choice does
+not change indirect defaults, which the separate G10 comparison owns. Current
+Full image qualification remains part of the existing canaries; RTX 2060
+hardware qualification remains the floor-device debt.
