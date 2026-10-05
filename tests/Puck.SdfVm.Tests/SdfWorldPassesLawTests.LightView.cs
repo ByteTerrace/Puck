@@ -94,7 +94,13 @@ public sealed partial class SdfWorldPassesLawTests {
             return replacement.LightViewBytes == BankBytes && graph.Render.Completion == FrameCompletion.Rendered
                 && residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var recorded)
                 && recorded == before + 2;
-        }, building: () => graph.Node(instance: 0).IsBuildingCandidate, reason: () => graph.Render.Reason);
+        }, building: () => graph.Node(instance: 0).IsBuildingCandidate, reason: () => {
+            _ = residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var recorded);
+            return $"Replacement bank bytes={replacement.LightViewBytes}/{BankBytes}, regions={recorded}/{before + 2}, " +
+                $"publications={residency.IndirectLightViews.Publications}, pending={residency.IndirectLightViews.Pending}, " +
+                $"completion={graph.Render.Completion}, light-building={graph.Node(0).IsBuildingCandidate}, " +
+                $"reader-building={graph.Node(1).IsBuildingCandidate}: {graph.Render.Reason}";
+        });
         var replacementName = Assert.Single(naming.Applied, item => item.Name == Light + "/" + SdfWorldPackage.IndirectLightDepth && item.Handle != bankName.Handle);
         var replacementBank = Assert.Single(gpu.Created, item => item.Handle == replacementName.Handle);
         Assert.True(residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var completed));
