@@ -15,7 +15,7 @@ public sealed class WorldIndirectParticipationLawTests {
             Continuity: EntityContinuity.Continuous, Generation: 1, Index: 0, Kit: 0, Look: 0,
             Orientation: Quaternion.Identity, Position: Vector3.Zero, PlacementId: "old-body");
         mirror.DeliverSnapshot(new WorldSnapshot(Authority: "neighbour", Entries: new[] { entry }, Revision: 1, StepTicks: 1, Tick: 1));
-        var count = mirror.EntityCapacity;
+        var count = WorldBodiesLimits.CapacityCeiling;
         var placementIds = new string?[count];
         var addresses = new WorldEntityAddress[count];
         mirror.CopySnapshotTo(new bool[count], addresses, placementIds, new Vector3[count], new Quaternion[count],

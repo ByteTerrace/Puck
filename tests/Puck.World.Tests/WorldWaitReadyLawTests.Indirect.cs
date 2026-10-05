@@ -1,9 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed partial class WorldWaitReadyLawTests {
     private sealed class IndirectReadiness : IWorldIndirectReadiness {
         public long Frame { get; set; } = 20;
@@ -32,11 +32,19 @@ public sealed partial class WorldWaitReadyLawTests {
         Assert.Single(answered);
         readiness.Captured = [new WorldIndirectReadyIdentity("world", 8, 4, 0, 29, 31),
             new WorldIndirectReadyIdentity("observer", 9, 4, 0, 29, 32)];
-        var captured = ConsoleCapture.RunSplit(() => { source.Collect(); return 0; });
+        var original = System.Console.Error;
+        using var captured = new StringWriter();
+        try {
+            System.Console.SetError(newError: captured);
+            source.Collect();
+        } finally {
+            System.Console.SetError(newError: original);
+        }
+        var error = captured.ToString();
         Assert.Equal(["world.wait indirect 180", "probe"], answered.Select(item => item.Line));
-        Assert.Contains("residency=world allocation=8 epoch=4 generation=0 stamp=29 source=31", captured.Error, StringComparison.Ordinal);
-        Assert.Contains("residency=observer allocation=9 epoch=4 generation=0 stamp=29 source=32", captured.Error, StringComparison.Ordinal);
-        Assert.DoesNotContain("allocation=7", captured.Error, StringComparison.Ordinal);
+        Assert.Contains("residency=world allocation=8 epoch=4 generation=0 stamp=29 source=31", error, StringComparison.Ordinal);
+        Assert.Contains("residency=observer allocation=9 epoch=4 generation=0 stamp=29 source=32", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("allocation=7", error, StringComparison.Ordinal);
     }
 
     [Fact]
