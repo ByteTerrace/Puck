@@ -194,7 +194,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
         }
         for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
-            if (m_fragmentPass.Inputs[port].Name is SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput) { continue; }
+            // These shared environment buffers order composition after its source reductions; the sky interface
+            // samples authored screen images and has no pass-group member for their reduced lighting records.
+            if (m_fragmentPass.Inputs[port].Name is SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput or SdfSkyEnvironmentGraph.ScreensInput) { continue; }
             var member = ReadMemberOf(version: m_fragmentPass.Inputs[port].Name);
             var bound = recording.Inputs[port];
 
