@@ -275,7 +275,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
     // writer waits between updates so it never overwrites an in-flight reader; it does not promise epoch immutability.
     private sealed class LivePixels(IGpuDeviceContext device) : IRenderGraphExternalProducer {
         private long m_revision = -1;
-        private readonly GpuWorkLedger m_empty = new(name: "unopened-live-pixels", framesInFlight: 1);
+        private readonly GpuWorkLedger m_empty = new(name: "unopened.live-pixels", framesInFlight: 1);
         public static ImageSourceDescriptor Descriptor { get; } = new(Producer: "live", Width: 4, Height: 4,
             Format: ImagePixelFormat.R8G8B8A8Unorm, Color: ImageColorEncoding.Srgb,
             Content: ImageContentClass.Deterministic, Cadence: ImageSourceCadence.Tick, Transport: ImageSourceTransport.Uploaded);
