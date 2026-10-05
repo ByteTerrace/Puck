@@ -44,6 +44,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.IndirectCache,
         SdfWorldPackage.IndirectCacheWritten,
         SdfWorldPackage.IndirectPickWritten,
+        SdfWorldPackage.IndirectDeferredWritten,
         SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.IndirectLightDepthWritten,
     ];
@@ -153,6 +154,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_shadowFrames[slot] = new SdfLights();
         }
 
+        if (m_part == SdfWorldPackage.IndirectReceiverReset) { return; }
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
@@ -307,7 +309,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return (quality.DisableSoftShadows || (frame.Lights.ShadowSlots.SlotCount == 0));
     }
-    public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
+    public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => m_part == SdfWorldPackage.IndirectReceiverReset
+        ? null : m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
     public void Submitted() {
         if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Primary) { m_owner.SubmittedReceiverSurface(m_context.Instance); }
         if (m_part == SdfWorldPackage.Parts.Views && !m_view.LightView) {
@@ -328,6 +331,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Begin(residency: residency);
 
         var tables = residency.Submit(context: recording.Context);
+        if (m_part == SdfWorldPackage.IndirectReceiverReset) {
+            var diagnostic = recording.Outputs[0].Buffer!;
+            recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, diagnostic.BufferHandle, sizeof(uint));
+            return RenderGraphPackageOutcome.Drew;
+        }
         var frame = (m_view.LightView ? residency.LightFrame() : residency.Frame!);
         var view = Math.Min(
             val1: m_view.View,
@@ -403,10 +411,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 cut: frame.Views[view].CutRevision);
             var cachePort = Array.IndexOf(m_inputs, SdfWorldPackage.IndirectCache);
             var pickPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectPick);
+            var deferredPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectDeferred);
             var indirect = BoundIndirect(recording, tables);
             var receiverScope = indirect is null ? default : m_owner.PrepareReceivers(m_context.Instance, indirect);
             m_pick.PrepareReceivers(recording.Slot, indirect,
-                cachePort < 0 ? null : recording.Inputs[cachePort].Version, receiverScope);
+                deferredPort < 0 ? null : recording.Outputs[deferredPort].Version, receiverScope);
             m_pick.PrepareIndirect(recording.Slot, indirect,
                 cachePort < 0 ? null : recording.Inputs[cachePort].Version,
                 pickPort < 0 ? null : recording.Outputs[pickPort].Version, recording.PassBlock);
@@ -910,6 +919,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
+        SdfWorldPackage.IndirectDeferred => SdfWorldPackage.IndirectDeferredWritten,
         SdfWorldPackage.IndirectVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,

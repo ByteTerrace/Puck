@@ -3,6 +3,14 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
+    /// <summary>The per-view transfer pass clearing its deferred receiver diagnostic before Views executes.</summary>
+    public const string IndirectReceiverReset = "indirectReceiverReset";
+    /// <summary>The cleared per-view receiver diagnostic.</summary>
+    public const string IndirectDeferredClear = "indirectDeferredClear";
+    /// <summary>The per-view deferred receiver count, copied only after its Views submission.</summary>
+    public const string IndirectDeferred = "indirectDeferred";
+    /// <summary>The per-view receiver diagnostic's writable shader member.</summary>
+    public const string IndirectDeferredWritten = "indirectDeferredRW";
     /// <summary>The selected receiver's header, eight corners, five RGB sources and captured Near direction/predecessor.</summary>
     public const int IndirectPickWords = 72;
     /// <summary>The selected indirect cache tier, zero disabling every cache read.</summary>
@@ -147,8 +155,8 @@ public static partial class SdfWorldPackage {
             new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
-    /// <summary>Adds the cache's buffer edge and selected-receiver diagnostic to views. Every view already publishes
-    /// the preserving visibility version; Primary has no dependency on mutable cache contents.</summary>
+    /// <summary>Adds the cache's buffer edge, selected-receiver diagnostic and per-view deferred completion counter.
+    /// One transfer reset precedes each Views execution; Primary has no dependency on mutable cache contents.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>
     /// <param name="bytes">The residency's cache size.</param>
     /// <returns>The view fragment with its external cache dependency.</returns>
@@ -157,12 +165,28 @@ public static partial class SdfWorldPackage {
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
             Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
             new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint))],
-        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name == Parts.Views) ? pass with {
-            Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache)],
-            InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeReadWrite],
-            Outputs = [.. pass.Outputs, IndirectPick],
-            OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
-        } : pass))],
+                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint)),
+            new ShaderPipelineResource(Name: IndirectDeferredClear, Kind: ShaderPipelineResourceKind.Buffer,
+                SizeBytes: sizeof(uint), StrideBytes: sizeof(uint), Retained: true),
+            new ShaderPipelineResource(Name: IndirectDeferred, Kind: ShaderPipelineResourceKind.Buffer,
+                SizeBytes: sizeof(uint), StrideBytes: sizeof(uint), From: IndirectDeferredClear, PreservesPredecessor: true)],
+        Passes = [.. fragment.Passes.SelectMany(WithReceiverCompletion)],
     };
+
+    private static RenderGraphFragmentPass[] WithReceiverCompletion(RenderGraphFragmentPass pass) {
+        if (pass.Name != Parts.Views) { return [pass]; }
+        // The reset precedes the same shading inputs. Its recorder executes whenever this node renders, as Views
+        // must while its mutable residency input is bound; the whole view can still stand when complete.
+        return [
+            new RenderGraphFragmentPass(Name: IndirectReceiverReset,
+                Inputs: pass.Inputs, InputAccesses: pass.InputAccesses,
+                Outputs: [IndirectDeferredClear], OutputAccesses: [RenderGraphPortAccess.TransferWrite], Members: []),
+            pass with {
+                Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache), new ResourceReference(Name: IndirectDeferredClear)],
+                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeReadWrite, RenderGraphPortAccess.ComputeRead],
+                Outputs = [.. pass.Outputs, IndirectPick, IndirectDeferred],
+                OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+            },
+        ];
+    }
 }

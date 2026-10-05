@@ -86,7 +86,7 @@ public sealed partial class SdfWorkCountingLawTests {
                     Assert.Equal(["puckCountWork(0u, 1u)"], calls);
                     break;
                 case "passes/sdf-indirect-trace.comp.hlsl":
-                    Assert.Equal(["puckCountWork(0u, 2u)", "puckCountWork(sdfWorkSteps, sdfWorkTexels)"], calls);
+                    Assert.Equal(["puckCountWork(0u, 1u)", "puckCountWork(sdfWorkSteps, sdfWorkTexels)"], calls);
                     break;
                 case "indirect/sdf-indirect-shade.hlsli":
                     Assert.Equal(["puckCountWork(sdfWorkSteps, passGroup.workCounterRowDetail == 0u ? 1u : 0u)"], calls);
@@ -99,9 +99,8 @@ public sealed partial class SdfWorkCountingLawTests {
         var trace = CodeOf("passes/sdf-indirect-trace.comp.hlsl");
         Assert.Matches(@"if \(group.x == 0u && lane == 0u\) \{\s*" +
             @"indirectCacheRW\[sdfIndirectReceiverProofWordOffset\(passGroup.indirectTier\)\] = 0u;\s*" +
-            @"indirectCacheRW\[sdfIndirectReceiverProofWordOffset\(passGroup.indirectTier\) \+ 1u\] = 0u;\s*" +
-            @"puckCountDetail\(4u, 0u, 2u, 0u, 0u, 0u\);\s*" +
-            @"if \(passGroup.workCounterRowDetail == 0u\) \{ puckCountWork\(0u, 2u\); \}", trace);
+            @"puckCountDetail\(4u, 0u, 1u, 0u, 0u, 0u\);\s*" +
+            @"if \(passGroup.workCounterRowDetail == 0u\) \{ puckCountWork\(0u, 1u\); \}", trace);
         Assert.Contains("if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }", trace);
         var shade = CodeOf("indirect/sdf-indirect-shade.hlsli");
         Assert.Contains("void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint readGeneration, uint readPublication,", shade);

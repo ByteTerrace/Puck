@@ -419,6 +419,7 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: IndirectCache),
         Written(element: ShaderValueType.Uint, name: IndirectCacheWritten),
         Written(element: ShaderValueType.Uint, name: IndirectPickWritten),
+        Written(element: ShaderValueType.Uint, name: IndirectDeferredWritten),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Float4, name: IndirectDirections),
         Read(element: ShaderValueType.Uint, name: IndirectTraceStates),

@@ -86,6 +86,12 @@ internal sealed class FakeGpuDevice :
 
     public long AdapterLuid => 0L;
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
+    /// <summary>Gets or sets optional observations of actual buffer copy handles and byte ranges.</summary>
+    public List<(nint Source, nint Destination, ulong Bytes, ulong SourceOffset, ulong DestinationOffset)>? BufferCopies { get; set; }
+    /// <summary>Gets or sets optional observations of the buffers and ranges cleared.</summary>
+    public List<(nint Buffer, ulong Bytes)>? BufferClears { get; set; }
+    /// <summary>Gets or sets optional observations of actual buffer access transitions.</summary>
+    public List<(nint Buffer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>? BufferTransitions { get; set; }
     public Action<int>? OnReadback { get; set; }
 
     public delegate void ReadbackWriter(GpuObjectName name, Span<byte> destination);
@@ -246,10 +252,14 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => Hit(key: "IGpuRecorder.Dispatch");
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
-    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
+    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        BufferClears?.Add((bufferHandle, sizeBytes));
+        Hit(key: "IGpuRecorder.ClearStorageBuffer");
+    }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
         OnBufferCopy?.Invoke(arg1: sourceOffsetBytes, arg2: sizeBytes);
+        BufferCopies?.Add((sourceBufferHandle, destinationBufferHandle, sizeBytes, sourceOffsetBytes, destinationOffsetBytes));
         Hit(key: "IGpuRecorder.CopyBuffer");
     }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
@@ -257,7 +267,10 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuRecorder.TransitionImageLayout");
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
-    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        BufferTransitions?.Add((bufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask));
+        Hit(key: "IGpuRecorder.TransitionBuffer");
+    }
     IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) {
         Hit(key: "IGpuCommandPoolFactory.Create");
 

@@ -411,8 +411,11 @@ This adds no launch query, but the primary shape count can increase.
 The views pass applies the complete lighting bank through the same certified
 component proof and irradiance weights as the solve. A missing approach uses
 the bounded normal launch. All views share the tier's finite new-proof allowance;
-its admission and deferred counters reset once through the residency's existing
-trace pass, including frames with no new transport rays. Each receiver retains
+its admission counter resets once through the residency's existing trace pass,
+including frames with no new transport rays. Each view owns a separate four-byte
+deferred counter: an explicit transfer reset precedes Views, whose preserving
+compute-written version supplies that view's fenced readback. A different camera's
+deferred work never delays this view's completion. Each receiver retains
 its exact launch and completed result in the visibility record, independently
 of shared proof-hash collisions. The complete allocation identity and transport
 revision qualify this certificate. Primary preserves it only when the same
@@ -430,7 +433,8 @@ Capture waits for that view's current completed receiver scope as well as its
 shared lighting solve. The shared-cache wait alone does not promise completed
 receiver work for every view.
 The certificate adds 32 bytes per allocated render pixel, and each allocated
-completion-ring slot owns four host-visible bytes, both reported in graph memory.
+completion-ring slot owns four host-visible bytes; its view also owns four
+device-local counter bytes, all reported in graph memory.
 Material albedo, metallic diffuse exclusion, `receive` and AO apply once
 after the selected algorithm returns its independent source contributions.
 The `indirect` debug view shows the incident sum before those material factors.

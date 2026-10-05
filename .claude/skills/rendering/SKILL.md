@@ -108,8 +108,10 @@ Reflected previous-bank light at hits belongs to Feedback; disabled Sky and
 unresolved terminals read no map.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
-and share bounded receiver-proof admission and deferred counters. Their reset is
-the existing trace pass's two-word work, requested only by pending view scopes.
+and share bounded receiver-proof admission. The existing trace pass resets its
+one admission word, requested only by pending view scopes. Each view separately
+owns a four-byte deferred counter, explicitly transfer-cleared before Views and
+read back from its preserving compute-written version after the same fence.
 Views publishes its eight-word certificate through an explicit preserving
 visibility version, qualified by the complete allocation identity and transport
 revision. Primary clears it on a new sample; repeating the exact submitted

@@ -126,7 +126,7 @@ SdfIndirectSources sdfIndirectReceiver(SdfPixel p, SdfSurfaceSample receiver, fl
         sdfIndirectReceiverStatus = 4u;
         if (passGroup.indirectReceiverProofs != 0u) {
             uint ignored;
-            InterlockedAdd(indirectCacheRW[sdfIndirectReceiverProofWordOffset(passGroup.indirectTier) + 1u], 1u, ignored);
+            InterlockedAdd(indirectDeferredRW[0], 1u, ignored);
         }
     }
     sdfIndirectStoreReceiverCertificate(record, 0u, 0u, 0.0, 0.0, !sdfIndirectReceiverDeferred);

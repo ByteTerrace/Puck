@@ -15,7 +15,7 @@ internal sealed partial class SdfWorldPickReadback {
         target.ReceiverBuffer ??= m_context.Services.BufferFactory.CreateReadback(sizeBytes: sizeof(uint),
             name: new GpuObjectName(owner: m_context.Instance, part: m_context.Pass, detail: "indirect-deferred", index: slot));
         target.ReceiverVersion = version;
-        target.ReceiverOffset = checked((ulong)(cache.Layout.ReceiverProofWordOffset + 1) * sizeof(uint));
+        target.ReceiverOffset = 0;
         target.ReceiverScope = scope;
         target.ReceiverLighting = cache.LightingCompletion;
         target.ReceiverRecord = true;
