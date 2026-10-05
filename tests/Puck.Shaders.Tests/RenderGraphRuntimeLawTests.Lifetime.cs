@@ -7,6 +7,9 @@ namespace Puck.Shaders.Tests;
 
 // Captures, steady-state allocation, device loss and disposal.
 public sealed partial class RenderGraphRuntimeLawTests {
+    private sealed class RootHolding(Action dispose) : IDisposable {
+        public void Dispose() => dispose();
+    }
     // The two-screen scene with an off-view camera and a buffer edge: every kind of edge and a stand-in in one frame.
     private static (RenderGraphRuntime Runtime, Frames Frames, Recorders Recorders) Scene(FakePipelineGpu gpu) {
         var recorders = new Recorders(Camera, Pool);
@@ -195,10 +198,25 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakePipelineGpu();
 
         var (runtime, frames, recorders) = Scene(gpu: gpu);
+        var released = new List<string>();
+        var root = new RenderGraphRuntimeNode(runtime: runtime, width: Display, height: Display, footprints: []) {
+            Holdings = [
+                new RootHolding(dispose: () => {
+                    Assert.Equal(expected: 0UL, actual: gpu.LiveBytes);
+                    Assert.All(collection: recorders.ByInstance.Values,
+                        action: static counter => Assert.Equal(expected: counter.Created, actual: counter.Disposed));
+                    released.Add(item: "first");
+                }),
+                new RootHolding(dispose: () => released.Add(item: "second")),
+            ],
+        };
 
         frames.Settle();
-        runtime.Dispose();
+        root.Dispose();
+        // The launcher tears down before its container releases the same root singleton.
+        root.Dispose();
 
+        Assert.Equal(expected: ["first", "second"], actual: released);
         Assert.Equal(
             actual: (Live: gpu.LiveBytes, Undisposed: gpu.CreatedObjects.Count(predicate: static created => (created.DisposeCount == 0)), Recorders: recorders.ByInstance.Values.Sum(selector: static counter => (counter.Created - counter.Disposed))),
             expected: (Live: 0UL, Undisposed: 0, Recorders: 0)

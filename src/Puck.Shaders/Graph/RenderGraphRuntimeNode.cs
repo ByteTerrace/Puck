@@ -21,6 +21,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     private readonly List<RenderGraphRoot> m_roots = [];
 
     private long m_frame;
+    private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphRuntimeNode"/> class.</summary>
     /// <param name="runtime">The runtime, which the node owns and disposes.</param>
@@ -51,7 +52,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
     /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
     /// dispose only after the device context is released here instead; its later disposal by the container is a
-    /// no-op.</summary>
+    /// no-op. Repeated root disposal releases neither the runtime nor these holdings again.</summary>
     public IReadOnlyList<IDisposable> Holdings { get; init; } = [];
     /// <inheritdoc/>
     public string? PendingCapturePath => Runtime.PendingCapturePath;
@@ -70,6 +71,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
 
     /// <inheritdoc/>
     public void Dispose() {
+        if (m_disposed) { return; }
+        m_disposed = true;
         Runtime.Dispose();
 
         foreach (var holding in Holdings) {
