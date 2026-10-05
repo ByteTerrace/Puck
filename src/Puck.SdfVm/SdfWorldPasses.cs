@@ -600,6 +600,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         private long m_revisionCapacity;
         private long m_revisionSwitches;
         private int m_revisionLightMaps;
+        private SdfIndirectCache? m_revisionLightCache;
         private SdfWorldView? m_view;
 
         // The frame the entry was last resolved in.
@@ -621,11 +622,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 lock (m_gate) {
                     var capacity = (Residency?.CapacityRevision ?? 0L);
                     var maps = LightMapCount(residency: Residency);
+                    // A light bank retains its allocating cache; even an equal-size replacement must hand it off.
+                    var lightCache = (m_view is { LightView: true } ? Residency?.Tables?.Indirect : null);
 
-                    if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches) || (m_revisionLightMaps != maps)) {
+                    if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches) || (m_revisionLightMaps != maps)
+                        || !ReferenceEquals(m_revisionLightCache, lightCache)) {
                         m_revisionCapacity = capacity;
                         m_revisionSwitches = Switches;
                         m_revisionLightMaps = maps;
+                        m_revisionLightCache = lightCache;
                         m_revision++;
                     }
                     return m_revision;

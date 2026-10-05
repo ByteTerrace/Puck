@@ -72,15 +72,45 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var after));
         Assert.Equal(expected: before, actual: after);
         Assert.All(collection: Enumerable.Range(start: 0, count: 2), action: index => Assert.True(condition: residency.IndirectLightViews.Snapshot(index: index).Valid));
+        var counter = views.CounterOf(instance: Light)!;
+        var revision = counter.Revision;
+        Assert.Equal(revision, counter.Revision);
+        frame = frame with { FarDistance = 24f };
+        Produce();
+        var replacement = residency.Tables.Indirect!;
+        Assert.NotSame(cache, replacement);
+        Assert.True(counter.Revision > revision, "An equal-capacity cache replacement must rebuild its light-bank owner.");
+        TestLiveness.Within(frames: 16, step: () => {
+            Produce();
+            return replacement.LightViewBytes == BankBytes;
+        }, building: () => graph.Node(instance: 0).IsBuildingCandidate, reason: () => graph.Render.Reason);
+        Assert.Equal(0, bank.DisposeCount);
+        var replacementName = Assert.Single(naming.Applied, item => item.Name == Light + "/" + SdfWorldPackage.IndirectLightDepth && item.Handle != bankName.Handle);
+        var replacementBank = Assert.Single(gpu.Created, item => item.Handle == replacementName.Handle);
+        // Advance real map submissions so last/previous publications and their existing reader-lag fence retire.
+        TestLiveness.Within(frames: 16, step: () => {
+            residency.IndirectLightViews.InvalidateStorage();
+            Produce();
+            return bank.DisposeCount == 1;
+        }, building: () => graph.Node(instance: 0).IsBuildingCandidate, reason: () => "The replaced light bank did not retire behind its reader fence.");
+        Assert.Equal(0UL, cache.LightViewBytes);
+        Assert.Equal(replacement.Bytes, residency.Tables.IndirectBytes);
+        Assert.Equal(0, residency.Tables.RetiringIndirectCacheCount);
+        Assert.Equal(0, replacementBank.DisposeCount);
+        Assert.Equal(BankBytes, replacement.LightViewBytes);
+        revision = counter.Revision;
+        Assert.Equal(revision, counter.Revision);
+        Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out before));
         frame = frame with { MeshDraws = [new SdfMeshDraw(Mesh: SdfMeshCard.Mesh, ObjectToWorld: Matrix4x4.Identity, Material: 0, Identity: "independent-triangle")] };
         Produce();
         Assert.All(collection: Enumerable.Range(start: 0, count: 2), action: index => Assert.Null(@object: residency.IndirectLightViews.Snapshot(index: index).Projection));
         Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out after));
         Assert.Equal(expected: before, actual: after);
-        var allocated = cache.Bytes;
+        var allocated = replacement.Bytes;
         graph.Dispose();
         Assert.Equal(1, bank.DisposeCount);
-        Assert.Equal(0UL, cache.LightViewBytes);
-        Assert.Equal(allocated, cache.Bytes + new GpuMemoryBytes(DeviceLocal: BankBytes, HostVisible: 0));
+        Assert.Equal(1, replacementBank.DisposeCount);
+        Assert.Equal(0UL, replacement.LightViewBytes);
+        Assert.Equal(allocated, replacement.Bytes + new GpuMemoryBytes(DeviceLocal: BankBytes, HostVisible: 0));
     }
 }

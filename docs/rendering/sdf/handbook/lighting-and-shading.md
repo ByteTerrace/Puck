@@ -206,7 +206,8 @@ and the frame/pass constant rings. The depth publisher borrows one bank, counted
 by the residency cache and held until the graph and its readers retire. It costs
 one MiB per region and does not rotate between submissions, so updating one
 region preserves every other held map. Traversal scratch is additional and
-shared by the one camera.
+shared by the one camera. Replacing the cache rebuilds its depth bank even when
+its map count stays fixed, so the former cache retires with the former graph.
 
 A baked mesh carries a CPU-side certificate only when its emitter retains the
 same SDF at the same pose. Raster depth can bound a search but cannot certify a
