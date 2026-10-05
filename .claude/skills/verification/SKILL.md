@@ -37,6 +37,10 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
+  The leased clone warms ignored shader bytecode from the caller only through
+  complete, hash-checked artifact pairs and the existing publication locks.
+  Its normal build still validates source/include/recipe identities; do not
+  copy managed outputs or alter timestamps to make a proof appear incremental.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`
   with exact selectors and one reviewed production-only restoration. Each side
   builds once and retains a separate report for every selector; every selector

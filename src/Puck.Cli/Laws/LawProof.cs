@@ -541,6 +541,8 @@ internal static partial class LawProof {
                 }
             }
 
+            if (!scratchWorktree) { persistent!.WarmShaders(cancellationToken: cancellationToken); }
+
             var original = withheld.ToDictionary(
                 comparer: StringComparer.Ordinal,
                 elementSelector: path => Read(path: path, root: tree),

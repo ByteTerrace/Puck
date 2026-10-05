@@ -1,7 +1,7 @@
 {
   "id": "sky-artist-surface",
   "title": "Saved sky and atmosphere rows reload into the actual comparison and inspector",
-  "binding": "One real editor-grid seat looks only at a fixed uniform sky. The positive changes red to blue and fog density0.01 to0.03 through existing row edits, saves a run-owned .puck file, loads that saved source and reloads its current origin before measuring against the held red frame. The opposite submits the original red and0.01 values through the same save/load/reload route; its held display stays unchanged. The initial/reloaded lighting echoes and the sole final inspector must contain their actual authored fog values; the inspector check ends at the next comparison response, so a lighting echo cannot satisfy it. This proves saved-current-source rendering and atmosphere inspector output; external file editing and preservation of surrounding source text remain the existing WorldSkyEdit laws, not an invented canary editing mechanism. The source is unqualified until the actual seat, camera and envelopes run on both backends.",
+  "binding": "One real editor-grid seat looks only at a fixed uniform sky. The positive changes red to blue and fog density0.01 to0.03 through existing row edits, saves a run-owned .puck file, replaces the live values with red and0.01, then force-loads that saved source and reloads its current origin before measuring against the held red frame. The opposite saves the original red and0.01 values, replaces the live values with blue and0.03, then force-loads/reloads that saved source; its held display returns unchanged. Before loading, each leg reads the unsaved fog and captures the unsaved opposite sky; both are asserted, so no-op edits cannot hide a no-op load. An accepted load that leaves the live edits in place fails both legs. The initial/reloaded lighting echoes and the sole final inspector must contain their actual authored fog values; the inspector check ends at the next comparison response, so a lighting echo cannot satisfy it. This proves saved-current-source rendering and atmosphere inspector output; external file editing and preservation of surrounding source text remain the existing WorldSkyEdit laws, not an invented canary editing mechanism. The source is unqualified until the actual seat, camera and envelopes run on both backends.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -79,6 +79,36 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.load",
         "occurrence": 1,
         "outcome": "accepted"
@@ -90,17 +120,17 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 3,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 4,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
         "verb": "world.lighting",
-        "occurrence": 2,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
@@ -120,12 +150,12 @@
       },
       {
         "verb": "world.screenshot",
-        "occurrence": 2,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 5,
+        "occurrence": 7,
         "outcome": "accepted"
       },
       {
@@ -141,7 +171,7 @@
         "stream": "stdout",
         "verb": "world.lighting",
         "occurrence": 1,
-        "count": 2,
+        "count": 3,
         "extract": [
           {
             "name": "initial-air",
@@ -165,8 +195,8 @@
         "name": "the-reloaded-air-echo",
         "stream": "stdout",
         "verb": "world.lighting",
-        "occurrence": 2,
-        "count": 2,
+        "occurrence": 3,
+        "count": 3,
         "extract": [
           {
             "name": "reloaded-air",
@@ -282,6 +312,61 @@
         "occurrence": 1,
         "count": 1,
         "extract": []
+      },
+      {
+        "type": "response",
+        "name": "the-unsaved-live-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "count": 3,
+        "extract": [
+          {
+            "name": "unsaved-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-unsaved-live-air-is-the-opposite-value",
+        "operator": "equal",
+        "left": {
+          "value": "unsaved-air"
+        },
+        "right": {
+          "literal": 0.01
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-unsaved-live-sky-is-the-opposite-color",
+        "capture": "unsaved.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.3,
+          0.3,
+          0.7,
+          0.7
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.1,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0.05,
+          0.05,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
       }
     ]
   },
@@ -350,6 +435,36 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.load",
         "occurrence": 1,
         "outcome": "accepted"
@@ -361,17 +476,17 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 3,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 4,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
         "verb": "world.lighting",
-        "occurrence": 2,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
@@ -391,12 +506,12 @@
       },
       {
         "verb": "world.screenshot",
-        "occurrence": 2,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 5,
+        "occurrence": 7,
         "outcome": "accepted"
       },
       {
@@ -412,7 +527,7 @@
         "stream": "stdout",
         "verb": "world.lighting",
         "occurrence": 1,
-        "count": 2,
+        "count": 3,
         "extract": [
           {
             "name": "initial-air",
@@ -436,8 +551,8 @@
         "name": "the-reloaded-air-echo",
         "stream": "stdout",
         "verb": "world.lighting",
-        "occurrence": 2,
-        "count": 2,
+        "occurrence": 3,
+        "count": 3,
         "extract": [
           {
             "name": "reloaded-air",
@@ -553,6 +668,61 @@
         "occurrence": 1,
         "count": 1,
         "extract": []
+      },
+      {
+        "type": "response",
+        "name": "the-unsaved-live-air-echo",
+        "stream": "stdout",
+        "verb": "world.lighting",
+        "occurrence": 2,
+        "count": 3,
+        "extract": [
+          {
+            "name": "unsaved-air",
+            "field": "fogDensity"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-unsaved-live-air-is-the-opposite-value",
+        "operator": "equal",
+        "left": {
+          "value": "unsaved-air"
+        },
+        "right": {
+          "literal": 0.03
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-unsaved-live-sky-is-the-opposite-color",
+        "capture": "unsaved.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.3,
+          0.3,
+          0.7,
+          0.7
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.1,
+          1
+        ],
+        "maximum": [
+          0.05,
+          0.05,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
       }
     ]
   }

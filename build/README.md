@@ -19,7 +19,8 @@ effective compiler command and backend options, and compiled bytes against its
 sidecar. Equal inputs restored or touched since compilation reuse their valid
 bytecode. Changed inputs, recipes, damaged bytes or incomplete sidecars compile
 again; only successful compilation publishes a new pair. The persistent law
-proof clone uses this same admission over its retained shader outputs.
+proof clone uses this same admission over its retained shader outputs and
+complete shader pairs warmed from its caller under the publication locks.
 
 `WorldAssets.targets`, imported by the game, hands every `.puck` source and
 `.world.json` document under `src/Puck.World/Assets/worlds` to one

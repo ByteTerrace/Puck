@@ -131,8 +131,9 @@
         </ItemGroup>
     </Target>
 
-    <!-- Compiles each declared source to SPIR-V (Vulkan; entry renamed to "main") always, and to DXIL (DirectX)
-         when its category's opt-out property is true, with the options ShaderRecipe.targets holds for the stage and
+    <!-- Compiles each declared source for its enabled backends: SPIR-V (Vulkan; entry renamed to "main") when
+         PuckShaderSpirvEnabled is true, and DXIL (DirectX) when the stage's DXIL-enabled property is true, with the
+         options ShaderRecipe.targets holds for the stage and
          target (generated from ShaderCompiler.StepsOf: the capability floor, explicit -O3 and -enable-16bit-types,
          and on DXIL the suppressed "attribute ignored" warnings for the SPIR-V-only vk:: attributes).
          Content admission checks source, recipe and bytecode against the existing sidecar. File timestamps do not

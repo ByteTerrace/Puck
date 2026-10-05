@@ -2,13 +2,18 @@
 
 A real editor-grid seat uses a fixed camera aimed above its geometry. The
 positive leg holds its red sky, edits the sky to blue and fog density to 0.03,
-saves into the leg's run directory, loads that saved `.puck` and reloads its
-current origin. The comparison measures the displayed frame before its graph
-is disabled; the following capture observes the ordinary display. The
-opposite retains red and 0.01 through precisely the same commands.
+saves into the leg's run directory, replaces the live values with red and 0.01,
+then force-loads that saved `.puck` and reloads its current origin. The force
+argument explicitly discards the unsaved perturbation. The comparison measures
+the displayed frame before its graph is disabled; the following capture observes the ordinary display. The
+opposite saves red and 0.01, temporarily edits the live world to blue and 0.03,
+then restores its saved values through the same load/reload commands. An accepted
+load that leaves the current live values unchanged therefore fails both legs.
+Before loading, each leg captures the opposite live sky and reads its unsaved
+fog value. Both are asserted, so no-op edits cannot conceal a no-op load.
 
-`world.lighting` reads both fog values. The sole `world.inspect` response
-reads the reloaded fog before the next comparison response. Its wrapped lines
+`world.lighting` reads the initial, unsaved and reloaded fog values. The sole
+`world.inspect` response reads the reloaded fog before the next comparison response. Its wrapped lines
 are checked in order; no later lighting echo can satisfy that inspector check. The inspector is queried without enabling its overlay or a continuous
 pixel demand, so its fixed line reservation includes the shared sky and air
 text and the captures contain no inspector panel. `world.cost sky` reads the

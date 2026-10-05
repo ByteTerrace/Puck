@@ -383,12 +383,17 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.True(condition: waiting.IsSet, userMessage: "The process ended without observing contention on the source tree's publication lock.");
     }
 
-    private sealed class Fixture : IDisposable {
-        private readonly TemporaryDirectory m_directory = new(prefix: "puck-shader-targets-");
+    internal sealed class Fixture : IDisposable {
+        private readonly TemporaryDirectory? m_directory;
 
-        public Fixture() => CliScratchDirectories.PinSdk(directory: Root);
+        public Fixture(string? root = null) {
+            m_directory = ((root is null) ? new TemporaryDirectory(prefix: "puck-shader-targets-") : null);
+            Root = (root ?? m_directory!.RootPath);
+            _ = Directory.CreateDirectory(path: Root);
+            CliScratchDirectories.PinSdk(directory: Root);
+        }
 
-        public string Root => m_directory.RootPath;
+        public string Root { get; }
 
         public string PathOf(string path) => Path.Combine(path1: Root, path2: path);
         public void Write(string path, string text) {
@@ -421,6 +426,6 @@ public sealed class ShaderBuildTargetsLawTests {
             workingDirectory: Root
         );
         public void RequireSuccess(CliProcessResult run) => Assert.True(condition: (run.ExitCode == 0), userMessage: $"{run.Stdout}\n{run.Stderr}");
-        public void Dispose() => m_directory.Dispose();
+        public void Dispose() => m_directory?.Dispose();
     }
 }

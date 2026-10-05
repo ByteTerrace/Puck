@@ -1135,9 +1135,16 @@ and never registers in the caller's worktree list.
 
 Each proof fetches the caller's `HEAD` by object id, checks it out detached,
 removes untracked files Git does not ignore, and mirrors the caller's
-uncommitted and untracked files. Ignored build outputs stay in the clone at
+uncommitted and untracked files. Ignored managed build outputs stay in the clone at
 the paths where MSBuild produced them. Nothing copies or links the caller's
-`obj` or `bin`. Git rewrites changed tracked files; unchanged files retain
+`obj` or `bin`. Before withholding, the leased clone can warm its ignored shader
+outputs from the caller's complete `.spv`/`.dxil` and `.hash` pairs. Both project
+publication locks protect the copy; it rejects links, incomplete sidecars and
+bytecode whose actual hash differs. Whole files publish with the sidecar last,
+and an equal destination pair stays untouched. A busy publisher skips warming
+that project. Warming does not certify freshness: the normal build still checks
+the destination source, ordered includes, effective recipe and bytecode, so a
+withheld shader change recompiles. Git rewrites changed tracked files; unchanged files retain
 their timestamps, so MSBuild's ordinary incremental checks apply.
 
 There the proof withholds the fix, builds the law's project in Release and

@@ -890,6 +890,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var previousRowRegions = m_rowRegions;
         var previousCadenceResources = m_cadenceResources;
         var previousCadenceVersions = m_cadenceVersions;
+        var previousBufferScratch = m_bufferPublicationScratch;
+        var previousBufferSecondScratch = m_bufferPublicationSecondScratch;
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
         var carried = CarriedHistoryOf(
             extent: (key.Width, key.Height),
@@ -928,6 +930,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             );
             SeedPassRegions();
             ConfigureCadence();
+            PrepareBufferPublications(next.Plan.Outputs.Count);
             // What an install counts belongs to no submission, whether it installs, fails partway or rebuilds after a
             // device loss.
             m_work.Discard();
@@ -977,6 +980,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_rowRegions = previousRowRegions;
             m_cadenceResources = previousCadenceResources;
             m_cadenceVersions = previousCadenceVersions;
+            m_bufferPublicationScratch = previousBufferScratch;
+            m_bufferPublicationSecondScratch = previousBufferSecondScratch;
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
             }
@@ -1311,8 +1316,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // The installed graph's copy pool went with its first pass, and the copies a frame owed with its slots.
         m_regionCopies = null;
         m_copyRecording = null;
-        // The published images were the released graph's or held from one, so nothing stays published.
+        // Published images and buffers belonged to the released graph or were held from one; neither stays published.
         m_lastSurface = default;
+        ClearBufferPublications();
         m_publishedStateTick = null;
         m_publishedFrame = null;
         m_previousSurface = default;
@@ -1742,6 +1748,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frameLeases.MoveTo(destination: slot.Leases);
         NoteRenderGrid();
         NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
+        PublishBuffers(slot: slotIndex);
         Publish(surface: Output(slot: slotIndex));
         m_publishedStateTick = Frame.StateTick;
         m_publishedAtRequestedExtent = !RendersAnotherExtent;
@@ -1787,6 +1794,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frame = 0;
         m_steps = 0;
         m_outputRefreshRequested = false;
+        ClearBufferPublications();
         Publish(surface: default);
         m_publishedStateTick = null;
         m_publishedFrame = null;

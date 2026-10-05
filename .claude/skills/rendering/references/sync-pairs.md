@@ -212,6 +212,18 @@ and temporal convergence. Existing dependency preparation retains its own
 counting and ordering. `GpuPassState.Standing` has no per-pass count, so timing
 or counted-load consumers must not interpret it as a measured zero.
 
+A paused buffer producer publishes without a display surface. Keep its actual
+last and previous named-output snapshots across an install, detach only owned
+published ring slots into the existing held-resource retirement, and count their
+bytes once. Do not expose unrendered replacement allocations or take ownership
+of package-borrowed buffers. Their replaced package recorders retain the actual
+owner while either publication names a borrowed allocation. An installed package
+retaining the same buffer object takes over that owner obligation without holding
+redundant old graphs; raw handles and external bindings do not. After actual
+displacement, the existing reader lag and fence retire those recorders. The graph
+never disposes the borrowed buffer directly. The reader lag retires displaced owned slots;
+reset and device release withdraw both snapshots.
+
 ## Image sources
 
 | C# (`Puck.Abstractions.Sources`) | HLSL (`src/Puck.Shaders/Assets/Shaders/Sources`) | Contract |

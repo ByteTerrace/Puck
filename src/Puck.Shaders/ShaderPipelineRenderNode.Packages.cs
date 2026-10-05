@@ -21,35 +21,55 @@ public sealed partial class ShaderPipelineRenderNode {
     // each frame it produces and every package recording of that frame is handed; null when there are none.
     internal RenderGraphExternalReads? Reads { get; set; }
 
-    // The buffer the selected output holds in the frame slot the node most recently submitted; null selects the default.
-    // Null before the first submission, after a device loss, or
-    // when the output is not a buffer the node allocates.
-    internal IGpuBuffer? LatestOutputBuffer(string? name = null) {
-        if (
-            (m_frame == 0) ||
-            (m_pipeline is null) ||
-            !m_ready ||
-            !m_resourceLookup.TryGetValue(
-                key: (name ?? m_pipeline.Plan.DefaultOutput),
-                value: out var resource
-            ) ||
-            (resource.Buffers is not { } buffers)
-        ) {
-            return null;
-        }
+    // The two completed named-output publications survive a graph replacement. Scratch belongs to the installed
+    // output shape and is prepared at install, never allocated while a steady frame publishes.
+    private BufferOutput[] m_publishedBuffers = [];
+    private BufferOutput[] m_previousBuffers = [];
+    private BufferOutput[] m_bufferPublicationScratch = [];
+    private BufferOutput[] m_bufferPublicationSecondScratch = [];
+    private string? m_publishedBufferDefault;
 
-        return buffers[HistoryIndex(previous: false, resource: resource, slot: ((int)((m_frame - 1) % m_inFlight)))];
+    private void PrepareBufferPublications(int count) {
+        m_bufferPublicationScratch = ((m_previousBuffers.Length == count) ? [] : new BufferOutput[count]);
+        m_bufferPublicationSecondScratch = ((m_publishedBuffers.Length == count) ? [] : new BufferOutput[count]);
     }
-
-    // The runtime alternates its two completed-frame arrays. Names and allocations come from this installed graph,
-    // never from a replacement candidate whose buffers have not produced the frame being published.
-    internal BufferOutput[] LatestOutputBuffers(BufferOutput[]? reuse) {
-        if ((m_pipeline is null) || !m_ready || (m_frame == 0)) { return []; }
-        var outputs = m_pipeline.Plan.Outputs;
-        var result = (reuse is not null && reuse.Length == outputs.Count) ? reuse : new BufferOutput[outputs.Count];
+    private void PublishBuffers(int slot) {
+        var outputs = m_pipeline!.Plan.Outputs;
+        var next = ((m_previousBuffers.Length == outputs.Count) ? m_previousBuffers : m_bufferPublicationScratch);
+        m_bufferPublicationScratch = m_bufferPublicationSecondScratch;
+        m_bufferPublicationSecondScratch = [];
         for (var index = 0; index < outputs.Count; index++) {
-            result[index] = new BufferOutput(Name: outputs[index], Buffer: LatestOutputBuffer(name: outputs[index]));
+            var name = outputs[index];
+            var resource = m_resourceLookup[name];
+            var buffer = ((resource.Buffers is { } buffers)
+                ? buffers[HistoryIndex(previous: false, resource: resource, slot: slot)] : null);
+            next[index] = new BufferOutput(Name: name, Buffer: buffer);
         }
+        m_previousBuffers = m_publishedBuffers;
+        m_publishedBuffers = next;
+        m_publishedBufferDefault = m_pipeline.Plan.DefaultOutput;
+    }
+    private void ClearBufferPublications() {
+        Array.Clear(m_publishedBuffers);
+        Array.Clear(m_previousBuffers);
+        m_publishedBufferDefault = null;
+    }
+    // Reads the actual last published frame, not an unrendered replacement's allocations. Null names select the
+    // default of the graph that published it; image outputs and withdrawn publications have no buffer.
+    internal IGpuBuffer? LatestOutputBuffer(string? name = null) {
+        name ??= m_publishedBufferDefault;
+        foreach (var output in m_publishedBuffers) {
+            if (output.Name == name) { return output.Buffer; }
+        }
+        return null;
+    }
+    // The runtime alternates its two completed-frame arrays. Copy the held publication into its reusable array so
+    // the node's next publication cannot overwrite the runtime's previous frame.
+    internal BufferOutput[] LatestOutputBuffers(BufferOutput[]? reuse) {
+        if (m_publishedBufferDefault is null) { return []; }
+        var result = ((reuse is not null && reuse.Length == m_publishedBuffers.Length)
+            ? reuse : new BufferOutput[m_publishedBuffers.Length]);
+        m_publishedBuffers.CopyTo(result, 0);
         return result;
     }
     internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer);
@@ -292,7 +312,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
         foreach (var held in m_held) {
-            if (!held.Leased && (held.Handle == imageHandle)) {
+            if ((held.Kind != ShaderPipelineResourceKind.Buffer) && !held.Leased && (held.Handle == imageHandle)) {
                 return true;
             }
         }

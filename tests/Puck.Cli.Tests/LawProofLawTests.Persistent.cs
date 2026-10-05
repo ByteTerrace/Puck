@@ -5,6 +5,101 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed partial class LawProofLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AProofWarmsShaderPairsButItsBuildStillRejectsWithheldShaderContent(bool withholdShader) {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var shaders = ShaderCheckout(checkout: checkout);
+        const string shader = "src/Lib/Assets/Shaders/a.comp.hlsl";
+
+        checkout.Write(name: FixPath, text: "fixed");
+        if (withholdShader) { checkout.Write(name: shader, text: "fixed shader"); }
+        var fix = checkout.Commit(message: "lib: fix");
+        shaders.RequireSuccess(run: shaders.Run(target: "Build"));
+        shaders.Write(path: "bin/managed.dll", text: "never transfer managed output");
+        shaders.Write(path: "obj/managed.cache", text: "never transfer managed intermediate");
+        var sidecar = File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv.hash"));
+        var bytes = File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv"));
+        var builds = 0;
+        var runner = new FakeRunner {
+            BeforeBuild = (tree, _) => {
+                using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+                if (++builds == 1) {
+                    Assert.Equal(expected: bytes, actual: File.ReadAllBytes(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv")));
+                    Assert.Equal(expected: sidecar, actual: File.ReadAllBytes(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+                }
+                Assert.False(condition: File.Exists(path: copied.PathOf(path: "bin/managed.dll")));
+                Assert.False(condition: File.Exists(path: copied.PathOf(path: "obj/managed.cache")));
+                copied.RequireSuccess(run: copied.Run(target: "Build"));
+                var compiles = copied.PathOf(path: "compiles.txt");
+                Assert.Equal(expected: (withholdShader ? builds : 0), actual: (File.Exists(path: compiles) ? File.ReadAllLines(path: compiles).Length : 0));
+            },
+        };
+
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, shader] : [FixPath]), Revision: fix), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+        Assert.Equal(expected: 2, actual: builds);
+        Assert.Contains(expectedSubstring: "warmed 1 shader artifact pair(s)", actualString: result.Error);
+        Assert.Equal(expected: sidecar, actual: File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [InlineData("bytes")]
+    [InlineData("recipe")]
+    [InlineData("publisher")]
+    [Theory]
+    public void AProofDoesNotWarmIncompleteCorruptOrPublishingShaderPairs(string unavailable) {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var shaders = ShaderCheckout(checkout: checkout);
+
+        checkout.Write(name: FixPath, text: "fixed");
+        var fix = checkout.Commit(message: "lib: fix");
+        shaders.RequireSuccess(run: shaders.Run(target: "Build"));
+        if (unavailable == "bytes") { shaders.Write(path: "Assets/Shaders/a.comp.spv", text: "corrupt bytecode"); }
+        if (unavailable == "recipe") {
+            var path = shaders.PathOf(path: "Assets/Shaders/a.comp.spv.hash");
+            File.WriteAllLines(path: path, contents: File.ReadAllLines(path: path).Where(predicate: static line => !line.StartsWith(value: "recipe:", comparisonType: StringComparison.Ordinal)));
+        }
+        using var publisher = ((unavailable == "publisher")
+            ? new FileStream(path: shaders.PathOf(path: "obj/shader-publish.lock"), mode: FileMode.Open, access: FileAccess.ReadWrite, share: FileShare.None)
+            : null);
+        var builds = 0;
+        var runner = new FakeRunner {
+            BeforeBuild = (tree, _) => {
+                using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+                if (++builds == 1) {
+                    Assert.False(condition: File.Exists(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv")));
+                    Assert.False(condition: File.Exists(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+                }
+                copied.RequireSuccess(run: copied.Run(target: "Build"));
+                Assert.Single(collection: File.ReadAllLines(path: copied.PathOf(path: "compiles.txt")));
+            },
+        };
+
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath], Revision: fix), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+        Assert.Equal(expected: 2, actual: builds);
+        Assert.DoesNotContain(expectedSubstring: "warmed 1 shader artifact pair(s)", actualString: result.Error);
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+
+    private static ShaderBuildTargetsLawTests.Fixture ShaderCheckout(GitScratchCheckout checkout) {
+        checkout.Write(name: ".gitignore", text: "bin/\nobj/\n*.spv\n*.dxil\n*.hash\ncompiles.txt\n");
+        checkout.Write(name: "src/Lib/Lib.csproj", text: "<Project />\n");
+        var shaders = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: checkout.Root, path2: "src/Lib"));
+        shaders.Write(path: "Assets/Shaders/a.comp.hlsl", text: "original shader");
+        shaders.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            """);
+        _ = checkout.Commit(message: "lib: shader source and target");
+        return shaders;
+    }
+
     [Fact]
     public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
         using var checkout = Checkout(initial: "broken");

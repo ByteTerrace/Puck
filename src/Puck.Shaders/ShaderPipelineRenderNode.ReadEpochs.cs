@@ -24,7 +24,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     name: new GpuObjectName(owner: m_name, part: "epoch-copy"));
                 held = new(epoch, input.Producer, image, input.Publication, input.Tainted);
                 m_recordedReadCopies.Add(held);
-                m_held.Add(new HeldImage(Handle: image.ImageHandle, Image: held,
+                m_held.Add(new HeldResource(Handle: image.ImageHandle, Resource: held,
                     Bytes: ImageBytes(input.Image.Format.ToString(), input.Image.Width, input.Image.Height), Epoch: epoch));
                 m_frameLeases.Hold(reads.Take(index));
                 RecordImageCopy(command, input.Image.ImageHandle, input.Layout, image.ImageHandle,
@@ -45,7 +45,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void DiscardUnsubmittedReadCopies() {
         foreach (var image in m_recordedReadCopies) {
-            m_held.RemoveAll(held => ReferenceEquals(held.Image, image));
+            m_held.RemoveAll(held => ReferenceEquals(held.Resource, image));
             image.Dispose();
         }
         m_recordedReadCopies.Clear();

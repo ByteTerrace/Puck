@@ -73,14 +73,14 @@ public sealed partial class ShaderPipelineRenderNode {
             width: source.Width
         );
 
-        m_held.Add(item: new HeldImage(
+        m_held.Add(item: new HeldResource(
             Bytes: ImageBytes(
                 format: source.Format.ToString(),
                 height: source.Height,
                 width: source.Width
             ),
             Handle: copy.ImageHandle,
-            Image: copy
+            Resource: copy
         ));
 
         var recorder = m_gpu.Recorder;
