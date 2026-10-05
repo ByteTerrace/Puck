@@ -2942,14 +2942,17 @@ or slot as the detail label P18 adds to the ledger:
   launch fallbacks, detail `indirect`), and the light view's march rows under
   its own instance; `gpu.texels.written` under `indirect$shade`;
 - `gpu.indirect.hits`, the hits `shade` lit, `gpu.indirect.samples`, the cache
-  lookups `views` made, and `gpu.indirect.unresolved` (rays, light-view texels
-  and shadow fallbacks by detail), all `PerBackendDeterministic`;
+  lookups `views` made, and `gpu.indirect.unresolved` (rays, unresolved or
+  deferred receivers, light-view texels and shadow fallbacks by detail), all
+  `PerBackendDeterministic`;
 - in a `sdf.indirect` `WorkCounterSet` on the host, all `Deterministic`:
   `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason (`demand`,
   `geometry`, `light`, `shadow`, `screen`, `converge`),
   `indirect.bricks.allocated`, `.evicted` and `.refused` per level,
-  `indirect.sweeps.completed` and `.restarted`; and, per view,
-  `indirect.proofs.issued`, `.reused` and `.deferred`.
+  `indirect.sweeps.completed` and `.restarted`. These are residency schedule
+  counts. Receiver proof costs appear in the GPU field-evaluation and unresolved
+  rows above; the fenced deferred-receiver word controls completion and is not a
+  cumulative proof-event counter.
 
 The ceilings file records at the floor device, at `medium`, a ceiling per row
 and a required zero wherever no work is allowed: every indirect row at `low`;
