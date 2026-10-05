@@ -411,7 +411,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 cut: frame.Views[view].CutRevision);
             var cachePort = Array.IndexOf(m_inputs, SdfWorldPackage.IndirectCache);
             var pickPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectPick);
-            var deferredPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectDeferred);
+            // Build ports carry the storage declaration; the recording carries its written successor version.
+            var deferredPort = Array.IndexOf(m_outputs, SdfWorldPackage.IndirectDeferredClear);
             var indirect = BoundIndirect(recording, tables);
             var receiverScope = indirect is null ? default : m_owner.PrepareReceivers(m_context.Instance, indirect);
             m_pick.PrepareReceivers(recording.Slot, indirect,
@@ -919,7 +920,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
-        SdfWorldPackage.IndirectDeferred => SdfWorldPackage.IndirectDeferredWritten,
+        SdfWorldPackage.IndirectDeferredClear => SdfWorldPackage.IndirectDeferredWritten,
         SdfWorldPackage.IndirectVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
