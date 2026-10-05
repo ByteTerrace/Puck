@@ -107,11 +107,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool m_lightingSubmitted;
 
     private readonly SdfWorldPickReadback? m_pick;
+    private readonly SdfIndirectCache.LightViewBank? m_lightBank;
 
-    public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view, SdfIndirectCache.LightViewBank? lightBank) {
         m_context = context;
         m_owner = owner;
         m_view = view;
+        m_lightBank = lightBank;
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
         // Port declarations are captured by graph planning, before the asynchronous build. The live frame may already
         // request another fade capacity when this recorder installs or follows a view.
@@ -162,6 +164,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
                 m_pick.ReceiversCompleted = (scope, lighting, deferred) => m_owner.CompletedReceivers(m_context.Instance, scope, lighting, deferred);
             }
+            // A replacement bank contains no maps, even while a retiring graph still publishes its old bank.
+            // Installation precedes every pass's Skip/Record, so the first traversal also sees this invalidation.
+            if (m_lightBank is not null) { view.Residency.IndirectLightViews.InvalidateStorage(); }
 
             return;
         }
@@ -243,6 +248,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_disposed = true;
         m_pick?.Dispose();
+        m_lightBank?.Dispose();
 
         foreach (var framebuffer in m_framebuffers) {
             framebuffer.Dispose();

@@ -49,7 +49,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakeGpuDevice();
         using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
         var recorders = new Recorders("cache.update", Over);
-        recorders.Registry.Register(factory: new BorrowedPackage(buffer) { OwnsBuffers = borrowed }, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: new BorrowedPackage(buffer) { OwnsAllocation = borrowed }, package: RenderGraphPackageCatalog.Indirect);
         var set = MutableBufferInstances(previous);
         Assert.False(RenderGraphRuntime.TryCreate(set, [MutableBufferGraph(), null], PackageView, recorders.Registry,
             new GpuPassPipelineCache(), gpu, false, out var runtime, out var refusal));

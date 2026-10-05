@@ -104,21 +104,30 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         view.Residency.Retain();
+        SdfIndirectCache.LightViewBank? lightBank = null;
 
         try {
             await view.Residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             if (view.LightView) {
                 await view.Residency.Tables!.Pipelines.BuildLightViewsAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                if (context.Part == SdfWorldPackage.LightDepth) {
+                    using var cache = view.Residency.Tables.RetainIndirect()
+                        ?? throw new InvalidOperationException(message: "A light camera requires its residency's indirect cache.");
+                    var output = context.Outputs.Single();
+                    lightBank = cache.CreateLightViewBank(buffers: context.Services.BufferFactory, bytes: output.SizeBytes!.Value,
+                        name: new GpuObjectName(owner: context.Instance, part: SdfWorldPackage.IndirectLightDepth));
+                }
             }
             if (context.Part == SdfWorldPackage.Resolve) {
                 Volatile.Write(location: ref m_resolveSource, value: new ResolveSource(Cache: context.Pipelines, Device: context.Device));
                 await view.Residency.Tables!.Pipelines.BuildResolveAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch {
+            lightBank?.Dispose();
             view.Residency.Release();
             throw;
         }
-        return new Built(view: view);
+        return new Built(view: view, lightBank: lightBank);
     }
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
@@ -141,9 +150,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 context: context,
                 groups: groups,
                 owner: this,
-                view: view
+                view: view,
+                lightBank: objects.LightBank
             );
         } catch {
+            objects.LightBank?.Dispose();
             Unhold(residency: view.Residency);
             view.Residency.Release();
 
@@ -561,12 +572,14 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // Where a resolve pass's pipeline came from.
     private sealed record ResolveSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
-    private sealed class Built(SdfWorldView view) : IDisposable {
+    private sealed class Built(SdfWorldView view, SdfIndirectCache.LightViewBank? lightBank) : IDisposable {
         private bool m_taken;
+        public SdfIndirectCache.LightViewBank? LightBank { get; } = lightBank;
 
         public void Dispose() {
             if (!m_taken) {
                 m_taken = true;
+                LightBank?.Dispose();
                 view.Residency.Release();
             }
         }

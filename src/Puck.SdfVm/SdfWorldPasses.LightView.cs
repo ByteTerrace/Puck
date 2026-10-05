@@ -1,8 +1,16 @@
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldPasses {
+    /// <inheritdoc/>
+    public bool OwnsBuffer(string? part) => part == SdfWorldPackage.LightDepth;
+
+    /// <inheritdoc/>
+    public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) =>
+        context.Part == SdfWorldPackage.LightDepth ? ((Built)built!).LightBank!.Buffer : null;
+
     private readonly Dictionary<string, SdfWorldResidency> m_lightViews = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<SdfWorldResidency, string> m_lightNames = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, RenderGraphPackageFragment> m_lightFragments = [];

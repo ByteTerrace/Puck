@@ -114,8 +114,8 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         return result;
     }
-    /// <summary>Gets every GPU byte, including region rings and shadows.</summary>
-    public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: Buffer.SizeBytes, HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default);
+    /// <summary>Gets every GPU byte, including region rings, pinned lighting and light banks held by graph readers.</summary>
+    public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: checked(Buffer.SizeBytes + LightViewBytes), HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default);
 
     internal bool IsDisposed => (Volatile.Read(location: ref m_holds) <= 0);
 

@@ -365,7 +365,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public IReadOnlyDictionary<string, SharedBufferOwner>? SharedBuffers { get; init; }
         public bool BuildOwnsBuffers { get; init; }
         public ulong? Signature { get; init; }
-        public bool OwnsBuffers => BuildOwnsBuffers || Buffers is not null || SharedBuffers is not null;
+        public bool OwnsBuffer(string? part) => BuildOwnsBuffers || Buffers is not null || SharedBuffers is not null;
         public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) =>
             built is BorrowedBuild owner ? owner.Buffer : Buffers?[context.Part!];
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;

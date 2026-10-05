@@ -13,7 +13,7 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     private readonly Lock m_gate = new();
 
     /// <inheritdoc/>
-    public bool OwnsBuffers => true;
+    public bool OwnsBuffer(string? part) => true;
     /// <inheritdoc/>
     public bool SamplesReads => true;
     /// <inheritdoc/>

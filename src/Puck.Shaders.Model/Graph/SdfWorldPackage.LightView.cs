@@ -3,7 +3,7 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The residency's retained bank of single-precision light-view depth maps.</summary>
+    /// <summary>The package-owned bank of single-precision light-view depth maps.</summary>
     public const string IndirectLightDepth = "indirectLightDepth";
     /// <summary>The depth publisher's writable bank.</summary>
     public const string IndirectLightDepthWritten = "indirectLightDepthRW";
@@ -18,7 +18,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The number of allocated map records in <see cref="LightMaps"/>.</summary>
     public const string LightMapCount = "lightMapCount";
 
-    /// <summary>Creates one camera's depth-only fragment, retaining its traversal scratch and all held/fading maps.
+    /// <summary>Creates one camera's depth-only fragment, retaining its traversal scratch and borrowing one bank for
+    /// all held/fading maps from the package owner.
     /// Surface, ambient, shadow, material lighting, sky and color resolve stages are absent.</summary>
     /// <param name="maps">The held and incoming region capacity.</param>
     /// <returns>The depth-bank producer.</returns>
@@ -36,7 +37,8 @@ public static partial class SdfWorldPackage {
         used.Add(item: Parts.Arguments);
         return new RenderGraphPackageFragment(InputVersions: [], OutputVersions: [IndirectLightDepth], Passes: passes,
             Resources: [.. NativeFragment.Resources.Where(predicate: resource => used.Contains(item: resource.Name)),
-                Buffer(name: IndirectLightDepth, strideBytes: sizeof(float), sizeBytes: Math.Max(val1: sizeof(float), val2: ((ulong)maps * SdfIndirectLightLayout.MapBytes)), count: null)]);
+                new ShaderPipelineResource(Name: IndirectLightDepth, Kind: ShaderPipelineResourceKind.Buffer,
+                    StrideBytes: sizeof(float), SizeBytes: Math.Max(val1: sizeof(float), val2: ((ulong)maps * SdfIndirectLightLayout.MapBytes)))]);
     }
 
     /// <summary>Adds the explicit depth-bank dependency to the passes that look up residency light visibility.</summary>

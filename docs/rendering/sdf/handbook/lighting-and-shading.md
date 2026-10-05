@@ -201,9 +201,12 @@ from shadowing itself. Positive penumbra remains an authoring requirement.
 The fragment contains instance culling, beam culling, dispatch arguments, mesh,
 primary traversal and depth publication. It omits tape evaluation, surface,
 ambient, shadow, material lighting, sky and color reconstruction. Its allocation
-includes visibility and mesh scratch, tile bounds and masks, argument buffers,
-the retained depth bank and the frame/pass constant rings. The bank costs one MiB
-per region; traversal scratch is additional and shared by the one camera.
+includes visibility and mesh scratch, tile bounds and masks, argument buffers
+and the frame/pass constant rings. The depth publisher borrows one bank, counted
+by the residency cache and held until the graph and its readers retire. It costs
+one MiB per region and does not rotate between submissions, so updating one
+region preserves every other held map. Traversal scratch is additional and
+shared by the one camera.
 
 A baked mesh carries a CPU-side certificate only when its emitter retains the
 same SDF at the same pose. Raster depth can bound a search but cannot certify a

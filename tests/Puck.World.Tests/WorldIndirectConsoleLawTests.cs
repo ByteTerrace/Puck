@@ -133,12 +133,12 @@ public sealed class WorldIndirectConsoleLawTests {
     }
 
     [Theory]
-    [InlineData(SdfIndirectTier.Medium, 20_971_520UL, 41_943_040UL, 131_072UL, 100_734_625UL)]
-    [InlineData(SdfIndirectTier.High, 335_544_320UL, 83_886_080UL, 262_144UL, 562_173_601UL)]
+    [InlineData(SdfIndirectTier.Medium, 20_971_520UL, 41_943_040UL, 131_072UL, 100_735_649UL)]
+    [InlineData(SdfIndirectTier.High, 335_544_320UL, 83_886_080UL, 262_144UL, 562_174_625UL)]
     public void BudgetIncludesBothLightingGenerationsRetiringCachesAndTheWholeLightFragmentOnce(SdfIndirectTier tier,
         ulong radiance, ulong irradiance, ulong publication, ulong total) {
         var layout = new SdfIndirectLayout(tier);
-        var active = new GpuMemoryBytes(layout.ByteLength + 123, 456);
+        var active = new GpuMemoryBytes(layout.ByteLength + 123 + 1024, 456);
         var all = active + new GpuMemoryBytes(789, 321);
         var output = WorldIndirectDiagnosticText.DescribeMemory(layout, all, active, lightDepth: 1024, lightFragment: 4096);
         foreach (var (field, value) in new[] { ("radiance", radiance), ("irradiance", irradiance), ("publication", publication), ("receiver-proofs", 8UL),

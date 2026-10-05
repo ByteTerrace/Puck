@@ -11,7 +11,8 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
     public void TheResidencyLightCameraPublishesAtNativeExtentAndStandsAfterItsRegionsFinish() {
-        var gpu = new FakeGpuDevice();
+        var naming = new RecordingGpuObjectNaming(isEnabled: true);
+        var gpu = new FakeGpuDevice(trackObjects: true, naming: naming);
         var pipelines = SdfTestPipelines.Cache();
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -56,6 +57,17 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 1.0, actual: views.RenderExtentOf(instance: Light)!.Grid);
         Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var before));
         Assert.Equal(expected: 2L, actual: before);
+        const ulong BankBytes = (2UL * 512 * 512 * sizeof(float));
+        var cache = residency.Tables!.Indirect!;
+        Assert.Equal(BankBytes, cache.LightViewBytes);
+        var bankName = Assert.Single(naming.Applied, item => item.Name == Light + "/" + SdfWorldPackage.IndirectLightDepth);
+        var bank = Assert.Single(gpu.Created, item => item.Handle == bankName.Handle);
+        Assert.Equal(0, bank.DisposeCount);
+        Assert.Equal(0UL, Assert.Single(graph.Node(0).ResourceStatus,
+            item => item.Name == SdfWorldPackage.IndirectLightDepth).AllocationBytes);
+        // Visibility96 + mesh16 + hardware depth4, plus less than one MiB for the remaining traversal and constants.
+        // The cache's two-MiB bank is separate: counting even one copy in this graph breaches the upper bound.
+        Assert.InRange(graph.Node(0).AllocationBytes, 30_408_704UL, 30_408_704UL + 1_048_576UL);
         for (var index = 0; (index < 4); index++) { Produce(); }
         Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out var after));
         Assert.Equal(expected: before, actual: after);
@@ -65,5 +77,10 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.All(collection: Enumerable.Range(start: 0, count: 2), action: index => Assert.Null(@object: residency.IndirectLightViews.Snapshot(index: index).Projection));
         Assert.True(condition: residency.IndirectWork.TryRead(kind: SdfIndirectWork.LightRegions, value: out after));
         Assert.Equal(expected: before, actual: after);
+        var allocated = cache.Bytes;
+        graph.Dispose();
+        Assert.Equal(1, bank.DisposeCount);
+        Assert.Equal(0UL, cache.LightViewBytes);
+        Assert.Equal(allocated, cache.Bytes + new GpuMemoryBytes(DeviceLocal: BankBytes, HostVisible: 0));
     }
 }

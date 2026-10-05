@@ -366,7 +366,8 @@ A mutable input preserves and updates the producer's current buffer in place,
 without introducing an output version or transferring allocation ownership.
 Only packages declare it; images, previous-frame reads, owned versions and
 host-upload ports refuse it. Across instances, its edge must reach a package
-that supplies one shared buffer through `OwnsBuffers` and `BorrowedBuffer`.
+whose writing part supplies one shared buffer through `OwnsBuffer(part)` and
+`BorrowedBuffer`. Other parts of that package may keep graph-owned scratch.
 The consumer plans read/write barriers, and the producer reacquires all
 intervening accesses before its next actual access, including after skipped
 passes. A fragment cannot update an input its package declared read-only.

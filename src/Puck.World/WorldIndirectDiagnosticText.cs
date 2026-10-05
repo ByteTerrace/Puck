@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.World.Client;
 
@@ -31,12 +30,9 @@ public static class WorldIndirectDiagnosticText {
 
     private static string Describe(SdfWorldResidency residency, WorldRenderProbe probe) {
         var light = probe.Root?.Runtime.NodeOf(WorldViewNames.IndirectLight(residency.IndirectInstanceName));
-        var depthName = RenderGraphPackageFragment.Spliced(SdfWorldPackage.IndirectLightDepth, RenderGraphPackageCatalog.SdfWorld);
-        var depth = light?.ResourceStatus.Where(resource => string.Equals(resource.Name, depthName, StringComparison.Ordinal))
-            .Aggregate(0UL, (total, resource) => checked(total + resource.AllocationBytes)) ?? 0UL;
         var bytes = residency.Tables?.IndirectBytes ?? default;
         var cache = residency.Tables?.Indirect;
-        var memory = DescribeMemory(cache?.Layout, bytes, cache?.Bytes ?? default, depth, light?.OwnedBytes ?? 0UL);
+        var memory = DescribeMemory(cache?.Layout, bytes, cache?.Bytes ?? default, cache?.LightViewBytes ?? 0UL, light?.OwnedBytes ?? 0UL);
         var control = $"frozen={residency.IndirectFrozen} reset-pending={residency.IndirectResetPending}";
         if (cache is null) { return $"indirect {residency.Name} tier={residency.IndirectTier.ToString().ToLowerInvariant()} {control} cache=unallocated {memory}"; }
         var snapshot = cache.Snapshot();
@@ -62,13 +58,13 @@ public static class WorldIndirectDiagnosticText {
     }
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
-    /// allocations. Probe-publication stamps and receiver admission/completion words occupy separate slices. A fragment's
-    /// total already includes its depth bank and regions; these are breakdowns, not additions.</summary>
+    /// allocations. Probe-publication stamps and receiver admission/completion words occupy separate slices. The active
+    /// cache includes its borrowed light banks; the light fragment counts only its own scratch and regions.</summary>
     /// <param name="layout">The active cache's word layout, or null when no active cache is allocated.</param>
     /// <param name="allCaches">The sum of unique active and retiring cache allocations.</param>
     /// <param name="activeCache">The active cache allocation, included in <paramref name="allCaches"/>.</param>
-    /// <param name="lightDepth">The depth-bank bytes already included in <paramref name="lightFragment"/>.</param>
-    /// <param name="lightFragment">The complete light-fragment allocation, added once to the cache total.</param>
+    /// <param name="lightDepth">The live depth-bank bytes already included in <paramref name="activeCache"/>.</param>
+    /// <param name="lightFragment">The graph-owned light-fragment allocation, added once to the cache total.</param>
     /// <returns>Disjoint cache slices, active regions, retiring allocations and the complete byte total.</returns>
     /// <exception cref="OverflowException">The supplied allocation totals contradict their included slices, or the sum exceeds the byte counter.</exception>
     public static string DescribeMemory(SdfIndirectLayout? layout, GpuMemoryBytes allCaches, GpuMemoryBytes activeCache,
@@ -82,7 +78,7 @@ public static class WorldIndirectDiagnosticText {
         var irradiance = (layout is null ? 0UL : Slice(layout.IrradianceWordOffset, layout.PublicationWordOffset));
         var publication = (layout is null ? 0UL : Slice(layout.PublicationWordOffset, layout.ReceiverProofWordOffset));
         var receiverProofs = (layout is null ? 0UL : Slice(layout.ReceiverProofWordOffset, layout.WordCount));
-        var regions = checked(activeCache.DeviceLocal - (layout?.ByteLength ?? 0UL));
+        var regions = checked(activeCache.DeviceLocal - (layout?.ByteLength ?? 0UL) - lightDepth);
         var retiringDevice = checked(allCaches.DeviceLocal - activeCache.DeviceLocal);
         var retiringHost = checked(allCaches.HostVisible - activeCache.HostVisible);
         var total = checked(allCaches.DeviceLocal + allCaches.HostVisible + lightFragment);

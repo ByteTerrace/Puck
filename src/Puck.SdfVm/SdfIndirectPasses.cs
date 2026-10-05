@@ -13,7 +13,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     private readonly Lock m_gate = new();
 
     /// <inheritdoc/>
-    public bool OwnsBuffers => true;
+    public bool OwnsBuffer(string? part) => true;
 
     /// <summary>Names the residency's one producer while views demand its cache.</summary>
     public void Register(string name, SdfWorldResidency residency) {

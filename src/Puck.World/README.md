@@ -2007,8 +2007,9 @@ the spheres. `world.debug-view indirect-cells` colours each hit by the stored
 partition component of its nearest cell corner, with no field evaluation.
 `world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
 reports the actual cache slices, upload regions, retiring caches and light-view
-fragment allocations. The fragment total already includes its depth bank and
-regions; their breakdowns are not added a second time.
+fragment allocations. The cache total includes the depth banks it lends to light
+graphs; the fragment total counts graph-owned scratch and regions. Each bank is
+counted once, including while a retiring graph's readers still hold it.
 
 `world.indirect-method [cache|screen|cone]` reads or selects the live indirect
 comparison method for every consuming view. It starts at `cache`; `screen` and
