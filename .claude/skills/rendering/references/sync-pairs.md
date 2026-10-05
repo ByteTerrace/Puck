@@ -187,6 +187,17 @@ not when a handoff begins, and keep the image's bytes in graph memory accounting
 
 ## Retained pass cadence
 
+`SdfIndirectBrickTable` packs the existing indirect brick region as capacity
+four-word pool records followed by capacity slot indices. Keep the prefix's
+pool/probe identities fixed and sort only placed indices by
+`IrradianceBrickKey.CompareTo` (level, Z, Y, X). The paired
+`indirect/sdf-indirect-bricks.hlsli` lookup checks the minus-one tail before
+dereferencing a slot and counts both directory and record reads. Medium/High
+need at most nine/ten comparisons. Update fixture packing with the suffix and
+retain full-key, missing, negative-coordinate, eviction and read-bound controls.
+Only the final table is written during Plan; constructor/reset still publish
+the empty table. Account the longer region through its existing `OwnedBytes`.
+
 `ShaderPipelineResource.Retained` is an owned intermediate's single
 queue-ordered allocation; do not combine it with transient, external, history
 or public-output storage. A package recorder's nullable `Signature` authorizes

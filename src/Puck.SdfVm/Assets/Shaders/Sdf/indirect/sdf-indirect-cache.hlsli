@@ -34,19 +34,7 @@ bool sdfIndirectAdmitReceiver() {
 int3 sdfIndirectCorner(uint corner) { return int3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u); }
 uint sdfIndirectLevelCount() { return passGroup.indirectTier == SdfIndirectTierHigh ? 3u : 2u; }
 
-int sdfIndirectProbeIndex(int3 lattice, uint level) {
-    int3 brick = int3(floor(float3(lattice) / 4.0));
-    int3 local = lattice - brick * 4;
-    uint capacity = sdfIndirectBrickCapacity(passGroup.indirectTier);
-    [loop] for (uint slot = 0u; slot < capacity; slot++) {
-        int4 entry = indirectBricks[slot];
-        sdfIndirectLoads++;
-        if ((entry.w & (int)SdfIndirectBrickLevelMask) == (int)level && all(entry.xyz == brick)) {
-            return (int)(slot * SdfIndirectProbesPerBrick) + local.x + local.y * 4 + local.z * 16;
-        }
-    }
-    return -1;
-}
+#include "sdf-indirect-bricks.hlsli"
 
 bool sdfIndirectCellCurrent(int index) {
     if (index < 0) { return false; }

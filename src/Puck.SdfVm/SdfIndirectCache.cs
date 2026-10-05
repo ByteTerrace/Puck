@@ -37,7 +37,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
             m_free[level] = new SortedSet<int>(collection: Enumerable.Range(offset, layout.Pools[level]));
             offset += layout.Pools[level];
         }
-        m_bricks = new byte[(layout.BrickCapacity * 16)];
+        m_bricks = new byte[SdfIndirectBrickTable.ByteLength(layout.BrickCapacity)];
         m_updates = new byte[((layout.TraceBudget + (2 * layout.ClassifyBudget)) * 16)];
         m_shadeUpdates = new byte[(layout.ShadeBudget * 16)];
         m_traceStates = new uint[layout.ProbeCapacity];
@@ -67,6 +67,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         Regions[2].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: directions.AsSpan()));
         ClearBricks();
+        Regions[0].Write(bytes: m_bricks, offset: 0);
         scope.Complete();
     }
 
@@ -164,6 +165,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
             offset += Layout.Pools[level];
         }
         ClearBricks();
+        Regions[0].Write(bytes: m_bricks, offset: 0);
     }
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
@@ -195,6 +197,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
                 Write(m_bricks, slot, key.X, key.Y, key.Z, state);
             }
         }
+        SdfIndirectBrickTable.Index(m_bricks, Layout.BrickCapacity);
         Regions[0].Write(bytes: m_bricks, offset: 0);
         var row = 0;
 
@@ -240,7 +243,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     private void ClearBricks() {
         Array.Clear(array: m_bricks);
         for (var slot = 0; (slot < Layout.BrickCapacity); slot++) { BinaryPrimitives.WriteInt32LittleEndian(destination: m_bricks.AsSpan(start: ((slot * 16) + 12)), value: -1); }
-        Regions[0].Write(bytes: m_bricks, offset: 0);
+        m_bricks.AsSpan(Layout.BrickCapacity * 16).Fill(byte.MaxValue);
     }
     private static void Write(byte[] bytes, int row, int x, int y, int z, int w) {
         var span = bytes.AsSpan(length: 16, start: (row * 16));

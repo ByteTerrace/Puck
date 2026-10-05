@@ -16,6 +16,7 @@ internal static class SdfIndirectDeviceProbe {
         var skyBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: SdfKernelInterfaces.SkyEnvironment);
         var counterBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: ShaderWorkCounters.Buffer);
         var cacheBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: SdfWorldPackage.IndirectCacheWritten);
+        var bricksBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: SdfWorldPackage.IndirectBricks);
         // Dynamic light and VM branches can retain buffers even when this fixture supplies zero counts.
         // Bind every declared read-only buffer in WORLD mode with its generated stride; no elimination is assumed.
         var nearWorldBindings = (worldParameters ? parameters.Layout.Bindings.Where(predicate: binding => ((binding.Set == 1) &&
@@ -76,6 +77,12 @@ internal static class SdfIndirectDeviceProbe {
         for (var brick = 0; (brick < (absent.Length / 16)); brick++) { BinaryPrimitives.WriteInt32LittleEndian(destination: absent.AsSpan(start: ((brick * 16) + 12)), value: -1); }
         using var nearInputs = (worldParameters ? services.BufferFactory.CreateHostVisible(data: absent,
             name: default, usage: GpuBufferUsage.Storage) : null);
+        var absentBricks = (worldParameters ? new byte[SdfIndirectBrickTable.ByteLength(512)] : []);
+
+        // Both tier directory offsets are absent; other tables retain their original zero-count fixture bytes.
+        absentBricks.AsSpan().Fill(byte.MaxValue);
+        using var nearBricks = (worldParameters ? services.BufferFactory.CreateHostVisible(data: absentBricks,
+            name: default, usage: GpuBufferUsage.Storage) : null);
         var buffers = new List<IGpuStorageBuffer>();
         var pool = services.Bindings.CreatePool(
             name: default,
@@ -94,7 +101,7 @@ internal static class SdfIndirectDeviceProbe {
                     descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadWriteBuffer);
             }
             if (nearInputs is not null) {
-                foreach (var binding in nearPassBindings) { WriteNearBuffer(binding: binding, set: set); }
+                foreach (var binding in nearPassBindings) { WriteNearBuffer(binding: binding, set: set, bricks: binding.Binding == bricksBinding); }
             }
             services.Bindings.WriteBuffer(binding: 60, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 61, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
@@ -157,9 +164,11 @@ internal static class SdfIndirectDeviceProbe {
             }
         }
 
-        void WriteNearBuffer(nint set, ShaderInterfaceBinding binding) => services.Bindings.WriteBuffer(
-            binding: binding.Binding, bufferHandle: nearInputs!.BufferHandle,
-            bufferSize: ((nearInputs.SizeBytes / binding.ElementStride) * binding.ElementStride),
-            descriptorSetHandle: set, elementStride: binding.ElementStride, kind: GpuBindingKind.ReadOnlyBuffer);
+        void WriteNearBuffer(nint set, ShaderInterfaceBinding binding, bool bricks = false) {
+            var buffer = (bricks ? nearBricks : nearInputs)!;
+            services.Bindings.WriteBuffer(binding: binding.Binding, bufferHandle: buffer.BufferHandle,
+                bufferSize: ((buffer.SizeBytes / binding.ElementStride) * binding.ElementStride),
+                descriptorSetHandle: set, elementStride: binding.ElementStride, kind: GpuBindingKind.ReadOnlyBuffer);
+        }
     }
 }

@@ -565,6 +565,12 @@ and generated common block deliver them to both solve and view passes. The
 [finite-solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns their ranges, source accounting, tier limits and captured reference semantics.
 
+The existing brick region keeps stable pool records and a sorted directory of
+their slot indices. `SdfIndirectBrickTable` and the shader lookup share the exact
+level/Z/Y/X ordering; planning publishes one completed table without transient
+empty writes. [The lighting handbook](../../docs/rendering/sdf/handbook/lighting-and-shading.md)
+owns its lookup bounds and region byte accounting.
+
 ## Capture completion
 
 A caller creates a `FrameCaptureRequest` and arms it on a capture target:

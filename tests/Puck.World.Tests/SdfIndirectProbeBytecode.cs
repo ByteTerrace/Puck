@@ -9,6 +9,7 @@ internal static class SdfIndirectProbeBytecode {
         "sdf-indirect-sky-proof.comp" => (64 * 1024),
 
         "sdf-indirect-receiver-proof.comp" => (64 * 1024),
+        "sdf-indirect-bricks-proof.comp" => (64 * 1024),
 
         "sdf-indirect-light-proof.comp" => ((3 * 1024) * 1024),
         "sdf-indirect-participation.comp" => ((3 * 1024) * 1024),

@@ -13,6 +13,31 @@ public sealed class SdfIndirectCacheLawTests {
         Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: 0.1)], WorldMin: Double3.Zero, WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1));
 
     [Fact]
+    public void AnUnchangedBrickDirectoryOwesNoUploadAfterEveryRingSlotHasCaughtUp() {
+        using var rig = new Rig();
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        Assert.True(rig.Cache.IsComplete);
+        var region = rig.Cache.Regions[0];
+        Assert.Equal(5120, region.ByteCount);
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(region.Contents[(256 * 16)..]));
+        Assert.Equal(192, BinaryPrimitives.ReadInt32LittleEndian(region.Contents[(256 * 16 + 4)..]));
+        for (var slot = 0; slot < SdfWorldTables.FrameRingSize; slot++) { region.Flush(slot); region.RecordCopy(0, slot); }
+        var before = region.Contents.ToArray();
+        var writes = rig.Gpu.Count("IGpuStorageBuffer.Write(offset)");
+        var dispatches = rig.Gpu.Count("IGpuRecorder.Dispatch");
+        Assert.True(writes > 0);
+
+        rig.Cache.Plan(Inputs);
+        Assert.False(rig.Cache.NeedsPublish);
+        for (var slot = 0; slot < SdfWorldTables.FrameRingSize; slot++) { region.Flush(slot); region.RecordCopy(0, slot); }
+        Assert.Equal(before, region.Contents.ToArray());
+        Assert.Equal(writes, rig.Gpu.Count("IGpuStorageBuffer.Write(offset)"));
+        Assert.Equal(dispatches, rig.Gpu.Count("IGpuRecorder.Dispatch"));
+        rig.Cache.Reset(2);
+        Assert.All(region.Contents[(256 * 16)..].ToArray(), value => Assert.Equal(byte.MaxValue, value));
+    }
+
+    [Fact]
     public void GeometryWaitsForThawAndAnAdmittedBatchThenWithdrawsEveryOldStratum() {
         using var rig = new Rig();
 
@@ -389,7 +414,7 @@ public sealed class SdfIndirectCacheLawTests {
     }
 
     private sealed class Rig : IDisposable {
-        public FakeGpuDevice Gpu { get; } = new(trackObjects: true);
+        public FakeGpuDevice Gpu { get; } = new(countCalls: true, trackObjects: true);
         public WorkCounterSet Work { get; } = new(SdfIndirectWork.SourceName, SdfIndirectWork.Kinds);
 
         public SdfIndirectCache Cache { get; }

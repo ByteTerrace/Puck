@@ -263,6 +263,16 @@ replaces it; placement lookup can still find the neighboring probes it needs.
 The change also withdraws the lighting publication and receiver certificates.
 This transport operation does not require replacing the cache allocation.
 
+Probe lookup uses a sorted directory in the same uploaded brick region. The
+prefix still holds one four-word record per pool slot; the suffix holds one
+slot index per capacity entry, sorted by level, Z, Y and X. Absent entries are
+minus one and follow every placed brick. Searching this directory preserves
+the existing probe identities while taking at most nine comparisons at Medium
+and ten at High, with at most two counted table reads per comparison. The suffix
+adds 1,024 or 2,048 logical bytes; the region's normal memory accounting includes
+its actual upload rings and device storage. Planning writes the completed table
+once, so an unchanged table creates no upload debt after its ring slots catch up.
+
 Program upload and a changed body policy collect a conservative influence bound for each casting dynamic slot
 from the existing packed segment and instance bounds. Static unbounded geometry
 does not taint unrelated dynamic slots; an unsupported dynamic dependency stays
