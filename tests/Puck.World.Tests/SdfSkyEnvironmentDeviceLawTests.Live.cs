@@ -171,15 +171,14 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             Assert.Null(graph.Node(1).LastSwapError);
             Assert.Null(graph.Node(2).LastSwapError);
         }
-        // Finish the actual pipeline work before counting graph transitions. A cold driver wait names the
-        // outstanding kernels; a completed build that cannot advance the fixture fails in a bounded frame count.
-        TestLiveness.Within(frames: 8, step: () => {
+        // Finish the actual pipeline work under the liveness watchdog before counting graph transitions. A cold
+        // driver wait names the outstanding kernels; publication then has its own bounded frame count.
+        TestLiveness.Until(step: () => {
             residency.BeginFrame();
             var ready = residency.Prepare(context);
             Report();
-            if (!ready) { _ = residency.WaitPipelineBuilds(TestContext.Current.CancellationToken); }
             return ready;
-        }, building: () => false, reason: Status);
+        }, reason: Status, wait: residency.WaitPipelineBuilds);
         void Produce() {
             views.BeginFrame(context);
             residency.BeginFrame();
