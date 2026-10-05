@@ -9893,7 +9893,7 @@ export type WorldRenderSkyLayerPanel = {
 };
 
 /**
- * The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. The camera alone sees it, since the environment map binds no screen.
+ * The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. Visibility defaults to the camera; lighting visibility projects the same acquired image into the residency's environment, following its completed publication and capture taint.
  */
 export type WorldRenderSkyLayerPanorama = {
   $type?: "panorama";

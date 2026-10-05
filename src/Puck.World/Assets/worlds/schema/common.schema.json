@@ -1740,7 +1740,7 @@
       "title": "WorldSkyProjection"
     },
     "WorldRenderSkyLayerPanorama": {
-      "description": "The image a diegetic screen shows, sampled by direction: the screen\u0027s source, at infinity. The camera alone sees it, since the environment map binds no screen.",
+      "description": "The image a diegetic screen shows, sampled by direction: the screen\u0027s source, at infinity. Visibility defaults to the camera; lighting visibility projects the same acquired image into the residency\u0027s environment, following its completed publication and capture taint.",
       "properties": {
         "$type": {
           "const": "panorama"
