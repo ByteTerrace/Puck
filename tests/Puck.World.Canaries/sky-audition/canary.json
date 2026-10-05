@@ -1,7 +1,7 @@
 {
   "id": "sky-audition",
   "title": "Named repeated sky rows audition independently and timeline previews alter their actual images",
-  "binding": "Three named gradient rows make row identity directly visible. The first two solo as red and blue; mute removes only the selected blue row and unmute restores it. The third reads a one-second authored section clock. At zero and half-period it differs, hold preserves it, run at rate one changes it, and rate zero stands. Unknown row and negative rate refuse without changing source. The opposite leg runs at rate zero, so only the running image agreement changes. Actual images, timing and command results await real World qualification.",
+  "binding": "Three named gradient rows make row identity directly visible. The first two solo as red and blue; mute removes only the selected blue row and unmute restores it. The third reads a one-second authored section clock. At zero and half-period it differs, and hold preserves half-period. Run at rate zero then releases hold without moving the exact tick 25200 / phase 0.5: the run response and the readout after twelve ticks require held=false, rate=0 and that same phase, and its capture must agree with the scrubbed half-period image. The independent run at rate one changes the image from zero, while rate zero stands. Unknown row and negative rate refuse without changing source. The opposite leg changes only the independent advancing run to rate zero, so only that running-image agreement changes. The same-phase check does not prescribe an endpoint reached by positive-rate integration. Actual images, timing and command results await real World qualification.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -194,18 +194,8 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.timeline",
-        "occurrence": 7,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.wait",
         "occurrence": 16,
-        "outcome": "accepted"
-      },
-      {
-        "verb": "world.timeline",
-        "occurrence": 8,
         "outcome": "accepted"
       },
       {
@@ -216,6 +206,16 @@
       {
         "verb": "world.wait",
         "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 8,
         "outcome": "accepted"
       },
       {
@@ -234,6 +234,11 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.timeline",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.screenshot",
         "occurrence": 9,
         "outcome": "accepted"
@@ -245,7 +250,32 @@
       },
       {
         "verb": "world.timeline",
-        "occurrence": 11,
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 14,
         "outcome": "refused"
       },
       {
@@ -260,7 +290,7 @@
       },
       {
         "verb": "world.timeline",
-        "occurrence": 12,
+        "occurrence": 15,
         "outcome": "accepted"
       },
       {
@@ -304,6 +334,24 @@
         "before": "half.png",
         "after": "held.png",
         "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "scrub-and-running-rate-zero-agree-at-half-period",
+        "before": "half.png",
+        "after": "half-running.png",
+        "agree": true
+      },
+      {
+        "type": "lines",
+        "name": "run-releases-hold-and-keeps-the-known-half-period",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "second span=1 held=true rate=1 presentedTick=25200+0 presentedPhase=0.5 ",
+          "second span=1 held=false rate=0 presentedTick=25200+0 presentedPhase=0.5 ",
+          "second span=1 held=false rate=0 presentedTick=25200+0 presentedPhase=0.5 "
+        ]
       },
       {
         "type": "framesAgree",
@@ -525,18 +573,8 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.timeline",
-        "occurrence": 7,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.wait",
         "occurrence": 16,
-        "outcome": "accepted"
-      },
-      {
-        "verb": "world.timeline",
-        "occurrence": 8,
         "outcome": "accepted"
       },
       {
@@ -547,6 +585,16 @@
       {
         "verb": "world.wait",
         "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 8,
         "outcome": "accepted"
       },
       {
@@ -565,6 +613,11 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.timeline",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.screenshot",
         "occurrence": 9,
         "outcome": "accepted"
@@ -576,7 +629,32 @@
       },
       {
         "verb": "world.timeline",
-        "occurrence": 11,
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.timeline",
+        "occurrence": 14,
         "outcome": "refused"
       },
       {
@@ -591,7 +669,7 @@
       },
       {
         "verb": "world.timeline",
-        "occurrence": 12,
+        "occurrence": 15,
         "outcome": "accepted"
       },
       {
@@ -635,6 +713,24 @@
         "before": "half.png",
         "after": "held.png",
         "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "scrub-and-running-rate-zero-agree-at-half-period",
+        "before": "half.png",
+        "after": "half-running.png",
+        "agree": true
+      },
+      {
+        "type": "lines",
+        "name": "run-releases-hold-and-keeps-the-known-half-period",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "second span=1 held=true rate=1 presentedTick=25200+0 presentedPhase=0.5 ",
+          "second span=1 held=false rate=0 presentedTick=25200+0 presentedPhase=0.5 ",
+          "second span=1 held=false rate=0 presentedTick=25200+0 presentedPhase=0.5 "
+        ]
       },
       {
         "type": "framesAgree",

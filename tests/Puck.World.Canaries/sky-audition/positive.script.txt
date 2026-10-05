@@ -31,6 +31,12 @@ world.timeline hold second
 world.wait 12
 world.screenshot {run}/held.png
 world.wait captures 30
+world.timeline rate second 0
+world.timeline run second
+world.wait 12
+world.screenshot {run}/half-running.png
+world.wait captures 30
+world.timeline
 world.timeline at second 0
 world.timeline rate second 1
 world.timeline run second
