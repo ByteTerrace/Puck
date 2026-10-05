@@ -106,6 +106,13 @@ its pinned full map, through the shared four-load radiance helper; never add
 unoccluded SH at a hit or apply artistic Ambient/Reflection gains to transport.
 Reflected previous-bank light at hits belongs to Feedback; disabled Sky and
 unresolved terminals read no map.
+Failed reflected support or continuation is unresolved lighting, not a black
+sample in the cosine denominator. Preserve that distinction through both banks:
+the five-word sample reserves `0xffffffff`, which finite R11G11B10 packing cannot
+produce. All directional and irradiance readers reject it before decoding;
+zero radiance remains known. Keep first-sweep and exact-zero-throughput hits
+independent of unused feedback proofs, and count failed lighting support through
+the existing unresolved row without changing immutable transport or ray budgets.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its

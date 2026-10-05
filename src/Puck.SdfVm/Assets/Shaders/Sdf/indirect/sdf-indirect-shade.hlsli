@@ -12,13 +12,13 @@ groupshared SdfIndirectSources sdfIndirectShaded[SdfIndirectMaximumRaysPerProbe]
 groupshared float3 sdfIndirectShadedDirections[SdfIndirectMaximumRaysPerProbe];
 groupshared uint sdfIndirectShadedKinds[SdfIndirectMaximumRaysPerProbe];
 
-SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, uint4 hit, uint readGeneration,
-    uint readPublication, float feedbackGain) {
+bool sdfIndirectShadeHit(float3 surfacePoint, float3 direction, uint4 hit, uint readGeneration,
+    uint readPublication, float feedbackGain, out SdfIndirectSources result) {
+    result = (SdfIndirectSources)0;
     float3 screenEmission;
     if (sdfIndirectScreenEmission((int)hit.z, surfacePoint, direction, screenEmission)) {
-        SdfIndirectSources screen = (SdfIndirectSources)0;
-        screen.values[SdfIndirectSourceScreens] = screenEmission;
-        return screen;
+        result.values[SdfIndirectSourceScreens] = screenEmission;
+        return true;
     }
     SdfShadeSurface surface = (SdfShadeSurface)0;
     surface.position = surfacePoint;
@@ -35,26 +35,19 @@ SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, ui
         surface.incomingVisibility[fade] = sdfIndirectDiffuseVisibility(sdfShadowHandoffs[fade].Incoming, surfacePoint, surface.normal);
     }
     float attenuation;
-    SdfIndirectSources result = sdfIndirectDiffuse(surface, attenuation);
+    result = sdfIndirectDiffuse(surface, attenuation);
     float3 reflected = surface.material.albedo * (1.0 - surface.material.metal) * surface.material.bleed;
-    if (feedbackGain > 0.0 && readPublication != 0u) {
+    if (feedbackGain > 0.0 && attenuation > 0.0 && passGroup.indirectFeedbackGain > 0.0 && any(reflected > 0.0)) {
         uint level = (hit.w >> SdfIndirectProofLevelShift) & 3u;
         uint mask = (hit.w >> SdfIndirectProofMaskShift) & 255u;
         float3 launched = sdfIndirectLaunchPosition(surfacePoint, hit.y, hit.w, sdfIndirectSpacing(passGroup.indirectTier, level));
         SdfIndirectSources previous;
-        if (mask != 0u && sdfIndirectIrradianceAt(surfacePoint, launched, surface.normal, level, mask,
-            readGeneration, readPublication, previous)) {
-            result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous) * (feedbackGain * attenuation * passGroup.indirectFeedbackGain);
-        }
+        if (mask == 0u || !sdfIndirectIrradianceAt(surfacePoint, launched, surface.normal, level, mask,
+            readGeneration, readPublication, previous)) { return false; }
+        result.values[SdfIndirectSourceFeedback] = reflected * sdfIndirectSourceTotal(previous)
+            * (feedbackGain * attenuation * passGroup.indirectFeedbackGain);
     }
-    return result;
-}
-
-SdfIndirectSources sdfIndirectShadeContinuation(float3 position, float3 direction, uint terminal,
-    uint generation, uint publication) {
-    SdfIndirectSources result;
-    sdfIndirectReadContinuation(position, direction, terminal, generation, publication, result);
-    return result;
+    return true;
 }
 
 // All lanes enter, including dormant and inactive probes. No field query classifies a probe during shading.
@@ -73,10 +66,14 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
         float3 endpoint = probe.position + direction * asfloat(hit.x);
         SdfIndirectSources result = (SdfIndirectSources)0;
         if (kind == SdfIndirectKindHit) {
-            result = sdfIndirectShadeHit(endpoint, direction, hit, readGeneration, readPublication, feedbackGain);
-            puckCountIndirect(detail, 1u, 0u, 0u);
+            bool answered = sdfIndirectShadeHit(endpoint, direction, hit, readGeneration, readPublication, feedbackGain, result);
+            puckCountIndirect(detail, 1u, 0u, answered ? 0u : 1u);
+            if (!answered) { kind = SdfIndirectKindUnresolved; }
         } else if (kind == SdfIndirectKindContinuation) {
-            result = sdfIndirectShadeContinuation(endpoint, direction, hit.w, writeGeneration, writePublication);
+            if (!sdfIndirectReadContinuation(endpoint, direction, hit.w, writeGeneration, writePublication, result)) {
+                kind = SdfIndirectKindUnresolved;
+                puckCountIndirect(detail, 0u, 0u, 1u);
+            }
         } else {
             result.values[SdfIndirectSourceSky] = sdfIndirectSky(kind, direction, passGroup.indirectSources, passGroup.indirectSourceGains.w);
         }
@@ -85,7 +82,8 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
             uint packed = sdfIndirectPackRadiance((passGroup.indirectSources & (1u << source)) != 0u ? result.values[source] : 0.0);
             sdfIndirectShaded[ray].values[source] = sdfIndirectUnpackRadiance(packed);
             if (index >= sdfIndirectRadianceProbeOffset(passGroup.indirectTier)) {
-                indirectCacheRW[sdfIndirectRadianceAddress(index, ray, writeGeneration) + source] = packed;
+                indirectCacheRW[sdfIndirectRadianceAddress(index, ray, writeGeneration) + source] =
+                    kind == SdfIndirectKindUnresolved ? SdfIndirectUnresolvedSample : packed;
             }
         }
         sdfIndirectShadedDirections[ray] = direction;
@@ -106,7 +104,8 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
     }
     uint address = sdfIndirectIrradianceAddress(index, writeGeneration) + lane * SdfIndirectRadianceWords;
     [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-        indirectCacheRW[address + source] = sdfIndirectPackRadiance(total > 0.0 ? irradiance.values[source] / total : 0.0);
+        indirectCacheRW[address + source] = total > 0.0 ? sdfIndirectPackRadiance(irradiance.values[source] / total)
+            : SdfIndirectUnresolvedSample;
     }
     DeviceMemoryBarrierWithGroupSync();
     if (lane == 0u) { indirectCacheRW[sdfIndirectPublicationAddress(index, writeGeneration)] = writePublication; }

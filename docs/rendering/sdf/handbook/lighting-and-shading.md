@@ -349,6 +349,18 @@ bank remains Feedback. Continuations keep their source categories; unresolved
 rays supply no radiance and enter no cosine denominator. Turning Sky off skips
 the map lookup and its four loads.
 
+A surface hit whose requested reflected term has no certified published support
+is also unresolved for that sweep; its known emission cannot turn the missing
+feedback into black. Direct-only sweeps and exactly zero reflected throughput
+still answer normally. Failed continuations follow the same rule and add to the
+existing unresolved count. The two lighting banks retain this status in the
+existing five-word samples: `0xffffffff` is outside finite R11G11B10 packing.
+Directional readers and irradiance interpolation reject that marker before
+decoding and normalize over known samples only. A sample with no known weight
+remains unresolved; an actual zero radiance remains known and keeps its weight.
+The immutable transport records, storage size and field-query budgets do not
+change when lighting support fails.
+
 `LightingSource` describes the active solve, while `PublishedLightingSource`
 describes the complete generation readers still see during a later solve.
 Each retains immutable CPU tables and exact GPU source publications; `CopyFrame()` supplies independent mutable

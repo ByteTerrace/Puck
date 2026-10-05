@@ -24,8 +24,11 @@ bool sdfIndirectReadContinuation(float3 position, float3 direction, uint termina
         // IrradianceCacheModel keeps a reachable face corner in the sum even at a zero trilinear coordinate.
         float weight = max(sdfIndirectCornerWeight(frac(scaled), corner), 1.0e-6);
         uint address = sdfIndirectRadianceAddress((uint)index, (uint)ray, generation);
+        uint first = sdfIndirectLoad(address);
+        if (first == SdfIndirectUnresolvedSample) { continue; }
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-            result.values[source] += sdfIndirectUnpackRadiance(sdfIndirectLoad(address + source)) * weight;
+            uint packed = source == 0u ? first : sdfIndirectLoad(address + source);
+            result.values[source] += sdfIndirectUnpackRadiance(packed) * weight;
         }
         total += weight;
     }

@@ -5,6 +5,9 @@
 #include "sdf-indirect-radiance.hlsli"
 
 struct SdfIndirectSources { float3 values[SdfIndirectSourceCount]; };
+// Finite R11G11B10 packing cannot produce this NaN word. All five words carry it for an unresolved sample;
+// readers test the first word before decoding. Zero remains a known black sample with its full weight.
+static const uint SdfIndirectUnresolvedSample = 0xffffffffu;
 #ifdef SDF_VIEWS_PASS
 static bool sdfIndirectPickActive = false;
 static uint sdfIndirectPickStores = 0u;
@@ -59,22 +62,33 @@ float3 sdfIndirectIrradianceDirection(uint2 texel) {
     float3 direction = sdfOctDecode(uv * 2.0 - 1.0);
     return direction.xzy;
 }
-float3 sdfIndirectProbeIrradiance(uint probe, uint generation, float3 normal, uint source) {
+bool sdfIndirectProbeIrradiance(uint probe, uint generation, float3 normal, out SdfIndirectSources value) {
     float2 uv = sdfOctEncode(normal.xzy) * 0.5 + 0.5;
     float2 position = uv * (float)(SdfIndirectIrradianceEdge - 2u) + 0.5;
     uint2 baseTexel = (uint2)floor(position);
     float2 fraction = frac(position);
     uint address = sdfIndirectIrradianceAddress(probe, generation);
-    float3 value = 0.0;
+    value = (SdfIndirectSources)0;
+    float total = 0.0;
     [unroll] for (uint tap = 0u; tap < 4u; tap++) {
         uint2 corner = uint2(tap & 1u, tap >> 1u);
         uint2 texel = baseTexel + corner;
         float weight = lerp(1.0 - fraction.x, fraction.x, (float)corner.x)
             * lerp(1.0 - fraction.y, fraction.y, (float)corner.y);
-        uint word = address + (texel.y * SdfIndirectIrradianceEdge + texel.x) * SdfIndirectRadianceWords + source;
-        value += sdfIndirectUnpackRadiance(sdfIndirectLoad(word)) * weight;
+        if (weight <= 0.0) { continue; }
+        uint word = address + (texel.y * SdfIndirectIrradianceEdge + texel.x) * SdfIndirectRadianceWords;
+        uint first = sdfIndirectLoad(word);
+        if (first == SdfIndirectUnresolvedSample) { continue; }
+        [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+            uint packed = source == 0u ? first : sdfIndirectLoad(word + source);
+            value.values[source] += sdfIndirectUnpackRadiance(packed) * weight;
+        }
+        total += weight;
     }
-    return value;
+    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+        value.values[source] = total > 0.0 ? value.values[source] / total : 0.0;
+    }
+    return total > 0.0;
 }
 float sdfIndirectCornerWeight(float3 fraction, uint corner) {
     float3 weight = lerp(1.0 - fraction, fraction, float3(sdfIndirectCorner(corner)));
@@ -118,11 +132,13 @@ bool sdfIndirectIrradianceAt(float3 surfacePoint, float3 launched, float3 normal
         float facing = (magnitude > 0.0 ? max(dot(normal, toward / magnitude), 0.0) : 0.0) + 0.01;
         float weight = sdfIndirectCornerWeight(fraction, corner) * facing;
         if (weight <= 0.0) { continue; }
+        SdfIndirectSources candidate;
+        if (!sdfIndirectProbeIrradiance((uint)index, generation, normal, candidate)) { continue; }
 #ifdef SDF_VIEWS_PASS
         if (sdfIndirectPickActive) { sdfIndirectPickStore(18u + 4u * corner, asuint(weight)); }
 #endif
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-            irradiance.values[source] += sdfIndirectProbeIrradiance((uint)index, generation, normal, source) * weight;
+            irradiance.values[source] += candidate.values[source] * weight;
         }
         total += weight;
     }
