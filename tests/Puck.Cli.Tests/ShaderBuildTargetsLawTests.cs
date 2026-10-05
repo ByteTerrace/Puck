@@ -390,7 +390,14 @@ public sealed class ShaderBuildTargetsLawTests {
             m_directory = ((root is null) ? new TemporaryDirectory(prefix: "puck-shader-targets-") : null);
             Root = (root ?? m_directory!.RootPath);
             _ = Directory.CreateDirectory(path: Root);
-            CliScratchDirectories.PinSdk(directory: Root);
+            var pin = PathOf(path: "global.json");
+
+            if (File.Exists(path: pin)) {
+                // A reused proof tree already carries its source checkout's pin; prove it agrees before building.
+                Assert.Equal(expected: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "global.json")), actual: File.ReadAllBytes(path: pin));
+            } else {
+                CliScratchDirectories.PinSdk(directory: Root);
+            }
         }
 
         public string Root { get; }
