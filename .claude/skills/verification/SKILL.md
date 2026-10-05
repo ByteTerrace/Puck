@@ -45,6 +45,8 @@ same change. The user's current instruction outranks it.
   in charge; no separate bytecode cache or manual artifact-copy flag is needed.
   Its normal build still validates source/include/recipe identities; do not
   copy managed outputs or alter timestamps to make a proof appear incremental.
+  Native proof builds use `-m:1` with build servers and node reuse disabled;
+  shader worker counts still follow the project's recipe.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`
   with exact selectors and one reviewed production-only restoration. Each side
   builds once and retains a separate report for every selector; every selector

@@ -115,7 +115,10 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
         File.WriteAllBytes(bytes: new byte[128], path: reference);
         var logs = directory.PathOf(name: "logs");
         var attempts = 0;
-        var result = new DotnetLawRunner(buildRunner: (_, _) => {
+        var result = new DotnetLawRunner(buildRunner: (arguments, _) => {
+            Assert.Contains(expected: "-m:1", collection: arguments);
+            Assert.Contains(expected: CliOptions.NoNodeReuse, collection: arguments);
+            Assert.Contains(expected: "--disable-build-servers", collection: arguments);
             ++attempts;
             if (attempts != missingReport) {
                 File.WriteAllText(Path.Combine(path1: logs, path2: "build.counts"), "1\n2\n3\n");

@@ -1152,6 +1152,8 @@ cache. Warming does not certify freshness: the normal build still checks
 the destination source, ordered includes, effective recipe and bytecode, so a
 withheld shader change recompiles. Git rewrites changed tracked files; unchanged files retain
 their timestamps, so MSBuild's ordinary incremental checks apply.
+Each native proof build uses one MSBuild node (`-m:1`), disables build servers
+and forbids node reuse. Shader worker counts still follow the project's recipe.
 
 There the proof withholds the fix, builds the law's project in Release and
 runs the law, which must fail. It then restores the fix, builds and runs
