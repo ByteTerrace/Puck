@@ -36,7 +36,7 @@ public sealed partial class RenderGraphRuntime {
     // A package joins this request only once, so changing demand cannot restart its samples or finite source epoch.
     private void RefreshConvergenceDemand(int captured) {
         if (m_convergence is not { Request.Completion.IsCompleted: false } convergence ||
-            m_nodes[captured]?.PendingCapturePath == convergence.Request.Path) { return; }
+            m_capture.PendingPath is null) { return; }
         m_convergenceDemand.Clear();
         m_convergencePending.Clear();
         m_convergencePending.Push(captured);

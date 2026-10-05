@@ -811,8 +811,9 @@ footprint contributes no completion obligation. Standing, deferred and
 previous-frame images with a positive footprint still contribute, as do standing
 buffer sources. Each participating package is notified once per request through
 `BeginConvergence`, including a request with no extra convergence samples;
-changing demand does not restart samples or finite source epochs. Once an encoder
-owns the served image, its contributing closure stays held until readback ends. A package's
+changing demand does not restart samples or finite source epochs. Once the runtime
+forwards the request to a graph node or external producer, its contributing closure
+stays held until that target completes the capture. A package's
 `CaptureReadinessOf` keeps forwarding and sample counting behind its actual
 finite-source completion; a refusal fails the request by name. `TaintedOf`
 also joins the graph's acquired-input taint, so an older retained result or

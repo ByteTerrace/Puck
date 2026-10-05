@@ -5,6 +5,44 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 public sealed partial class RenderGraphRuntimeLawTests {
+    [Fact]
+    public void AForwardedExternalCaptureKeepsItsDependencyEpochWhenDemandChanges() {
+        const string Inactive = "inactive";
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var producers = new Producers(gpu);
+        var package = new CaptureDemandPackage(false) { Ready = true };
+        producers.Register(recorders.Registry);
+        recorders.Registry.Register(RenderGraphPackageCatalog.SdfWorld, package);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },
+            External("world") with { Reads = [new(Producer: PackageView), new(Producer: Inactive)] }),
+            "world", null!, null!, null!);
+        var footprints = new List<RenderGraphFootprint> { new("world", PackageView, 1, 1) };
+        // Both sources own real outputs before the capture, but only one contributes to this capture's footprint.
+        new Frames(runtime, [new("world", 1, 1), new(PackageView, 1, 1), new(Inactive, 1, 1)], footprints).Settle();
+        var frames = new Frames(runtime, [new("world", 1, 1)], footprints);
+        var producer = producers.Only;
+        var request = CaptureRequest();
+        producer.Holding = true;
+        runtime.RequestCapture(request);
+        frames.Next();
+        Assert.Equal(request.Path, producer.PendingCapturePath);
+        Assert.False(request.Completion.IsCompleted);
+        Assert.Empty(producer.Captured);
+        Assert.Equal(PackageView, Assert.Single(package.Started));
+
+        footprints.Add(new("world", Inactive, 1, 1));
+        frames.Next(3);
+        Assert.Equal(request.Path, producer.PendingCapturePath);
+        Assert.False(request.Completion.IsCompleted);
+        Assert.Equal(PackageView, Assert.Single(package.Started));
+        producer.Holding = false;
+        frames.Next();
+        Assert.Equal(request.Path, Assert.Single(producer.Captured));
+        Assert.Null(Outcome(request).Error);
+        Assert.Null(producer.PendingCapturePath);
+    }
+
     [Theory]
     [InlineData("absent")]
     [InlineData("zero")]
