@@ -44,7 +44,8 @@ internal static class WorldRenderRoot {
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
     /// none.</param>
-    /// <returns>The render root, which releases the screen binder at its teardown.</returns>
+    /// <returns>The render root, which releases the graph host's residency registrations, the screen binder and the
+    /// world's residency at its teardown while the device is alive.</returns>
     /// <exception cref="InvalidOperationException">The document's instances do not form a set, or the runtime refused
     /// them.</exception>
     public static IRenderRoot Build(IServiceProvider sp, OverlayPackage? overlay) {
@@ -286,10 +287,10 @@ internal static class WorldRenderRoot {
             // its constructor takes.
             Footprints = host.Footprints,
             Named = host.Named,
-            // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
-            // created before the device context, so the container would dispose them after it; the root's teardown releases
-            // them, after the runtime's passes gave back their holds, while the device is alive.
-            Holdings = [compareCapture, binder, residency],
+            // The graph host's environment and indirect registrations retain residencies. Release those registrations
+            // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
+            // These services can predate the device context, so their later container disposal is too late for GPU owners.
+            Holdings = [compareCapture, host, binder, residency],
             Prepare = (in FrameContext context) => {
                 compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
