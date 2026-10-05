@@ -11,7 +11,11 @@ namespace Puck.World.Tests;
 internal static class SdfIndirectDeviceProbe {
     public static Vector4[] Run(GpuDeviceServices services, string extension, string kernel, int resultRows,
         IReadOnlyList<SdfProgram> programs, Vector4[] rows, Vector4[]? transforms = null, uint cacheWords = 128,
-        ReadOnlyMemory<byte> passValues = default, ReadOnlyMemory<byte> environment = default, bool worldParameters = false) {
+        ReadOnlyMemory<byte> passValues = default, ReadOnlyMemory<byte> environment = default, bool worldParameters = false,
+        IReadOnlyList<(uint X, uint Y, uint Z)>? dispatchGroups = null) {
+        if ((dispatchGroups is not null) && (dispatchGroups.Count != programs.Count)) {
+            throw new ArgumentException(message: "Each probe dispatch must have one group extent.", paramName: nameof(dispatchGroups));
+        }
         var parameters = (worldParameters ? SdfWorldInterfaces.WorldParameters : SdfWorldInterfaces.IndirectParameters);
         var skyBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: SdfKernelInterfaces.SkyEnvironment);
         var counterBinding = SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: ShaderWorkCounters.Buffer);
@@ -147,7 +151,9 @@ internal static class SdfIndirectDeviceProbe {
 
                 recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: MemoryMarshal.AsBytes(span: pushed), offset: 0,
                     pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
-                recorder.Dispatch(commandBufferHandle: command, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                var groups = (dispatchGroups is null ? (X: 1u, Y: 1u, Z: 1u) : dispatchGroups[index]);
+
+                recorder.Dispatch(commandBufferHandle: command, groupCountX: groups.X, groupCountY: groups.Y, groupCountZ: groups.Z);
                 recorder.MemoryBarrier(commandBufferHandle: command, destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
                     sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
             }
