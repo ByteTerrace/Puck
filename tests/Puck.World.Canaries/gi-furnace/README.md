@@ -14,8 +14,11 @@ feedback 0.25. The companion disables feedback and requires one sweep and
 0.125. No explicit light, screen, sky, artistic fill, AO or temporal history
 contributes.
 
-Both observations come from the current fenced GPU pick and its independently
-cast CPU reference. The source categories stay separate. The GPU tolerances
+Each existing screenshot and its `world.wait captures` completes before the
+corresponding explanation. That capture fence includes the view's receiver
+certificates; `world.wait indirect` proves the shared cache alone. Both
+observations come from the current fenced GPU pick and its independently cast
+CPU reference. The source categories stay separate. The GPU tolerances
 cover two low-precision radiance quantization steps; the reference holds the
 closed form to its printed precision. A queued reset must advance the cache
 epoch, solve again, and recover identical center-region pixels.

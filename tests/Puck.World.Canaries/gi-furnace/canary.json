@@ -16,15 +16,15 @@
       {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
       {"verb":"world.view.pointer","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":3,"outcome":"accepted"},
-      {"verb":"world.explain","occurrence":1,"outcome":"accepted"},
       {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"world.explain","occurrence":1,"outcome":"accepted"},
       {"verb":"world.indirect-reset","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":5,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":6,"outcome":"accepted"},
-      {"verb":"world.explain","occurrence":2,"outcome":"accepted"},
       {"verb":"world.screenshot","occurrence":2,"outcome":"accepted"},
-      {"verb":"world.wait","occurrence":7,"outcome":"accepted"}
+      {"verb":"world.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"world.explain","occurrence":2,"outcome":"accepted"}
     ],
     "expect": [
       {"type":"line","name":"fenced-current-solve","stream":"stderr","match":"contains","text":"[indirect: settled at tick","present":true},
@@ -77,15 +77,15 @@
       {"verb":"world.wait","occurrence":2,"outcome":"accepted"},
       {"verb":"world.view.pointer","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":3,"outcome":"accepted"},
-      {"verb":"world.explain","occurrence":1,"outcome":"accepted"},
       {"verb":"world.screenshot","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"world.explain","occurrence":1,"outcome":"accepted"},
       {"verb":"world.indirect-reset","occurrence":1,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":5,"outcome":"accepted"},
       {"verb":"world.wait","occurrence":6,"outcome":"accepted"},
-      {"verb":"world.explain","occurrence":2,"outcome":"accepted"},
       {"verb":"world.screenshot","occurrence":2,"outcome":"accepted"},
-      {"verb":"world.wait","occurrence":7,"outcome":"accepted"}
+      {"verb":"world.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"world.explain","occurrence":2,"outcome":"accepted"}
     ],
     "expect": [
       {"type":"line","name":"fenced-current-solve","stream":"stderr","match":"contains","text":"[indirect: settled at tick","present":true},
