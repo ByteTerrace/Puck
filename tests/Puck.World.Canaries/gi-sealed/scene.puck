@@ -9,8 +9,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "planar"
       palette [{ color: "#000000", specular: 0, roughness: 1, fill: "#000000" }]
-      shape Box "outer" { material: 0, scale [1.525, 1.525, 1.525] }
-      shape Box "inner" { material: 0, blend: Subtraction, scale [1.5, 1.5, 1.5] }
+      shape Box "outer" { material: 0, position [0, 0, 0], scale [1.525, 1.525, 1.525] }
+      shape Box "inner" { material: 0, blend: Subtraction, position [0, 0, 0], scale [1.5, 1.5, 1.5] }
     }
   }
   prototype "curved" {
@@ -18,8 +18,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "curved"
       palette [{ color: "#000000", specular: 0, roughness: 1, fill: "#000000" }]
-      shape Sphere "outer" { material: 0, scale [1.525, 1.525, 1.525] }
-      shape Sphere "inner" { material: 0, blend: Subtraction, scale [1.5, 1.5, 1.5] }
+      shape Sphere "outer" { material: 0, position [0, 0, 0], scale [1.525, 1.525, 1.525] }
+      shape Sphere "inner" { material: 0, blend: Subtraction, position [0, 0, 0], scale [1.5, 1.5, 1.5] }
     }
   }
   prototype "receiver" {
@@ -35,8 +35,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "exterior"
       palette [{ color: "#FFFFFF", emissive: 1, metal: 1, specular: 0, roughness: 1, fill: "#000000" }]
-      shape Sphere "outer" { material: 0, scale [12.2, 12.2, 12.2] }
-      shape Sphere "inner" { material: 0, blend: Subtraction, scale [12, 12, 12] }
+      shape Sphere "outer" { material: 0, position [0, 0, 0], scale [12.2, 12.2, 12.2] }
+      shape Sphere "inner" { material: 0, blend: Subtraction, position [0, 0, 0], scale [12, 12, 12] }
     }
   }
 }

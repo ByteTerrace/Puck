@@ -8,8 +8,8 @@ prototypes {
       schema: "puck.creation.v1"
       name: "enclosure"
       palette [{ color: "#FFFFFF", emissive: 0.125, specular: 0, roughness: 1, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
-      shape Sphere "outer" { material: 0, scale [3.2, 3.2, 3.2] }
-      shape Sphere "inner" { material: 0, blend: Subtraction, scale [3, 3, 3] }
+      shape Sphere "outer" { material: 0, position [0, 0, 0], scale [3.2, 3.2, 3.2] }
+      shape Sphere "inner" { material: 0, blend: Subtraction, position [0, 0, 0], scale [3, 3, 3] }
     }
   }
 }
