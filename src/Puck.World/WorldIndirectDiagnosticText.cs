@@ -58,8 +58,9 @@ public static class WorldIndirectDiagnosticText {
     }
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
-    /// allocations. Probe-publication stamps and receiver admission/completion words occupy separate slices. The active
-    /// cache includes its borrowed light banks; the light fragment counts only its own scratch and regions.</summary>
+    /// allocations. Probe-publication stamps and the shared receiver admission word occupy separate cache slices.
+    /// Per-view receiver completion words belong to graph storage outside these slices. The active cache includes
+    /// its borrowed light banks; the light fragment counts only its own scratch and regions.</summary>
     /// <param name="layout">The active cache's word layout, or null when no active cache is allocated.</param>
     /// <param name="allCaches">The sum of unique active and retiring cache allocations.</param>
     /// <param name="activeCache">The active cache allocation, included in <paramref name="allCaches"/>.</param>
