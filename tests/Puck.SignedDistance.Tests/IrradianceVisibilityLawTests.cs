@@ -98,7 +98,7 @@ public sealed class IrradianceVisibilityLawTests {
         var shaded = model.Irradiance(normal: Up, surface: under)!.Value.X;
         var lit = model.Irradiance(normal: Up, surface: open)!.Value.X;
 
-        Assert.Equal(expected: 0, actual: reference.Unresolved);
+        Assert.True(condition: (reference.Unresolved == 0), userMessage: (reference.Unresolved == 0) ? null : TableReferenceDiagnostic(surfaces, under));
         Assert.True(condition: (shaded < (0.5 * lit)));
         Assert.InRange(actual: shaded, high: (reference.Irradiance.X + 0.05), low: (reference.Irradiance.X - 0.05));
 
@@ -184,6 +184,41 @@ public sealed class IrradianceVisibilityLawTests {
         Assert.False(condition: field.SegmentClear(from: placement.Position, to: (placement.Position + (sun * 2.0))));
         Assert.True(condition: (sunlit > 0));
         Assert.True(condition: (shaded > 0));
+    }
+
+    // Failure-only diagnostics use the reference's own prefix estimates on a fresh field. Its path directions depend
+    // on path index and bounce, never total path count, so bisection identifies the same unresolved Halton path.
+    // The first failing depth locates its ray/launch stage; the public result does not distinguish those failures.
+    private static string TableReferenceDiagnostic(IrradianceSurfaces surfaces, Double3 point) {
+        var field = IrradianceScenes.TableHall(halfWidth: 1.6, height: 0.8, thickness: 0.05);
+        var reference = new IrradianceReference(exitDistance: 60.0, field: field, surfaces: surfaces);
+        var rows = new List<string>();
+
+        for (var depth = 0; depth <= 2; depth++) {
+            var estimate = reference.Estimate(bounces: depth, normal: Up, paths: 2048, point: point);
+            var paths = new List<int>();
+
+            for (var ordinal = 1; ordinal <= Math.Min(estimate.Unresolved, 8); ordinal++) {
+                var first = 1;
+                var last = 2048;
+
+                while (first < last) {
+                    var middle = first + ((last - first) / 2);
+                    var prefix = reference.Estimate(bounces: depth, normal: Up, paths: middle, point: point);
+                    if (prefix.Unresolved >= ordinal) {
+                        last = middle;
+                    } else {
+                        first = middle + 1;
+                    }
+                }
+
+                paths.Add(first);
+            }
+
+            rows.Add($"depth={depth}, unresolved={estimate.Unresolved}, irradiance={estimate.Irradiance}, first unresolved paths=[{string.Join(", ", paths)}]");
+        }
+
+        return $"The table reference must resolve every path. Fresh field: {string.Join("; ", rows)}";
     }
 
     private static void HoldsDarkInside(IrradianceField field, Double3 center, (Double3 Point, Double3 Normal)[] inside, (Double3 Point, Double3 Normal) outside) {
