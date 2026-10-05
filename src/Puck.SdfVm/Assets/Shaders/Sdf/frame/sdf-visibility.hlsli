@@ -287,7 +287,6 @@ void sdfVisibilityStoreRow(uint word, uint4 bits) {
 }
 void sdfStoreVisibility(uint record, SdfVisibility visibility) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowV, uint4(asuint(visibility.t), visibility.identity, asuint(visibility.material), visibility.flags));
-    sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u);
 }
 void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
     uint word = (record + SdfVisibilityRowC);

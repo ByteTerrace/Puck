@@ -369,6 +369,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.RenderedBindings = -1;
+            entry.ReceiverRecordedSurface = null;
+            entry.ReceiverSubmittedSurface = null;
             entry.ImagePublication = default;
             entry.ImageLightingFence = null;
             entry.SubmittedLightingFence = null;
@@ -380,6 +382,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var entry in m_entries.Values) {
             entry.Picker.Clear();
             entry.Temporal.Reset();
+            entry.ReceiverRecordedSurface = null;
+            entry.ReceiverSubmittedSurface = null;
             entry.ImagePublication = default;
             entry.ImageLightingFence = null;
             entry.SubmittedLightingFence = null;

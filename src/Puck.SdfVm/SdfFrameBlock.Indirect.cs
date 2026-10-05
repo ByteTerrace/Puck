@@ -29,6 +29,7 @@ public static partial class SdfFrameBlock {
     /// <param name="block">The world pass block.</param>
     /// <param name="cache">The cache bound by this graph edge, or null when the edge no longer names the current allocation.</param>
     public static void WriteIndirect(Span<byte> block, SdfIndirectCache? cache) {
+        WriteIndirectReceiverPreservation(block, false);
         WriteUInt32(block, IndirectTier, (uint)(cache?.Layout.Tier ?? SdfIndirectTier.Off));
         WriteUInt32(block, Offset(SdfWorldPackage.IndirectEpoch), cache?.Epoch ?? 0u);
         var allocation = (ulong)(cache?.History.Allocation ?? 0L);
@@ -44,6 +45,11 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block, Offset(SdfWorldPackage.IndirectPreviousPublication), 0u);
         WriteIndirectPick(block, false, 0u, 0u);
     }
+    /// <summary>Preserves completed receiver certificates only when Primary repeats its submitted surface inputs.</summary>
+    /// <param name="block">The world pass block.</param>
+    /// <param name="preserve">Whether the geometry, camera sample and visibility allocation are unchanged.</param>
+    public static void WriteIndirectReceiverPreservation(Span<byte> block, bool preserve) =>
+        WriteUInt32(block, Offset(SdfWorldPackage.PreserveIndirectReceivers), preserve ? 1u : 0u);
     /// <summary>Admits Near only after the current source's whole finite solve has completed under its view fence.</summary>
     /// <param name="block">The world pass block.</param>
     /// <param name="cache">The exact cache allocation bound by this view.</param>

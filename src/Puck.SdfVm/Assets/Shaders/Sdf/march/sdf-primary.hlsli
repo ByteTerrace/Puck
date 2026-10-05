@@ -606,6 +606,9 @@ void sdfPrimaryStage(SdfPixel p) {
     coverage.blendWeight = materialBlendWeight;
     coverage.blendOther = materialBlendOther;
     sdfStoreVisibility(record, visibility);
+    // Repeating the same submitted surface does not discard bounded receiver work merely because cadence is off.
+    // New geometry, camera samples or visibility storage still clear the completed certificate before shading.
+    if (passGroup.preserveIndirectReceivers == 0u) { sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u); }
     sdfStoreVisibilityCoverage(record, coverage);
 
     if (meshPixel) {

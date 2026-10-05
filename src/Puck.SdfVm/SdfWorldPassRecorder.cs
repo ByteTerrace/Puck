@@ -309,6 +309,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
     public void Submitted() {
+        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Primary) { m_owner.SubmittedReceiverSurface(m_context.Instance); }
         if (m_part == SdfWorldPackage.Parts.Views && !m_view.LightView) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
             m_lightingSubmitted = true;
@@ -335,7 +336,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var width = recording.Width;
         var height = recording.Height;
 
-        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Primary) { m_owner.ReceiverSurfaceWritten(m_context.Instance); }
         if (!m_view.LightView) { residency.RequestExtent(height: recording.FrameHeight, width: recording.FrameWidth); }
         SdfFrameBlock.Write(
             block: recording.PassBlock,
@@ -361,6 +361,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             views: ((residency.IndirectTier == SdfIndirectTier.Off) ? null : residency.IndirectLightViews), depthCamera: m_view.LightView);
         SdfFrameBlock.WriteIndirect(recording.PassBlock, !m_view.LightView && m_part == SdfWorldPackage.Parts.Primary
             ? tables.Indirect : BoundIndirect(recording, tables));
+        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Primary) {
+            var preserve = m_owner.PrepareReceiverSurface(m_context.Instance, this, recording.Outputs[0].Buffer!,
+                tables.PassSignature(frame, view, SdfWorldPackage.Parts.Primary),
+                new SdfReprojectionView(frame.Views[view].Camera, temporal.Jitter, width, height), stableGeometry: !tables.LightGeometryMutable);
+            SdfFrameBlock.WriteIndirectReceiverPreservation(recording.PassBlock, preserve);
+        }
         if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Views) {
             var boundIndirect = BoundIndirect(recording, tables);
             SdfFrameBlock.WriteIndirectNear(recording.PassBlock, boundIndirect, frame, residency.IsIndirectReady);

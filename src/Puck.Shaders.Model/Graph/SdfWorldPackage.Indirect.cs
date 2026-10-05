@@ -27,6 +27,8 @@ public static partial class SdfWorldPackage {
     public const string IndirectAllocation = "indirectAllocation";
     /// <summary>The exact transport and slot revision qualifying a receiver certificate.</summary>
     public const string IndirectCertificateRevision = "indirectCertificateRevision";
+    /// <summary>Whether Primary rewrites the same submitted surface inputs in the same visibility allocation.</summary>
+    public const string PreserveIndirectReceivers = "preserveIndirectReceivers";
     /// <summary>The visibility version after views publishes only its receiver-certificate fields.</summary>
     public const string IndirectVisibility = "indirectVisibility";
     /// <summary>The submitted cache update sequence, for reading only completed proof publications.</summary>
@@ -92,6 +94,7 @@ public static partial class SdfWorldPackage {
             Value(name: IndirectEpoch, type: ShaderValueType.Uint),
             Value(name: IndirectAllocation, type: ShaderValueType.Uint2),
             Value(name: IndirectCertificateRevision, type: ShaderValueType.Uint),
+            Value(name: PreserveIndirectReceivers, type: ShaderValueType.Uint),
             Value(name: IndirectFrame, type: ShaderValueType.Uint),
             Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
             Value(name: IndirectReadPublication, type: ShaderValueType.Uint),

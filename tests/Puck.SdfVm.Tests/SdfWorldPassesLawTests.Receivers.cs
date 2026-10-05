@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -9,13 +11,15 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
-    [Fact]
-    public void DeferredReceiversKeepOnlyTheirShadingWarmUntilTheirCompletedCountIsZero() {
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void DeferredReceiversKeepOnlyTheirShadingWarmUntilTheirCompletedCountIsZero(bool cadence) {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
-        var source = Frame() with { FarDistance = 12f, IndirectTier = SdfIndirectTier.Medium, EnableCadenceGate = true };
+        var source = Frame() with { FarDistance = 12f, IndirectTier = SdfIndirectTier.Medium, EnableCadenceGate = cadence };
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-            frameSource: new FixedFrameSource(source), height: Extent, kernels: SdfTestPipelines.Kernels(),
+            frameSource: new CapturingFrameSource(() => source), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "world", pipelines: pipelines, width: Extent);
         var views = new SdfWorldPasses(_ => new SdfWorldView(residency, 0));
         using var indirect = new SdfIndirectPasses(views);
@@ -65,12 +69,15 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(graph.Node(0).TryReadCompleted(work));
             var executed = Executed(work);
             Assert.Contains(SdfWorldPackage.Parts.Views, executed);
-            Assert.DoesNotContain(SdfWorldPackage.Parts.Primary, executed);
+            Assert.Equal(!cadence, executed.Contains(SdfWorldPackage.Parts.Primary));
+            // Shared lighting is fenced, but this view still owes real receiver work.
+            Assert.True(residency.IsIndirectReady);
+            Assert.False(views.CaptureReadinessOf("world").IsRendered);
         }
         var observed = completions;
         residency.IndirectFrozen = true;
         for (var settle = 0; settle < 4; settle++) { _ = Produce(); }
-        Assert.True(Produce());
+        Assert.Equal(cadence, Produce());
         Assert.True(completions >= observed);
         residency.IndirectFrozen = false;
         Assert.False(Produce());
@@ -78,11 +85,38 @@ public sealed partial class SdfWorldPassesLawTests {
         observed = completions;
         Assert.False(Produce(complete: false));
         Assert.Equal(observed, completions);
-        TestLiveness.Within(frames: 8, step: () => Produce(), building: () => false, reason: () => graph.Render.Reason);
+        TestLiveness.Within(frames: 8, step: () => {
+            _ = Produce();
+            return views.CaptureReadinessOf("world").IsRendered;
+        }, building: () => false, reason: () => graph.Render.Reason);
+        if (cadence) {
+            TestLiveness.Within(frames: 8, step: () => Produce(), building: () => false, reason: () => graph.Render.Reason);
+        }
         observed = completions;
         var cacheFrame = residency.Tables!.Indirect!.Frame;
-        for (var standing = 0; standing < 4; standing++) { Assert.True(Produce()); }
-        Assert.Equal(observed, completions);
-        Assert.Equal(cacheFrame, residency.Tables.Indirect.Frame);
+        for (var standing = 0; standing < 4; standing++) {
+            Assert.Equal(cadence, Produce());
+            Assert.True(views.CaptureReadinessOf("world").IsRendered);
+        }
+        if (cadence) {
+            Assert.Equal(observed, completions);
+            Assert.Equal(cacheFrame, residency.Tables.Indirect.Frame);
+        }
+
+        // A changed camera must not inherit the preceding sample's completed zero, even though the cache is ready.
+        deferred = 1;
+        source = source with { Views = [source.Views[0] with {
+            Camera = CameraSnapshot.LookAt(position: source.Views[0].Camera.Position, target: new Vector3(.1f, 0f, 0f),
+                fieldOfViewRadians: 1f, viewportWidth: Extent, viewportHeight: Extent),
+        }] };
+        Assert.False(Produce());
+        Assert.False(views.CaptureReadinessOf("world").IsRendered);
+        for (var pending = 0; pending < 4; pending++) { Assert.False(Produce()); }
+        Assert.False(views.CaptureReadinessOf("world").IsRendered);
+        deferred = 0;
+        TestLiveness.Within(frames: 8, step: () => {
+            _ = Produce();
+            return views.CaptureReadinessOf("world").IsRendered;
+        }, building: () => false, reason: () => graph.Render.Reason);
     }
 }

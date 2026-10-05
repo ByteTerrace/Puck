@@ -27,10 +27,10 @@ public sealed partial class SdfWorldPasses {
         if (view.Residency.IndirectFrozen) {
             return FrameRender.Refused($"the instance '{instance}' cannot complete a cold capture solve while indirect updates are frozen");
         }
-        return view.Residency.IsIndirectReady &&
-            view.Residency.Tables?.Indirect?.PublishedLightingSource is { Tainted: false }
+        return view.Residency.IsIndirectReady && view.Residency.Tables?.Indirect is { } cache && ReceiversComplete(entry, cache) &&
+            cache.PublishedLightingSource is { Tainted: false }
             ? FrameRender.Rendered
-            : FrameRender.Waiting($"the instance '{instance}' awaits its capture source's complete fenced indirect solve");
+            : FrameRender.Waiting($"the instance '{instance}' awaits its capture source's complete fenced indirect solve and receiver certificates");
     }
 
     internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame) => tables is not null && frame is not null &&

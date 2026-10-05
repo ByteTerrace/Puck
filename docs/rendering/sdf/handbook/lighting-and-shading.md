@@ -415,12 +415,20 @@ its admission and deferred counters reset once through the residency's existing
 trace pass, including frames with no new transport rays. Each receiver retains
 its exact launch and completed result in the visibility record, independently
 of shared proof-hash collisions. The complete allocation identity and transport
-revision qualify this certificate; a new primary sample clears it. Completed
-unresolved results also stand, while deferred results remain retryable.
+revision qualify this certificate. Primary preserves it only when the same
+recorder has successfully submitted the same geometry signature, camera, jitter,
+render grid and visibility allocation; a changed sample or allocation clears it.
+This preservation also applies when cadence is disabled and Primary runs again.
+Brick upload serials and slice progress join the geometry signature when it is
+read, after any upload; an unfinished bake never preserves a certificate.
+Completed unresolved results also stand, while deferred results remain retryable.
 The existing readback ring copies the actual deferred count and accepts it only
-after its submission fence, for the same allocation, revision and primary write.
+after its submission fence, for the same allocation, revision and surface sample.
 Pending receivers keep Views active without rerunning unchanged Primary; zero
 completes that scope. Frozen caches read completed proofs and admit none.
+Capture waits for that view's current completed receiver scope as well as its
+shared lighting solve. The shared-cache wait alone does not promise completed
+receiver work for every view.
 The certificate adds 32 bytes per allocated render pixel, and each allocated
 completion-ring slot owns four host-visible bytes, both reported in graph memory.
 Material albedo, metallic diffuse exclusion, `receive` and AO apply once

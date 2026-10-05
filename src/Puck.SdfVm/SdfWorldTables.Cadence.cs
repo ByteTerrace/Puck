@@ -30,6 +30,7 @@ namespace Puck.SdfVm;
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
+//   - brick serials and slice cursors : read when a signature is requested, including writes made by this frame's upload.
 // Not covered by any packed span — handled conservatively by forcing a render:
 //   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
 //                          the sky and the composite run every frame (ForcesPass) and the whole view never stands.
@@ -103,6 +104,7 @@ public sealed partial class SdfWorldTables {
         var geometry = Fnv1aHash.Create();
 
         geometry.Add(value: m_geometrySignature);
+        AddBrickGeometry(ref geometry);
         geometry.Add(values: block);
         var hash = Fnv1aHash.Create();
 
@@ -142,6 +144,13 @@ public sealed partial class SdfWorldTables {
     }
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
+    }
+
+    // Uploads follow table packing: include their actual slot revisions and slice progress at the point of use.
+    private void AddBrickGeometry(ref Fnv1aHash hash) {
+        if (!m_brickPoolEnabled) { return; }
+        hash.Add(values: MemoryMarshal.AsBytes(m_brickSerials.AsSpan()));
+        hash.Add(values: MemoryMarshal.AsBytes(m_brickVoxelCursor.AsSpan()));
     }
 
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
@@ -216,6 +225,7 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
+        AddBrickGeometry(ref hash);
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);

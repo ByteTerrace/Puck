@@ -1,7 +1,7 @@
 #ifndef SDF_INDIRECT_RECEIVER_CERTIFICATE_HLSLI
 #define SDF_INDIRECT_RECEIVER_CERTIFICATE_HLSLI
-// This pixel owns a completed certificate independently of the shared acceleration hash's occupancy. A primary write
-// clears it, and any transport or slot replacement changes its exact allocation/revision scope. Deferred work is never
+// This pixel owns a completed certificate independently of the shared acceleration hash's occupancy. A changed primary
+// sample clears it, and any transport or slot replacement changes its exact allocation/revision scope. Deferred work is never
 // stored as a completed unresolved answer.
 bool sdfIndirectReceiverCertificate(uint record, out uint level, out uint mask, out float3 launched, out float clearance) {
     uint word = record + SdfVisibilityRowI;

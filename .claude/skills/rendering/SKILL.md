@@ -112,10 +112,15 @@ and share bounded receiver-proof admission and deferred counters. Their reset is
 the existing trace pass's two-word work, requested only by pending view scopes.
 Views publishes its eight-word certificate through an explicit preserving
 visibility version, qualified by the complete allocation identity and transport
-revision. Primary clears it on a new sample; completed unresolved results stand
-and deferred results retry. The fenced deferred count keeps Views active until
-completion without making unchanged Primary read the cache. Frozen views admit no
-new proof. Preserve outer field-mask and secondary-body policy while querying
+revision. Primary clears it on a new sample; repeating the exact submitted
+geometry, camera, jitter, grid and visibility allocation preserves it even with
+cadence off. Commit that identity only after successful submission. Completed
+brick writes are in the point-of-use geometry signature; unfinished bakes never
+preserve certificates. Completed unresolved results stand and deferred results retry.
+The fenced deferred count keeps Views active until
+completion without making unchanged Primary read the cache. Capture also waits
+for its own view's current fenced receiver scope, not only the shared solve.
+Frozen views admit no new proof. Preserve outer field-mask and secondary-body policy while querying
 the full field from a nested lighting helper.
 
 Shared-cache waits use `SdfWorldResidency.IsIndirectReady`: the latest packed
