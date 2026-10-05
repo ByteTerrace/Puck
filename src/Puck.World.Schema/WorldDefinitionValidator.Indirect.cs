@@ -4,7 +4,13 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateIndirect(WorldDefinition definition, List<string> errors) {
+        foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
+            if (definition.Render.Preset(tier)?.Indirect is { } chosen && !Enum.IsDefined(chosen)) {
+                errors.Add($"render.{tier.ToString().ToLowerInvariant()}.indirect must be off, medium or high.");
+            }
+        }
         if (definition.Render.Indirect is not { } indirect) { return; }
+        if (!Enum.IsDefined(indirect.Tier)) { errors.Add("render.indirect.tier must be off, medium or high."); }
         if (!Enum.IsDefined(indirect.Bodies)) { errors.Add("render.indirect.bodies must be default, cast, receive or off."); }
         if (indirect.Bounces is { } bounces && (bounces < 0 || bounces > SdfIndirectLayout.MaximumBounces)) {
             errors.Add($"render.indirect.bounces must be an integer from 0 to {SdfIndirectLayout.MaximumBounces}; the selected tier caps its actual depth.");

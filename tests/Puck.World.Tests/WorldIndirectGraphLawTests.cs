@@ -67,7 +67,10 @@ public sealed class WorldIndirectGraphLawTests {
         var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
         var sink = WorldSessionLevers.Compose(settings, new PresentPacingControl(initialTargetHertz: null), new Audio(), new WorldBindingBarVisibility());
 
-        Assert.Equal(SdfIndirectTier.Off, settings.IndirectTier);
+        Assert.Equal(SdfIndirectTier.Medium, settings.IndirectTier);
+        foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
+            Assert.Equal(tier, new WorldRenderSettings(new WorldRenderDefaults(Indirect: new(Tier: tier))).IndirectTier);
+        }
         foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
             var before = settings.Revision;
 

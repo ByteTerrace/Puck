@@ -470,6 +470,7 @@ public static class WorldLightingText {
         var environment = definition.Render.Environment;
         var indirect = definition.Render.Indirect;
         echo = echo.Segment().Head(head: "indirect")
+            .Field(key: "tier", value: (indirect?.Tier ?? SdfIndirectTier.Medium).ToString().ToLowerInvariant())
             .Field(key: "lights", value: Describe(indirect?.Sources?.Lights ?? new BindableScalar(1f)))
             .Field(key: "emission", value: Describe(indirect?.Sources?.Emission ?? new BindableScalar(1f)))
             .Field(key: "screens", value: Describe(indirect?.Sources?.Screens ?? new BindableScalar(1f)))

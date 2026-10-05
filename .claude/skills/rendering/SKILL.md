@@ -92,6 +92,9 @@ Preserve exact source publication and taint, same-world camera exclusion, and th
 CPU reference's explicit refusal until it can consume actual captured pixels.
 The default source mask includes all five categories; screen admission still
 requires an actual acquired emitting source and preserves authored screens=0.
+World boot resolves `render.indirect.tier` to Medium when absent. The existing
+quality preset and session-lever route selects Off at Low, Medium at Medium and
+High at High, preserving explicit preset overrides and saved source controls.
 `render.indirect.sources` binds five unit gains through the environment resolver.
 Apply each gain only at its origin, and feedback once per reflected hop, never
 on continuation or cache interpolation. Pin gains and requested `bounces` with

@@ -73,6 +73,7 @@ public sealed partial class WorldRenderSettings {
         Temporal = defaults.Temporal;
         ShadowAmortize = defaults.ShadowAmortize;
         SkyQuality = defaults.SkyQuality;
+        IndirectTier = defaults.Indirect?.Tier ?? SdfIndirectTier.Medium;
         DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
         CadenceGate = true;
@@ -92,7 +93,8 @@ public sealed partial class WorldRenderSettings {
     /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
     /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
-    /// <summary>The residency's traced, partitioned indirect-light cache tier. It starts off and remains session state.</summary>
+    /// <summary>The residency's traced, partitioned indirect-light cache tier. It boots from <c>render.indirect.tier</c>,
+    /// Medium when absent, and follows the live session lever or quality preset thereafter.</summary>
     public SdfIndirectTier IndirectTier {
         get => m_indirectTier;
         set {

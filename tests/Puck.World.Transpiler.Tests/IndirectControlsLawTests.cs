@@ -9,6 +9,7 @@ public sealed class IndirectControlsLawTests {
         var document = WorldSources.LowerClean("""
             render {
               indirect {
+                tier: off
                 sources { lights: 0.125, emission: 0.25, screens: 0, sky: 0.5, feedback: 0.75 }
                 bounces: 1
                 apply { intensity: 0.5, tint: "#FF0000", contact: 0.25 }
@@ -18,6 +19,7 @@ public sealed class IndirectControlsLawTests {
             """);
         using var wire = JsonDocument.Parse(document.ToJsonString());
         var indirect = wire.RootElement.GetProperty("render").GetProperty("indirect");
+        Assert.Equal("off", indirect.GetProperty("tier").GetString());
         Assert.Equal(.125d, indirect.GetProperty("sources").GetProperty("lights").GetDouble());
         Assert.Equal(0, indirect.GetProperty("sources").GetProperty("screens").GetInt32());
         Assert.Equal(1, indirect.GetProperty("bounces").GetInt32());

@@ -301,6 +301,12 @@ collision-field values as an indirect comparison.
 
 ## Finite indirect lighting sweeps
 
+World boots at `render.indirect.tier`, Medium when absent; `off` and `high` are
+explicit authored choices. `world.indirect` moves the live tier and `world.save`
+retains it. The shared `quality.puck` presets select Off, Medium and High for
+Low, Medium and High respectively. A preset's `indirect` member overrides that
+mapping; applying a preset does not change the source gains or receiver controls.
+
 The residency's `shade` pass follows placement, partition and transport over the
 same cache allocation. Once transport finishes, the shared `IrradianceSolveSchedule`
 visits coarser levels before finer ones, within the tier's probe allowance. The

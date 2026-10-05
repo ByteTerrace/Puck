@@ -55,7 +55,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
     }
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
@@ -861,7 +861,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale and sky-quality levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality and indirect-tier levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -918,6 +918,11 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     name: WorldSessionLevers.SkyQuality,
                     a: ((double)preset.Sky)
                 );
+                SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, (double)(preset.Indirect ?? (tier switch {
+                    QualityTier.Low => SdfIndirectTier.Off,
+                    QualityTier.Medium => SdfIndirectTier.Medium,
+                    _ => SdfIndirectTier.High,
+                })));
                 SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
                     WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
                     section: WorldSection.Views);

@@ -81,6 +81,7 @@ public static class WorldApplicationDefaults {
 /// <param name="ShadowFadeTicks">The length of a shadow handoff in delivered ticks; zero selects instant changes.</param>
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 /// <param name="Sky">The sky's quality tier the preset selects (<c>world.sky-quality</c>).</param>
+/// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
@@ -93,7 +94,8 @@ public readonly record struct WorldQualityPreset(
     uint ShadowFadeTicks = 0,
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
     WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter,
-    WorldSkyTier Sky = WorldSkyTier.High
+    WorldSkyTier Sky = WorldSkyTier.High,
+    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -176,8 +178,8 @@ public sealed record WorldRenderDefaults(
     /// leaves no marchable depth a camera could frame a body in.</summary>
     public const float MinFarDistance = 1f;
 
-    /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
-    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: a world
+    /// <summary>Gets the absent defaults — shadows off, no crowd radius, no ambient occlusion, native scale,
+    /// Medium indirect light, no authored presets and the engine's pinned far distance. A world
     /// authors its boot levers and its preset table in its own <c>render</c> section, or inherits them from its
     /// basis or an import; the shipped worlds share one preset table, <c>Assets/worlds/quality.puck</c>.</summary>
     public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
@@ -202,11 +204,13 @@ public sealed record WorldRenderDefaults(
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
 /// <param name="Apply">Bindable receiver-only controls. They do not change cached radiance.</param>
+/// <param name="Tier">The boot cache tier, Medium by default. The live session lever and selected quality preset override it.</param>
 public sealed record WorldRenderIndirect(
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>))] SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectSources? Sources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null,
+    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium);
 
 /// <summary>Gains applied once where each source enters transport; continuation never applies them a second time.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>

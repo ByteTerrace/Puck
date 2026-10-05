@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Presentation;
 using Puck.Testing;
+using Puck.SignedDistance;
 using Puck.World.Transpiler;
 
 using Xunit;
@@ -71,12 +72,15 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
                 AmbientOcclusion: false,
                 RenderScale: WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.Half),
                 Shadows: ShadowTier.Off,
+                Indirect: SdfIndirectTier.Off,
                 Sky: WorldSkyTier.Low,
                 Temporal: false
             )
         );
         Assert.True(condition: (table.Preset(tier: QualityTier.Medium)?.Temporal ?? false));
         Assert.True(condition: (table.Preset(tier: QualityTier.High)?.Temporal ?? false));
+        Assert.Equal(SdfIndirectTier.Medium, table.Preset(QualityTier.Medium)?.Indirect);
+        Assert.Equal(SdfIndirectTier.High, table.Preset(QualityTier.High)?.Indirect);
         Assert.Equal(
             actual: (table with { LowRaw = null, MediumRaw = null, HighRaw = null }),
             expected: WorldRenderDefaults.Absent

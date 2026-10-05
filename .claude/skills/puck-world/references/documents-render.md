@@ -6,6 +6,12 @@ file is the decision/derivation prose the schema cannot state.
 
 ### `render` — the render defaults
 
+`render.indirect.tier` boots Medium when absent and accepts Off, Medium or High.
+The existing `world.indirect` session lever overrides it and `world.save` folds it
+back without changing source gains. Quality presets carry an optional `indirect`
+override; absent uses Off for Low, Medium for Medium and High for High. The one
+shipped `quality.puck` table authors all three explicitly.
+
 `render.indirect.sources` carries bindable `lights`, `emission`, `screens`, `sky`
 and `feedback` gains in [0, 1], each default one. Explicit screens=0 stays off
 even when an emitting image is bound. Structural `bounces` requests zero through
@@ -16,8 +22,8 @@ environment binding path own validation, keys and state reads; add no separate
 indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns source and receiver semantics.
 
-`WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
-inert section. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
+`WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` carries the
+engine defaults, including Medium indirect. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
 `shadowFadeSlots`, `shadowFadeTicks`, `shadowOverflow`,
 `ambientOcclusion`, `renderScale`, `upscaleSharpness`, `temporal`,
 `dynamicResolution`, the `low`/`medium`/`high` presets, each also carrying a

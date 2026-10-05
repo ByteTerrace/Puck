@@ -11,9 +11,10 @@ public static partial class WorldSessionLevers {
     /// folds first.
     /// <para>A lever folds only into a section the document authors, and a section whose lever agrees with it comes
     /// back as the same instance, so an absent section stays absent and an authored one keeps exactly the members its
-    /// author wrote. An absent section resolves to the engine's inert value, which is not a section a saved document
-    /// may claim: an absent <c>audio</c> section, for one, resolves to a zero speaker radius the validator refuses in
+    /// author wrote. Some absent sections resolve to values a saved authored section cannot claim:
+    /// an absent <c>audio</c> section, for one, resolves to a zero speaker radius the validator refuses in
     /// an authored one. Moved render ceilings, view quality and editor values create their valid section when absent;
+    /// moved indirect tiers also create their section, preserving its source and receiver controls;
     /// unchanged defaults leave absent sections absent. Pins never fold.</para></summary>
     /// <param name="definition">The definition to fold into, normally the authority half's snapshot.</param>
     /// <param name="settings">The live render-lever settings.</param>
@@ -83,13 +84,16 @@ public static partial class WorldSessionLevers {
     );
     // Shadow reach folds to its tier; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
-        if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale)) {
+        if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
+            (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium)) {
             return null;
         }
 
         render ??= WorldRenderDefaults.Absent;
 
         var captured = (render with {
+            Indirect = (render.Indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) == settings.IndirectTier
+                ? render.Indirect : (render.Indirect ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier },
             Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
             ShadowLights = settings.ShadowSlots.Slots,
             ShadowFadeSlots = settings.ShadowSlots.FadeSlots,

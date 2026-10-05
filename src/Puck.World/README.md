@@ -1989,7 +1989,10 @@ view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
 `world.indirect off|medium|high` selects the session's residency-owned traced
-and partitioned cache. It starts off. Enabled views of one residency share one
+and partitioned cache. It boots at `render.indirect.tier`, Medium when absent;
+an explicit `off` disables it. The shared quality presets select Off at Low,
+Medium at Medium and High at High, and a preset can author an `indirect` override.
+`world.save` folds the live tier back into its authored home. Enabled views of one residency share one
 cache, and a completed cache schedules no more rays until demand or geometry
 changes. `world.debug-view indirect-probes` shows probe
 classes across the whole view, including empty sky, with scene hits occluding
