@@ -42,13 +42,18 @@ Read every instance and detail row, including both views, both light slots,
 histories, cache updates, apply work, unresolved work and allocated bytes.
 Missing or extra readings, a malformed response, any rejected command, an
 unsettled source fence or backend mismatch refuses qualification. Only measured
-passing paired reports may create the declared `.batch.ceilings.json` files:
+passing paired reports may create the declared `.batch.ceilings.json` files.
+Record and check the saved reports after inspecting the collection, without
+launching the batch again. For the first observation:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --batch tests/Puck.Counters/indirect-comparison/comparison.batch.json --output <reports>/indirect-comparison --record
-dotnet <cli-copy>/Puck.Cli.dll counters --batch tests/Puck.Counters/indirect-comparison/comparison.batch.json --output <reports>/indirect-check --check
+dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/indirect-comparison/medium-cache-cadence.batch.report.json --ceilings tests/Puck.Counters/indirect-comparison/medium-cache-cadence.batch.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/indirect-comparison/medium-cache-cadence.batch.report.json --ceilings tests/Puck.Counters/indirect-comparison/medium-cache-cadence.batch.ceilings.json --check
 ```
 
+Apply the same saved-report commands to all thirty declared report/ceilings
+pairs. An initial batch `--check` refuses while any declared ceilings are missing;
+a future batch `--check` collects fresh observations against the recorded set.
 Once all declared observation ceilings exist, `puck gate --gpu` routes their
 actual workload/script associations through this manifest once. Ambiguous
 manifest associations and incomplete measured sets refuse. The parent

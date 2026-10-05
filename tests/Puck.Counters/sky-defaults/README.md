@@ -58,9 +58,19 @@ finite values and the corresponding image evidence are also qualification duties
 
 No reports, ceilings, measured zeros or tier choices are authored here. The new
 field-scale control, fixture compilation, engine batch cases, current backend
-observations and chosen defaults remain unqualified. Only a measured passing
-paired set may create the declared ceilings with the same command plus `--record`;
-then `--check` judges those identities. Keep this phase separate from the
+observations and chosen defaults remain unqualified. After inspecting a measured
+passing paired set, record and check each saved report against its declared
+ceilings without launching the batch again. For the first observation:
+
+```text
+dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/sky-defaults/low-still-full.report.json --ceilings tests/Puck.Counters/sky-defaults/low-still-full.ceilings.json --record
+dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/sky-defaults/low-still-full.report.json --ceilings tests/Puck.Counters/sky-defaults/low-still-full.ceilings.json --check
+```
+
+Apply the same saved-report commands to all thirty-six declared report/ceilings
+pairs. An initial batch `--check` refuses while any declared ceilings are missing;
+a future batch `--check` collects fresh observations against the recorded set.
+Keep this phase separate from the
 [G10 indirect comparison](../indirect-comparison/README.md), whose warm-up proves
 current shared-cache fences. RTX 4070 results and final tier decisions must close
 locally; only RTX 2060 hardware qualification may remain as device debt.
