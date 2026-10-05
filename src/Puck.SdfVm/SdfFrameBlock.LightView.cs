@@ -21,8 +21,9 @@ public static partial class SdfFrameBlock {
         object? geometryOwner = null, SdfLightGeometry geometry = default) {
         // A live depth camera can advance while a finite solve still reads captured poses. Incompatible maps
         // become ordinary map misses, so shade uses its existing bounded ray over the pinned World set.
-        if (geometryOwner is not null && views is not null && !views.MatchesGeometry(geometryOwner, geometry)) { views = null; }
-        var records = block.Slice(start: LightMapsOffset, length: (SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows * 16));
+        if ((geometryOwner is not null) && (views is not null) && !views.MatchesGeometry(geometry: geometry, owner: geometryOwner)) { views = null; }
+        var records = block.Slice(length: ((SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows) * 16), start: LightMapsOffset);
+
         records.Clear();
         WriteUInt32(block: block, offset: LightMapCountOffset, value: ((uint)(views?.MapCount ?? 0)));
         WriteUInt32(block: block, offset: LightMapOffset, value: ((depthCamera && (views?.Pending is >= 0)) ? ((uint)(views.Pending + 1)) : 0u));
@@ -30,9 +31,11 @@ public static partial class SdfFrameBlock {
         if (views is null) { return; }
         for (var index = 0; (index < views.MapCount); index++) {
             var map = views.Snapshot(index: index);
+
             if (map.Projection is not { } projection) { continue; }
-            var record = records.Slice(start: (index * SdfIndirectLightLayout.MetadataRows * 16), length: (SdfIndirectLightLayout.MetadataRows * 16));
+            var record = records.Slice(length: (SdfIndirectLightLayout.MetadataRows * 16), start: ((index * SdfIndirectLightLayout.MetadataRows) * 16));
             var values = MemoryMarshal.Cast<byte, float>(span: record);
+
             Point(values[0..], projection.Origin); values[3] = (map.Valid ? 1f : 0f);
             Point(values[4..], projection.Right); values[7] = ((float)projection.HalfWidth);
             Point(values[8..], projection.Up); values[11] = ((float)projection.Near);
@@ -43,5 +46,6 @@ public static partial class SdfFrameBlock {
             BinaryPrimitives.WriteUInt64LittleEndian(destination: record[104..], value: map.GeometryGeneration);
         }
     }
+
     private static void Point(Span<float> values, Double3 point) { values[0] = ((float)point.X); values[1] = ((float)point.Y); values[2] = ((float)point.Z); }
 }

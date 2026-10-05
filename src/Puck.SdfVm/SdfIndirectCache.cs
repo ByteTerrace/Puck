@@ -39,7 +39,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         m_bricks = new byte[(layout.BrickCapacity * 16)];
         m_updates = new byte[((layout.TraceBudget + (2 * layout.ClassifyBudget)) * 16)];
-        m_shadeUpdates = new byte[layout.ShadeBudget * 16];
+        m_shadeUpdates = new byte[(layout.ShadeBudget * 16)];
         m_traceStates = new uint[layout.ProbeCapacity];
         using var scope = new GpuCreationScope();
 
@@ -92,30 +92,33 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the pending trace stratum count.</summary>
     public int TraceCount => (m_pending?.Traces.Count ?? 0);
     /// <summary>Gets whether this schedule has GPU work.</summary>
-    public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount + ShadeCount) != 0) || Lighting?.AwaitingEnvironment == true;
+    public bool HasWork => (((((PlaceCount + ClassifyCount) + TraceCount) + ShadeCount) != 0) || (Lighting?.AwaitingEnvironment == true));
     /// <summary>Gets whether publication owes an update, environment pin, table-only eviction or shared receiver allowance reset.</summary>
-    public bool NeedsPublish => (m_pending is not null || m_shade is not null || m_receiverAdmission || Lighting?.AwaitingEnvironment == true);
+    public bool NeedsPublish => ((m_pending is not null) || (m_shade is not null) || m_receiverAdmission || (Lighting?.AwaitingEnvironment == true));
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
     public bool IsComplete => (m_schedule.IsComplete && (m_pending is null) && (m_changedGeometry is null));
+
     /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
     /// <param name="level">The running level index.</param>
     /// <returns>The box used by the residency's light camera.</returns>
     public SdfLightRegion? AllocatedRegion(int level) {
         SdfLightRegion? result = null;
+
         foreach (var key in m_slots.Keys) {
             if (key.Level != level) { continue; }
             IrradianceLattice.BrickBox(brick: key, level: Layout.Levels[level], min: out var min, max: out var max);
             result = ((result is { } previous) ? new SdfLightRegion(
                 Min: new Double3(X: Math.Min(val1: min.X, val2: previous.Min.X), Y: Math.Min(val1: min.Y, val2: previous.Min.Y), Z: Math.Min(val1: min.Z, val2: previous.Min.Z)),
                 Max: new Double3(X: Math.Max(val1: max.X, val2: previous.Max.X), Y: Math.Max(val1: max.Y, val2: previous.Max.Y), Z: Math.Max(val1: max.Z, val2: previous.Max.Z)))
-                : new SdfLightRegion(Min: min, Max: max));
+                : new SdfLightRegion(Max: max, Min: min));
         }
         return result;
     }
+
     /// <summary>Gets every GPU byte, including region rings, pinned lighting and light banks held by graph readers.</summary>
-    public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: checked(Buffer.SizeBytes + LightViewBytes), HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default);
+    public GpuMemoryBytes Bytes => (Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: checked((Buffer.SizeBytes + LightViewBytes)), HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default));
 
     internal bool IsDisposed => (Volatile.Read(location: ref m_holds) <= 0);
 
@@ -141,7 +144,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     }
     /// <summary>Invalidates all slots on a geometry/material-binding change or explicit reset; no old cell or proof remains valid.</summary>
     public void Reset(uint epoch) {
-        CertificateRevision = checked(CertificateRevision + 1u);
+        CertificateRevision = checked((CertificateRevision + 1u));
         Epoch = epoch;
         Frame = 1;
         InvalidateLighting();
@@ -165,14 +168,14 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
         if ((m_pending is not null) || Frozen) { return; }
-        if (m_changedGeometry is not null && m_shade is not null) { return; }
+        if ((m_changedGeometry is not null) && (m_shade is not null)) { return; }
         ApplyGeometryChanges();
         m_pending = m_schedule.Frame(inputs: inputs);
-        if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Placed.Count != 0 ||
-            m_pending.Classified.Count != 0 || m_pending.Traces.Count != 0) {
-            CertificateRevision = checked(CertificateRevision + 1u);
+        if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Placed.Count != 0) ||
+            (m_pending.Classified.Count != 0) || (m_pending.Traces.Count != 0)) {
+            CertificateRevision = checked((CertificateRevision + 1u));
         }
-        if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Traces.Count != 0) { InvalidateLighting(); }
+        if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Traces.Count != 0)) { InvalidateLighting(); }
         foreach (var key in m_pending.Evicted) {
             Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);
             m_free[key.Level].Add(item: m_slots[key]); m_slots.Remove(key: key); m_placed.Remove(item: key);
@@ -187,7 +190,8 @@ public sealed partial class SdfIndirectCache : IDisposable {
         m_placed.UnionWith(other: m_pending.Placed);
         foreach (var (key, slot) in m_slots) {
             if (m_placed.Contains(item: key)) {
-                var state = key.Level | (m_schedule.IsClassified(key) ? SdfIndirectLayout.BrickClassified : 0);
+                var state = key.Level | (m_schedule.IsClassified(key: key) ? SdfIndirectLayout.BrickClassified : 0);
+
                 Write(m_bricks, slot, key.X, key.Y, key.Z, state);
             }
         }
@@ -201,11 +205,10 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         Regions[1].Write(offset: 0, bytes: m_updates.AsSpan(length: (row * 16), start: 0));
         Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
-        if (((PlaceCount + ClassifyCount + TraceCount) == 0) && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
+        if ((((PlaceCount + ClassifyCount) + TraceCount) == 0) && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
     }
     /// <summary>Requests the shared receiver allowance for the next actual frame. Frozen caches admit no new proofs.</summary>
     public void AdmitReceivers() { if (!Frozen) { m_receiverAdmission = true; } }
-
     /// <summary>Counts and commits only the schedule and receiver allowance actually submitted.</summary>
     public void Submitted() {
         if (m_pending is not { } plan) {

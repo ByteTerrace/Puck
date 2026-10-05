@@ -27,9 +27,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Roots: [new RenderGraphRoot(Height: 1.0, Instance: "view", Width: 1.0)]);
 
             _ = runtime.ProduceFrame(context: default, frame: in frame);
-            return viewing.Recorded.Count >= 3;
+            return (viewing.Recorded.Count >= 3);
         });
-        Assert.Equal(expected: viewing.Recorded, actual: viewing.Signatures);
+        Assert.Equal(actual: viewing.Signatures, expected: viewing.Recorded);
         Assert.All(collection: viewing.Recorded, action: publication => {
             Assert.True(condition: publication.IsKnown);
             Assert.Same(expected: source, actual: publication.Owner);
@@ -43,7 +43,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public readonly List<GpuImagePublication> Recorded = [];
 
         public bool SamplesReads => true;
-        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(null);
+
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
 
         private sealed class Recorder(SignatureReadingPackage owner) : IRenderGraphPackageRecorder {

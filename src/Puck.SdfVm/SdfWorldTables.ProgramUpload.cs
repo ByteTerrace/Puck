@@ -16,9 +16,10 @@ public sealed partial class SdfWorldTables {
         program.ValidateIsa();
         var geometryChanged = true;
         var programChanged = true;
+
         if (m_liveProgram is { } previous) {
-            geometryChanged = !SameProgramGeometry(previous, program);
-            programChanged = geometryChanged || !previous.Words.SequenceEqual(program.Words);
+            geometryChanged = !SameProgramGeometry(current: program, previous: previous);
+            programChanged = (geometryChanged || !previous.Words.SequenceEqual(other: program.Words));
         }
 
         if (program.RequiredDynamicTransformCapacity > m_dynamicTransformCapacity) {
@@ -98,10 +99,12 @@ public sealed partial class SdfWorldTables {
     private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) {
         var before = previous.Words;
         var after = current.Words;
-        if (before.Length != after.Length || previous.MaterialCount != current.MaterialCount ||
-            !previous.ScreenSurfaceWords.SequenceEqual(current.ScreenSurfaceWords)) { return false; }
-        var first = checked((int)after[SdfProgram.ProgramMaterialOffsetLane] * 4);
-        var end = checked(first + current.MaterialCount * SdfProgram.MaterialVectorsPerEntry * 4);
-        return before[..first].SequenceEqual(after[..first]) && before[end..].SequenceEqual(after[end..]);
+
+        if ((before.Length != after.Length) || (previous.MaterialCount != current.MaterialCount) ||
+            !previous.ScreenSurfaceWords.SequenceEqual(other: current.ScreenSurfaceWords)) { return false; }
+        var first = checked((((int)after[SdfProgram.ProgramMaterialOffsetLane]) * 4));
+        var end = checked((first + ((current.MaterialCount * SdfProgram.MaterialVectorsPerEntry) * 4)));
+
+        return (before[..first].SequenceEqual(other: after[..first]) && before[end..].SequenceEqual(other: after[end..]));
     }
 }

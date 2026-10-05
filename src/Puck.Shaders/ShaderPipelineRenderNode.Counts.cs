@@ -58,13 +58,14 @@ public sealed partial class ShaderPipelineRenderNode {
         // Buffer exports have no output pixel grid: their requested extent is only a scheduler placeholder.
         // Any exported image retains the output bound; an all-buffer package owns its positive allocation ceiling.
         var imageOutput = false;
+
         foreach (var output in plan.Outputs) {
             if (plan.FindResource(name: output)!.Declaration.Kind != ShaderPipelineResourceKind.Buffer) {
                 imageOutput = true;
                 break;
             }
         }
-        ValidateRenderExtent(ceiling: imageOutput ? extent : render, render: render);
+        ValidateRenderExtent(ceiling: (imageOutput ? extent : render), render: render);
         var counts = (CounterOf(plan: plan)?.CountsAt(height: render.Height, width: render.Width) ?? new ShaderPipelineStorageCounts(Height: extent.Height, Width: extent.Width));
 
         return counts with {

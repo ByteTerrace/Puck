@@ -18,18 +18,18 @@ public sealed class SdfMeshLawTests {
         var mesh = new SdfMesh(indices: Indices, positions: Positions);
         var draws = new[] {
             new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "static"),
-            new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "moving") { IsDynamic = true, Indirect = SdfIndirectParticipation.Off },
+            new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "moving") { Indirect = SdfIndirectParticipation.Off, IsDynamic = true },
         };
-        var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
-        var layout = SdfMeshRegion.Plan(draws, meshes);
+        var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
+        var layout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
         var words = new uint[layout.Words];
-        SdfMeshRegion.Write(draws, meshes, layout, words);
-        Assert.Equal(41, SdfMeshRegion.DrawWords);
-        Assert.Equal(0u, words[20]);
-        Assert.Equal(0x30000010u, words[41 + 20]);
-        Assert.Equal(0u, words[41 + 16]);
-    }
 
+        SdfMeshRegion.Write(draws, meshes, layout, words);
+        Assert.Equal(actual: SdfMeshRegion.DrawWords, expected: 41);
+        Assert.Equal(0u, words[20]);
+        Assert.Equal(0x30000010u, words[(41 + 20)]);
+        Assert.Equal(0u, words[(41 + 16)]);
+    }
     [Fact]
     public void AMeshCarriesEachAttributeWhole() {
         var plain = new SdfMesh(

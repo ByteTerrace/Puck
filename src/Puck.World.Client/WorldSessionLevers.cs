@@ -145,10 +145,10 @@ public static partial class WorldSessionLevers {
         sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
-                Console.Error.WriteLine("[world.sky-field-scale: expected 1|0.5 — lever dropped]");
+                Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");
                 return;
             }
-            settings.SkyFieldScale = (float)lever.A;
+            settings.SkyFieldScale = ((float)lever.A);
         });
         sink.Register(
             name: SkyQuality,

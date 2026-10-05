@@ -105,12 +105,12 @@ public sealed class SdfIndirectLayout {
         RadianceProbeOffset = ((tier == SdfIndirectTier.Medium) ? (Pools[0] * ProbesPerBrick) : 0);
         RadianceProbeCapacity = (ProbeCapacity - RadianceProbeOffset);
         RadianceWordOffset = (ProofWordOffset + (ProofCapacity * ProofWords));
-        RadianceGenerationWords = (RadianceProbeCapacity * RaysPerProbe * RadianceWords);
+        RadianceGenerationWords = ((RadianceProbeCapacity * RaysPerProbe) * RadianceWords);
         IrradianceWordOffset = (RadianceWordOffset + (LightingGenerations * RadianceGenerationWords));
-        IrradianceGenerationWords = (ProbeCapacity * IrradianceTexels * RadianceWords);
+        IrradianceGenerationWords = ((ProbeCapacity * IrradianceTexels) * RadianceWords);
         PublicationWordOffset = (IrradianceWordOffset + (LightingGenerations * IrradianceGenerationWords));
         ReceiverProofWordOffset = (PublicationWordOffset + (LightingGenerations * ProbeCapacity));
-        WordCount = (ReceiverProofWordOffset + (tier == SdfIndirectTier.Off ? 0 : 1));
+        WordCount = (ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1));
     }
 
     /// <summary>Gets the selected tier.</summary>

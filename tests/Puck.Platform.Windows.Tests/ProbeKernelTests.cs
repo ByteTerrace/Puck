@@ -177,7 +177,7 @@ public sealed partial class ProbeKernelTests {
             ring: ring
         );
 
-        Assert.True(condition: sharedRing.Slots.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var readSlot));
+        Assert.True(condition: sharedRing.Slots.TryAcquireLatest(fenceValue: out _, slot: out var readSlot, version: out _));
 
         try {
             var view = bench.OpenSharedView(sharedHandle: sharedRing.Handles[readSlot]);
@@ -524,7 +524,7 @@ public sealed partial class ProbeKernelTests {
         );
         paintingRing.Slots.Publish(fenceValue: 0UL, slot: paintingWriteSlot);
 
-        Assert.True(condition: paintingRing.Slots.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var paintingReadSlot));
+        Assert.True(condition: paintingRing.Slots.TryAcquireLatest(fenceValue: out _, slot: out var paintingReadSlot, version: out _));
 
         var targets = new[] { bench.CreateSharedTarget(), bench.CreateSharedTarget() };
         var slots = new LatestSlotPublication();

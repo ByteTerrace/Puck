@@ -26,7 +26,7 @@ public sealed partial class SdfWorldTables {
         );
         var everything = (
             !m_dynamicTransformsPacked ||
-            m_packedTransformCount != count ||
+            (m_packedTransformCount != count) ||
             !ReferenceEquals(
             objA: moved,
             objB: m_movedTransformsSource
@@ -52,7 +52,8 @@ public sealed partial class SdfWorldTables {
         m_movedTransformsTable = transforms;
 
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
-        var changed = !m_dynamicTransformsPacked || m_packedTransformCount != count;
+        var changed = (!m_dynamicTransformsPacked || (m_packedTransformCount != count));
+
         m_packedTransformCount = count;
 
         if (everything) {
@@ -112,7 +113,7 @@ public sealed partial class SdfWorldTables {
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
     private bool WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
-        MarkIndirectTransform(floats, slot);
+        MarkIndirectTransform(current: floats, slot: slot);
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
             m_changedTransforms.Add(length: 1, start: slot);
             return true;
@@ -243,7 +244,7 @@ public sealed partial class SdfWorldTables {
             );
         }
 
-        StageIndirectParticipation(frame);
+        StageIndirectParticipation(frame: frame);
         var transformsChanged = PackDynamicTransforms(frame: frame);
 
         // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose

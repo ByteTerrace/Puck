@@ -10,40 +10,40 @@ public sealed partial class RenderGraphRuntimeLawTests {
         const string Inactive = "inactive";
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders();
-        var producers = new Producers(gpu);
-        var package = new CaptureDemandPackage(false) { Ready = true };
-        producers.Register(recorders.Registry);
-        recorders.Registry.Register(RenderGraphPackageCatalog.SdfWorld, package);
+        var producers = new Producers(gpu: gpu);
+        var package = new CaptureDemandPackage(buffer: false) { Ready = true };
+
+        producers.Register(registry: recorders.Registry);
+        recorders.Registry.Register(factory: package, package: RenderGraphPackageCatalog.SdfWorld);
         using var runtime = Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },
             External("world") with { Reads = [new(Producer: PackageView), new(Producer: Inactive)] }),
             "world", null!, null!, null!);
-        var footprints = new List<RenderGraphFootprint> { new("world", PackageView, 1, 1) };
+        var footprints = new List<RenderGraphFootprint> { new(Consumer: "world", Height: 1, Producer: PackageView, Width: 1) };
         // Both sources own real outputs before the capture, but only one contributes to this capture's footprint.
-        new Frames(runtime, [new("world", 1, 1), new(PackageView, 1, 1), new(Inactive, 1, 1)], footprints).Settle();
-        var frames = new Frames(runtime, [new("world", 1, 1)], footprints);
+        new Frames(runtime, [new(Height: 1, Instance: "world", Width: 1), new(Height: 1, Instance: PackageView, Width: 1), new(Height: 1, Instance: Inactive, Width: 1)], footprints).Settle();
+        var frames = new Frames(runtime, [new(Height: 1, Instance: "world", Width: 1)], footprints);
         var producer = producers.Only;
         var request = CaptureRequest();
+
         producer.Holding = true;
-        runtime.RequestCapture(request);
+        runtime.RequestCapture(request: request);
         frames.Next();
         Assert.Equal(request.Path, producer.PendingCapturePath);
-        Assert.False(request.Completion.IsCompleted);
-        Assert.Empty(producer.Captured);
-        Assert.Equal(PackageView, Assert.Single(package.Started));
+        Assert.False(condition: request.Completion.IsCompleted);
+        Assert.Empty(collection: producer.Captured);
+        Assert.Equal(PackageView, Assert.Single(collection: package.Started));
 
-        footprints.Add(new("world", Inactive, 1, 1));
-        frames.Next(3);
+        footprints.Add(item: new(Consumer: "world", Height: 1, Producer: Inactive, Width: 1));
+        frames.Next(count: 3);
         Assert.Equal(request.Path, producer.PendingCapturePath);
-        Assert.False(request.Completion.IsCompleted);
-        Assert.Equal(PackageView, Assert.Single(package.Started));
+        Assert.False(condition: request.Completion.IsCompleted);
+        Assert.Equal(PackageView, Assert.Single(collection: package.Started));
         producer.Holding = false;
         frames.Next();
-        Assert.Equal(request.Path, Assert.Single(producer.Captured));
-        Assert.Null(Outcome(request).Error);
-        Assert.Null(producer.PendingCapturePath);
+        Assert.Equal(request.Path, Assert.Single(collection: producer.Captured));
+        Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Null(@object: producer.PendingCapturePath);
     }
-
-    [Theory]
     [InlineData("absent")]
     [InlineData("zero")]
     [InlineData("image")]
@@ -51,80 +51,88 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [InlineData("buffer")]
     [InlineData("removed")]
     [InlineData("prepared")]
+    [Theory]
     public void CaptureCompletionFollowsItsVisibleImagesAndBufferDependencies(string edge) {
         const string Inactive = "inactive";
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
         var recorders = new Recorders();
-        var buffer = edge == "buffer";
-        var package = new CaptureDemandPackage(buffer);
-        recorders.Registry.Register(buffer ? RenderGraphPackageCatalog.Indirect : RenderGraphPackageCatalog.SdfWorld, package);
-        using var runtime = buffer
+        var buffer = (edge == "buffer");
+        var package = new CaptureDemandPackage(buffer: buffer);
+
+        recorders.Registry.Register(factory: package, package: (buffer ? RenderGraphPackageCatalog.Indirect : RenderGraphPackageCatalog.SdfWorld));
+        using var runtime = (buffer
             ? Runtime(gpu, recorders, NamedBufferInstances(), "main", null!, NamedBufferReader(null))
             : Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },
-                Instance("main", reads: [new(Producer: PackageView), new(Producer: Inactive, PreviousFrame: edge == "previous")])),
-                "main", null!, null!, Graph(ScreensGraph(false, "view"), ("view", edge == "prepared" ? Inactive : PackageView)));
+                Instance("main", reads: [new(Producer: PackageView), new(Producer: Inactive, PreviousFrame: (edge == "previous"))])),
+                "main", null!, null!, Graph(ScreensGraph(false, "view"), ("view", ((edge == "prepared") ? Inactive : PackageView)))));
         var footprints = new List<RenderGraphFootprint>();
+
         if (!buffer) {
-            footprints.Add(new("main", PackageView, 1, 1));
-            if (edge != "absent") { footprints.Add(new("main", Inactive, edge == "zero" ? 0 : 1, 1)); }
+            footprints.Add(item: new(Consumer: "main", Height: 1, Producer: PackageView, Width: 1));
+            if (edge != "absent") { footprints.Add(item: new(Consumer: "main", Height: 1, Producer: Inactive, Width: ((edge == "zero") ? 0 : 1))); }
         }
-        var frames = new Frames(runtime, [new("main", 1, 1)], footprints);
+        var frames = new Frames(runtime, [new(Height: 1, Instance: "main", Width: 1)], footprints);
+
         if (edge == "previous") {
             // The previous image is a real completed publication, then stands without current producer demand.
-            new Frames(runtime, [new("main", 1, 1), new(Inactive, 1, 1)], footprints).Settle();
+            new Frames(runtime, [new(Height: 1, Instance: "main", Width: 1), new(Height: 1, Instance: Inactive, Width: 1)], footprints).Settle();
         }
         frames.Settle();
-        if (buffer) { runtime.Node(0).Paused = true; }
+        if (buffer) { runtime.Node(instance: 0).Paused = true; }
         var request = new FrameCaptureRequest(CaptureRequest().Path);
-        runtime.RequestCapture(request);
+
+        runtime.RequestCapture(request: request);
         if (edge == "prepared") {
             // World clears its live placements before producing a frame, then its package composes them again.
             // The captured image still depends on that prepared view, even on the first frozen frame.
-            footprints.RemoveAll(item => item.Producer == Inactive);
+            footprints.RemoveAll(match: item => (item.Producer == Inactive));
             package.PrepareFootprints = () => {
-                if (!footprints.Any(item => item.Producer == Inactive)) {
-                    footprints.Add(new("main", Inactive, 1, 1));
+                if (!footprints.Any(predicate: item => (item.Producer == Inactive))) {
+                    footprints.Add(item: new(Consumer: "main", Height: 1, Producer: Inactive, Width: 1));
                 }
             };
         }
-        var demanded = buffer || edge is "image" or "previous" or "removed" or "prepared";
+        var demanded = (buffer || (edge is "image" or "previous" or "removed" or "prepared"));
+
         if (demanded) {
-            frames.Next(3);
-            Assert.False(request.Completion.IsCompleted);
+            frames.Next(count: 3);
+            Assert.False(condition: request.Completion.IsCompleted);
             Assert.Contains("pending demanded source", runtime.UnservedCaptureReason);
-            Assert.Single(package.Started, name => name == (buffer ? "pool" : Inactive));
+            Assert.Single(collection: package.Started, predicate: name => (name == (buffer ? "pool" : Inactive)));
             // A standing buffer or previous image still owns its fence. Repeated demand never restarts that operation.
-            if (edge == "removed") { footprints.RemoveAll(item => item.Producer == Inactive); }
-            else { package.Ready = true; }
+            if (edge == "removed") { footprints.RemoveAll(match: item => (item.Producer == Inactive)); } else { package.Ready = true; }
         } else {
             Assert.DoesNotContain(Inactive, package.Started);
-            Assert.Equal(0UL, runtime.NodeOf(Inactive)!.FrameCounter);
+            Assert.Equal(0UL, runtime.NodeOf(instance: Inactive)!.FrameCounter);
         }
         TestLiveness.Within(frames: 64, step: () => { frames.Next(); return request.Completion.IsCompleted; },
-            building: () => runtime.Instances.Instances.Any(instance => runtime.NodeOf(instance.Name)?.IsBuildingCandidate == true),
+            building: () => runtime.Instances.Instances.Any(predicate: instance => (runtime.NodeOf(instance: instance.Name)?.IsBuildingCandidate == true)),
             reason: () => runtime.UnservedCaptureReason);
-        Assert.Null(Outcome(request).Error);
-        if (demanded) { Assert.Single(package.Started, name => name == (buffer ? "pool" : Inactive)); }
+        Assert.Null(@object: Outcome(request: request).Error);
+        if (demanded) { Assert.Single(collection: package.Started, predicate: name => (name == (buffer ? "pool" : Inactive))); }
     }
 
     private sealed class CaptureDemandPackage(bool buffer) : IRenderGraphPackageFactory {
-        private readonly IRenderGraphPackageFactory m_inner = buffer ? new NamedBufferPackage() : new ViewPackage();
+        private readonly IRenderGraphPackageFactory m_inner = (buffer ? new NamedBufferPackage() : new ViewPackage());
+
         public List<string> Started { get; } = [];
-        public bool Ready { get; set; }
+
         public Action? PrepareFootprints { get; set; }
+        public bool Ready { get; set; }
+
         public void BeginFrame(in FrameContext context) {
             m_inner.BeginFrame(context: in context);
             PrepareFootprints?.Invoke();
         }
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
-            m_inner.BuildAsync(context, cancellationToken);
+            m_inner.BuildAsync(cancellationToken: cancellationToken, context: context);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
-            m_inner.Create(context, built, groups);
-        public IShaderPipelineStorageCounter? CounterOf(string instance) => m_inner.CounterOf(instance);
-        public RenderGraphPackageFragment? FragmentOf(string instance) => m_inner.FragmentOf(instance);
-        public FrameRender CaptureReadinessOf(string instance) => Ready || (!buffer && instance == PackageView)
-            ? FrameRender.Rendered : FrameRender.Waiting("pending demanded source");
-        public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Started.Add(instance);
+            m_inner.Create(built: built, context: context, groups: groups);
+        public IShaderPipelineStorageCounter? CounterOf(string instance) => m_inner.CounterOf(instance: instance);
+        public RenderGraphPackageFragment? FragmentOf(string instance) => m_inner.FragmentOf(instance: instance);
+        public FrameRender CaptureReadinessOf(string instance) => ((Ready || (!buffer && (instance == PackageView)))
+            ? FrameRender.Rendered : FrameRender.Waiting(reason: "pending demanded source"));
+        public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Started.Add(item: instance);
     }
 
     [Fact]

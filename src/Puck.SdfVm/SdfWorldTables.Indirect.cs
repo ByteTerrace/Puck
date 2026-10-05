@@ -70,13 +70,13 @@ public sealed partial class SdfWorldTables {
         m_indirect?.Reset(epoch: m_indirectEpoch);
         m_indirectClear = (m_indirect is not null);
     }
+
     // The residency consumes the editor's queued reset only after it has a renderable frame.
     internal void ResetIndirectPresentation() => ResetIndirect();
-
     internal void PlanIndirect(SdfFrame frame) {
         if (m_indirect is not { } cache) { return; }
         cache.Plan(inputs: IndirectInputs(frame: frame));
-        PlanIndirectLighting(cache, frame);
+        PlanIndirectLighting(cache: cache, frame: frame);
     }
 
     /// <summary>Collects demand from the existing program's conservative segment bounds and every camera.</summary>

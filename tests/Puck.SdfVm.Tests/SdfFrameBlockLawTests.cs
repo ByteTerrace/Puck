@@ -14,27 +14,32 @@ public sealed class SdfFrameBlockLawTests {
     [Fact]
     public void ComparisonBoundsEmitTypedShaderConstantsWithoutAnotherPolicyTable() {
         var generated = SdfIndirectHlsl.Generate();
-        Assert.Contains("static const uint SdfIndirectAlternativeRays = 4u;", generated, StringComparison.Ordinal);
-        Assert.Contains("static const uint SdfIndirectAlternativeScreenSteps = 12u;", generated, StringComparison.Ordinal);
-        Assert.Contains("static const uint SdfIndirectAlternativeConeSteps = 24u;", generated, StringComparison.Ordinal);
-        Assert.Contains("static const uint SdfIndirectAlternativePhases = 4u;", generated, StringComparison.Ordinal);
-        Assert.Contains("static const float SdfIndirectAlternativeReach = 4;", generated, StringComparison.Ordinal);
-        Assert.Contains("static const float SdfIndirectAlternativeConeSlope = 0.25;", generated, StringComparison.Ordinal);
+
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeRays = 4u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeScreenSteps = 12u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeConeSteps = 24u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativePhases = 4u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeReach = 4;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeConeSlope = 0.25;");
     }
     [Fact]
     public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
         var block = new byte[SdfFrameBlock.SizeBytes];
-        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectSources));
+        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectSources));
+
         SdfFrameBlock.Write(block: block, frame: Frame(), height: 1, tables: default, view: 0, width: 1);
         // Direct, Feedback, Emission and the captured Sky are enabled by default; Screens awaits its own capture.
-        Assert.Equal(15u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan(offset)));
+        Assert.Equal(15u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
         var frame = Frame() with { IndirectSources = SdfIndirectSources.Sky | SdfIndirectSources.Screens };
+
         SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
-        Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan(offset)));
+        Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
         var generated = SdfIndirectHlsl.Generate();
-        Assert.Contains("SdfIndirectSourcesSky = 8u;", generated, StringComparison.Ordinal);
-        Assert.Contains("SdfIndirectSourcesScreens = 16u;", generated, StringComparison.Ordinal);
+
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesSky = 8u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesScreens = 16u;");
     }
+
     // The values the writer leaves as their zero default on every frame: the extent, which the node writes, and the view
     // base, since each instance renders its one view at row zero.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
@@ -56,11 +61,11 @@ public sealed class SdfFrameBlockLawTests {
     );
     // A quality every lever of which is off its default, and the pass-block members that carry them.
     private static readonly SdfViewQuality Restricted = new() {
-        IndirectMethod = SdfIndirectMethod.Screen,
-        GeometryOnly = true,
         DisableAmbientOcclusion = true,
         DisableFarBound = true,
         DisableSoftShadows = true,
+        GeometryOnly = true,
+        IndirectMethod = SdfIndirectMethod.Screen,
         ShadowAmortize = true,
         ShadowDistanceScale = 0.5f,
         UseCameraTileShadowMask = true,

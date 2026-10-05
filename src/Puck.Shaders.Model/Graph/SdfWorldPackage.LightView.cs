@@ -28,20 +28,20 @@ public static partial class SdfWorldPackage {
         ArgumentOutOfRangeException.ThrowIfNegative(value: maps);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: maps, other: SdfIndirectLightLayout.MaxMaps);
         var passes = NativeFragment.Passes.Take(count: 6).Where(predicate: static pass => (pass.Name != Parts.Tape))
-            .Select(selector: static pass => (pass.Name == Parts.Primary) ? pass with {
+            .Select(selector: static pass => ((pass.Name == Parts.Primary) ? pass with {
                 Inputs = [.. pass.Inputs.Where(predicate: static input => (input.Name != Parts.SegmentTapes))],
-                InputAccesses = [.. pass.Inputs.Select((input, index) => (input, index))
+                InputAccesses = [.. pass.Inputs.Select(selector: (input, index) => (input, index))
                     .Where(predicate: static pair => (pair.input.Name != Parts.SegmentTapes)).Select(selector: pair => pass.InputAccesses[pair.index])],
-            } : pass).Append(element:
-            Pass(name: LightDepth, inputs: [Parts.Visibility, Parts.CullBounds], outputs: [IndirectLightDepth])).ToArray();
+            } : pass)).Append(element:
+            Pass(inputs: [Parts.Visibility, Parts.CullBounds], name: LightDepth, outputs: [IndirectLightDepth])).ToArray();
         var used = passes.SelectMany(selector: static pass => pass.Inputs.Concat(second: pass.Outputs)).Select(selector: static port => port.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
         used.Add(item: Parts.Arguments);
         return new RenderGraphPackageFragment(InputVersions: [], OutputVersions: [IndirectLightDepth], Passes: passes,
             Resources: [.. NativeFragment.Resources.Where(predicate: resource => used.Contains(item: resource.Name)).Select(selector: AtRenderExtent),
                 new ShaderPipelineResource(Name: IndirectLightDepth, Kind: ShaderPipelineResourceKind.Buffer,
-                    StrideBytes: sizeof(float), SizeBytes: Math.Max(val1: sizeof(float), val2: ((ulong)maps * SdfIndirectLightLayout.MapBytes)))]);
+                    StrideBytes: sizeof(float), SizeBytes: Math.Max(val1: sizeof(float), val2: (((ulong)maps) * SdfIndirectLightLayout.MapBytes)))]);
     }
-
     /// <summary>Adds the explicit depth-bank dependency to the passes that look up residency light visibility.</summary>
     /// <param name="fragment">The consumer fragment.</param>
     /// <param name="maps">The allocation's map capacity.</param>
@@ -49,7 +49,7 @@ public static partial class SdfWorldPackage {
     public static RenderGraphPackageFragment WithLightViews(RenderGraphPackageFragment fragment, int maps) => fragment with {
         InputVersions = [.. fragment.InputVersions, IndirectLightDepth],
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectLightDepth,
-            Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: Math.Max(val1: sizeof(float), val2: ((ulong)maps * SdfIndirectLightLayout.MapBytes)),
+            Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: Math.Max(val1: sizeof(float), val2: (((ulong)maps) * SdfIndirectLightLayout.MapBytes)),
             StrideBytes: sizeof(float), Initialization: ShaderPipelineInitialization.External)],
         Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is Parts.Views or IndirectShade) ? pass with {
             Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectLightDepth)],

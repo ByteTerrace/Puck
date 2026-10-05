@@ -146,7 +146,7 @@ public sealed class SdfResolveDeviceLawTests {
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
         using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
-        var historyInputBytes = new byte[checked((int)((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width * height))];
+        var historyInputBytes = new byte[checked((int)(((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width) * height))];
 
         if (narrowChromaHistory) {
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
@@ -154,7 +154,7 @@ public sealed class SdfResolveDeviceLawTests {
                 var offset = checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + 1) * sizeof(uint)));
 
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: offset),
-                    value: ((uint)BitConverter.HalfToUInt16Bits(value: (Half)8f) << 16));
+                    value: (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)8f))) << 16));
             }
         }
         using var historyInput = (narrowChromaHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
@@ -169,11 +169,12 @@ public sealed class SdfResolveDeviceLawTests {
         using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
         using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
         var transportStride = parameters.Layout.Bindings.Single(predicate: binding => (binding.Name == SdfWorldPackage.TransportWritten)).ElementStride;
-        Assert.Equal(actual: transportStride, expected: 2u * sizeof(uint));
+
+        Assert.Equal(actual: transportStride, expected: (2u * sizeof(uint)));
         using var transport = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * transportStride), usage: GpuBufferUsage.Storage);
         var poisonedTransport = new byte[checked((int)transport.SizeBytes)];
 
-        Array.Fill(array: poisonedTransport, value: (byte)0xa5);
+        Array.Fill(array: poisonedTransport, value: ((byte)0xa5));
         using var transportSeed = services.BufferFactory.CreateHostVisible(data: poisonedTransport, name: default, usage: GpuBufferUsage.Storage);
         using var transportReadback = services.BufferFactory.CreateReadback(name: default, sizeBytes: transport.SizeBytes);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
@@ -185,14 +186,14 @@ public sealed class SdfResolveDeviceLawTests {
             sourceFormat = GpuPixelFormat.R16G16B16A16Float;
         }
         if (narrowChromaHistory) {
-            var grays = new Half[(RenderWidth * RenderHeight * 4)];
+            var grays = new Half[((RenderWidth * RenderHeight) * 4)];
 
             for (var y = 0u; (y < RenderHeight); y++) {
                 for (var x = 0u; (x < RenderWidth); x++) {
-                    var offset = ((y * RenderWidth + x) * 4);
-                    var gray = (Half)((x < 8) ? 0.25f : 0.75f);
+                    var offset = (((y * RenderWidth) + x) * 4);
+                    var gray = ((Half)((x < 8) ? 0.25f : 0.75f));
 
-                    grays[offset] = gray; grays[offset + 1] = gray; grays[offset + 2] = gray; grays[offset + 3] = (Half)1f;
+                    grays[offset] = gray; grays[(offset + 1)] = gray; grays[(offset + 2)] = gray; grays[(offset + 3)] = ((Half)1f);
                 }
             }
             source = MemoryMarshal.AsBytes(span: grays.AsSpan()).ToArray();
@@ -232,6 +233,7 @@ public sealed class SdfResolveDeviceLawTests {
                 [Binding(member: SdfWorldPackage.VisibilityRecords)] = visibility,
                 [Binding(member: SdfWorldPackage.TransportWritten)] = transport,
             };
+
             if (historyInput is not null) {
                 buffers[Binding(member: SdfWorldPackage.HistorySurface)] = historyInput;
             }
@@ -353,8 +355,8 @@ public sealed class SdfResolveDeviceLawTests {
                 Check(color: result, value: ((float)expected), width: width, x: 8, y: 8);
                 var offset = checked((int)(((8 * width) + 8) * 4));
 
-                Assert.Equal(expected: result[offset], actual: result[offset + 1]);
-                Assert.Equal(expected: result[offset], actual: result[offset + 2]);
+                Assert.Equal(expected: result[offset], actual: result[(offset + 1)]);
+                Assert.Equal(expected: result[offset], actual: result[(offset + 2)]);
             }
 
             var transportBytes = new byte[checked((int)transport.SizeBytes)];

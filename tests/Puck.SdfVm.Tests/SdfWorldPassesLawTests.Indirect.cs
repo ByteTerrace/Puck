@@ -14,33 +14,36 @@ public sealed partial class SdfWorldPassesLawTests {
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "indirect-controls", pipelines: SdfTestPipelines.Cache(), width: Extent) {
-            IndirectTierOverride = SdfIndirectTier.Medium,
             IndirectFrozen = true,
+            IndirectTierOverride = SdfIndirectTier.Medium,
         };
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
             StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-        TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context); },
+
+        TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context: context); },
             reason: () => residency.NotReadyReason, wait: residency.WaitPipelineBuilds);
         var original = residency.Tables!.Indirect!;
         var history = original.History;
+
         residency.RequestIndirectReset();
-        Assert.True(residency.IndirectResetPending);
+        Assert.True(condition: residency.IndirectResetPending);
         Assert.Equal(history, original.History);
-        Assert.True(residency.Prepare(context));
-        Assert.True(residency.IndirectResetPending);
+        Assert.True(condition: residency.Prepare(context: context));
+        Assert.True(condition: residency.IndirectResetPending);
         residency.BeginFrame();
-        Assert.True(residency.Prepare(context));
-        Assert.False(residency.IndirectResetPending);
+        Assert.True(condition: residency.Prepare(context: context));
+        Assert.False(condition: residency.IndirectResetPending);
         Assert.NotEqual(history, original.History);
-        Assert.True(original.Frozen);
+        Assert.True(condition: original.Frozen);
         residency.IndirectTierOverride = SdfIndirectTier.High;
         residency.BeginFrame();
-        Assert.True(residency.Prepare(context));
+        Assert.True(condition: residency.Prepare(context: context));
         var replacement = residency.Tables.Indirect!;
-        Assert.NotSame(original, replacement);
-        Assert.True(replacement.Frozen);
-        Assert.True(residency.IndirectFrozen);
+
+        Assert.NotSame(actual: replacement, expected: original);
+        Assert.True(condition: replacement.Frozen);
+        Assert.True(condition: residency.IndirectFrozen);
         Assert.NotEqual(original.History.Allocation, replacement.History.Allocation);
     }
     [Fact]
@@ -70,7 +73,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 Reads: [new RenderGraphRead(Producer: residency.IndirectInstanceName, Kind: ShaderPipelineResourceKind.Buffer)],
                 Refresh: RenderGraphRefresh.EveryFrame),
             new RenderGraphInstance(Name: residency.IndirectInstanceName, ExternalPackage: RenderGraphPackageCatalog.Indirect,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: indirect.FragmentOf(residency.IndirectInstanceName)!.Passes.Count, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                Output: ShaderPipelineResourceKind.Buffer, Passes: indirect.FragmentOf(instance: residency.IndirectInstanceName)!.Passes.Count, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
         ], refusal: out var setRefusal, set: out var set), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(deviceContext: gpu, graphs: new RenderGraphRuntimeGraph?[2],
             hostsOnDirectX: false, packages: packages, pipelines: pipelines.Pipelines, refusal: out var refusal,

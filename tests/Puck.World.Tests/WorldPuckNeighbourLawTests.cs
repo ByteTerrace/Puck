@@ -50,10 +50,10 @@ public sealed class WorldPuckNeighbourLawTests : IDisposable {
         return WorldDefinitionSerialization.Serialize(definition: resolution.Definition!);
     }
 
-    [Theory]
     [InlineData(true, false)]
     [InlineData(true, true)]
     [InlineData(false, true)]
+    [Theory]
     public void ADocumentAndItsSourceNameOneCanonicalOrigin(bool sourceExists, bool documentExists) {
         var directory = (sourceExists
             ? m_source.RootPath

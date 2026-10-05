@@ -1150,7 +1150,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets or sets the work that follows this frame's composed cameras and graph placements, before the
     /// runtime schedules it, such as the editor comparison's placement and viewport record.</summary>
     public Action? FrameComposed { get; set; }
-
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
     /// resolved sky and display dimensions after every camera and its resolution policy have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
@@ -1678,7 +1677,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             IndirectTier = m_settings.IndirectTier,
-            IndirectBodies = m_client.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
+            IndirectBodies = (m_client.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default),
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,
             IndirectBounces = lighting.Indirect.Bounces,

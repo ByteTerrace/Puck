@@ -9,16 +9,18 @@ public sealed partial class SdfProgram {
         var maximumDepth = 0;
         var current = 1f;
         var maximum = 1f;
-        for (var index = end - 1; index >= first; index--) {
+
+        for (var index = (end - 1); (index >= first); index--) {
             var instruction = m_instructions[index];
+
             if (instruction.Op == SdfOp.PopField) {
                 parents[depth++] = current;
-                maximumDepth = Math.Max(maximumDepth, depth);
+                maximumDepth = Math.Max(val1: maximumDepth, val2: depth);
                 if (instruction.Data1.Y > 0f) { current /= instruction.Data1.Y; }
-                if (!float.IsFinite(current)) {
-                    throw new InvalidOperationException("Nested field-scope distance rescaling exceeds the finite bound domain.");
+                if (!float.IsFinite(f: current)) {
+                    throw new InvalidOperationException(message: "Nested field-scope distance rescaling exceeds the finite bound domain.");
                 }
-                maximum = MathF.Max(maximum, current);
+                maximum = MathF.Max(x: maximum, y: current);
             } else if (instruction.Op == SdfOp.PushField) {
                 current = parents[--depth];
             }
@@ -28,14 +30,14 @@ public sealed partial class SdfProgram {
     // Each nesting level can add its own soft halo. Cover every level and every rescale path while retaining
     // the existing tight formula for flat scopes. This is a conservative geometric bound, not a march allowance.
     private float NestedFieldMarginScale(int first, int end) {
-        var extent = FieldScopeExtent(first, end);
-        var scale = extent.Depth > 1 ? extent.Depth * extent.Rescale : 1f;
-        if (!float.IsFinite(scale)) {
-            throw new InvalidOperationException("Nested field-scope margin scaling exceeds the finite bound domain.");
+        var extent = FieldScopeExtent(end: end, first: first);
+        var scale = ((extent.Depth > 1) ? (extent.Depth * extent.Rescale) : 1f);
+
+        if (!float.IsFinite(f: scale)) {
+            throw new InvalidOperationException(message: "Nested field-scope margin scaling exceeds the finite bound domain.");
         }
         return scale;
     }
-
     // Read the already-baked stream, rather than maintaining a second version of the composition/warp analysis.
     // Validation has established balanced scopes and a single instruction owner throughout each scope.
     private IReadOnlyList<SdfFieldScopeClamp> ReadFieldScopeClamps(int[] instructionOwners) {

@@ -38,8 +38,8 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     private void NotePackageTaint(int index) {
-        if (HasPackageTaint(index)) {
-            NoteTaint(index, $"{m_set.Instances[index].Name}'s retained package state", true);
+        if (HasPackageTaint(index: index)) {
+            NoteTaint(index: index, producer: $"{m_set.Instances[index].Name}'s retained package state", tainted: true);
         }
     }
     // Before rendering, retained taint guards capture forwarding. Only the successfully submitted package state
@@ -48,9 +48,11 @@ public sealed partial class RenderGraphRuntime {
         if (m_graphs[index] is not { } graph) { return false; }
         var name = m_set.Instances[index].Name;
         var passes = graph.Pipeline.Plan.Passes;
-        for (var position = 0; position < passes.Count; position++) {
+
+        for (var position = 0; (position < passes.Count); position++) {
             var pass = passes[position];
-            if (pass.Package is { } step && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(name)) {
+
+            if ((pass.Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(instance: name)) {
                 return true;
             }
         }
@@ -59,7 +61,7 @@ public sealed partial class RenderGraphRuntime {
     // Why a capture of an instance waits on taint, or null when it does not. Outside a capture frame a tainted instance is
     // expected; the capture frame renders it again, so only a taint that frame could not clear keeps a capture waiting.
     private string? TaintReasonOf(int index, string name) => ((m_capturing &&
-        ((m_taintedReads[index] ?? (HasPackageTaint(index) ? $"{name}'s retained package state" : null)) is { } tainting))
+        ((m_taintedReads[index] ?? (HasPackageTaint(index: index) ? $"{name}'s retained package state" : null)) is { } tainting))
         ? $"the instance '{name}' has rendered only over external content from '{tainting}' that the capture gate did not fill"
         : null
     );

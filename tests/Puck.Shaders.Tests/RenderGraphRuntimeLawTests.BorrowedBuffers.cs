@@ -82,11 +82,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
     }
     private sealed class BorrowedPackage(IGpuBuffer buffer) : IRenderGraphPackageFactory {
         public RenderGraphPackageFragment Fragment { get; set; } = SdfWorldPackage.IndirectFragment(bytes: buffer.SizeBytes);
-
         public bool OwnsAllocation { get; set; } = true;
+
         public bool OwnsBuffer(string? part) => OwnsAllocation;
-        public bool Unchanged { get; set; }
+
         public bool SkipPlacement { get; set; }
+        public bool Unchanged { get; set; }
 
         public List<IGpuBuffer> Outputs { get; } = [];
 

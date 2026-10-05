@@ -111,6 +111,7 @@ public sealed class SdfSkyLightingLawTests {
     public void PhysicalLightingProjectsWithArtisticGainsDisabled() {
         var refresh = new SdfSkyEnvironmentRefresh();
         var sky = Sky(Vector3.One, Vector3.One);
+
         sky.Block.Ambient = sky.Block.Reflection = sky.Atmosphere.FogDensity = 0f;
         var layers = Pack(block: out var block, sky: sky);
 
@@ -125,10 +126,10 @@ public sealed class SdfSkyLightingLawTests {
     public void PanoramaRefreshFollowsItsAcquiredImageWithoutInventingACpuProjection() {
         var refresh = new SdfSkyEnvironmentRefresh();
         var sky = Sky(Vector3.Zero, Vector3.Zero);
-        var image = sky.Add(new SdfSkyPanorama { Screen = 0, Intensity = 1f }, "live", visibility: SdfSkyVisibility.Lighting);
+        var image = sky.Add(new SdfSkyPanorama { Intensity = 1f, Screen = 0 }, "live", visibility: SdfSkyVisibility.Lighting);
         var layers = Pack(block: out var block, sky: sky);
 
-        Assert.Throws<NotSupportedException>(() => SdfSkyEnvironment.Render(block: block, layers: layers,
+        Assert.Throws<NotSupportedException>(testCode: () => SdfSkyEnvironment.Render(block: block, layers: layers,
             map: new Vector3[SdfSkyEnvironment.Texels]));
         Assert.True(condition: refresh.Owes(block: block, layers: layers));
         Assert.False(condition: refresh.Projected);

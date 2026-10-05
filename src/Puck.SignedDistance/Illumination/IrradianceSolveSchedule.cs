@@ -9,7 +9,6 @@ namespace Puck.SignedDistance.Illumination;
 /// <param name="CompletesSweep">Whether committing this batch publishes the entire sweep.</param>
 public sealed record IrradianceSolveBatch(int Sweep, int ReadGeneration, int WriteGeneration, int Level,
     IReadOnlyList<IrradianceProbeKey> Probes, bool CompletesSweep);
-
 /// <summary>The CPU reference and residency's shared finite solve order. Coarser levels finish before their finer
 /// readers. Planning retains the same immutable batch until submission commits it; only a whole sweep publishes.</summary>
 public sealed class IrradianceSolveSchedule {
@@ -17,6 +16,7 @@ public sealed class IrradianceSolveSchedule {
     private readonly int m_budget;
     private readonly int m_bounces;
     private readonly int m_firstWrite;
+
     private IrradianceSolveBatch? m_pending;
     private int m_level;
     private int m_offset;
@@ -35,17 +35,17 @@ public sealed class IrradianceSolveSchedule {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(probeBudget);
         ArgumentOutOfRangeException.ThrowIfLessThan(publishedGeneration, -1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(publishedGeneration, 1);
-        if (levels.Count == 0) { throw new ArgumentException("A solve has at least one level.", nameof(levels)); }
+        if (levels.Count == 0) { throw new ArgumentException(message: "A solve has at least one level.", paramName: nameof(levels)); }
         m_levels = new IrradianceProbeKey[levels.Count][];
-        for (var level = 0; level < levels.Count; level++) {
+        for (var level = 0; (level < levels.Count); level++) {
             m_levels[level] = levels[level].ToArray();
-            if (m_levels[level].Any(key => key.Level != level)) { throw new ArgumentException("A probe must belong to its declared level.", nameof(levels)); }
+            if (m_levels[level].Any(predicate: key => (key.Level != level))) { throw new ArgumentException(message: "A probe must belong to its declared level.", paramName: nameof(levels)); }
         }
         m_budget = probeBudget;
         m_bounces = bounces;
-        m_firstWrite = publishedGeneration < 0 ? 0 : publishedGeneration ^ 1;
+        m_firstWrite = ((publishedGeneration < 0) ? 0 : publishedGeneration ^ 1);
         PublishedGeneration = publishedGeneration;
-        m_level = levels.Count - 1;
+        m_level = (levels.Count - 1);
     }
 
     /// <summary>Gets the generation visible to readers; minus one before the first complete sweep.</summary>
@@ -53,23 +53,24 @@ public sealed class IrradianceSolveSchedule {
     /// <summary>Gets the complete sweeps this solve has published.</summary>
     public int CompletedSweeps { get; private set; }
     /// <summary>Gets whether direct light and every requested feedback sweep have been submitted.</summary>
-    public bool IsComplete => CompletedSweeps > m_bounces;
+    public bool IsComplete => (CompletedSweeps > m_bounces);
 
     /// <summary>Returns the pending batch, or null after the finite solve completes. Empty inventories still publish
     /// an empty sweep through <see cref="Submitted"/>, without a GPU dispatch.</summary>
     /// <returns>The retained batch. Its probe inventory cannot be changed through this API.</returns>
     public IrradianceSolveBatch? Plan() {
-        if (IsComplete || m_pending is not null) { return m_pending; }
-        while (m_level > 0 && m_offset == m_levels[m_level].Length) { m_level--; m_offset = 0; }
-        var count = Math.Min(m_budget, m_levels[m_level].Length - m_offset);
-        var probes = Array.AsReadOnly(m_levels[m_level].AsSpan(m_offset, count).ToArray());
-        var last = m_offset + count == m_levels[m_level].Length;
-        for (var level = m_level - 1; level >= 0 && last; level--) { last = m_levels[level].Length == 0; }
+        if (IsComplete || (m_pending is not null)) { return m_pending; }
+        while ((m_level > 0) && (m_offset == m_levels[m_level].Length)) { m_level--; m_offset = 0; }
+        var count = Math.Min(val1: m_budget, val2: (m_levels[m_level].Length - m_offset));
+        var probes = Array.AsReadOnly(array: m_levels[m_level].AsSpan(length: count, start: m_offset).ToArray());
+        var last = ((m_offset + count) == m_levels[m_level].Length);
+
+        for (var level = (m_level - 1); ((level >= 0) && last); level--) { last = (m_levels[level].Length == 0); }
         var write = m_firstWrite ^ (CompletedSweeps & 1);
+
         m_pending = new IrradianceSolveBatch(CompletedSweeps, write ^ 1, write, m_level, probes, last);
         return m_pending;
     }
-
     /// <summary>Commits only the retained batch after its work is successfully submitted.</summary>
     public void Submitted() {
         if (m_pending is not { } batch) { return; }
@@ -77,7 +78,7 @@ public sealed class IrradianceSolveSchedule {
         if (batch.CompletesSweep) {
             PublishedGeneration = batch.WriteGeneration;
             CompletedSweeps++;
-            m_level = m_levels.Length - 1;
+            m_level = (m_levels.Length - 1);
             m_offset = 0;
         }
         m_pending = null;

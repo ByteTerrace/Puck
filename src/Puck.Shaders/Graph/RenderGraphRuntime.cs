@@ -341,8 +341,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 return false;
             }
             var publication = published[producer];
+
             if (input.Output is { } selected) {
                 var producerPlan = graphs[producer]?.Pipeline.Plan;
+
                 if ((storage.Declaration.Kind != ShaderPipelineResourceKind.Buffer) ||
                     ((producerPlan is null) && (set.Instances[producer].Kind != RenderGraphInstanceKind.Graph)) ||
                     ((producerPlan is not null) && (!producerPlan.Outputs.Contains(value: selected) ||
@@ -354,7 +356,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 }
                 publication = PublishedBy(graph: graphs[producer], producer: null, packages: packages, outputName: selected);
             }
-            var outputKind = (input.Output is null ? set.Instances[producer].Output : ShaderPipelineResourceKind.Buffer);
+            var outputKind = ((input.Output is null) ? set.Instances[producer].Output : ShaderPipelineResourceKind.Buffer);
+
             if (storage.Declaration.Kind != outputKind) {
                 refusal = Refuse(
                     RenderGraphRuntimeRefusalCode.InputKind,
@@ -367,7 +370,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 return false;
             }
             if (Mismatch(
-                checkStride: input.Output is not null,
+                checkStride: (input.Output is not null),
                 declaration: storage.Declaration,
                 published: publication
             ) is { } mismatch) {
@@ -786,9 +789,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         var size = declaration.SizeBytes.GetValueOrDefault();
 
-        if (checkStride && declaration.StrideBytes != known.StrideBytes) {
-            return ($"a buffer with stride {declaration.StrideBytes?.ToString() ?? "raw"}",
-                $"a buffer with stride {known.StrideBytes?.ToString() ?? "raw"}");
+        if (checkStride && (declaration.StrideBytes != known.StrideBytes)) {
+            return ($"a buffer with stride {(declaration.StrideBytes?.ToString() ?? "raw")}",
+                $"a buffer with stride {(known.StrideBytes?.ToString() ?? "raw")}");
         }
         return ((size > known.SizeBytes)
             ? ($"a {size}-byte buffer", $"a {known.SizeBytes}-byte buffer")
@@ -1037,7 +1040,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private string? ReasonOf(int index) {
         var name = m_set.Instances[index].Name;
 
-        if (index == m_captureInstance && CaptureReadiness is { IsRendered: false } readiness) { return readiness.Reason; }
+        if ((index == m_captureInstance) && (CaptureReadiness is { IsRendered: false } readiness)) { return readiness.Reason; }
 
         if (m_producers[index] is { } producer) {
             return ((producer.NotReadyReason is { } reason)
@@ -1185,7 +1188,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_captureFootprints = frame.Footprints;
         PackagesBeginFrame(context: in context);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
-        RefreshConvergenceDemand(m_captureInstance);
+        RefreshConvergenceDemand(captured: m_captureInstance);
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;
@@ -1254,10 +1257,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             // A finite package operation owns this exact image until its sibling work finishes. Pass-level skips
             // still submit and rotate frame slots, so the hold must precede binding and the node's submission path.
-            if (PackagesHoldOutput(index)) {
+            if (PackagesHoldOutput(index: index)) {
                 m_unproduced++;
                 m_historySucceeded[index] = true;
-                MarkCurrent(index);
+                MarkCurrent(index: index);
                 continue;
             }
 
@@ -1376,12 +1379,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 index: index,
                 schedule: schedule
             );
-            if (PrepareReadEpochs(index, node) is { IsRendered: false } frozen) {
+            if (PrepareReadEpochs(index: index, node: node) is { IsRendered: false } frozen) {
                 node.Reads?.RetireUntaken();
                 node.Reads = null;
                 m_unproduced++;
-                MarkProduction(index, frozen);
-                schedule.Next.Withdraw(index, prior);
+                MarkProduction(index: index, production: frozen);
+                schedule.Next.Withdraw(index: index, previous: prior);
                 continue;
             }
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
@@ -1407,7 +1410,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null) &&
-                !HasPackageTaint(index) &&
+                !HasPackageTaint(index: index) &&
                 (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0)) &&
                 !MarkReadStale(index: index, schedule: schedule)
             ) {
@@ -1422,7 +1425,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var rendered = node.FrameCounter;
             var submitted = node.SubmissionCount;
             // Readback may complete inline in ProduceFrame. That still counts the final rendered sample of this request.
-            var converging = (index == m_captureInstance && IsConverging(index)) ? m_convergence : null;
+            var converging = (((index == m_captureInstance) && IsConverging(index: index)) ? m_convergence : null);
             Surface surface;
 
             // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
@@ -1467,7 +1470,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             // A sample rendered at an extent the node was not asked for is one its capture never reads.
-            if ((node.FrameCounter != rendered) && converging is not null &&
+            if ((node.FrameCounter != rendered) && (converging is not null) &&
                 CaptureReadiness.IsRendered &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
                 converging.Count();
@@ -1494,7 +1497,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
         // retire displaced package owners against this actual reader fence, without another producer submission.
-        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter); }
+        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
 
         return Shown(
             image: RootImage(),
@@ -1645,6 +1648,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
             return null;
         }
+
         public static Output None => new(
             Buffer: null,
             Frame: -1,

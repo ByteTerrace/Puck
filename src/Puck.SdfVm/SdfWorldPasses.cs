@@ -111,9 +111,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             if (view.LightView) {
                 await view.Residency.Tables!.Pipelines.BuildLightViewsAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 if (context.Part == SdfWorldPackage.LightDepth) {
-                    using var cache = view.Residency.Tables.RetainIndirect()
-                        ?? throw new InvalidOperationException(message: "A light camera requires its residency's indirect cache.");
+                    using var cache = (view.Residency.Tables.RetainIndirect()
+                        ?? throw new InvalidOperationException(message: "A light camera requires its residency's indirect cache."));
                     var output = context.Outputs.Single();
+
                     lightBank = cache.CreateLightViewBank(buffers: context.Services.BufferFactory, bytes: output.SizeBytes!.Value,
                         name: new GpuObjectName(owner: context.Instance, part: SdfWorldPackage.IndirectLightDepth));
                 }
@@ -127,7 +128,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             view.Residency.Release();
             throw;
         }
-        return new Built(view: view, lightBank: lightBank);
+        return new Built(lightBank: lightBank, view: view);
     }
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
@@ -190,7 +191,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             light.Residency.PlanLightView(context: in context);
             return (light.Residency.IndirectLightViews.Pending < 0);
         }
-        if (entry.View is { } indirectView && (LightViewName(residency: indirectView.Residency) is not null)) {
+        if ((entry.View is { } indirectView) && (LightViewName(residency: indirectView.Residency) is not null)) {
             indirectView.Residency.PlanLightView(context: in context);
             if (indirectView.Residency.IndirectLightViews.Pending >= 0) { return false; }
         }
@@ -211,7 +212,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         return (
-            !ReceiversPending(entry) &&
+            !ReceiversPending(entry: entry) &&
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
@@ -266,6 +267,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.TemporalFrame = m_frame;
             entry.InstalledTemporal = temporal;
             var tables = view.Residency.Tables!;
+
             if (entry.Temporal.Epoch.Indirect != (tables.Indirect?.History ?? default)) { entry.Temporal.Changed(); }
 
             entry.Temporal.Prepare(
@@ -310,7 +312,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Temporal: temporal,
             Unread: unread,
             Width: width
-        ) { Indirect = view.Residency.Tables?.Indirect?.History ?? default };
+        ) { Indirect = (view.Residency.Tables?.Indirect?.History ?? default) };
     }
 
     // A residency's signature may belong to another instance. This instance can stand only after its own passes
@@ -353,15 +355,16 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) {
         if (ViewOf(instance: instance) is not { LightView: false } view) { return []; }
         var residency = view.Residency;
+
         return [
-            .. (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off
+            .. ((residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off)
                 ? (RenderGraphRuntimeInput[])[new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
-                    .. (LightViewName(residency: residency) is { } light ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : [])] : []),
-            .. (EnvironmentName(residency: residency) is { } environment
+                    .. ((LightViewName(residency: residency) is { } light) ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : [])] : []),
+            .. ((EnvironmentName(residency: residency) is { } environment)
                 ? new RenderGraphRuntimeInput[] {
-                    new(Version: SdfSkyEnvironmentGraph.Input, Producer: environment, Output: SdfSkyEnvironmentGraph.Coefficients),
-                    new(Version: SdfSkyEnvironmentGraph.MapInput, Producer: environment, Output: SdfSkyEnvironmentGraph.Map),
-                    new(Version: SdfSkyEnvironmentGraph.ScreensInput, Producer: environment, Output: SdfSkyEnvironmentGraph.Screens),
+                    new(Output: SdfSkyEnvironmentGraph.Coefficients, Producer: environment, Version: SdfSkyEnvironmentGraph.Input),
+                    new(Output: SdfSkyEnvironmentGraph.Map, Producer: environment, Version: SdfSkyEnvironmentGraph.MapInput),
+                    new(Output: SdfSkyEnvironmentGraph.Screens, Producer: environment, Version: SdfSkyEnvironmentGraph.ScreensInput),
                 } : []),
         ];
     }
@@ -582,6 +585,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
     private sealed class Built(SdfWorldView view, SdfIndirectCache.LightViewBank? lightBank) : IDisposable {
         private bool m_taken;
+
         public SdfIndirectCache.LightViewBank? LightBank { get; } = lightBank;
 
         public void Dispose() {
@@ -631,10 +635,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     var capacity = (Residency?.CapacityRevision ?? 0L);
                     var maps = LightMapCount(residency: Residency);
                     // A light bank retains its allocating cache; even an equal-size replacement must hand it off.
-                    var lightCache = (m_view is { LightView: true } ? Residency?.Tables?.Indirect : null);
+                    var lightCache = ((m_view is { LightView: true }) ? Residency?.Tables?.Indirect : null);
 
                     if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches) || (m_revisionLightMaps != maps)
-                        || !ReferenceEquals(m_revisionLightCache, lightCache)) {
+                        || !ReferenceEquals(objA: m_revisionLightCache, objB: lightCache)) {
                         m_revisionCapacity = capacity;
                         m_revisionSwitches = Switches;
                         m_revisionLightMaps = maps;
@@ -650,8 +654,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         public long Bindings { get; set; }
 
         public long RenderedBindings { get; set; } = -1;
-        public ulong RenderedLightRevision { get; set; }
 
+        public ulong RenderedLightRevision { get; set; }
         public SdfWorldView? View {
             get {
                 lock (m_gate) {

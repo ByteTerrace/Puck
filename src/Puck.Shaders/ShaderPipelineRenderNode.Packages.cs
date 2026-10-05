@@ -36,24 +36,27 @@ public sealed partial class ShaderPipelineRenderNode {
     private void PublishBuffers(int slot) {
         var outputs = m_pipeline!.Plan.Outputs;
         var next = ((m_previousBuffers.Length == outputs.Count) ? m_previousBuffers : m_bufferPublicationScratch);
+
         m_bufferPublicationScratch = m_bufferPublicationSecondScratch;
         m_bufferPublicationSecondScratch = [];
-        for (var index = 0; index < outputs.Count; index++) {
+        for (var index = 0; (index < outputs.Count); index++) {
             var name = outputs[index];
             var resource = m_resourceLookup[name];
             var buffer = ((resource.Buffers is { } buffers)
                 ? buffers[HistoryIndex(previous: false, resource: resource, slot: slot)] : null);
-            next[index] = new BufferOutput(Name: name, Buffer: buffer);
+
+            next[index] = new BufferOutput(Buffer: buffer, Name: name);
         }
         m_previousBuffers = m_publishedBuffers;
         m_publishedBuffers = next;
         m_publishedBufferDefault = m_pipeline.Plan.DefaultOutput;
     }
     private void ClearBufferPublications() {
-        Array.Clear(m_publishedBuffers);
-        Array.Clear(m_previousBuffers);
+        Array.Clear(array: m_publishedBuffers);
+        Array.Clear(array: m_previousBuffers);
         m_publishedBufferDefault = null;
     }
+
     // Reads the actual last published frame, not an unrendered replacement's allocations. Null names select the
     // default of the graph that published it; image outputs and withdrawn publications have no buffer.
     internal IGpuBuffer? LatestOutputBuffer(string? name = null) {
@@ -67,11 +70,13 @@ public sealed partial class ShaderPipelineRenderNode {
     // the node's next publication cannot overwrite the runtime's previous frame.
     internal BufferOutput[] LatestOutputBuffers(BufferOutput[]? reuse) {
         if (m_publishedBufferDefault is null) { return []; }
-        var result = ((reuse is not null && reuse.Length == m_publishedBuffers.Length)
+        var result = (((reuse is not null) && (reuse.Length == m_publishedBuffers.Length))
             ? reuse : new BufferOutput[m_publishedBuffers.Length]);
-        m_publishedBuffers.CopyTo(result, 0);
+
+        m_publishedBuffers.CopyTo(array: result, index: 0);
         return result;
     }
+
     internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer);
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read

@@ -261,7 +261,7 @@ public sealed partial class SdfProgramBuilder {
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
     private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
-        if (!Enum.IsDefined(indirect)) { throw new ArgumentOutOfRangeException(nameof(indirect)); }
+        if (!Enum.IsDefined(value: indirect)) { throw new ArgumentOutOfRangeException(paramName: nameof(indirect)); }
         if (
             isDynamic &&
             ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))

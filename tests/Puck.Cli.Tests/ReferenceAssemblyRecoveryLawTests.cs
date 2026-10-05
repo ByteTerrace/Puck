@@ -103,7 +103,6 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
             DirectoryLinks.Remove(link: linked);
         }
     }
-
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
@@ -111,28 +110,29 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
     public void ARecoveryNeedsWorkCountsFromEveryBuildAttempt(int missingReport) {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-counts-law-");
         var reference = directory.PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
         File.WriteAllBytes(bytes: new byte[128], path: reference);
         var logs = directory.PathOf(name: "logs");
         var attempts = 0;
         var result = new DotnetLawRunner(buildRunner: (arguments, _) => {
-            Assert.Contains(expected: "-m:1", collection: arguments);
-            Assert.Contains(expected: CliOptions.NoNodeReuse, collection: arguments);
-            Assert.Contains(expected: "--disable-build-servers", collection: arguments);
+            Assert.Contains(collection: arguments, expected: "-m:1");
+            Assert.Contains(collection: arguments, expected: CliOptions.NoNodeReuse);
+            Assert.Contains(collection: arguments, expected: "--disable-build-servers");
             ++attempts;
             if (attempts != missingReport) {
                 File.WriteAllText(Path.Combine(path1: logs, path2: "build.counts"), "1\n2\n3\n");
             }
-            return (attempts == 1)
+            return ((attempts == 1)
                 ? Result(exit: 1, text: $"CSC : error CS0009: Metadata file '{reference}' could not be opened -- invalid image.")
-                : Result(exit: 0, text: "Build succeeded.");
+                : Result(exit: 0, text: "Build succeeded."));
         }).Build(tree: directory.RootPath, project: "Application.csproj", logDirectory: logs,
             cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(expected: 2, actual: attempts);
+        Assert.Equal(actual: attempts, expected: 2);
         Assert.Equal(expected: (missingReport == 0), actual: result.Succeeded);
         if (missingReport == 0) {
-            Assert.Equal(expected: new LawBuildCounts(Compiled: 2, UpToDate: 4, Targets: 6), actual: result.Counts);
+            Assert.Equal(expected: new LawBuildCounts(Compiled: 2, Targets: 6, UpToDate: 4), actual: result.Counts);
             Assert.Empty(collection: result.Errors);
         } else {
             Assert.Contains(actualString: Assert.Single(collection: result.Errors), expectedSubstring: "no valid work-count report");

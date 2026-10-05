@@ -170,7 +170,6 @@ public interface IRenderGraphPackageFactory {
     /// <param name="part">The fragment part, or null for a package without a fragment.</param>
     /// <returns>Whether the part supplies its buffer outputs.</returns>
     bool OwnsBuffer(string? part) => false;
-
     /// <summary>Returns a residency-owned buffer for a package output, or null when the graph allocates it. Called on
     /// the frame thread after the package builds. The package build and recorder keep its owner alive until retirement;
     /// the graph tracks barriers and publication but never disposes the borrowed buffer. Current-frame consumers may
@@ -497,7 +496,6 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
         key: package,
         value: out factory
     );
-
     /// <summary>Returns whether a package owns the buffer allocation behind a planned storage, as declared by its
     /// writer's factory. Such storage has one allocation across submissions and permits current mutable imports.</summary>
     /// <param name="plan">The producer's plan.</param>
@@ -506,7 +504,7 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
     public bool OwnsBuffer(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer) && plan.Passes.Any(predicate: pass =>
             ((pass.Package is { } package) && pass.Outputs.Any(predicate: output => storage.Versions.Contains(value: output.Name)) &&
-            TryGetFactory(package.Package, out var factory) && factory.OwnsBuffer(package.Part))));
+            TryGetFactory(package.Package, out var factory) && factory.OwnsBuffer(part: package.Part))));
 
     internal IRenderGraphPackageFactory FactoryFor(string instance, string pass, string package) => (m_factories.TryGetValue(
         key: package,

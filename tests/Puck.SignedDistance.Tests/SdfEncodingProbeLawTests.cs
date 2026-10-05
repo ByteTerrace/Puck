@@ -55,7 +55,7 @@ public sealed class SdfEncodingProbeLawTests {
             );
 
         Covers<SdfNoiseFlavor>(lanes: Emitted(op: SdfOp.CellJitter).Select(selector: static instruction => instruction.Blend));
-        Covers<SdfIndirectParticipation>(lanes: Built.SelectMany(static built => built.Program.Instances).Select(static instance => (uint)instance.Indirect));
+        Covers<SdfIndirectParticipation>(lanes: Built.SelectMany(selector: static built => built.Program.Instances).Select(selector: static instance => ((uint)instance.Indirect)));
         Covers<SdfCellMode>(lanes: Emitted(op: SdfOp.CellDisplace).Select(selector: static instruction => instruction.Blend));
         Assert.Equal(
             actual: Emitted(op: SdfOp.WallpaperFold).Select(selector: static instruction => ((SdfWallpaperGroup)instruction.Shape)).ToHashSet(),

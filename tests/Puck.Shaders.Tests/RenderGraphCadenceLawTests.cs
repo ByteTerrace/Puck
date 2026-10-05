@@ -19,7 +19,7 @@ public sealed partial class RenderGraphCadenceLawTests {
     private static RenderGraphPackageCatalog Catalog(bool input = false, bool shadeReads = false, bool compositeReadsPredecessor = false) => new(packages: [
         new RenderGraphPackage(Id: Writer, Config: Config, Inputs: (input ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the first field."),
         new RenderGraphPackage(Id: Shade, Inputs: (shadeReads ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the second field."),
-        new RenderGraphPackage(Id: Composite, Inputs: [.. Enumerable.Repeat(RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null), compositeReadsPredecessor ? 2 : 1)], Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], Members: [], Summary: "Reads both retained fields.")
+        new RenderGraphPackage(Id: Composite, Inputs: [.. Enumerable.Repeat(RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null), (compositeReadsPredecessor ? 2 : 1))], Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], Members: [], Summary: "Reads both retained fields.")
     ]);
     private static RenderGraphDefinition Graph(bool preserve = true) => new(
         Schema: RenderGraphSchemas.Graph, Name: "retained", Outputs: ["out"],
@@ -57,13 +57,15 @@ public sealed partial class RenderGraphCadenceLawTests {
     [Theory]
     public void APackageCanReadItsForwardedBufferOnlyWhilePreservingPredecessorFields(bool preserve) {
         var graph = Graph(preserve: preserve);
+
         graph = graph with {
-            Packages = graph.Packages!.Select(static pass => ((pass.Name == "shade") ? pass with { Inputs = ["a"] } : pass)).ToArray(),
+            Packages = graph.Packages!.Select(selector: static pass => ((pass.Name == "shade") ? pass with { Inputs = ["a"] } : pass)).ToArray(),
         };
         var compiler = new RenderGraphCompiler(Catalog(shadeReads: true));
 
         if (!preserve) {
-            var failure = Assert.Throws<ShaderPipelineCompilationException>(() => compiler.Compile(definition: graph));
+            var failure = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => compiler.Compile(definition: graph));
+
             Assert.Contains(collection: failure.Diagnostics, filter: static diagnostic => (diagnostic.Code == "SHADERPIPE_DISCARDED_READ"));
             return;
         }
@@ -81,23 +83,24 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Use.Access);
         Assert.Equal(GpuStage.ComputeShader, write.Use.Stage);
         Assert.Equal(GpuImageLayout.Undefined, write.Use.Layout);
-        Assert.True(condition: read.Barrier.SourceAccess.HasFlag(GpuAccess.ShaderWrite));
+        Assert.True(condition: read.Barrier.SourceAccess.HasFlag(flag: GpuAccess.ShaderWrite));
         Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Barrier.DestinationAccess);
     }
     [Fact]
     public void AReaderCanFollowThePreservingWriterWhoseNewFieldsItAlsoConsumes() {
         var graph = Graph();
+
         graph = graph with {
-            Packages = graph.Packages!.Select(static pass => pass.Name == "composite" ? pass with { Inputs = ["a", "b"] } : pass).ToArray(),
+            Packages = graph.Packages!.Select(selector: static pass => ((pass.Name == "composite") ? pass with { Inputs = ["a", "b"] } : pass)).ToArray(),
         };
         var plan = new RenderGraphCompiler(Catalog(compositeReadsPredecessor: true)).Compile(definition: graph).Pipeline;
-        var reader = Assert.Single(plan.Passes, pass => pass.Name == "composite");
-        var writer = Assert.Single(plan.Passes, pass => pass.Name == "shade");
+        var reader = Assert.Single(collection: plan.Passes, predicate: pass => (pass.Name == "composite"));
+        var writer = Assert.Single(collection: plan.Passes, predicate: pass => (pass.Name == "shade"));
 
         Assert.Equal(["write", "shade", "composite"], plan.PassOrder);
         Assert.Contains(writer.Index, reader.Dependencies);
         Assert.DoesNotContain(reader.Index, writer.Dependencies);
-        Assert.Equal(2, reader.Accesses.Count(access => access.Storage == plan.FindResource("a")!.Storage));
+        Assert.Equal(2, reader.Accesses.Count(predicate: access => (access.Storage == plan.FindResource(name: "a")!.Storage)));
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -105,18 +108,19 @@ public sealed partial class RenderGraphCadenceLawTests {
     public void ADestructiveSuccessorConsumesEveryPreservedAncestor(bool samePass) {
         var graph = Graph();
         var passes = graph.Packages!;
+
         graph = graph with {
             Resources = [.. graph.Resources, new ShaderPipelineResource(Name: "c", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16, From: "b")],
-            Packages = [passes[0], passes[1] with { Inputs = samePass ? ["a"] : [] },
-                new RenderGraphPackagePass(Name: "destroy", Package: samePass ? Composite : Shade,
-                    Inputs: samePass ? ["a", "c"] : [], Outputs: [samePass ? "out" : "c"]),
+            Packages = [passes[0], passes[1] with { Inputs = (samePass ? ["a"] : []) },
+                new RenderGraphPackagePass(Name: "destroy", Package: (samePass ? Composite : Shade),
+                    Inputs: (samePass ? ["a", "c"] : []), Outputs: [(samePass ? "out" : "c")]),
                 .. (samePass ? new[] { new RenderGraphPackagePass(Name: "overwrite", Package: Shade, Inputs: ["a"], Outputs: ["c"]) }
                     : new[] { passes[2] with { Inputs = ["a", "c"] } })],
         };
-        var failure = Assert.Throws<ShaderPipelineCompilationException>(() =>
+        var failure = Assert.Throws<ShaderPipelineCompilationException>(testCode: () =>
             new RenderGraphCompiler(Catalog(shadeReads: samePass, compositeReadsPredecessor: true)).Compile(definition: graph));
 
-        Assert.Contains(failure.Diagnostics, diagnostic => diagnostic.Code == (samePass ? "SHADERPIPE_DISCARDED_READ" : "SHADERPIPE_CYCLE"));
+        Assert.Contains(collection: failure.Diagnostics, filter: diagnostic => (diagnostic.Code == (samePass ? "SHADERPIPE_DISCARDED_READ" : "SHADERPIPE_CYCLE")));
     }
     [Fact]
     public void AStandingIntermediateKeepsItsLastWriteBeyondEveryFlightSlot() {

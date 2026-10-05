@@ -28,8 +28,8 @@ public readonly record struct IrradianceLightProjection(Double3 Origin, Double3 
     /// scalar is nonpositive or nonfinite.</exception>
     public static IrradianceLightProjection Create(Double3 receiverMin, Double3 receiverMax, Double3 casterMin,
         Double3 casterMax, Double3 towardLight, double penumbraSlope, int resolution) {
-        RequireBox(min: receiverMin, max: receiverMax);
-        RequireBox(min: casterMin, max: casterMax);
+        RequireBox(max: receiverMax, min: receiverMin);
+        RequireBox(max: casterMax, min: casterMin);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: resolution);
         if (!double.IsFinite(d: penumbraSlope) || (penumbraSlope <= 0.0) ||
             !double.IsFinite(d: towardLight.Length) || (towardLight.Length <= 0.0)) {
@@ -54,24 +54,23 @@ public readonly record struct IrradianceLightProjection(Double3 Origin, Double3 
         // Start close to the caster volume, with enough clearance for the complete swept column. No value grows
         // as the penumbra shrinks: it remains a required positive authoring parameter, not a virtual-eye distance.
         const double Near = 0.001;
-        var distance = (closest + radius + (2 * Near));
-        var far = (distance - furthest + radius + Near);
+        var distance = ((closest + radius) + (2 * Near));
+        var far = (((distance - furthest) + radius) + Near);
         var origin = (center + (toward * distance));
+
         if (!double.IsFinite(d: far) || !double.IsFinite(d: origin.Length) || !double.IsFinite(d: halfWidth)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(receiverMin), message: "The light view exceeds finite projection coordinates.");
         }
-        return new IrradianceLightProjection(Origin: origin, Right: right, Up: up,
-            TowardLight: toward, HalfWidth: halfWidth, Near: Near, Far: far, Resolution: resolution);
+        return new IrradianceLightProjection(Far: far, HalfWidth: halfWidth, Near: Near,
+            Origin: origin, Resolution: resolution, Right: right, TowardLight: toward, Up: up);
     }
-
     /// <summary>Returns the camera-plane origin of a map texel's parallel ray, before its near-distance advance.</summary>
     /// <param name="column">The zero-based column.</param>
     /// <param name="row">The zero-based row, increasing down the image.</param>
     /// <returns>The ray's world-space origin.</returns>
-    public Double3 OriginAt(int column, int row) => (Origin +
-        (Right * ((((column + 0.5) * 2.0 / Resolution) - 1.0) * HalfWidth)) +
-        (Up * ((1.0 - ((row + 0.5) * 2.0 / Resolution)) * HalfWidth)));
-
+    public Double3 OriginAt(int column, int row) => ((Origin +
+        (Right * (((((column + 0.5) * 2.0) / Resolution) - 1.0) * HalfWidth))) +
+        (Up * ((1.0 - (((row + 0.5) * 2.0) / Resolution)) * HalfWidth)));
     /// <summary>Projects a receiver onto the map, refusing points outside its frustum or swept depth.</summary>
     /// <param name="point">The receiver position.</param>
     /// <param name="column">Receives the texel column.</param>
@@ -81,22 +80,23 @@ public readonly record struct IrradianceLightProjection(Double3 Origin, Double3 
     public bool Project(Double3 point, out int column, out int row, out double travel) {
         var offset = (point - Origin);
         var depth = -Double3.Dot(a: offset, b: TowardLight);
+
         column = -1;
         row = -1;
         travel = 0.0;
         if ((depth < Near) || !double.IsFinite(d: depth)) { return false; }
         var horizontal = (Double3.Dot(a: offset, b: Right) / HalfWidth);
         var vertical = (Double3.Dot(a: offset, b: Up) / HalfWidth);
+
         if ((Math.Abs(value: horizontal) >= 1.0) || (Math.Abs(value: vertical) >= 1.0)) { return false; }
-        column = ((int)((horizontal + 1.0) * 0.5 * Resolution));
-        row = ((int)((1.0 - vertical) * 0.5 * Resolution));
+        column = ((int)(((horizontal + 1.0) * 0.5) * Resolution));
+        row = ((int)(((1.0 - vertical) * 0.5) * Resolution));
         travel = depth;
         return (travel <= Far);
     }
 
     private static double Radius(Double3 axis, Double3 half) =>
-        ((Math.Abs(value: axis.X) * half.X) + (Math.Abs(value: axis.Y) * half.Y) + (Math.Abs(value: axis.Z) * half.Z));
-
+        (((Math.Abs(value: axis.X) * half.X) + (Math.Abs(value: axis.Y) * half.Y)) + (Math.Abs(value: axis.Z) * half.Z));
     private static void RequireBox(Double3 min, Double3 max) {
         if (!double.IsFinite(d: min.Length) || !double.IsFinite(d: max.Length) ||
             (min.X > max.X) || (min.Y > max.Y) || (min.Z > max.Z)) {

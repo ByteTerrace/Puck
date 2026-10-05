@@ -8,18 +8,23 @@ public sealed partial class SdfWorldResidency {
     internal void FreezeScreenClosure() {
         if (m_frame is not { } frame) { return; }
         var lights = new SdfLights();
-        lights.CopyFrom(frame.Lights);
+
+        lights.CopyFrom(source: frame.Lights);
         var sky = new SdfSky();
-        sky.CopyFrom(frame.Sky);
-        m_screenClosureFrame = frame with { Lights = lights, Sky = sky,
-            DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()),
-            Views = Array.AsReadOnly(frame.Views.ToArray()), MovedTransforms = null, ProgramChanged = false };
+
+        sky.CopyFrom(source: frame.Sky);
+        m_screenClosureFrame = frame with {
+            Lights = lights,
+            Sky = sky,
+            DynamicTransforms = Array.AsReadOnly(array: frame.DynamicTransforms.ToArray()),
+            Views = Array.AsReadOnly(array: frame.Views.ToArray()),
+            MovedTransforms = null,
+            ProgramChanged = false,
+        };
     }
-
     internal void ReleaseScreenClosure() => m_screenClosureFrame = null;
-
     internal void ResetScreenClosureLighting() {
         m_tables?.Indirect?.ResetLightingForCapture();
-        Array.Clear(m_renderedSignatures);
+        Array.Clear(array: m_renderedSignatures);
     }
 }

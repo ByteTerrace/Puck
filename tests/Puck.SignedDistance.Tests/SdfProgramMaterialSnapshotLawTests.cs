@@ -1,6 +1,7 @@
 using System.Numerics;
 using Xunit;
 namespace Puck.SignedDistance.Tests;
+
 public sealed class SdfProgramMaterialSnapshotLawTests {
     [Fact]
     public void MaterialAndNestedInputsCannotChangeTheProgramOrItsReferenceAfterConstruction() {
@@ -10,6 +11,7 @@ public sealed class SdfProgramMaterialSnapshotLawTests {
             Inset: new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1, new SdfRadialPaint(stops))) };
         var program = new SdfProgram([], materials);
         var packed = program.Words.ToArray();
+
         materials[0] = new SdfMaterial(Vector3.Zero);
         stops[0] = new SdfRadialStop(10, Vector3.Zero);
         under[0] = new SdfRevealStage(1, new SdfSurface(Vector3.Zero, 1, 1));
@@ -17,7 +19,7 @@ public sealed class SdfProgramMaterialSnapshotLawTests {
         Assert.Equal(new SdfRadialStop(0, Vector3.One), program.Materials[0].Inset!.Paint.Stops[0]);
         Assert.Equal(0.5f, program.Materials[0].Weathering!.Under![0].Threshold);
         Assert.Equal(packed, program.Words.ToArray());
-        Assert.Throws<NotSupportedException>(() => ((IList<SdfMaterial>)program.Materials)[0] = new SdfMaterial(Vector3.Zero));
-        Assert.Throws<NotSupportedException>(() => ((IList<SdfRadialStop>)program.Materials[0].Inset!.Paint.Stops)[0] = stops[0]);
+        Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfMaterial>)program.Materials)[0] = new SdfMaterial(Vector3.Zero));
+        Assert.Throws<NotSupportedException>(testCode: () => ((IList<SdfRadialStop>)program.Materials[0].Inset!.Paint.Stops)[0] = stops[0]);
     }
 }

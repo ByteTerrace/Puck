@@ -26,7 +26,9 @@ internal sealed partial class WorldScreenBinder {
             if (value is not null) { value.FitSkyViews = FitBootSky; }
         }
     }
+
     private WorldFramePresenter? m_presenter;
+
     /// <summary>Gets or sets the capture armed for a seat's crossing, which each presented frame asks whether the seat
     /// has crossed on it; <see langword="null"/> in a presentation with no render graph.</summary>
     public WorldCrossingCapture? CrossingCapture { get; set; }
@@ -165,7 +167,7 @@ internal sealed partial class WorldScreenBinder {
             scene: scene,
             views: views
         );
-        scene.FitSkyViews = (views, sky, width, height) => FitRoutedSky(scene, views, sky, width, height);
+        scene.FitSkyViews = (views, sky, width, height) => FitRoutedSky(height: height, scene: scene, sky: sky, views: views, width: width);
         CountRoutedResidency(
             created: 1,
             identity: identity,

@@ -88,7 +88,7 @@ public sealed class WorldInfinityViews {
         foreach (var view in plan.Views) {
             m_producers[view.Name] = ((Consumer == WorldViewGraphs.WorldInstance)
                 ? view.Name
-                : (Consumer + Puck.State.GeneratedName.Joiner + view.Name));
+                : ((Consumer + Puck.State.GeneratedName.Joiner) + view.Name));
         }
 
         foreach (var view in plan.Views) {
@@ -101,7 +101,6 @@ public sealed class WorldInfinityViews {
     public InfinityViewFrame FrameOf(string name) => (m_frames.TryGetValue(key: name, value: out var frame)
         ? frame
         : default);
-
     /// <summary>Updates demand from the completed composite of one viewer. Only executed detail rows report a new
     /// visibility result; a standing or skipped composite keeps the previous result, and other passes cannot demand a view.</summary>
     /// <param name="parent">The planned parent view, or null for the root consumer.</param>
@@ -109,20 +108,21 @@ public sealed class WorldInfinityViews {
     public void Report(string? parent, GpuWorkSample sample) {
         ArgumentNullException.ThrowIfNull(sample);
         var column = GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations);
+
         foreach (var view in m_plan.Views) {
-            if (!string.Equals(view.Parent, parent, StringComparison.Ordinal)) { continue; }
-            for (var row = 0; row < sample.Details.Length; row++) {
+            if (!string.Equals(a: view.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
+            for (var row = 0; (row < sample.Details.Length); row++) {
                 var detail = sample.Details[row];
-                if (string.Equals(detail.Detail, view.Spec.Name, StringComparison.Ordinal)
-                    && sample.PassLabels[detail.Pass].EndsWith("$composite", StringComparison.Ordinal)
-                    && sample.TryGetDetailCount(row, column, out var count)) {
+
+                if (string.Equals(a: detail.Detail, b: view.Spec.Name, comparisonType: StringComparison.Ordinal)
+                    && sample.PassLabels[detail.Pass].EndsWith(comparisonType: StringComparison.Ordinal, value: "$composite")
+                    && sample.TryGetDetailCount(column: column, detail: row, value: out var count)) {
                     Demand.Report(view.Name, count);
                     break;
                 }
             }
         }
     }
-
     /// <summary>Fits the sky sampling records of the root viewer or one nested viewer. Layers beyond the nesting
     /// or residency cap still carry their fitted fallback, while inactive cones carry no binding.</summary>
     /// <param name="parent">The planned parent view, or null for the root consumer.</param>
@@ -133,6 +133,7 @@ public sealed class WorldInfinityViews {
     /// <returns>A retained list updated by the next call for this parent.</returns>
     public IReadOnlyList<SdfSkyViewBinding> BindingsOf(string? parent, CameraSnapshot viewer, uint viewerWidth, uint viewerHeight, QualityTier tier) {
         var key = (parent ?? string.Empty);
+
         if (!m_bindings.TryGetValue(key: key, value: out var bindings)) {
             bindings = [];
             m_bindings.Add(key: key, value: bindings);
@@ -140,7 +141,7 @@ public sealed class WorldInfinityViews {
         bindings.Clear();
         foreach (var view in m_plan.Views) {
             if (!string.Equals(a: view.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
-            Add(spec: view.Spec, frame: FrameOf(name: view.Name), producer: (m_unavailable.Contains(view.Name) ? null : ProducerOf(name: view.Name)));
+            Add(spec: view.Spec, frame: FrameOf(name: view.Name), producer: (m_unavailable.Contains(item: view.Name) ? null : ProducerOf(name: view.Name)));
         }
         foreach (var fallback in m_plan.Fallbacks) {
             if (!string.Equals(a: fallback.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
@@ -152,7 +153,7 @@ public sealed class WorldInfinityViews {
         void Add(InfinityViewSpec spec, InfinityViewFrame frame, string? producer) {
             if (!frame.Visible) { return; }
             bindings.Add(item: new SdfSkyViewBinding(Layer: spec.Name, Producer: producer,
-                Parameters: InfinityViewSampling.Describe(spec: spec, viewer: viewer, frame: frame, imageSlot: -1)));
+                Parameters: InfinityViewSampling.Describe(frame: frame, imageSlot: -1, spec: spec, viewer: viewer)));
         }
     }
     /// <summary>Fits every planned view and publishes the available ones for a frame.</summary>
@@ -173,8 +174,8 @@ public sealed class WorldInfinityViews {
 
         m_unavailable.Clear();
         foreach (var view in m_plan.Views) {
-            if (((view.Parent is not null) && m_unavailable.Contains(view.Parent)) || (available?.Invoke(view.Name) == false)) {
-                _ = m_unavailable.Add(view.Name);
+            if (((view.Parent is not null) && m_unavailable.Contains(item: view.Parent)) || (available?.Invoke(view.Name) == false)) {
+                _ = m_unavailable.Add(item: view.Name);
             }
         }
 
@@ -207,7 +208,7 @@ public sealed class WorldInfinityViews {
 
             m_frames[view.Name] = frame;
 
-            if (m_unavailable.Contains(view.Name)) { continue; }
+            if (m_unavailable.Contains(item: view.Name)) { continue; }
 
             if (frame.Visible) {
                 // The extent is the footprint's step of the consumer's, so it moves only when the footprint does.
@@ -232,7 +233,7 @@ public sealed class WorldInfinityViews {
             ) {
                 OutputExtent = extent,
                 Parent = ((view.Parent is null) ? null : ProducerOf(name: view.Parent)),
-                Reads = Reads(view.Name, readsOf?.Invoke(view.Name)),
+                Reads = Reads(name: view.Name, screens: readsOf?.Invoke(view.Name)),
                 SkyConsumer = ((view.Parent is null) ? Consumer : ProducerOf(name: view.Parent)),
             });
         }
@@ -241,13 +242,13 @@ public sealed class WorldInfinityViews {
     private IReadOnlyList<string> Reads(string name, IReadOnlyList<string>? screens) {
         m_readScratch.Clear();
         foreach (var child in m_plan.Views) {
-            if (string.Equals(child.Parent, name, StringComparison.Ordinal) && !m_unavailable.Contains(child.Name)) {
-                m_readScratch.Add(ProducerOf(child.Name));
+            if (string.Equals(a: child.Parent, b: name, comparisonType: StringComparison.Ordinal) && !m_unavailable.Contains(item: child.Name)) {
+                m_readScratch.Add(item: ProducerOf(name: child.Name));
             }
         }
         if (screens is not null) {
             foreach (var screen in screens) {
-                if (!m_readScratch.Contains(screen, StringComparer.Ordinal)) { m_readScratch.Add(screen); }
+                if (!m_readScratch.Contains(screen, StringComparer.Ordinal)) { m_readScratch.Add(item: screen); }
             }
         }
         if (!m_readScratch.SequenceEqual(m_reads[name], StringComparer.Ordinal)) { m_reads[name] = m_readScratch.ToArray(); }

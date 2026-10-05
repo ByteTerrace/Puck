@@ -6,7 +6,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
-        ValidateIndirect(definition, errors);
+        ValidateIndirect(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
         foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
@@ -37,7 +37,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateSkyFieldScale(float value, string path, List<string> errors) {
-        if (value is not (.5f or 1f)) { errors.Add($"{path} must be 1 or 0.5."); }
+        if (value is not (.5f or 1f)) { errors.Add(item: $"{path} must be 1 or 0.5."); }
     }
     // A row applies to the view it names when that view renders: the default selector, the primary world, an authored
     // camera or view graph, or a view the engine names itself (a generated name, which carries the joiner).

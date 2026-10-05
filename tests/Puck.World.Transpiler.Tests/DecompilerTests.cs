@@ -25,6 +25,7 @@ public class DecompilerTests {
             }
             """));
         var printed = WorldSources.AssertRoundTrips(original: original);
+
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "authoredVerdict");
         Assert.DoesNotContain(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "test \"decompiled\"");
     }

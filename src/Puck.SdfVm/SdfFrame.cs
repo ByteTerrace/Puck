@@ -77,7 +77,7 @@ public readonly record struct SdfViewQuality {
     public float SkyFieldFraction => SkyFieldScale switch {
         0f or 1f => 1f,
         .5f => .5f,
-        _ => throw new ArgumentOutOfRangeException(nameof(SkyFieldScale)),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(SkyFieldScale)),
     };
     /// <summary>Publishes only geometry, with premultiplied color and its coverage in alpha, for a far sky layer.
     /// The composite omits background sky and air on uncovered rays. Restrictions retain the consumer's output form.</summary>
@@ -124,7 +124,7 @@ public readonly record struct SdfViewQuality {
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
         IndirectMethod = IndirectMethod,
-        SkyFieldScale = MathF.Min(SkyFieldFraction, other.SkyFieldFraction),
+        SkyFieldScale = MathF.Min(x: SkyFieldFraction, y: other.SkyFieldFraction),
         GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableFarBound = (DisableFarBound || other.DisableFarBound),
@@ -245,15 +245,19 @@ public sealed record SdfFrame(
     /// <summary>The dynamic-instance default. Default receives at Medium and casts and receives at High; a placement's
     /// explicit policy wins. Static instances retain their normal casting and receiving policy.</summary>
     public SdfIndirectParticipation IndirectBodies { get; init; }
+
     /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
     /// require their captured source publications; the default admits all five categories.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
     /// <summary>Gets the source gains captured by a finite solve. Zero also disables that category in authored frames.</summary>
     public SdfIndirectGains IndirectGains { get; init; } = SdfIndirectGains.One;
+
     /// <summary>Gets requested feedback sweeps after direct, capped by the actual tier. Null uses its layout limit.</summary>
     public int? IndirectBounces { get; init; }
+
     /// <summary>Gets receiver-only application controls, independent of the finite lighting source.</summary>
     public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
+
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
     /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
     /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow

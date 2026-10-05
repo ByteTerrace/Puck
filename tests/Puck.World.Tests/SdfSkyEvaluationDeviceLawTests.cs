@@ -50,11 +50,11 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         // Half field scale preserves the full lit footprint and its border; five of eight field columns see sky.
         Assert.Equal((0L, 32L), Run(services, extension, static _ => true, divisor: 2));
         Assert.Equal((32L, 32L), Run(services, extension, static _ => false, divisor: 2));
-        Assert.Equal((20L, 32L), Run(services, extension, static x => x < 8, divisor: 2));
+        Assert.Equal((20L, 32L), Run(services, extension, static x => (x < 8), divisor: 2));
         // The 17x9 lit grid has a 9x5 field grid. Its last uncovered column reaches the last two field columns.
         Assert.Equal((0L, 45L), Run(services, extension, static _ => true, divisor: 2, width: 17, height: 9));
         Assert.Equal((45L, 45L), Run(services, extension, static _ => false, divisor: 2, width: 17, height: 9));
-        Assert.Equal((10L, 45L), Run(services, extension, static x => x < 16, divisor: 2, width: 17, height: 9));
+        Assert.Equal((10L, 45L), Run(services, extension, static x => (x < 16), divisor: 2, width: 17, height: 9));
     }
     // Runs the sky pass once over a lit image whose column x is covered when covered(x), and returns its counted sky
     // evaluations and texels written.
@@ -65,8 +65,8 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         parameters.WriteExtent(block: block, height: height, width: width);
         void Word(string member, uint value, int lane = 0) => BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block.AsSpan(start: (((int)parameters.BlockOffsetOf(member: member)) + (lane * 4))), value: value);
-        Word(member: SdfWorldPackage.SkyFieldExtent, value: (width + divisor - 1u) / divisor);
-        Word(lane: 1, member: SdfWorldPackage.SkyFieldExtent, value: (height + divisor - 1u) / divisor);
+        Word(member: SdfWorldPackage.SkyFieldExtent, value: (((width + divisor) - 1u) / divisor));
+        Word(lane: 1, member: SdfWorldPackage.SkyFieldExtent, value: (((height + divisor) - 1u) / divisor));
         Word(member: SdfWorldPackage.ImageExtent, value: width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);

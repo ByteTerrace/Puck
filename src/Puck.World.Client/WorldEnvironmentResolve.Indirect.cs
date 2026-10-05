@@ -10,6 +10,7 @@ public sealed partial class WorldEnvironmentResolve {
         var sources = indirect?.Sources;
         var sourceSite = new WorldValueSite("render.indirect.sources");
         var applySite = new WorldValueSite("render.indirect.apply");
+
         m_indirect = new WorldResolvedIndirect(new SdfIndirectGains(
             Lights: Scalar(mirror, sources?.Lights, 1f, WorldValueFields.IndirectLights, sourceSite),
             Emission: Scalar(mirror, sources?.Emission, 1f, WorldValueFields.IndirectEmission, sourceSite),
@@ -23,7 +24,6 @@ public sealed partial class WorldEnvironmentResolve {
                 Contact: Scalar(mirror, indirect?.Apply?.Contact, 1f, WorldValueFields.IndirectContact, applySite)));
     }
 }
-
 /// <summary>The immutable indirect controls resolved through the environment's existing bindings and clocks.</summary>
 /// <param name="Gains">Source gains applied at each origin.</param>
 /// <param name="Bounces">Requested finite feedback depth, or the selected tier's default.</param>

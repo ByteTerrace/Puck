@@ -150,7 +150,7 @@ internal sealed partial class WorldScreenBinder {
             );
         }
         foreach (var entry in InfinityEntries()) {
-            if (entry.Screens is { } screens) { moved |= ReconcileLevel(screens, sessions); }
+            if (entry.Screens is { } screens) { moved |= ReconcileLevel(screens: screens, sessions: sessions); }
         }
 
         if (!(moved || m_feedsMoved)) {
@@ -231,7 +231,7 @@ internal sealed partial class WorldScreenBinder {
         }
         foreach (var entry in InfinityEntries()) {
             if (entry.Screens is not { } screens) { continue; }
-            foreach (var feed in screens.Views) { AddFeed(feed); }
+            foreach (var feed in screens.Views) { AddFeed(feed: feed); }
         }
 
         m_feedsMoved = false;
@@ -267,7 +267,7 @@ internal sealed partial class WorldScreenBinder {
 
         var nested = new List<RenderGraphInstance>();
 
-        foreach (var screens in m_feeds.Select(feed => feed.Nested).Concat(InfinityEntries().Select(entry => entry.Screens)).OfType<WorldNestedScreens<SessionFeed>>()) {
+        foreach (var screens in m_feeds.Select(selector: feed => feed.Nested).Concat(second: InfinityEntries().Select(selector: entry => entry.Screens)).OfType<WorldNestedScreens<SessionFeed>>()) {
             foreach (var source in screens.Sources) {
                 if (
                     !WorldSourceInstances.Holds(
@@ -465,7 +465,7 @@ internal sealed partial class WorldScreenBinder {
     public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
         ArgumentNullException.ThrowIfNull(argument: view);
 
-        if (m_infinityOutputs.TryGetValue(view, out var infinity)) {
+        if (m_infinityOutputs.TryGetValue(key: view, value: out var infinity)) {
             placements = (infinity.Entry.Screens?.Mappings.Mappings ?? []);
             return true;
         }
@@ -512,7 +512,7 @@ internal sealed partial class WorldScreenBinder {
 
         WorldNestedScreens<SessionFeed>? world;
 
-        if (m_infinityOutputs.TryGetValue(consumer, out var infinity)) {
+        if (m_infinityOutputs.TryGetValue(key: consumer, value: out var infinity)) {
             world = infinity.Entry.Screens;
         } else if (m_feedsByName.TryGetValue(
             key: consumer,
@@ -603,9 +603,9 @@ internal sealed partial class WorldScreenBinder {
 
     private static bool Emits(WorldNestedScreens<SessionFeed>? screens, int screen) {
         if (screens is null) { return false; }
-        return screens.RowOf(screen)?.Source switch {
+        return screens.RowOf(screen: screen)?.Source switch {
             WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
-            WorldScreenSource.Session => screens.Children.TryGetValue(screen, out var child) && child.InstanceName != screens.World,
+            WorldScreenSource.Session => (screens.Children.TryGetValue(key: screen, value: out var child) && (child.InstanceName != screens.World)),
             _ => false,
         };
     }

@@ -7,9 +7,9 @@ public sealed class SingleSlotPublicationTests {
     public void A_reader_acquires_the_completed_write_with_its_fence_value_and_the_writer_waits_for_it() {
         var publication = new SingleSlotPublication();
 
-        Assert.False(condition: publication.TryAcquireLatest(version: out _,
-            fenceValue: out _,
-            slot: out _
+        Assert.False(condition: publication.TryAcquireLatest(fenceValue: out _,
+            slot: out _,
+            version: out _
         ));
         Assert.True(condition: publication.TryBeginWrite());
         publication.EndWrite(
@@ -20,9 +20,9 @@ public sealed class SingleSlotPublicationTests {
             actual: publication.Version,
             expected: 1L
         );
-        Assert.True(condition: publication.TryAcquireLatest(version: out var firstVersion,
-            fenceValue: out var fenceValue,
-            slot: out var slot
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out var fenceValue,
+            slot: out var slot,
+            version: out var firstVersion
         ));
         Assert.Equal(
             actual: (slot, fenceValue),
@@ -38,15 +38,15 @@ public sealed class SingleSlotPublicationTests {
             completed: false,
             fenceValue: 9UL
         );
-        Assert.True(condition: publication.TryAcquireLatest(version: out var keptVersion,
-            fenceValue: out var kept,
-            slot: out var keptSlot
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out var kept,
+            slot: out var keptSlot,
+            version: out var keptVersion
         ));
         Assert.Equal(
             actual: kept,
             expected: 7UL
         );
-        Assert.Equal(expected: (1L, firstVersion), actual: (firstVersion, keptVersion));
+        Assert.Equal(actual: (firstVersion, keptVersion), expected: (1L, firstVersion));
         publication.Release(slot: keptSlot);
     }
     [Fact]
@@ -58,9 +58,9 @@ public sealed class SingleSlotPublicationTests {
             completed: true,
             fenceValue: 3UL
         );
-        Assert.True(condition: publication.TryAcquireLatest(version: out _,
-            fenceValue: out _,
-            slot: out var held
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _,
+            slot: out var held,
+            version: out _
         ));
 
         // A reader still holds the image; retiring must not wait for it.
@@ -71,9 +71,9 @@ public sealed class SingleSlotPublicationTests {
             actual: publication.LatestSlot,
             expected: -1
         );
-        Assert.False(condition: publication.TryAcquireLatest(version: out _,
-            fenceValue: out _,
-            slot: out _
+        Assert.False(condition: publication.TryAcquireLatest(fenceValue: out _,
+            slot: out _,
+            version: out _
         ));
         publication.Release(slot: held);
         Assert.False(

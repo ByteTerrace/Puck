@@ -61,7 +61,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// buffer the capture readback holds once a capture has been served, plus package and timestamp readback buffers.</summary>
     public ulong OwnedBytes {
         get {
-            var bytes = checked(AllocationBytes + m_readbackBytes + TimingReadbackBytes + PackageReadbackBytes(m_passes));
+            var bytes = checked((((AllocationBytes + m_readbackBytes) + TimingReadbackBytes) + PackageReadbackBytes(passes: m_passes)));
 
             foreach (var retired in m_retired) {
                 bytes = checked((bytes + retired.Bytes));
@@ -85,7 +85,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
     private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
-        var bytes = checked((preview?.LiveBytes() ?? 0UL) + PackageReadbackBytes(passes));
+        var bytes = checked(((preview?.LiveBytes() ?? 0UL) + PackageReadbackBytes(passes: passes)));
 
         foreach (var pass in passes) {
             if (pass?.GeometryBuffer is { } geometry) {
@@ -200,11 +200,12 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private IGpuBuffer[] PublishedBorrowedBuffersOf(RuntimeResource[] resources) {
         var published = new List<IGpuBuffer>();
+
         foreach (var resource in resources) {
             if (resource is not { Borrowed: true, Buffers: { } buffers }) { continue; }
             foreach (var buffer in buffers) {
-                if (buffer is not null && IsPublishedBuffer(buffer.BufferHandle) &&
-                    !published.Contains(buffer, ReferenceEqualityComparer.Instance)) { published.Add(buffer); }
+                if ((buffer is not null) && IsPublishedBuffer(handle: buffer.BufferHandle) &&
+                    !published.Contains(buffer, ReferenceEqualityComparer.Instance)) { published.Add(item: buffer); }
             }
         }
         return [.. published];
@@ -215,7 +216,7 @@ public sealed partial class ShaderPipelineRenderNode {
         foreach (var resource in m_resources) {
             if (resource is not { Borrowed: true, Buffers: { } buffers }) { continue; }
             foreach (var installed in buffers) {
-                if (ReferenceEquals(installed, buffer)) { return true; }
+                if (ReferenceEquals(objA: installed, objB: buffer)) { return true; }
             }
         }
         return false;
@@ -224,17 +225,18 @@ public sealed partial class ShaderPipelineRenderNode {
     // Borrowed buffers remain the package owner's responsibility and never enter node-owned held bytes.
     private void HoldBuffers(RuntimeResource[] resources) {
         foreach (var resource in resources) {
-            if (resource is null || resource.Borrowed || resource.Buffers is not { } buffers) { continue; }
-            for (var slot = 0; slot < buffers.Length; slot++) {
-                if (buffers[slot] is not { } buffer || !IsPublishedBuffer(buffer.BufferHandle)) { continue; }
+            if ((resource is null) || resource.Borrowed || (resource.Buffers is not { } buffers)) { continue; }
+            for (var slot = 0; (slot < buffers.Length); slot++) {
+                if ((buffers[slot] is not { } buffer) || !IsPublishedBuffer(handle: buffer.BufferHandle)) { continue; }
                 var handle = buffer.BufferHandle;
                 var heldAlready = false;
+
                 foreach (var held in m_held) {
-                    if (held.Kind == ShaderPipelineResourceKind.Buffer && held.Handle == handle) { heldAlready = true; break; }
+                    if ((held.Kind == ShaderPipelineResourceKind.Buffer) && (held.Handle == handle)) { heldAlready = true; break; }
                 }
                 buffers[slot] = null!;
                 if (!heldAlready) {
-                    m_held.Add(new HeldResource(Handle: handle, Resource: buffer, Bytes: buffer.SizeBytes,
+                    m_held.Add(item: new HeldResource(Handle: handle, Resource: buffer, Bytes: buffer.SizeBytes,
                         Kind: ShaderPipelineResourceKind.Buffer));
                 }
             }
@@ -287,10 +289,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
             // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
             // while it is the one the node publishes now, which a capture it serves without rendering reads.
-            if (held.Epoch is { IsActive: true } || (held.Leased
+            if ((held.Epoch is { IsActive: true }) || (held.Leased
                 ? (held.Handle == m_lastSurface.ImageHandle)
                 : ((held.Kind == ShaderPipelineResourceKind.Buffer)
-                    ? IsPublishedBuffer(held.Handle) : IsPublished(imageHandle: held.Handle)))) {
+                    ? IsPublishedBuffer(handle: held.Handle) : IsPublished(imageHandle: held.Handle)))) {
                 continue;
             }
 
@@ -314,7 +316,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 resources: []
             ));
         }
-        foreach (var retired in m_retired) { retired.ReleasePublication(this); }
+        foreach (var retired in m_retired) { retired.ReleasePublication(node: this); }
     }
     // Retires objects an install or a selection replaced: published images and owned buffer slots are held, and the
     // rest is disposed once the node's latest submission has completed, which may already be true.
@@ -341,12 +343,12 @@ public sealed partial class ShaderPipelineRenderNode {
             resources: resources
         );
 
-        HoldBuffers(resources);
+        HoldBuffers(resources: resources);
         // A borrowed allocation stays owned by its package. Keep the old recorder/build that retains that owner
         // while a published frame still names it without an installed retaining owner. Actual displacement then
         // retires through the same reader lag as detached owned slots.
-        var publishedBorrowedBuffers = PublishedBorrowedBuffersOf(resources);
-        var holdsBorrowedPublication = publishedBorrowedBuffers.Any(buffer => !InstalledRetainsBorrowedBuffer(buffer));
+        var publishedBorrowedBuffers = PublishedBorrowedBuffersOf(resources: resources);
+        var holdsBorrowedPublication = publishedBorrowedBuffers.Any(predicate: buffer => !InstalledRetainsBorrowedBuffer(buffer: buffer));
         var retired = new RetiredGraph(
             afterSubmission: m_submissions,
             bytes: LiveBytes(
@@ -354,12 +356,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 preview: preview,
                 resources: resources
             ),
-            fence: holdsBorrowedPublication ? null : m_lastSubmissionFence,
+            fence: (holdsBorrowedPublication ? null : m_lastSubmissionFence),
             allocation: null,
             passes: passes,
             preview: preview,
             resources: resources,
-            publishedBorrowedBuffers: holdsBorrowedPublication ? publishedBorrowedBuffers : []
+            publishedBorrowedBuffers: (holdsBorrowedPublication ? publishedBorrowedBuffers : [])
         );
 
         if (inFlight || holdsBorrowedPublication) {
@@ -367,7 +369,7 @@ public sealed partial class ShaderPipelineRenderNode {
         } else {
             retired.Dispose(node: this);
         }
-        foreach (var held in m_retired) { held.ReleasePublication(this); }
+        foreach (var held in m_retired) { held.ReleasePublication(node: this); }
     }
 
     /// <summary>Gets whether the node holds anything of a graph: an installed or building graph's objects, its frame slots'
@@ -431,24 +433,26 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = (m_retired.Count - 1); (index >= 0); index--) {
             var retired = m_retired[index];
 
-            if (retired.ReadersCompleted || retired.Fence is { IsSignaled: true }) {
+            if (retired.ReadersCompleted || (retired.Fence is { IsSignaled: true })) {
                 retired.Dispose(node: this);
                 m_retired.RemoveAt(index: index);
             }
         }
     }
+
     /// <summary>Completes displaced borrowed publications against the runtime frame's final submission, ordered
     /// after every reader. Called even when this producer stands. The submitter's slot owns the completion callback
     /// until its fence has finished, so resetting or disposing that fence cannot erase the completion.</summary>
     /// <param name="submitter">The last node that actually submitted this frame, or null when none did.</param>
     internal void RetireAfterConsumers(ShaderPipelineRenderNode? submitter) {
         foreach (var retired in m_retired) {
-            if (retired.AwaitingConsumers && submitter is not null) {
-                retired.ArmAfterConsumers(submitter);
+            if (retired.AwaitingConsumers && (submitter is not null)) {
+                retired.ArmAfterConsumers(submitter: submitter);
             }
         }
         RetireCompleted();
     }
+
     // Arms every queued retirement whose retiring submission is the one just made with that submission's fence.
     private void ArmRetirements(IGpuSubmissionFence fence) {
         foreach (var retired in m_retired) {
@@ -508,20 +512,22 @@ public sealed partial class ShaderPipelineRenderNode {
     // fence of the submission made RetirementLag submissions after it stopped being published. The runtime may
     // replace that lag for displaced borrowed buffers with an actual frame's last reader submission.
     private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? allocation, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission, IGpuBuffer[]? publishedBorrowedBuffers = null) {
-        private readonly IGpuBuffer[] m_publishedBorrowedBuffers = publishedBorrowedBuffers ?? [];
+        private readonly IGpuBuffer[] m_publishedBorrowedBuffers = (publishedBorrowedBuffers ?? []);
 
         public long AfterSubmission { get; private set; } = afterSubmission;
         public ulong Bytes { get; } = bytes;
         public IGpuSubmissionFence? Fence { get; set; } = fence;
-        public bool HoldsBorrowedPublication { get; private set; } = publishedBorrowedBuffers is { Length: > 0 };
+        public bool HoldsBorrowedPublication { get; private set; } = (publishedBorrowedBuffers is { Length: > 0 });
+
         public bool AwaitingConsumers { get; private set; }
         public bool ReadersCompleted { get; private set; }
 
         public void ArmAfterConsumers(ShaderPipelineRenderNode submitter) {
             AwaitingConsumers = false;
             Fence = submitter.LatestSubmission;
-            submitter.HoldUntilLatestSubmission(new GpuImageLease(ImageViewHandle: 0, Release: CompleteReaders));
+            submitter.HoldUntilLatestSubmission(lease: new GpuImageLease(ImageViewHandle: 0, Release: CompleteReaders));
         }
+
         private void CompleteReaders(int _) {
             ReadersCompleted = true;
             Fence = null;
@@ -530,17 +536,17 @@ public sealed partial class ShaderPipelineRenderNode {
         public void ReleasePublication(ShaderPipelineRenderNode node) {
             if (!HoldsBorrowedPublication) { return; }
             var allTransferred = true;
+
             foreach (var buffer in m_publishedBorrowedBuffers) {
-                if (node.InstalledRetainsBorrowedBuffer(buffer)) { continue; }
+                if (node.InstalledRetainsBorrowedBuffer(buffer: buffer)) { continue; }
                 allTransferred = false;
-                if (node.IsPublishedBuffer(buffer.BufferHandle)) { return; }
+                if (node.IsPublishedBuffer(handle: buffer.BufferHandle)) { return; }
             }
             HoldsBorrowedPublication = false;
             AwaitingConsumers = !allTransferred;
-            AfterSubmission = node.m_submissions + (allTransferred ? 0 : RetirementLag);
-            Fence = allTransferred ? node.m_lastSubmissionFence : null;
+            AfterSubmission = (node.m_submissions + (allTransferred ? 0 : RetirementLag));
+            Fence = (allTransferred ? node.m_lastSubmissionFence : null);
         }
-
         public void Dispose(ShaderPipelineRenderNode node) {
             node.DisposeGraph(
                 passes: passes,

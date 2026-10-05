@@ -185,7 +185,7 @@ public sealed partial class WorldStampPool {
                         origin: transforms[rootSlot].Position,
                         rotation: transforms[rootSlot].Orientation,
                         scale: placementScale
-                    ) with { Indirect = live.Row?.Indirect ?? live.Indirect, IsDynamic = true }
+                    ) with { Indirect = (live.Row?.Indirect ?? live.Indirect), IsDynamic = true }
                     : null),
                 index: index
             );

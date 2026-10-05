@@ -277,7 +277,7 @@ public sealed partial class SdfProgram {
     private static void RequirePackedMaterials(IReadOnlyList<SdfMaterial> materials, string paramName) {
         for (var index = 0; (index < materials.Count); index++) {
             var material = materials[index];
-            var bleed = material.Bleed ?? Vector3.One;
+            var bleed = (material.Bleed ?? Vector3.One);
 
             if (
                 !VectorFunctions.IsFinite(vector: material.Albedo) ||
@@ -312,7 +312,7 @@ public sealed partial class SdfProgram {
                 (material.Fill.Z < 0f) ||
                 !VectorFunctions.IsFinite(vector: bleed) ||
                 (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
-                !float.IsFinite(material.Receive) || (material.Receive < 0f) ||
+                !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering
@@ -786,8 +786,8 @@ public sealed partial class SdfProgram {
         }
 
         foreach (var instance in m_instances) {
-            if (!Enum.IsDefined(instance.Indirect)) {
-                throw new ArgumentOutOfRangeException(instancesParamName, "An instance's indirect participation must be Default, Cast, Receive or Off.");
+            if (!Enum.IsDefined(value: instance.Indirect)) {
+                throw new ArgumentOutOfRangeException(message: "An instance's indirect participation must be Default, Cast, Receive or Off.", paramName: instancesParamName);
             }
             if (
                 (instance.First < 0) ||

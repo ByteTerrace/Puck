@@ -444,7 +444,7 @@ public static class WorldRigCatalog {
 
             var firstInstance = builder.InstanceCount;
             var firstSlot = BodySlotBase(avatar: avatar);
-            var indirect = probeWorstCase ? SdfIndirectParticipation.Default : indirectFor?.Invoke(avatar) ?? SdfIndirectParticipation.Default;
+            var indirect = (probeWorstCase ? SdfIndirectParticipation.Default : (indirectFor?.Invoke(avatar) ?? SdfIndirectParticipation.Default));
             var scale = (probeWorstCase
                 ? 1f
                 : ScaleFor(

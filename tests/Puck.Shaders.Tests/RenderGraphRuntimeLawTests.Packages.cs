@@ -458,20 +458,28 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public ManualResetEventSlim? BuildGate { get; set; }
         public int Builds => Volatile.Read(location: ref m_builds);
+
         public List<RenderGraphConvergence> Convergence { get; } = [];
+
         public int Lost { get; private set; }
+
         public List<string> Parts { get; } = [];
+
+        public bool RetainedTainted { get; set; }
         public long Revision { get; set; }
         public bool SamplesReads { get; set; }
         public bool Unchanged { get; set; }
-        public bool RetainedTainted { get; set; }
+
         public FrameRender CaptureState { get; set; } = FrameRender.Rendered;
+
         public bool HoldOutput { get; set; }
         public GpuImagePublication Publication { get; private set; }
-        public bool HoldsOutput(string instance, GpuImagePublication publication) => HoldOutput && publication == Publication;
+
+        public bool HoldsOutput(string instance, GpuImagePublication publication) => (HoldOutput && (publication == Publication));
         public void OutputPublished(string instance, GpuImagePublication publication) => Publication = publication;
         public bool TaintedOf(string instance) => RetainedTainted;
         public FrameRender CaptureReadinessOf(string instance) => CaptureState;
+
         // The unread frames each cadence question and each recording carried, in order.
         public List<long> AskedUnread { get; } = [];
         public List<long> RecordedUnread { get; } = [];

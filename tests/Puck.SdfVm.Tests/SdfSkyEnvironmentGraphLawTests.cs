@@ -20,11 +20,12 @@ public sealed class SdfSkyEnvironmentGraphLawTests {
         var reads = SdfSkyEnvironmentGraph.ReadsOf(set: set, view: "view");
 
         Assert.Equal(expected: new[] { ("source", false), ("camera", true), ("post", true), ("view", true) },
-            actual: reads.Select(static read => (read.Producer, read.PreviousFrame)));
-        var instances = set.Instances.Select(static instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld
+            actual: reads.Select(selector: static read => (read.Producer, read.PreviousFrame)));
+        var instances = set.Instances.Select(selector: static instance => ((instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld)
             ? instance with { Reads = [.. instance.Reads, new(Producer: "environment", Kind: ShaderPipelineResourceKind.Buffer)] }
-            : instance).ToList();
-        instances.Add(new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: reads,
+            : instance)).ToList();
+
+        instances.Add(item: new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: reads,
             Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment));
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: instances, set: out _, refusal: out refusal), userMessage: refusal?.Message);
     }

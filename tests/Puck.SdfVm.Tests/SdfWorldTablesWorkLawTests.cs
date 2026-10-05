@@ -38,25 +38,30 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var rig = new Rig();
         var frame = rig.Frame;
         var empty = Signature();
+
         rig.Engine.SubmitUpload();
         var poses = rig.Engine.PoseRevision;
-        frame = frame with { DynamicTransforms = Array.AsReadOnly(Array.Empty<DynamicTransform>()) };
+
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(array: Array.Empty<DynamicTransform>()) };
         Assert.Equal(empty, Signature());
         rig.Engine.SubmitUpload();
-        Assert.Equal(poses + 1, rig.Engine.PoseRevision);
+        Assert.Equal((poses + 1), rig.Engine.PoseRevision);
 
         // Adding or removing an identity row changes the active count even though the always-bound empty row
         // already contains those same bytes. Collection copies still reseed history without changing geometry.
         var identity = new DynamicTransform(Vector3.Zero, Quaternion.Identity);
+
         frame = frame with { DynamicTransforms = new[] { identity } };
         var populated = Signature();
-        Assert.NotEqual(empty, populated);
-        frame = frame with { DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()) };
+
+        Assert.NotEqual(actual: populated, expected: empty);
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(array: frame.DynamicTransforms.ToArray()) };
         Assert.Equal(populated, Signature());
         frame = frame with { DynamicTransforms = Array.Empty<DynamicTransform>() };
         var removed = Signature();
-        Assert.NotEqual(populated, removed);
-        frame = frame with { DynamicTransforms = Array.AsReadOnly(Array.Empty<DynamicTransform>()) };
+
+        Assert.NotEqual(actual: removed, expected: populated);
+        frame = frame with { DynamicTransforms = Array.AsReadOnly(array: Array.Empty<DynamicTransform>()) };
         Assert.Equal(removed, Signature());
 
         // Each component changes independently; reverting the previous case must not supply its invalidation.
@@ -67,17 +72,19 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         }) {
             frame = frame with { DynamicTransforms = new[] { identity } };
             var previous = Signature();
+
             frame = frame with { DynamicTransforms = new[] { changed } };
             var current = Signature();
-            Assert.NotEqual(previous, current);
-            frame = frame with { DynamicTransforms = Array.AsReadOnly(frame.DynamicTransforms.ToArray()) };
+
+            Assert.NotEqual(actual: current, expected: previous);
+            frame = frame with { DynamicTransforms = Array.AsReadOnly(array: frame.DynamicTransforms.ToArray()) };
             Assert.Equal(current, Signature());
         }
 
         ulong Signature() {
-            rig.Engine.Pack(frame);
+            rig.Engine.Pack(frame: frame);
             rig.Engine.UpdateTablesSignature();
-            return rig.Engine.ViewSignature(frame, 0);
+            return rig.Engine.ViewSignature(frame: frame, view: 0);
         }
     }
     [Fact]

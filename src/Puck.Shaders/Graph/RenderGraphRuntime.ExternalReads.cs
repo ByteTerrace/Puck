@@ -182,7 +182,7 @@ public sealed partial class RenderGraphRuntime {
                     : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
             var acquired = FrozenReadOf(index, m_set.Instances[producer].Name, new RenderGraphExternalOutput(
-                completed.Image, completed.Layout, LeaseOf(completed.Image) with { Publication = completed.Publication }, completed.Tainted));
+                Image: completed.Image, Layout: completed.Layout, Lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication }, Tainted: completed.Tainted));
 
             if (
                 acquired.Image.IsSameDeviceImage &&

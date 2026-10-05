@@ -18,15 +18,15 @@ namespace Puck.World.Tests;
 
 [Collection(AllocationCollection.Name)]
 public sealed class WorldInspectorLawTests {
-    [Theory]
     [InlineData(WorldHostPresentation.Windowed)]
     [InlineData(WorldHostPresentation.Offscreen)]
+    [Theory]
     public void RealInspectorCommandAndPanelShareOneTextWithoutCreatingADevice(WorldHostPresentation presentation) {
         using var files = new TemporaryDirectory();
         var builder = WorldBootHarness.Compose(files, presentation,
-            presentation == WorldHostPresentation.Offscreen
+            ((presentation == WorldHostPresentation.Offscreen)
                 ? "tests/Puck.World.Canaries/gi-furnace/fixture.puck"
-                : "tests/Puck.World.Canaries/editor-grid/fixture.puck",
+                : "tests/Puck.World.Canaries/editor-grid/fixture.puck"),
             edit: definition => definition with {
                 RenderRaw = definition.Render with { Indirect = new WorldRenderIndirect(Tier: SdfIndirectTier.Off) },
             });
@@ -79,113 +79,130 @@ public sealed class WorldInspectorLawTests {
         Assert.Null(@object: residencyOf.Invoke(obj: source, parameters: [1]));
         field.SetValue(obj: cursor, value: null);
         Assert.Null(@object: residencyOf.Invoke(obj: source, parameters: [0]));
-        var malformed = registry.Submit("world.explain extra");
-        Assert.True(malformed.IsError, malformed.Output);
+        var malformed = registry.Submit(line: "world.explain extra");
+
+        Assert.True(condition: malformed.IsError, userMessage: malformed.Output);
         Assert.Equal("[world.explain: expected no arguments]", malformed.Output);
-        var absent = registry.Submit("world.explain");
-        Assert.True(absent.IsError, absent.Output);
+        var absent = registry.Submit(line: "world.explain");
+
+        Assert.True(condition: absent.IsError, userMessage: absent.Output);
         Assert.Contains("world.explain:", absent.Output);
-        Assert.Null(absent.Settlement);
+        Assert.Null(@object: absent.Settlement);
         // Registration/following is earlier than an actual render. A refused or still-building replacement must not
         // leave an explanation's console settlement waiting for a pixel it cannot record.
-        cursorType.GetField("m_pointerPicker", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, picker);
-        cursorType.GetField("m_pointerInstance", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, "unrendered-pane");
-        cursorType.GetField("m_pointerX", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, .5f);
-        cursorType.GetField("m_pointerY", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(cursor, .5f);
-        var unrendered = registry.Submit("world.explain");
-        Assert.True(unrendered.IsError, unrendered.Output);
+        cursorType.GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_pointerPicker")!.SetValue(obj: cursor, value: picker);
+        cursorType.GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_pointerInstance")!.SetValue(obj: cursor, value: "unrendered-pane");
+        cursorType.GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_pointerX")!.SetValue(obj: cursor, value: .5f);
+        cursorType.GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_pointerY")!.SetValue(obj: cursor, value: .5f);
+        var unrendered = registry.Submit(line: "world.explain");
+
+        Assert.True(condition: unrendered.IsError, userMessage: unrendered.Output);
         Assert.Contains("no rendered pixel", unrendered.Output);
-        Assert.Null(unrendered.Settlement);
+        Assert.Null(@object: unrendered.Settlement);
         Assert.Equal(0, picker.RequestIdentity);
-        Assert.False(picker.Pending);
+        Assert.False(condition: picker.Pending);
         if (presentation == WorldHostPresentation.Offscreen) { InspectOffscreenDisplay(host.Services, registry); }
     }
+
     // The neutral device supplies zero readback pixels. This exercises the actual boot renderer, display mapping,
     // console route and fenced request; the real furnace canary judges the physical surface and indirect answer.
     private static void InspectOffscreenDisplay(IServiceProvider services, CommandRegistry registry) {
-        using var root = Assert.IsType<RenderGraphRuntimeNode>(WorldRenderRoot.Build(sp: services, overlay: null));
+        using var root = Assert.IsType<RenderGraphRuntimeNode>(@object: WorldRenderRoot.Build(overlay: null, sp: services));
         var probe = services.GetRequiredService<WorldRenderProbe>();
         var views = services.GetRequiredService<WorldViewGraphHost>();
         var device = services.GetRequiredService<IGpuDeviceContext>();
         var host = new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device });
         var index = 0UL;
+
         void Produce() {
-            var frame = new FrameContext(AccumulatorTicks: 0UL, DeltaTicks: 1680UL, ElapsedTicks: index++ * 1680UL,
+            var frame = new FrameContext(AccumulatorTicks: 0UL, DeltaTicks: 1680UL, ElapsedTicks: (index++ * 1680UL),
                 FrameDeltaTicks: 1680UL, Host: host, StepTicks: 1680UL, TargetHeight: 128, TargetWidth: 128);
-            _ = root.ProduceFrame(frame);
+
+            _ = root.ProduceFrame(context: frame);
             Assert.NotEqual(FrameCompletion.Refused, root.Runtime.Render.Completion);
-            Assert.Null(probe.Residency!.Refusal);
+            Assert.Null(@object: probe.Residency!.Refusal);
         }
         bool Building() => Enumerable.Range(0, root.Runtime.Instances.Instances.Count)
-            .Any(instance => root.Runtime.Producer(instance) is null && root.Runtime.Node(instance).IsBuildingCandidate);
+            .Any(predicate: instance => ((root.Runtime.Producer(instance: instance) is null) && root.Runtime.Node(instance: instance).IsBuildingCandidate));
         TestLiveness.Until(step: () => { Produce(); return probe.Residency!.IsReady; },
             wait: probe.Residency!.WaitPipelineBuilds, reason: () => probe.Residency!.NotReadyReason);
         // PrepareGraph publishes the camera mapping before the root's compositor has necessarily installed. The
         // post-production feed runs only after that root actually renders; a mapping alone cannot establish it.
         TestLiveness.Within(frames: 16, step: () => {
             Produce();
-            return root.Runtime.Render.IsRendered && views.DisplayView is { } displayed &&
-                views.Pickers?.HasRenderedResolvedView(displayed.Source.Name) == true;
+            return (root.Runtime.Render.IsRendered && (views.DisplayView is { } displayed) &&
+                (views.Pickers?.HasRenderedResolvedView(instance: displayed.Source.Name) == true));
         },
             building: Building, reason: () => root.Runtime.Render.Reason);
-        var display = Assert.IsType<SourceMapping>(views.DisplayView);
-        Assert.True(views.Pickers!.HasRenderedResolvedView(display.Source.Name), $"The displayed source '{display.Source.Name}' has no current rendered picker binding.");
+        var display = Assert.IsType<SourceMapping>(@object: views.DisplayView);
+
+        Assert.True(condition: views.Pickers!.HasRenderedResolvedView(instance: display.Source.Name), userMessage: $"The displayed source '{display.Source.Name}' has no current rendered picker binding.");
         Assert.Equal(128, views.DisplayWidth);
         Assert.Equal(128, views.DisplayHeight);
-        var pointer = registry.Submit("world.view.pointer 32 96");
-        Assert.False(pointer.IsError, pointer.Output);
+        var pointer = registry.Submit(line: "world.view.pointer 32 96");
+
+        Assert.False(condition: pointer.IsError, userMessage: pointer.Output);
         Produce();
-        var positioned = registry.Submit("world.view.pointer");
-        Assert.False(positioned.IsError, positioned.Output);
+        var positioned = registry.Submit(line: "world.view.pointer");
+
+        Assert.False(condition: positioned.IsError, userMessage: positioned.Output);
         Assert.Contains("position=32,96", positioned.Output);
-        var inspection = Assert.Single(services.GetServices<ICommandModule>(),
-            module => module.GetType().Name == "WorldInspectionCommandModule");
+        var inspection = Assert.Single(collection: services.GetServices<ICommandModule>(),
+            predicate: module => (module.GetType().Name == "WorldInspectionCommandModule"));
         var reports = new List<CommandResult>();
-        inspection.GetType().GetProperty("Report")!.SetValue(inspection, (Action<CommandResult>)reports.Add);
+
+        inspection.GetType().GetProperty(name: "Report")!.SetValue(obj: inspection, value: ((Action<CommandResult>)reports.Add));
         var commands = new TextCommandSource(registry);
         var issued = new List<(string Line, CommandResult Result)>();
         var other = new List<string>();
-        using var issuer = commands.CreateSession(Principal.Console, onResult: (line, result) => issued.Add((line, result)));
-        using var observer = commands.CreateSession(Principal.Console, onResult: (line, _) => other.Add(line));
-        issuer.Enqueue("world.explain");
-        issuer.Enqueue("world.inspect");
-        observer.Enqueue("world.inspect");
+        using var issuer = commands.CreateSession(Principal.Console, onResult: (line, result) => issued.Add(item: (line, result)));
+        using var observer = commands.CreateSession(Principal.Console, onResult: (line, _) => other.Add(item: line));
+
+        issuer.Enqueue(line: "world.explain");
+        issuer.Enqueue(line: "world.inspect");
+        observer.Enqueue(line: "world.inspect");
         commands.Collect();
-        var request = Assert.Single(issued).Result;
+        var request = Assert.Single(collection: issued).Result;
+
         Assert.Equal("world.explain", issued[0].Line);
-        Assert.Equal("world.inspect", Assert.Single(other));
-        Assert.False(request.IsError, request.Output);
-        var settlement = Assert.IsType<CommandSettlement>(request.Settlement);
-        var picker = Assert.IsType<SdfWorldPicker>(views.FindPicker(display.Source.Name));
-        Assert.True(picker.Pending || picker.InFlight);
+        Assert.Equal("world.inspect", Assert.Single(collection: other));
+        Assert.False(condition: request.IsError, userMessage: request.Output);
+        var settlement = Assert.IsType<CommandSettlement>(@object: request.Settlement);
+        var picker = Assert.IsType<SdfWorldPicker>(@object: views.FindPicker(instance: display.Source.Name));
+
+        Assert.True(condition: (picker.Pending || picker.InFlight));
         TestLiveness.Within(frames: 16, step: () => { Produce(); return settlement.IsSettled; },
             building: Building, reason: () => root.Runtime.Render.Reason);
         var result = CommandResult.Settling(settlement);
-        Assert.False(result.IsError, result.Output);
+
+        Assert.False(condition: result.IsError, userMessage: result.Output);
         Assert.Contains("pixel=32,96/128,128", result.Output);
-        Assert.Equal(result, Assert.Single(reports));
+        Assert.Equal(result, Assert.Single(collection: reports));
         commands.Collect();
-        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(item => item.Line));
+        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(selector: item => item.Line));
 
         // The same issuing-session barrier and late sink also own a route cancellation, rather than leaving a
         // pending line silent or letting its next line overtake the named refusal.
         issued.Clear();
         reports.Clear();
-        issuer.Enqueue("world.explain");
-        issuer.Enqueue("world.inspect");
+        issuer.Enqueue(line: "world.explain");
+        issuer.Enqueue(line: "world.inspect");
         commands.Collect();
-        var cancelled = Assert.IsType<CommandSettlement>(Assert.Single(issued).Result.Settlement);
-        Assert.False(registry.Submit("world.view.pointer clear").IsError);
+        var cancelled = Assert.IsType<CommandSettlement>(@object: Assert.Single(collection: issued).Result.Settlement);
+
+        Assert.False(condition: registry.Submit(line: "world.view.pointer clear").IsError);
         Produce();
-        Assert.True(cancelled.IsSettled);
-        var refusal = Assert.Single(reports);
-        Assert.True(refusal.IsError, refusal.Output);
+        Assert.True(condition: cancelled.IsSettled);
+        var refusal = Assert.Single(collection: reports);
+
+        Assert.True(condition: refusal.IsError, userMessage: refusal.Output);
         Assert.Contains("acting seat or pane changed", refusal.Output);
         commands.Collect();
-        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(item => item.Line));
-        Assert.True(registry.Submit("world.explain").IsError);
-        Assert.Single(reports);
+        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(selector: item => item.Line));
+        Assert.True(condition: registry.Submit(line: "world.explain").IsError);
+        Assert.Single(collection: reports);
     }
+
     [Fact]
     public void FormatterNamesCapturedPlacementMaterialAndPixelCostWithoutSteadyAllocation() {
         var maps = new WorldPickMapBuilder();

@@ -10,12 +10,11 @@ namespace Puck.SignedDistance;
 /// <param name="Feedback">Previous complete-bank reflection.</param>
 public readonly record struct SdfIndirectGains(float Lights, float Emission, float Screens, float Sky, float Feedback) {
     /// <summary>Gets the physical unit source gains.</summary>
-    public static SdfIndirectGains One { get; } = new(1f, 1f, 1f, 1f, 1f);
-
+    public static SdfIndirectGains One { get; } = new(Emission: 1f, Feedback: 1f, Lights: 1f, Screens: 1f, Sky: 1f);
     /// <summary>Gets the enabled categories. A zero gain is explicitly disabled.</summary>
-    public SdfIndirectSources Sources => (Lights > 0 ? SdfIndirectSources.Direct : 0) |
-        (Emission > 0 ? SdfIndirectSources.Emission : 0) | (Screens > 0 ? SdfIndirectSources.Screens : 0) |
-        (Sky > 0 ? SdfIndirectSources.Sky : 0) | (Feedback > 0 ? SdfIndirectSources.Feedback : 0);
+    public SdfIndirectSources Sources => ((Lights > 0) ? SdfIndirectSources.Direct : 0) |
+        ((Emission > 0) ? SdfIndirectSources.Emission : 0) | ((Screens > 0) ? SdfIndirectSources.Screens : 0) |
+        ((Sky > 0) ? SdfIndirectSources.Sky : 0) | ((Feedback > 0) ? SdfIndirectSources.Feedback : 0);
 
     /// <summary>Refuses values outside the finite unit domain before packing a frame.</summary>
     /// <exception cref="ArgumentOutOfRangeException">A source gain is not finite or lies outside [0, 1].</exception>
@@ -25,10 +24,9 @@ public readonly record struct SdfIndirectGains(float Lights, float Emission, flo
     }
 
     internal static void Unit(float value, string name) {
-        if (!float.IsFinite(value) || value < 0f || value > 1f) { throw new ArgumentOutOfRangeException(name, value, "Indirect gains lie in [0, 1]."); }
+        if (!float.IsFinite(f: value) || (value < 0f) || (value > 1f)) { throw new ArgumentOutOfRangeException(actualValue: value, message: "Indirect gains lie in [0, 1].", paramName: name); }
     }
 }
-
 /// <summary>Receiver-only indirect controls; they never alter cached incoming source contributions.</summary>
 /// <param name="Intensity">Final indirect diffuse gain in [0, 1].</param>
 /// <param name="Tint">Final indirect diffuse color, each channel in [0, 1].</param>

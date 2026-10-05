@@ -6,7 +6,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class IndirectControlsLawTests {
     [Fact]
     public void IndirectSourcesDepthAndApplicationRetainTheSharedDocumentRoundTrip() {
-        var document = WorldSources.LowerClean("""
+        var document = WorldSources.LowerClean(body: """
             render {
               indirect {
                 tier: off
@@ -18,14 +18,16 @@ public sealed class IndirectControlsLawTests {
             }
             """);
         using var wire = JsonDocument.Parse(document.ToJsonString());
-        var indirect = wire.RootElement.GetProperty("render").GetProperty("indirect");
-        Assert.Equal("off", indirect.GetProperty("tier").GetString());
-        Assert.Equal(.125d, indirect.GetProperty("sources").GetProperty("lights").GetDouble());
-        Assert.Equal(0, indirect.GetProperty("sources").GetProperty("screens").GetInt32());
-        Assert.Equal(1, indirect.GetProperty("bounces").GetInt32());
-        Assert.Equal("#FF0000", indirect.GetProperty("apply").GetProperty("tint").GetString());
+        var indirect = wire.RootElement.GetProperty(propertyName: "render").GetProperty(propertyName: "indirect");
+
+        Assert.Equal("off", indirect.GetProperty(propertyName: "tier").GetString());
+        Assert.Equal(.125d, indirect.GetProperty(propertyName: "sources").GetProperty(propertyName: "lights").GetDouble());
+        Assert.Equal(0, indirect.GetProperty(propertyName: "sources").GetProperty(propertyName: "screens").GetInt32());
+        Assert.Equal(1, indirect.GetProperty(propertyName: "bounces").GetInt32());
+        Assert.Equal("#FF0000", indirect.GetProperty(propertyName: "apply").GetProperty(propertyName: "tint").GetString());
         var printed = WorldSources.AssertRoundTrips(document);
-        Assert.Contains("indirect", printed);
-        Assert.Contains("feedback", printed);
+
+        Assert.Contains(actualString: printed, expectedSubstring: "indirect");
+        Assert.Contains(actualString: printed, expectedSubstring: "feedback");
     }
 }

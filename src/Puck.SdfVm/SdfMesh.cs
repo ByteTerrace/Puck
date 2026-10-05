@@ -278,7 +278,8 @@ public static class SdfMeshRegion {
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var mesh = draws[draw].Mesh;
-            if (!Enum.IsDefined(draws[draw].Indirect)) { throw new ArgumentException("A mesh draw's indirect policy must be Default, Cast, Receive or Off.", nameof(draws)); }
+
+            if (!Enum.IsDefined(value: draws[draw].Indirect)) { throw new ArgumentException(message: "A mesh draw's indirect policy must be Default, Cast, Receive or Off.", paramName: nameof(draws)); }
 
             if (meshes.TryAdd(
                 key: mesh,
@@ -360,7 +361,7 @@ public static class SdfMeshRegion {
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
             record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag)
-                | (draws[draw].IsDynamic ? DynamicFlag : 0u) | ((uint)draws[draw].Indirect << SdfProgram.IndirectInstanceShift);
+                | (draws[draw].IsDynamic ? DynamicFlag : 0u) | (((uint)draws[draw].Indirect) << SdfProgram.IndirectInstanceShift);
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,

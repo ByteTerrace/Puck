@@ -19,14 +19,12 @@ public enum SdfIndirectPickStatus {
     /// <summary>The selected pixel did not perform diffuse shading, for example a miss, screen or geometric debug view.</summary>
     NotShaded,
 }
-
 /// <summary>One actual corner considered by the selected GPU lookup.</summary>
 /// <param name="Index">The physical probe index, or minus one when the corner has no allocation.</param>
 /// <param name="Classification">The fenced probe state.</param>
 /// <param name="Weight">The normalized weight actually used by the receiver; zero for excluded corners.</param>
 /// <param name="Publication">The probe's stamp in the read lighting generation.</param>
 public readonly record struct SdfIndirectPickCorner(int Index, IrradianceProbeClass Classification, float Weight, uint Publication);
-
 /// <summary>A fenced census of the snapshot's allocated probes at its exact geometry epoch.</summary>
 /// <param name="Active">Active probes.</param>
 /// <param name="Relocated">Probes moved within the allowed relocation distance.</param>
@@ -34,7 +32,6 @@ public readonly record struct SdfIndirectPickCorner(int Index, IrradianceProbeCl
 /// <param name="Dormant">Classified probes that have no lit surface to trace.</param>
 /// <param name="Unpublished">Allocated probes whose state has not been written at this epoch.</param>
 public readonly record struct SdfIndirectCensus(int Active, int Relocated, int Inactive, int Dormant, int Unpublished);
-
 /// <summary>The selected receiver's independently accumulated incident linear RGB contributions. Cache reads decode
 /// the actual quantized lighting generations; an answered Near ray or alternative reports its replacement sources.
 /// These categories are never inferred from the final shaded color.</summary>
@@ -44,7 +41,6 @@ public readonly record struct SdfIndirectCensus(int Active, int Relocated, int I
 /// <param name="Sky">Sky exit contributions.</param>
 /// <param name="Screens">Screen and portal contributions.</param>
 public readonly record struct SdfIndirectPickSources(Vector3 Direct, Vector3 Feedback, Vector3 Emission, Vector3 Sky, Vector3 Screens);
-
 /// <summary>A selected receiver answer copied under the same fence as its visibility and cache census. The immutable
 /// source is the solve that produced the cache fallback generation. An answered Near ray retains that same exact
 /// current source and its sampled direction; a later live frame cannot relabel either answer.

@@ -581,8 +581,8 @@ public sealed class RenderGraphPackageCatalog {
         new RenderGraphPackage(
             Id: SkyEnvironment,
             Inputs: [],
-            Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(float) * 4),
-                RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(uint) * 2)],
+            Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: (sizeof(float) * 4)),
+                RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: (sizeof(uint) * 2))],
             Members: [],
             Summary: "One residency's sky environment map and radiance coefficients, shared by its views and lighting solve."
         ),

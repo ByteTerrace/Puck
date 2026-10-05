@@ -181,9 +181,10 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
     public void SetScreenEmission(int screenIndex, bool emits) {
         RequireScreenIndex(screenIndex: screenIndex);
-        var flag = emits ? 1f : 0f;
+        var flag = (emits ? 1f : 0f);
+
         _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in flag)),
-            offset: screenIndex * ScreenMappingByteLength + ScreenBoundOffset + sizeof(float) * 2);
+            offset: (((screenIndex * ScreenMappingByteLength) + ScreenBoundOffset) + (sizeof(float) * 2)));
     }
     /// <summary>States whether a declared screen surface (see <see cref="SdfProgramBuilder"/>'s screen-surface
     /// <c>ScreenSlab</c> overload) at <paramref name="screenIndex"/> shows a source this frame: its row's bound flag, which

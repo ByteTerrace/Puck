@@ -26,19 +26,20 @@ public sealed class InfinityViewSamplingLawTests {
         var high = sky.Add(parameters: new SdfSkyView(), label: "high", tier: SdfSkyTier.High);
         var visible = sky.Add(parameters: new SdfSkyView(), label: "visible");
         var details = new SdfSkyDetails();
-        for (var index = 0; index < 40; index++) { _ = details.RowOf($"earlier-{index}"); }
+
+        for (var index = 0; (index < 40); index++) { _ = details.RowOf(label: $"earlier-{index}"); }
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
         var authored = new int[SdfSky.MaxLayers];
 
         sky.Pack(lights: new SdfLights(), farDistance: 100, details: details, block: out _, layers: layers, authoredIndices: authored);
-        Assert.Equal(new[] { 0, visible, -1, -1, -1, -1, -1, -1 }, authored);
-        Assert.Equal(details.RowOf("visible"), layers[1].Detail);
+        Assert.Equal(actual: authored, expected: new[] { 0, visible, -1, -1, -1, -1, -1, -1 });
+        Assert.Equal(details.RowOf(label: "visible"), layers[1].Detail);
 
         sky.Quality = SdfSkyTier.High;
-        sky.LayerAt(muted).Opacity = 1;
+        sky.LayerAt(index: muted).Opacity = 1;
         sky.Pack(lights: new SdfLights(), farDistance: 100, details: details, block: out _, layers: layers, authoredIndices: authored);
-        Assert.Equal(new[] { 0, muted, high, visible, -1, -1, -1, -1 }, authored);
-        Assert.Equal(details.RowOf("visible"), layers[3].Detail);
+        Assert.Equal(actual: authored, expected: new[] { 0, muted, high, visible, -1, -1, -1, -1 });
+        Assert.Equal(details.RowOf(label: "visible"), layers[3].Detail);
     }
 
     private static InfinityViewSpec Spec(CameraSnapshot viewer, InfinityViewKind kind = InfinityViewKind.World) => new(

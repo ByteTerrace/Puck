@@ -217,7 +217,6 @@ public sealed record WorldRenderIndirect(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium);
-
 /// <summary>Gains applied once where each source enters transport; continuation never applies them a second time.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>
 /// <param name="Emission">Material emission gain.</param>
@@ -230,7 +229,6 @@ public sealed record WorldRenderIndirectSources(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Screens = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Sky = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Feedback = null);
-
 /// <summary>Receiver-only controls; gains and tint channels lie in [0, 1] and default to one.</summary>
 /// <param name="Intensity">Final indirect diffuse gain.</param>
 /// <param name="Tint">Final indirect diffuse tint.</param>
@@ -293,7 +291,6 @@ public abstract record WorldRenderLight {
     /// attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BindableScalar? Bounce { get; init; }
-
     /// <summary>Gets the light's name, which a section key addresses it by, or <see langword="null"/> for an unnamed
     /// light no key can address.</summary>
     [JsonIgnore]

@@ -288,7 +288,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             probeWorstCase: false,
-            indirectFor: index => WorldIndirectParticipation.ForPlacement(neighbour.Definition, neighbour.PlacementId(index)),
+            indirectFor: index => WorldIndirectParticipation.ForPlacement(definition: neighbour.Definition, placementId: neighbour.PlacementId(index: index)),
             slotBase: slotBase,
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
             scaleFor: index => m_emittedScales[(appearanceBase + index)]

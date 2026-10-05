@@ -36,7 +36,6 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the detail rows the sky, composite and environment passes count the sky's runs and layers in, in row
     /// order.</summary>
     public SdfSkyDetails SkyDetails => m_skyDetails;
-
     /// <summary>Gets each packed sky layer's authored index, followed by −1 for unused rows. Muted and
     /// tier-excluded layers consume no packed row; counter detail identities are composition-wide, not packed ordinals.</summary>
     public ReadOnlySpan<int> SkyAuthoredIndices => m_skyAuthoredIndices;
@@ -58,7 +57,7 @@ public sealed partial class SdfWorldTables {
         _ = m_lightRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_lightRecords.AsSpan()), offset: 0);
         _ = m_skyRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyRecord.AsSpan()), offset: 0);
         _ = m_skyLayerRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyLayerRecords.AsSpan()), offset: 0);
-        PrepareSkyEnvironment(physical: frame.IndirectTier != SdfIndirectTier.Off && (frame.IndirectSources & SdfIndirectSources.Sky) != 0);
+        PrepareSkyEnvironment(physical: ((frame.IndirectTier != SdfIndirectTier.Off) && ((frame.IndirectSources & SdfIndirectSources.Sky) != 0)));
     }
     // Writes the generated record buffers and the shared sky environment map into a ring slot's World set.
     private void WriteLightAndSkySet(nint set, int slot) {

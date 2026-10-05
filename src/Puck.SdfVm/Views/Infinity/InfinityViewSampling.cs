@@ -26,10 +26,10 @@ public static class InfinityViewSampling {
             Coverage = ((spec.Kind == InfinityViewKind.Far) ? 1u : 0u),
             Fallback = spec.Fallback,
             Forward = viewer.Forward,
+            ImageSlot = imageSlot,
             Intensity = 1f,
             Rect = frame.Rect,
             Right = viewer.Right,
-            ImageSlot = imageSlot,
             Up = viewer.Up,
         };
     }

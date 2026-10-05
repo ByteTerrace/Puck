@@ -247,6 +247,7 @@ public sealed class WorldPresentationNameLawTests {
         );
 
         var light = WorldViewNames.IndirectLight(cache: "world$indirect");
+
         Assert.Equal(expected: new[] { "world", "indirect", "indirect-light" }, actual: light.Split(separator: GeneratedName.Joiner));
 
         foreach (var name in ((string[])[WorldViewNames.Session(screen: 0), seat, source, light])) {

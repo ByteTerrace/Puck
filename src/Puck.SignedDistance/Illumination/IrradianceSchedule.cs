@@ -88,8 +88,7 @@ public sealed class IrradianceSchedule {
     /// The GPU may read them only after the admitted classification pass in the same ordered submission.</summary>
     /// <param name="key">The allocated brick's world-space key.</param>
     /// <returns>Whether the existing schedule has admitted current partitions for this brick.</returns>
-    public bool IsClassified(IrradianceBrickKey key) => m_bricks.TryGetValue(key, out var brick) && brick.Classified;
-
+    public bool IsClassified(IrradianceBrickKey key) => (m_bricks.TryGetValue(key: key, value: out var brick) && brick.Classified);
     /// <summary>Returns whether a change of geometry within a sphere dirties a probe: whether the sphere meets the ball
     /// the probe's rays sweep, which holds every ray that missed as well as every ray that hit.</summary>
     /// <param name="probe">The probe's position, in world units.</param>
@@ -108,6 +107,7 @@ public sealed class IrradianceSchedule {
     /// <returns>The dirty placement bricks, in key order; their submitted trace masks must be withdrawn together.</returns>
     public IReadOnlyList<IrradianceBrickKey> MarkGeometry(IrradianceSphere previous, IrradianceSphere current) {
         var changed = new List<IrradianceBrickKey>();
+
         foreach (var (key, brick) in m_bricks) {
             var level = m_levels[key.Level];
             var reach = (m_exitDistance + (IrradianceCells.RelocationAllowance * level.Spacing));
@@ -123,27 +123,29 @@ public sealed class IrradianceSchedule {
             }
 
             if (any) {
-                Array.Clear(brick.Traced);
+                Array.Clear(array: brick.Traced);
                 brick.Placed = false;
                 brick.Classified = false;
                 brick.Reason = IrradianceUpdateReason.Geometry;
-                changed.Add(key);
+                changed.Add(item: key);
             }
         }
-        foreach (var key in changed) { InvalidateNeighborPartitions(key); }
+        foreach (var key in changed) { InvalidateNeighborPartitions(changed: key); }
         return changed;
     }
 
     private void InvalidateNeighborPartitions(IrradianceBrickKey changed) {
-        for (var z = 0; z <= 1; z++) {
-            for (var y = 0; y <= 1; y++) {
-                for (var x = 0; x <= 1; x++) {
-                    var neighbor = changed with { X = changed.X - x, Y = changed.Y - y, Z = changed.Z - z };
-                    if (m_bricks.TryGetValue(neighbor, out var brick)) { brick.Classified = false; }
+        for (var z = 0; (z <= 1); z++) {
+            for (var y = 0; (y <= 1); y++) {
+                for (var x = 0; (x <= 1); x++) {
+                    var neighbor = changed with { X = (changed.X - x), Y = (changed.Y - y), Z = (changed.Z - z) };
+
+                    if (m_bricks.TryGetValue(key: neighbor, value: out var brick)) { brick.Classified = false; }
                 }
             }
         }
     }
+
     /// <summary>Schedules one frame.</summary>
     /// <param name="inputs">What the frame sees.</param>
     /// <returns>The frame's plan; the schedule assumes it is carried out.</returns>
@@ -191,7 +193,7 @@ public sealed class IrradianceSchedule {
         }
 
         foreach (var changed in allocated.Concat(second: evicted)) {
-            InvalidateNeighborPartitions(changed);
+            InvalidateNeighborPartitions(changed: changed);
         }
         var placed = m_bricks
             .Where(predicate: static pair => !pair.Value.Placed)

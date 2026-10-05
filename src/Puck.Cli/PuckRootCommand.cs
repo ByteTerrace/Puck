@@ -118,7 +118,7 @@ internal static class PuckRootCommand {
 
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     internal static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
-        Command[] verbs = schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
+        Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
@@ -174,7 +174,7 @@ internal static class PuckRootCommand {
             WorktreeBaseCommand.Create(),
             WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
-        ];
+        ]);
         var root = new RootCommand(description: "The Puck developer CLI: every repository operation is a verb here.");
 
         // The listing reads in name order however the list above is kept.
@@ -190,6 +190,7 @@ internal static class PuckRootCommand {
 
         return root;
     }
+
     public static int Invoke(string[] args) => Invoke(
         args: args,
         root: Create(clock: TimeProvider.System)

@@ -8,6 +8,7 @@ namespace Puck.Testing;
 internal static class IrradianceLightFixture {
     public static readonly Double3 Sun = new Double3(X: 0.3, Y: 1.0, Z: 0.2).Normalize();
     public static readonly Double3 Up = new(X: 0, Y: 1, Z: 0);
+
     public static SdfProgram Program() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -22,17 +23,15 @@ internal static class IrradianceLightFixture {
         _ = builder.Box(halfExtents: new Vector3(x: 1.5f, y: 0.01f, z: 0.01f), material: material, round: 0);
         return builder.Build();
     }
-
     public static IrradianceLightProjection Projection(int resolution) => IrradianceLightProjection.Create(
         receiverMin: new Double3(X: -4, Y: 0, Z: -4), receiverMax: new Double3(X: 4, Y: 0, Z: 4),
         casterMin: new Double3(X: -6, Y: -0.2, Z: -6), casterMax: new Double3(X: 6, Y: 1.25, Z: 6),
         towardLight: Sun, penumbraSlope: 0.1, resolution: resolution);
-
     // Includes exact rod-shadow points as well as both sides of the box silhouette and openly lit floor.
     public static Double3[] Receivers() => [
-        .. Enumerable.Range(start: 0, count: 41).Select(selector: index => new Double3(
-            X: (-1.0 + (index * 0.05)), Y: 0, Z: (2.0 - (0.8 * Sun.Z / Sun.Y)))),
-        .. Enumerable.Range(start: 0, count: 17).SelectMany(selector: x => Enumerable.Range(start: 0, count: 17)
+        .. Enumerable.Range(count: 41, start: 0).Select(selector: index => new Double3(
+            X: (-1.0 + (index * 0.05)), Y: 0, Z: (2.0 - ((0.8 * Sun.Z) / Sun.Y)))),
+        .. Enumerable.Range(count: 17, start: 0).SelectMany(selector: x => Enumerable.Range(count: 17, start: 0)
             .Select(selector: z => new Double3(X: (-3.2 + (x * 0.4)), Y: 0, Z: (-3.2 + (z * 0.4))))),
     ];
     // Whether any floor point within a disc of the radius lies in the casters' exact shadow, by ray-box slab tests
@@ -55,6 +54,7 @@ internal static class IrradianceLightFixture {
 
         return false;
     }
+
     private static bool Crosses(Double3 center, Double3 half, Double3 origin, Double3 direction) {
         var near = 0.0;
         var far = double.MaxValue;

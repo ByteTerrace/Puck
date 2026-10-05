@@ -32,7 +32,8 @@ cameras [{
           { program: "cache-base", value: 0 }
           { program: "cache-pan", value: 1 }
           { program: "cache-translated", value: 2 }
-        ], default: "cache-base", key: "state.cameraPose")
+        ], default: "cache-base", key: "state.cameraPose"
+        )
       ]
     }
   }

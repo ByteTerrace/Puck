@@ -42,6 +42,7 @@ public sealed class SdfShadowHistory {
 
             if ((index < 0) || (index >= lights.Count)) { continue; }
             var light = lights[index];
+
             if (SdfLightMotion.Changed(direction: light.Direction, penumbra: light.Param,
                 anchorDirection: m_directions[slot], anchorPenumbra: m_penumbrae[slot])) {
                 rejected |= (1u << slot);

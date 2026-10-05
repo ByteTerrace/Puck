@@ -63,8 +63,9 @@ internal static partial class TestCommand {
                 (JsonNode.Parse(utf8Json: bytes) is JsonObject authored) &&
                 (authored["schedule"] is JsonObject) &&
                 (authored["state"]?["world"] is JsonArray rows) &&
-                rows.OfType<JsonObject>().Any(predicate: static row => row["verdict"] is JsonObject)) {
+                rows.OfType<JsonObject>().Any(predicate: static row => (row["verdict"] is JsonObject))) {
                 var name = Path.GetFileNameWithoutExtension(path: source);
+
                 if (written.TryGetValue(key: name, value: out var owner)) {
                     reason = $"{source} and {owner} both generate the test world '{name}' — sources run together need different document names.";
                     return false;

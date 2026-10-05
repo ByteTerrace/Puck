@@ -172,14 +172,17 @@ public sealed class IrradianceCacheModel {
         m_published = -1;
 
         var levels = new IReadOnlyList<IrradianceProbeKey>[m_levels.Count];
-        for (var level = 0; level < levels.Length; level++) {
-            var keys = ProbesOf(level: level).Where(predicate: static probe => (probe.Hits is not null)).Select(static probe => probe.Key).ToArray();
-            if (reverseOrder) { Array.Reverse(keys); }
+
+        for (var level = 0; (level < levels.Length); level++) {
+            var keys = ProbesOf(level: level).Where(predicate: static probe => (probe.Hits is not null)).Select(selector: static probe => probe.Key).ToArray();
+
+            if (reverseOrder) { Array.Reverse(array: keys); }
             levels[level] = keys;
         }
-        var schedule = new IrradianceSolveSchedule(levels, bounces, probesPerStep > 0 ? probesPerStep : int.MaxValue);
+        var schedule = new IrradianceSolveSchedule(levels, bounces, ((probesPerStep > 0) ? probesPerStep : int.MaxValue));
+
         while (schedule.Plan() is { } batch) {
-            foreach (var key in batch.Probes) { ShadeProbe(feedback: batch.Sweep > 0, probe: m_probes[key], write: batch.WriteGeneration); }
+            foreach (var key in batch.Probes) { ShadeProbe(feedback: (batch.Sweep > 0), probe: m_probes[key], write: batch.WriteGeneration); }
             schedule.Submitted();
             if (batch.CompletesSweep) { m_published = schedule.PublishedGeneration; SweepsPublished++; }
         }
@@ -193,7 +196,7 @@ public sealed class IrradianceCacheModel {
     /// proof allowance ran out before this receiver was proven; or <see langword="null"/> when no level supports the
     /// receiver, where a view shades as it does with indirect light off.</returns>
     public Double3? Irradiance(Double3 surface, Double3 normal) =>
-        Contributions(surface: surface, normal: normal)?.Total;
+        Contributions(normal: normal, surface: surface)?.Total;
     /// <summary>Returns the independently transported sources of the same published receiver answer. Proof admission,
     /// corner weights and normalization are shared with <see cref="Irradiance"/>.</summary>
     /// <param name="surface">The receiver's surface point.</param>
@@ -245,8 +248,9 @@ public sealed class IrradianceCacheModel {
 
             if (cosine > 0.0) {
                 total += cosine;
-                var unknown = (hits[ray].Kind == IrradianceHitKind.Unresolved)
-                    || ((m_published >= 0) && !probe.Radiance[m_published][ray].HasValue);
+                var unknown = ((hits[ray].Kind == IrradianceHitKind.Unresolved)
+                    || ((m_published >= 0) && !probe.Radiance[m_published][ray].HasValue));
+
                 unresolved += (unknown ? cosine : 0.0);
             }
         }
@@ -574,10 +578,10 @@ public sealed class IrradianceCacheModel {
         }
 
         return new IrradianceContributions(
-            Direct: Double3.Multiply(albedo, m_surfaces.Direct(record.Point, record.Normal, record.Material)),
-            Feedback: Double3.Multiply(albedo, reflected),
+            Direct: Double3.Multiply(a: albedo, b: m_surfaces.Direct(record.Point, record.Normal, record.Material)),
+            Feedback: Double3.Multiply(a: albedo, b: reflected),
             Emission: m_surfaces.Emission(record.Material), Sky: default,
-            Screens: Double3.Multiply(albedo, m_surfaces.Screens(record.Point, record.Normal, record.Material)));
+            Screens: Double3.Multiply(a: albedo, b: m_surfaces.Screens(record.Point, record.Normal, record.Material)));
     }
     private IrradianceContributions? ShadeContinuation(Continuation[] support, int write) {
         var sum = default(IrradianceContributions);
@@ -597,7 +601,7 @@ public sealed class IrradianceCacheModel {
 
             if (IrradianceCells.Launch(field: m_field, height: (IrradianceCells.ReceiverBias * spacing), normal: normal, surface: surface) is not { } launch) {
                 // A view may display its no-indirect fallback; a solve cannot reuse that fallback as known black.
-                return budgeted ? default(IrradianceContributions) : null;
+                return (budgeted ? default(IrradianceContributions) : null);
             }
 
             var point = launch.Point;

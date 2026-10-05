@@ -10,199 +10,211 @@ namespace Puck.SignedDistance.Tests;
 // The irradiance reference against closed forms: the furnace's finite-bounce series, a floor under a uniform sky, a
 // floor beside an emissive half-plane, and a floor under a finite emissive disc.
 public sealed class IrradianceReferenceLawTests {
-    [Theory]
     [InlineData(0d)]
     [InlineData(.25d)]
     [InlineData(1d)]
+    [Theory]
     public void FeedbackGainScalesEachReflectedHopWithoutDimmingTheFirstSource(double gain) {
-        var field = IrradianceScenes.Shell(3, .2);
+        var field = IrradianceScenes.Shell(inner: 3, thickness: .2);
         var surfaces = IrradianceScenes.Uniform(albedo: .5, emission: .75, sky: 9);
         var reference = new IrradianceReference(field, surfaces, 100, feedbackGain: gain);
-        var result = reference.EstimateIncidentSources(Double3.Zero, new(0, 1, 0), bounces: 2, paths: 8);
-        var expected = .75 * (1 + .5 * gain + .25 * gain * gain);
+        var result = reference.EstimateIncidentSources(Double3.Zero, new(X: 0, Y: 1, Z: 0), bounces: 2, paths: 8);
+        var expected = (.75 * ((1 + (.5 * gain)) + ((.25 * gain) * gain)));
+
         Assert.Equal(0, result.Unresolved);
-        Assert.Equal(new Double3(.75, .75, .75), result.Contributions.Emission);
+        Assert.Equal(new Double3(X: .75, Y: .75, Z: .75), result.Contributions.Emission);
         Assert.Equal(expected, result.Contributions.Total.X, precision: 9);
-        Assert.Equal(expected - .75, result.Contributions.Feedback.X, precision: 9);
-        Assert.Equal(gain == 0 ? 8L : 24L, field.Casts);
+        Assert.Equal((expected - .75), result.Contributions.Feedback.X, precision: 9);
+        Assert.Equal(((gain == 0) ? 8L : 24L), field.Casts);
     }
-    [Theory]
     [InlineData(1d, 1)]
     [InlineData(-1d, 256)]
+    [Theory]
     public void ACapturedFirstRaySelectsItsColoredHitAndKeepsEachSourceIndependent(double side, int paths) {
         var builder = new SdfProgramBuilder();
-        var red = builder.AddMaterial(new SdfMaterial(Vector3.UnitX));
-        var green = builder.AddMaterial(new SdfMaterial(Vector3.UnitY));
-        builder.Translate(Vector3.UnitX).Sphere(.1f, red);
-        builder.ResetPoint().Translate(-Vector3.UnitX).Sphere(.1f, green);
-        var field = new IrradianceField(builder.Build());
-        var reference = new IrradianceReference(field, new IrradianceSurfaces(
-            albedo: static _ => new(.25, .25, .25),
-            emission: material => material == red ? new(1, 0, 0) : new(0, 1, 0),
-            direct: static (_, _, _) => new(2, 0, 0), screens: static (_, _, _) => new(0, 0, 4),
-            sky: static _ => new(9, 9, 9)), exitDistance: 8);
+        var red = builder.AddMaterial(material: new SdfMaterial(Vector3.UnitX));
+        var green = builder.AddMaterial(material: new SdfMaterial(Vector3.UnitY));
 
-        var result = reference.EstimateIncidentSources(Double3.Zero, new Double3(side * 3, 0, 0), bounces: 0, paths);
+        builder.Translate(offset: Vector3.UnitX).Sphere(.1f, red);
+        builder.ResetPoint().Translate(offset: -Vector3.UnitX).Sphere(.1f, green);
+        var field = new IrradianceField(program: builder.Build());
+        var reference = new IrradianceReference(field, new IrradianceSurfaces(
+            albedo: static _ => new(X: .25, Y: .25, Z: .25),
+            emission: material => ((material == red) ? new(X: 1, Y: 0, Z: 0) : new(X: 0, Y: 1, Z: 0)),
+            direct: static (_, _, _) => new(X: 2, Y: 0, Z: 0), screens: static (_, _, _) => new(X: 0, Y: 0, Z: 4),
+            sky: static _ => new(X: 9, Y: 9, Z: 9)), exitDistance: 8);
+
+        var result = reference.EstimateIncidentSources(Double3.Zero, new Double3(X: (side * 3), Y: 0, Z: 0), bounces: 0, paths);
+
         Assert.Equal(paths, result.Paths);
         Assert.Equal(0, result.Unresolved);
-        Assert.Equal(side > 0 ? new Double3(1, 0, 0) : new Double3(0, 1, 0), result.Contributions.Emission);
-        Assert.Equal(new Double3(.5, 0, 0), result.Contributions.Direct);
-        Assert.Equal(new Double3(0, 0, 1), result.Contributions.Screens);
+        Assert.Equal(((side > 0) ? new Double3(X: 1, Y: 0, Z: 0) : new Double3(X: 0, Y: 1, Z: 0)), result.Contributions.Emission);
+        Assert.Equal(new Double3(X: .5, Y: 0, Z: 0), result.Contributions.Direct);
+        Assert.Equal(new Double3(X: 0, Y: 0, Z: 1), result.Contributions.Screens);
         Assert.Equal(Double3.Zero, result.Contributions.Sky);
         Assert.Equal(Double3.Zero, result.Contributions.Feedback);
         Assert.Equal(paths, field.Casts);
-        Assert.True(field.Samples > 0);
+        Assert.True(condition: (field.Samples > 0));
     }
-
     [Fact]
     public void ACapturedDirectionDoesNotBecomeAReceiverHemisphere() {
         var field = Floor();
         var reference = new IrradianceReference(field, new IrradianceSurfaces(
             albedo: static _ => default, emission: static _ => default,
-            sky: static direction => direction.Y > .999 ? new(1, 0, 0) : new(0, 0, 1)), exitDistance: 8);
-        var captured = reference.EstimateIncidentSources(new(0, .004, 0), new(0, 1, 0), bounces: 0);
+            sky: static direction => ((direction.Y > .999) ? new(X: 1, Y: 0, Z: 0) : new(X: 0, Y: 0, Z: 1))), exitDistance: 8);
+        var captured = reference.EstimateIncidentSources(new(X: 0, Y: .004, Z: 0), new(X: 0, Y: 1, Z: 0), bounces: 0);
+
         Assert.Equal(64, captured.Paths);
         Assert.Equal(0, captured.Unresolved);
-        Assert.Equal(new Double3(1, 0, 0), captured.Contributions.Sky);
+        Assert.Equal(new Double3(X: 1, Y: 0, Z: 0), captured.Contributions.Sky);
         Assert.Equal(64, field.Casts);
-        var hemisphere = reference.EstimateSources(Double3.Zero, new(0, 1, 0), bounces: 0, paths: 64);
+        var hemisphere = reference.EstimateSources(Double3.Zero, new(X: 0, Y: 1, Z: 0), bounces: 0, paths: 64);
+
         Assert.Equal(0, hemisphere.Unresolved);
-        Assert.Equal(new Double3(0, 0, 1), hemisphere.Contributions.Sky);
+        Assert.Equal(new Double3(X: 0, Y: 0, Z: 1), hemisphere.Contributions.Sky);
         Assert.Equal(128, field.Casts);
     }
-
-    [Theory]
     [InlineData(.5d, 2)]
     [InlineData(1d, 9)]
+    [Theory]
     public void ACapturedIncomingRayRetainsTheFurnacesFiniteDepthAndFeedbackAttribution(double albedo, int bounces) {
         const double Emission = .75;
         const int Paths = 8;
-        var field = IrradianceScenes.Shell(3, .2);
+        var field = IrradianceScenes.Shell(inner: 3, thickness: .2);
         var reference = new IrradianceReference(field, IrradianceScenes.Uniform(albedo, Emission, sky: 9), 100);
-        var result = reference.EstimateIncidentSources(Double3.Zero, new(0, 1, 0), bounces, Paths);
-        var expected = IrradianceScenes.Furnace(albedo: albedo, emission: Emission, bounces: bounces);
+        var result = reference.EstimateIncidentSources(Double3.Zero, new(X: 0, Y: 1, Z: 0), bounces, Paths);
+        var expected = IrradianceScenes.Furnace(albedo: albedo, bounces: bounces, emission: Emission);
+
         Assert.Equal(0, result.Unresolved);
-        Assert.Equal(new Double3(Emission, Emission, Emission), result.Contributions.Emission);
-        Assert.Equal(expected - Emission, result.Contributions.Feedback.X, precision: 9);
+        Assert.Equal(new Double3(X: Emission, Y: Emission, Z: Emission), result.Contributions.Emission);
+        Assert.Equal((expected - Emission), result.Contributions.Feedback.X, precision: 9);
         Assert.Equal(expected, result.Contributions.Total.X, precision: 9);
         Assert.Equal(expected, result.Contributions.Total.Y, precision: 9);
         Assert.Equal(expected, result.Contributions.Total.Z, precision: 9);
         Assert.Equal(Double3.Zero, result.Contributions.Direct);
         Assert.Equal(Double3.Zero, result.Contributions.Sky);
         Assert.Equal(Double3.Zero, result.Contributions.Screens);
-        Assert.Equal(Paths * (bounces + 1), field.Casts);
+        Assert.Equal((Paths * (bounces + 1)), field.Casts);
     }
-
     [Fact]
     public void AnExactlyNonReflectingHitKeepsItsEmissionWhenTheNextLaunchCannotResolve() {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Vector3.UnitX, Emissive: 1f, Metal: 1f));
+        var material = builder.AddMaterial(material: new SdfMaterial(Vector3.UnitX, Emissive: 1f, Metal: 1f));
+
         builder.Plane(Vector3.UnitY, 0f, material);
         builder.Plane(-Vector3.UnitY, .0005f, material);
         var program = builder.Build();
-        var origin = new Double3(0, .0001, 0);
-        var direction = new Double3(0, -1, 0);
-        var witness = new IrradianceField(program);
-        var hit = witness.Cast(origin, direction, 1);
-        Assert.Equal(IrradianceRayKind.Hit, hit.Kind);
-        Assert.True(witness.TryGradient(hit.Point, out var normal));
-        Assert.Equal(new Double3(0, 1, 0), normal);
-        // The first hit is certified, but its 0.001 m launch starts beyond the opposite wall of this 0.0005 m gap.
-        Assert.Null(IrradianceCells.Launch(witness, hit.Point, normal, .004));
+        var origin = new Double3(X: 0, Y: .0001, Z: 0);
+        var direction = new Double3(X: 0, Y: -1, Z: 0);
+        var witness = new IrradianceField(program: program);
+        var hit = witness.Cast(direction: direction, maxDistance: 1, origin: origin);
 
-        var field = new IrradianceField(program);
+        Assert.Equal(IrradianceRayKind.Hit, hit.Kind);
+        Assert.True(condition: witness.TryGradient(hit.Point, out var normal));
+        Assert.Equal(new Double3(X: 0, Y: 1, Z: 0), normal);
+        // The first hit is certified, but its 0.001 m launch starts beyond the opposite wall of this 0.0005 m gap.
+        Assert.Null(value: IrradianceCells.Launch(witness, hit.Point, normal, .004));
+
+        var field = new IrradianceField(program: program);
         var surfaces = IrradianceSurfaces.FromMaterials(program.Materials,
-            direct: static (_, _, _) => new(3, 4, 5), screens: static (_, _, _) => new(6, 7, 8));
+            direct: static (_, _, _) => new(X: 3, Y: 4, Z: 5), screens: static (_, _, _) => new(X: 6, Y: 7, Z: 8));
         var reference = new IrradianceReference(field, surfaces, 1);
         var result = reference.EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
+
         Assert.Equal(0, result.Unresolved);
-        Assert.Equal(new Double3(1, 0, 0), result.Contributions.Emission);
-        Assert.Equal(new Double3(1, 0, 0), result.Contributions.Total);
+        Assert.Equal(new Double3(X: 1, Y: 0, Z: 0), result.Contributions.Emission);
+        Assert.Equal(new Double3(X: 1, Y: 0, Z: 0), result.Contributions.Total);
         Assert.Equal(Double3.Zero, result.Contributions.Direct);
         Assert.Equal(Double3.Zero, result.Contributions.Screens);
         Assert.Equal(Double3.Zero, result.Contributions.Feedback);
         Assert.Equal(4, field.Casts);
-        Assert.True(field.Samples > 0);
+        Assert.True(condition: (field.Samples > 0));
 
         // Neither callback can contribute at zero reflectance, even if its independent visibility work refuses.
         foreach (var directRefuses in new[] { true, false }) {
-            Func<Double3, Double3, int, Double3> direct = (_, _, _) => directRefuses
-                ? throw new InvalidOperationException("blocked direct visibility") : Double3.Zero;
-            Func<Double3, Double3, int, Double3> screens = (_, _, _) => directRefuses
-                ? Double3.Zero : throw new InvalidOperationException("blocked screen visibility");
-            var callbackField = new IrradianceField(program);
+            Func<Double3, Double3, int, Double3> direct = (_, _, _) => (directRefuses
+                ? throw new InvalidOperationException(message: "blocked direct visibility") : Double3.Zero);
+            Func<Double3, Double3, int, Double3> screens = (_, _, _) => (directRefuses
+                ? Double3.Zero : throw new InvalidOperationException(message: "blocked screen visibility"));
+            var callbackField = new IrradianceField(program: program);
             var callbackSurfaces = IrradianceSurfaces.FromMaterials(program.Materials, direct: direct, screens: screens);
             var callbackResult = new IrradianceReference(callbackField, callbackSurfaces, 1)
                 .EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
-            Assert.Equal(result, callbackResult);
+
+            Assert.Equal(actual: callbackResult, expected: result);
             Assert.Equal(4, callbackField.Casts);
             foreach (var nonzero in new[] { 1d, double.Epsilon }) {
                 var required = IrradianceSurfaces.FromMaterials(program.Materials, direct: direct, screens: screens,
-                    reflection: (_, _, _) => new(nonzero, 0, 0));
-                var exception = Assert.Throws<InvalidOperationException>(() =>
-                    new IrradianceReference(new IrradianceField(program), required, 1)
+                    reflection: (_, _, _) => new(X: nonzero, Y: 0, Z: 0));
+                var exception = Assert.Throws<InvalidOperationException>(testCode: () =>
+                    new IrradianceReference(new IrradianceField(program: program), required, 1)
                         .EstimateIncidentSources(origin, direction, bounces: 0, paths: 1));
-                Assert.Equal(directRefuses ? "blocked direct visibility" : "blocked screen visibility", exception.Message);
+
+                Assert.Equal((directRefuses ? "blocked direct visibility" : "blocked screen visibility"), exception.Message);
             }
         }
 
         foreach (var reflectance in new[] { 1d, double.Epsilon }) {
-            var controlField = new IrradianceField(program);
+            var controlField = new IrradianceField(program: program);
             var controlSurfaces = IrradianceSurfaces.FromMaterials(program.Materials,
-                reflection: (_, _, _) => new(reflectance, 0, 0));
+                reflection: (_, _, _) => new(X: reflectance, Y: 0, Z: 0));
             var control = new IrradianceReference(controlField, controlSurfaces, 1)
                 .EstimateIncidentSources(origin, direction, bounces: 1, paths: 4);
+
             Assert.Equal(4, control.Unresolved);
             Assert.Equal(Double3.Zero, control.Contributions.Total);
             Assert.Equal(4, controlField.Casts);
-            Assert.True(controlField.Samples > field.Samples);
+            Assert.True(condition: (controlField.Samples > field.Samples));
         }
     }
-
     [Fact]
     public void CapturedRayArgumentsRefuseBeforeAnyFieldQuery() {
         var field = Floor();
-        var reference = new IrradianceReference(field, IrradianceScenes.Uniform(0, 0, 1), 8);
-        Double3[] directions = [default, new(double.NaN, 0, 0), new(0, double.PositiveInfinity, 0), new(0, 0, double.NegativeInfinity)];
+        var reference = new IrradianceReference(field, IrradianceScenes.Uniform(albedo: 0, emission: 0, sky: 1), 8);
+        Double3[] directions = [default, new(X: double.NaN, Y: 0, Z: 0), new(X: 0, Y: double.PositiveInfinity, Z: 0), new(X: 0, Y: 0, Z: double.NegativeInfinity)];
+
         foreach (var direction in directions) {
-            Assert.Throws<ArgumentOutOfRangeException>("direction", () => reference.EstimateIncidentSources(new(0, .004, 0), direction, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(paramName: "direction", testCode: () => reference.EstimateIncidentSources(new(X: 0, Y: .004, Z: 0), direction, 0));
         }
-        Double3[] origins = [new(double.NaN, 0, 0), new(0, double.PositiveInfinity, 0), new(0, 0, double.NegativeInfinity)];
+        Double3[] origins = [new(X: double.NaN, Y: 0, Z: 0), new(X: 0, Y: double.PositiveInfinity, Z: 0), new(X: 0, Y: 0, Z: double.NegativeInfinity)];
+
         foreach (var origin in origins) {
-            Assert.Throws<ArgumentOutOfRangeException>("origin", () => reference.EstimateIncidentSources(origin, new(0, 1, 0), 0));
+            Assert.Throws<ArgumentOutOfRangeException>(paramName: "origin", testCode: () => reference.EstimateIncidentSources(origin, new(X: 0, Y: 1, Z: 0), 0));
         }
         foreach (var bounces in new[] { -1, 10, int.MaxValue }) {
-            Assert.Throws<ArgumentOutOfRangeException>("bounces", () => reference.EstimateIncidentSources(new(0, .004, 0), new(0, 1, 0), bounces));
+            Assert.Throws<ArgumentOutOfRangeException>(paramName: "bounces", testCode: () => reference.EstimateIncidentSources(new(X: 0, Y: .004, Z: 0), new(X: 0, Y: 1, Z: 0), bounces));
         }
         foreach (var paths in new[] { -1, 0, 257, int.MaxValue }) {
-            Assert.Throws<ArgumentOutOfRangeException>("paths", () => reference.EstimateIncidentSources(new(0, .004, 0), new(0, 1, 0), 0, paths));
+            Assert.Throws<ArgumentOutOfRangeException>(paramName: "paths", testCode: () => reference.EstimateIncidentSources(new(X: 0, Y: .004, Z: 0), new(X: 0, Y: 1, Z: 0), 0, paths));
         }
         Assert.Equal(0, field.Casts);
         Assert.Equal(0, field.Samples);
     }
-
     [Fact]
     public void AnUnresolvedCapturedRayCannotBecomeACompleteBlackOrSkyAnswer() {
         var field = Floor();
-        var reference = new IrradianceReference(field, IrradianceScenes.Uniform(0, 0, 1), 10);
-        var result = reference.EstimateIncidentSources(new(0, .0015, 0), new(1, 0, 0), bounces: 0, paths: 4);
+        var reference = new IrradianceReference(field, IrradianceScenes.Uniform(albedo: 0, emission: 0, sky: 1), 10);
+        var result = reference.EstimateIncidentSources(new(X: 0, Y: .0015, Z: 0), new(X: 1, Y: 0, Z: 0), bounces: 0, paths: 4);
+
         Assert.Equal(4, result.Paths);
         Assert.Equal(4, result.Unresolved);
         Assert.Equal(Double3.Zero, result.Contributions.Total);
         Assert.Equal(4, field.Casts);
     }
-
     [Fact]
     public void BleedScalesTransportWhileReceiveAndFillRemainViewControls() {
-        var material = new SdfMaterial(new Vector3(0.5f, 0.25f, 1f), Emissive: 2,
-            Metal: 0.5f, Bleed: new Vector3(0.25f, 0.5f, 0.75f), Fill: Vector3.One, Receive: 7);
+        var material = new SdfMaterial(new Vector3(x: 0.5f, y: 0.25f, z: 1f), Emissive: 2,
+            Metal: 0.5f, Bleed: new Vector3(x: 0.25f, y: 0.5f, z: 0.75f), Fill: Vector3.One, Receive: 7);
         var surfaces = IrradianceSurfaces.FromMaterials([material]);
-        Assert.Equal(new Double3(0.0625, 0.0625, 0.375), surfaces.Albedo(0));
-        Assert.Equal(new Double3(0.25, 0.25, 1.5), surfaces.Emission(0));
+
+        Assert.Equal(new Double3(X: 0.0625, Y: 0.0625, Z: 0.375), surfaces.Albedo(0));
+        Assert.Equal(new Double3(X: 0.25, Y: 0.25, Z: 1.5), surfaces.Emission(0));
         var control = IrradianceSurfaces.FromMaterials([material with { Receive = 0, Fill = Vector3.Zero }]);
+
         Assert.Equal(surfaces.Albedo(0), control.Albedo(0));
         Assert.Equal(surfaces.Emission(0), control.Emission(0));
         var black = IrradianceSurfaces.FromMaterials([material with { Bleed = Vector3.Zero }]);
+
         Assert.Equal(Double3.Zero, black.Albedo(0));
         Assert.Equal(Double3.Zero, black.Emission(0));
     }

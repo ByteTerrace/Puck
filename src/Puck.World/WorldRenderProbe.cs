@@ -39,20 +39,22 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
     );
     /// <summary>The host's scheduled indirect work, summed once per active residency and retained after retirement.</summary>
     public ForwardingWorkCounterSource Indirect { get; } = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
+
     /// <summary>The residencies currently demanding an indirect cache, once each.</summary>
-    public IReadOnlyList<SdfWorldResidency> IndirectResidencies => m_indirectResidencies.Where(entry => entry.Value)
-        .Select(entry => entry.Key).ToArray();
+    public IReadOnlyList<SdfWorldResidency> IndirectResidencies => m_indirectResidencies.Where(predicate: entry => entry.Value)
+        .Select(selector: entry => entry.Key).ToArray();
     /// <summary>The active and retiring indirect allocations, once each. Read only on the console/frame owner
     /// thread; inactive entries leave the inventory when their tables have released every cache byte.</summary>
     public IReadOnlyList<SdfWorldResidency> IndirectAllocationResidencies {
         get {
-            foreach (var entry in m_indirectResidencies.Where(entry => !entry.Value &&
-                ((entry.Key.Tables?.IndirectBytes ?? default) == default)).ToArray()) {
-                m_indirectResidencies.Remove(entry.Key);
+            foreach (var entry in m_indirectResidencies.Where(predicate: entry => (!entry.Value &&
+                ((entry.Key.Tables?.IndirectBytes ?? default) == default))).ToArray()) {
+                m_indirectResidencies.Remove(key: entry.Key);
             }
             return m_indirectResidencies.Keys.ToArray();
         }
     }
+
     /// <summary>Records the existing graph host's demand transition without losing an allocation still retiring.</summary>
     /// <param name="residency">The unique residency registered by the host.</param>
     /// <param name="active">Whether the host currently demands its cache.</param>

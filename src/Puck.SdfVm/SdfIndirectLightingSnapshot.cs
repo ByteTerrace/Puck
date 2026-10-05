@@ -16,8 +16,9 @@ public sealed class SdfIndirectLightingSnapshot {
         Screens = screens;
         Tainted = tainted;
         var lights = new SdfLight[SdfLights.MaxLights];
-        frame.Lights.Pack(lights);
-        Lights = Array.AsReadOnly(lights);
+
+        frame.Lights.Pack(records: lights);
+        Lights = Array.AsReadOnly(array: lights);
     }
 
     /// <summary>Gets the immutable program whose full material identities and geometry the solve consumes.</summary>
@@ -51,9 +52,11 @@ public sealed class SdfIndirectLightingSnapshot {
     /// <returns>The source frame that produced this solve; no later live frame is consulted.</returns>
     public SdfFrame CopyFrame() {
         var lights = new SdfLights();
-        lights.CopyFrom(m_frame.Lights);
+
+        lights.CopyFrom(source: m_frame.Lights);
         var sky = new SdfSky();
-        sky.CopyFrom(m_frame.Sky);
+
+        sky.CopyFrom(source: m_frame.Sky);
         return m_frame with { Lights = lights, Sky = sky };
     }
 }

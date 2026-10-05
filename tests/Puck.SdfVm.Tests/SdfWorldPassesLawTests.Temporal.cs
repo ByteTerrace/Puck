@@ -22,7 +22,7 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Produce();
         var preceding = rig.HistoryFrames();
 
-        Assert.NotEqual(expected: 0u, actual: preceding);
+        Assert.NotEqual(actual: preceding, expected: 0u);
         Assert.True(condition: rig.PreviousValid());
         Assert.Equal(expected: tainted, actual: rig.Passes.TaintedOf(instance: "world"));
         if (tainted) { rig.Filling = true; }
@@ -31,7 +31,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         // Exercise the package's capture notification without asking the fake device to write a PNG. The recorded
         // production pass block must retain the ordinary sequence, or start the requested clean sequence at zero.
-        rig.Passes.BeginConvergence(instance: "world", convergence: convergence);
+        rig.Passes.BeginConvergence(convergence: convergence, instance: "world");
         rig.Produce();
         var restart = ((samples > 0) || tainted);
         var first = (restart ? 0u : (preceding + 1u));
@@ -47,7 +47,6 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: SdfTemporalHistory.Sample(index: (first + 1u)), actual: rig.Jitter());
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
     }
-
     [Fact]
     public void FollowingAViewOrCrossingToAnotherResidencyRestartsTheSequenceWithoutARebuild() {
         using var rig = new TemporalRig(views: 2, secondResidency: true);
@@ -491,7 +490,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
             m_gpu.SetBinds = null;
             return BitConverter.ToUInt32(m_gpu.Memory(bufferHandle: m_gpu.BufferAt(binding: 0, set: set)),
-                (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
+                ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member)));
         }
 
         public bool ShadowsEnabled {

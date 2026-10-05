@@ -16,6 +16,6 @@ public static class SdfLightMotion {
         var delta = (unit - anchorDirection);
         var chord = (2.0 * Math.Sin(a: (angle / 2.0)));
 
-        return (penumbra != anchorPenumbra) || (Vector3.Dot(vector1: delta, vector2: delta) > (chord * chord));
+        return ((penumbra != anchorPenumbra) || (Vector3.Dot(vector1: delta, vector2: delta) > (chord * chord)));
     }
 }

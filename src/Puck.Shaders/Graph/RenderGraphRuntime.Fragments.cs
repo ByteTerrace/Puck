@@ -48,7 +48,7 @@ public sealed partial class RenderGraphRuntime {
                     throw new InvalidDataException(message: $"Instance '{instance.Name}' selected a refused package fragment: {fault}"));
                 m_fragmentGraphs.Add(key: key, value: graph);
             }
-            candidate ??= (RenderGraphRuntimeGraph?[])m_graphs.Clone();
+            candidate ??= ((RenderGraphRuntimeGraph?[])m_graphs.Clone());
             candidate[index] = graph with { Inputs = factory.InputsOf(instance: instance.Name) };
             (changes ??= []).Add(item: (index, fragment));
         }

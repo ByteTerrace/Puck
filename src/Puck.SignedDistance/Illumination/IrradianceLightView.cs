@@ -32,15 +32,16 @@ public sealed class IrradianceLightView {
         m_toward = projection.TowardLight;
         m_resolution = projection.Resolution;
         m_distance = (projection.Far * 0.5);
-        TexelSize = (2.0 * projection.HalfWidth / projection.Resolution);
+        TexelSize = ((2.0 * projection.HalfWidth) / projection.Resolution);
         SweepRadius = ((sweepRadius >= 0.0) ? sweepRadius : projection.SweepRadius);
-        m_depth = new double[checked(m_resolution * m_resolution)];
+        m_depth = new double[checked((m_resolution * m_resolution))];
         for (var row = 0; (row < m_resolution); row++) {
             for (var column = 0; (column < m_resolution); column++) {
                 var direction = -projection.TowardLight;
                 var start = projection.Near;
                 var sweep = field.Sweep(origin: (projection.OriginAt(column: column, row: row) + (direction * start)), direction: direction,
                     radius: SweepRadius, maxDistance: Math.Max(val1: 0.0, val2: (projection.Far - start)));
+
                 m_depth[((row * m_resolution) + column)] = sweep.Kind switch {
                     IrradianceRayKind.Miss => double.PositiveInfinity,
                     IrradianceRayKind.Hit => (start + sweep.Distance),
@@ -50,7 +51,6 @@ public sealed class IrradianceLightView {
             }
         }
     }
-
     /// <summary>Initializes a new instance of the <see cref="IrradianceLightView"/> class and renders it.</summary>
     /// <param name="field">The field.</param>
     /// <param name="towardLight">The unit direction from a surface toward the light.</param>
@@ -133,7 +133,8 @@ public sealed class IrradianceLightView {
         }
 
         var travel = -Double3.Dot(a: offset, b: m_toward);
-        if ((m_projection is { } projection) && !projection.Project(point: point, column: out column, row: out row, travel: out travel)) {
+
+        if ((m_projection is { } projection) && !projection.Project(column: out column, point: point, row: out row, travel: out travel)) {
             return null;
         }
         var depth = m_depth[((row * m_resolution) + column)];

@@ -104,7 +104,7 @@ public sealed partial class SdfWorldTables {
         var geometry = Fnv1aHash.Create();
 
         geometry.Add(value: m_geometrySignature);
-        AddBrickGeometry(ref geometry);
+        AddBrickGeometry(hash: ref geometry);
         geometry.Add(values: block);
         var hash = Fnv1aHash.Create();
 
@@ -145,12 +145,11 @@ public sealed partial class SdfWorldTables {
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
     }
-
     // Uploads follow table packing: include their actual slot revisions and slice progress at the point of use.
     private void AddBrickGeometry(ref Fnv1aHash hash) {
         if (!m_brickPoolEnabled) { return; }
-        hash.Add(values: MemoryMarshal.AsBytes(m_brickSerials.AsSpan()));
-        hash.Add(values: MemoryMarshal.AsBytes(m_brickVoxelCursor.AsSpan()));
+        hash.Add(values: MemoryMarshal.AsBytes(span: m_brickSerials.AsSpan()));
+        hash.Add(values: MemoryMarshal.AsBytes(span: m_brickVoxelCursor.AsSpan()));
     }
 
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
@@ -225,11 +224,11 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
-        AddBrickGeometry(ref hash);
+        AddBrickGeometry(hash: ref hash);
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
-        hash.Add(value: BitConverter.SingleToUInt32Bits(frame.Views[view].Quality.SkyFieldFraction));
+        hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].Quality.SkyFieldFraction));
         AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;

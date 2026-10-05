@@ -50,67 +50,72 @@ public sealed class WorldInfinityViewLawTests {
             var columns = GpuWork.SubmissionKinds.Length;
             var evaluations = GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations);
             // Outside + two passes + four details: sky/plain, sky/lobby, composite/plain, composite/lobby.
-            counts[4 * columns + evaluations] += root;
-            counts[6 * columns + evaluations] += nested;
+            counts[((4 * columns) + evaluations)] += root;
+            counts[((6 * columns) + evaluations)] += nested;
         }
     }
 
     [Fact]
     public void OnlyTheViewersExecutedCompositeChangesItsNamedLayerDemand() {
         var views = new WorldInfinityViews();
-        views.Apply(WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("lobby")], nestingDepth: 2));
+
+        views.Apply(plan: WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("lobby")], nestingDepth: 2));
         var ledger = new GpuWorkLedger(framesInFlight: 1, name: "gpu.infinity-demand");
         var gpu = GpuWorkCounting.Wrap(new FakeGpuDevice().Services, ledger);
+
         ledger.Configure(1, ["sdf.world$sky", "sdf.world$composite"]);
-        ledger.ConfigureDetails([new(0, "plain"), new(0, "lobby"), new(1, "plain"), new(1, "lobby")]);
+        ledger.ConfigureDetails(details: [new(Detail: "plain", Pass: 0), new(Detail: "lobby", Pass: 0), new(Detail: "plain", Pass: 1), new(Detail: "lobby", Pass: 1)]);
         var sample = new GpuWorkSample();
+
         void Submit(long shown, bool standing = false) {
-            ledger.EnterPass(0);
+            ledger.EnterPass(pass: 0);
             ledger.LeavePass();
-            if (standing) { ledger.StandPass(1); } else { ledger.EnterPass(1); ledger.LeavePass(); }
-            ledger.ReadOnCompletion(new VisibleLayers(999, shown), 0);
-            gpu.QueueSubmitter.SubmitAndWait([]);
-            Assert.True(ledger.TryReadCompleted(sample));
+            if (standing) { ledger.StandPass(pass: 1); } else { ledger.EnterPass(pass: 1); ledger.LeavePass(); }
+            ledger.ReadOnCompletion(readback: new VisibleLayers(nested: shown, root: 999), slot: 0);
+            gpu.QueueSubmitter.SubmitAndWait(commandBufferHandles: []);
+            Assert.True(condition: ledger.TryReadCompleted(sample: sample));
         }
         Submit(7);
         views.Report(parent: null, sample);
-        Assert.True(views.Demand.IsDemanded("sky$lobby"));
-        Assert.False(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+        Assert.True(condition: views.Demand.IsDemanded(view: "sky$lobby"));
+        Assert.False(condition: views.Demand.IsDemanded(view: "sky$lobby$sky$lobby"));
         views.Report(parent: "sky$lobby", sample);
-        Assert.True(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+        Assert.True(condition: views.Demand.IsDemanded(view: "sky$lobby$sky$lobby"));
         Submit(0, standing: true);
         views.Report(parent: null, sample);
-        Assert.True(views.Demand.IsDemanded("sky$lobby"));
+        Assert.True(condition: views.Demand.IsDemanded(view: "sky$lobby"));
         Submit(0);
         views.Report(parent: null, sample);
-        Assert.False(views.Demand.IsDemanded("sky$lobby"));
-        Assert.True(views.Demand.IsDemanded("sky$lobby$sky$lobby"));
+        Assert.False(condition: views.Demand.IsDemanded(view: "sky$lobby"));
+        Assert.True(condition: views.Demand.IsDemanded(view: "sky$lobby$sky$lobby"));
     }
-
     [Fact]
     public void AnUnavailableObservationKeepsItsFitAndFallbackWithoutPublishingARead() {
         var views = new WorldInfinityViews();
-        views.Apply(WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("moon")], nestingDepth: 2));
-        views.Demand.Report("sky$lobby", 12);
+
+        views.Apply(plan: WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, _) => [Spec("moon")], nestingDepth: 2));
+        views.Demand.Report(texels: 12, view: "sky$lobby");
         var published = new WorldViewSet();
+
         published.Begin();
         views.Update(Viewer(), 1280, 720, QualityTier.High, published, available: _ => false);
-        _ = published.TryPublish(out _);
-        Assert.Empty(published.Instances.Views);
-        var fallback = Assert.Single(views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High));
-        Assert.Null(fallback.Producer);
-        Assert.True(views.FrameOf("sky$lobby").Visible);
+        _ = published.TryPublish(instances: out _);
+        Assert.Empty(collection: published.Instances.Views);
+        var fallback = Assert.Single(collection: views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High));
+
+        Assert.Null(@object: fallback.Producer);
+        Assert.True(condition: views.FrameOf(name: "sky$lobby").Visible);
 
         published.Begin();
-        views.Update(Viewer(), 1280, 720, QualityTier.High, published, available: name => name == "sky$lobby");
-        Assert.True(published.TryPublish(out var admitted));
-        var lobby = Assert.Single(admitted.Views);
-        Assert.Equal("sky$lobby", lobby.Name);
-        Assert.Empty(lobby.Reads!);
-        Assert.Equal("sky$lobby", Assert.Single(views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High)).Producer);
-        Assert.Null(Assert.Single(views.BindingsOf("sky$lobby", views.FrameOf("sky$lobby").Camera, 1280, 720, QualityTier.High)).Producer);
-    }
+        views.Update(Viewer(), 1280, 720, QualityTier.High, published, available: name => (name == "sky$lobby"));
+        Assert.True(condition: published.TryPublish(instances: out var admitted));
+        var lobby = Assert.Single(collection: admitted.Views);
 
+        Assert.Equal("sky$lobby", lobby.Name);
+        Assert.Empty(collection: lobby.Reads!);
+        Assert.Equal("sky$lobby", Assert.Single(collection: views.BindingsOf(null, Viewer(), 1280, 720, QualityTier.High)).Producer);
+        Assert.Null(@object: Assert.Single(collection: views.BindingsOf("sky$lobby", views.FrameOf(name: "sky$lobby").Camera, 1280, 720, QualityTier.High)).Producer);
+    }
     [Fact]
     public void AnotherCameraOfAShownWorldKeepsTheOriginalNamesAndCapDecision() {
         var plan = WorldInfinityViewPlan.Resolve([Spec("lobby")], (_, spec) => spec.Name switch {
@@ -118,17 +123,18 @@ public sealed class WorldInfinityViewLawTests {
             "moon" => [Spec("star")],
             _ => [],
         }, nestingDepth: 3, cap: 2);
-        var camera = plan.Below("sky$lobby");
-        var moon = Assert.Single(camera.Views);
+        var camera = plan.Below(parent: "sky$lobby");
+        var moon = Assert.Single(collection: camera.Views);
+
         Assert.Equal("sky$lobby$sky$moon", moon.Name);
-        Assert.Null(moon.Parent);
-        var fallback = Assert.Single(camera.Fallbacks);
+        Assert.Null(@object: moon.Parent);
+        var fallback = Assert.Single(collection: camera.Fallbacks);
+
         Assert.Equal(moon.Name, fallback.Parent);
         Assert.Equal("star", fallback.Spec.Name);
-        Assert.Equal(Assert.Single(plan.Fallbacks).Reason, fallback.Reason);
-        Assert.Same(plan, plan.Below(null));
+        Assert.Equal(Assert.Single(collection: plan.Fallbacks).Reason, fallback.Reason);
+        Assert.Same(plan, plan.Below(parent: null));
     }
-
     [Fact]
     public void AnInstanceIsNamedUnderTheSkyAndNestedUnderTheViewWhoseWorldShowsIt() {
         Assert.Equal(expected: "sky$lobby", actual: WorldViewNames.Sky(layer: "lobby"));
@@ -287,13 +293,13 @@ public sealed class WorldInfinityViewLawTests {
 
         first.Apply(plan: plan);
         second.Apply(plan: plan);
-        first.Demand.Report(view: "sky$lobby", texels: 12);
+        first.Demand.Report(texels: 12, view: "sky$lobby");
         set.Begin();
         first.Update(viewer: left, viewerWidth: 1280, viewerHeight: 720, tier: QualityTier.High, views: set);
         second.Update(viewer: right, viewerWidth: 640, viewerHeight: 360, tier: QualityTier.High, views: set);
         _ = set.TryPublish(instances: out var published);
-        var a = Assert.Single(collection: first.BindingsOf(parent: null, viewer: left, viewerWidth: 1280, viewerHeight: 720, tier: QualityTier.High));
-        var b = Assert.Single(collection: second.BindingsOf(parent: null, viewer: right, viewerWidth: 640, viewerHeight: 360, tier: QualityTier.High));
+        var a = Assert.Single(collection: first.BindingsOf(parent: null, tier: QualityTier.High, viewer: left, viewerHeight: 720, viewerWidth: 1280));
+        var b = Assert.Single(collection: second.BindingsOf(parent: null, tier: QualityTier.High, viewer: right, viewerHeight: 360, viewerWidth: 640));
 
         Assert.Equal(expected: "lobby", actual: a.Layer);
         Assert.Equal(expected: a.Layer, actual: b.Layer);
@@ -301,15 +307,15 @@ public sealed class WorldInfinityViewLawTests {
         Assert.Equal(expected: left.Forward, actual: a.Parameters.Forward);
         Assert.Equal(expected: right.Forward, actual: b.Parameters.Forward);
         Assert.NotEqual(expected: a.Parameters.Forward, actual: b.Parameters.Forward);
-        Assert.True(condition: published!.Views.Single(predicate: view => view.Name == a.Producer).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
-        Assert.False(condition: published.Views.Single(predicate: view => view.Name == b.Producer).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
+        Assert.True(condition: published!.Views.Single(predicate: view => (view.Name == a.Producer)).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
+        Assert.False(condition: published.Views.Single(predicate: view => (view.Name == b.Producer)).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
 
         var consumers = new[] { WorldViewGraphs.WorldInstance, "camera" }.Select(selector: static name =>
             new WorldView(Name: name, FilmsWorld: false, Demand: WorldViewDemand.Root, Width: 1, Height: 1, Refresh: RenderGraphRefresh.EveryFrame));
         var instances = WorldViewInstances.Of(views: [.. consumers, .. published.Views]).Instances(sources: []);
 
-        Assert.Equal(expected: a.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => view.Name == WorldViewGraphs.WorldInstance).Reads).Producer);
-        Assert.Equal(expected: b.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => view.Name == "camera").Reads).Producer);
+        Assert.Equal(expected: a.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => (view.Name == WorldViewGraphs.WorldInstance)).Reads).Producer);
+        Assert.Equal(expected: b.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => (view.Name == "camera")).Reads).Producer);
     }
     [Fact]
     public void ANestedViewFitsTheCameraOfTheViewThatRendersItsWorldAndNeverTheViewers() {

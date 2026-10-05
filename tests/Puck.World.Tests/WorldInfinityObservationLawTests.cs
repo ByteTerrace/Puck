@@ -17,6 +17,7 @@ namespace Puck.World.Tests;
 public sealed class WorldInfinityObservationLawTests {
     private const string Layer = "zenith";
     private const int Screen = WorldPrototypeFacets.DerivedFaceBase;
+
     private static readonly ulong Step = EngineTicks.PerRate(ratePerSecond: 30u);
 
     private static IHost Boot(TemporaryDirectory state) => state.Own(owner: WorldBootHarness.Compose(
@@ -29,7 +30,6 @@ public sealed class WorldInfinityObservationLawTests {
             },
         }
     ).Build());
-
     private static void Settle(WorldInstanceHost instances) {
         instances.Boot!.Server.Advance(stepTicks: Step);
         instances.SettleBootScreenSessions(stepped: true);
@@ -50,7 +50,7 @@ public sealed class WorldInfinityObservationLawTests {
         Assert.NotNull(@object: sky);
         Assert.NotNull(@object: screen.Observation);
         Assert.NotNull(@object: sky.Observation);
-        Assert.NotSame(expected: screen, actual: sky);
+        Assert.NotSame(actual: sky, expected: screen);
         Assert.Equal(expected: screen.InstanceName, actual: sky.InstanceName);
         Assert.NotEqual(expected: screen.Observation.Session, actual: sky.Observation.Session);
         Assert.Equal(expected: new WorldObservationSite.InfinityLayer(Name: Layer), actual: sky.Site);
@@ -69,7 +69,6 @@ public sealed class WorldInfinityObservationLawTests {
         Assert.Same(expected: screen, actual: instances.ScreenSession(instanceName: WorldInstanceHost.BootInstanceName, screenIndex: Screen));
         Assert.NotNull(@object: screen.Observation);
     }
-
     [Fact]
     public void InfinityObservationsFollowTheExistingNestingLimit() {
         using var state = new TemporaryDirectory(prefix: "puck-infinity-observation-depth-");
@@ -102,9 +101,8 @@ public sealed class WorldInfinityObservationLawTests {
 
         Assert.NotNull(@object: reopened);
         Assert.NotNull(@object: reopened.Observation);
-        Assert.NotSame(expected: first, actual: reopened);
+        Assert.NotSame(actual: reopened, expected: first);
     }
-
     [Fact]
     public void AnOverCapLiveEditIsRefusedBeforeAnyNewObservationOpens() {
         using var state = new TemporaryDirectory(prefix: "puck-infinity-observation-cap-");
@@ -123,7 +121,7 @@ public sealed class WorldInfinityObservationLawTests {
 
         WorldRenderSkyLayer[] Layers(int count) => [
             new WorldRenderSkyLayer.View(Name: Layer, Destination: "middle"),
-            .. Enumerable.Range(start: 1, count: (count - 1)).Select(selector: index =>
+            .. Enumerable.Range(count: (count - 1), start: 1).Select(selector: index =>
                 new WorldRenderSkyLayer.View(Name: $"extra{index}", Destination: "middle")),
         ];
 
@@ -133,11 +131,11 @@ public sealed class WorldInfinityObservationLawTests {
         ));
         Settle(instances: instances);
 
-        Assert.Contains(collection: echoes, filter: echo => echo.Rejected && echo.Message.Contains(value: $"infinity view {(SdfSky.MaxInfinityViews + 1)}", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: echoes, filter: echo => (echo.Rejected && echo.Message.Contains(comparisonType: StringComparison.Ordinal, value: $"infinity view {(SdfSky.MaxInfinityViews + 1)}")));
         Assert.Same(expected: before, actual: boot.Server.Definition);
         Assert.Same(expected: retained, actual: instances.InfinitySession(instanceName: WorldInstanceHost.BootInstanceName, layerName: Layer));
         Assert.NotNull(@object: retained.Observation);
-        for (var index = 1; index <= SdfSky.MaxInfinityViews; index++) {
+        for (var index = 1; (index <= SdfSky.MaxInfinityViews); index++) {
             Assert.Null(@object: instances.InfinitySession(instanceName: WorldInstanceHost.BootInstanceName, layerName: $"extra{index}"));
         }
 
@@ -148,7 +146,7 @@ public sealed class WorldInfinityObservationLawTests {
         Settle(instances: instances);
 
         Assert.Same(expected: retained, actual: instances.InfinitySession(instanceName: WorldInstanceHost.BootInstanceName, layerName: Layer));
-        for (var index = 1; index < SdfSky.MaxInfinityViews; index++) {
+        for (var index = 1; (index < SdfSky.MaxInfinityViews); index++) {
             Assert.NotNull(@object: instances.InfinitySession(instanceName: WorldInstanceHost.BootInstanceName, layerName: $"extra{index}")?.Observation);
         }
     }

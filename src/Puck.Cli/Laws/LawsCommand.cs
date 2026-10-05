@@ -91,7 +91,7 @@ internal static class LawsCommand {
               cannot be withheld; 130 cancelled after cleanup.
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Prove(
-            alsoLaws: parseResult.GetValue(option: alsoLawOption) ?? [],
+            alsoLaws: (parseResult.GetValue(option: alsoLawOption) ?? []),
             cancellationToken: cancellationToken,
             fileList: parseResult.GetValue(option: fileListOption),
             fix: parseResult.GetValue(option: fixOption),

@@ -296,12 +296,15 @@ internal static partial class LawProof {
 
         var selected = new HashSet<string>(comparer: StringComparer.Ordinal);
         var completed = new List<LawRun>();
-        for (var index = 0; index < laws.Count; index++) {
+
+        for (var index = 0; (index < laws.Count); index++) {
             var law = laws[index];
-            var reportDirectory = laws.Count == 1 ? results : Path.Combine(path1: results, path2: $"selector-{index:D3}");
+            var reportDirectory = ((laws.Count == 1) ? results : Path.Combine(path1: results, path2: $"selector-{index:D3}"));
+
             Console.Error.WriteLine(value: $"laws prove: running {law} {phase}; report {CliPaths.ToDisplay(fullPath: reportDirectory)}.");
             _ = Directory.CreateDirectory(path: reportDirectory);
             var run = runner.Run(cancellationToken: cancellationToken, law: law, project: project, results: reportDirectory, tree: tree);
+
             if (run.Error is { } error) {
                 refusal = Refuse(what: law, why: $"the run {phase} cannot be judged: {error}");
                 return false;
@@ -381,6 +384,7 @@ internal static partial class LawProof {
     public static int Prove(string repositoryRoot, string law, string? project, LawFix fix, ILawRunner runner, string scratchRoot, string lawTreesRoot, CancellationToken cancellationToken = default, Func<string, string[], ChildProcessResult>? cleanupGit = null, Action<string>? reportCleanupFailure = null, IReadOnlyList<string>? alsoLaws = null) {
         cancellationToken.ThrowIfCancellationRequested();
         string[] laws = [law, .. (alsoLaws ?? [])];
+
         foreach (var selector in laws) {
             if (!LawName().IsMatch(input: selector)) {
                 return Refuse(what: selector, why: "a law is a test name of dotted identifiers, such as Class or Class.Method.");
@@ -532,7 +536,7 @@ internal static partial class LawProof {
             }
             if (laws.Length > 1) {
                 foreach (var selector in laws) {
-                    if (!TryResolveProject(tree: tree, law: selector, named: null, project: out var owner, error: out projectError)) {
+                    if (!TryResolveProject(error: out projectError, law: selector, named: null, project: out var owner, tree: tree)) {
                         return Refuse(what: selector, why: projectError);
                     }
                     if (!string.Equals(a: owner, b: lawProject, comparisonType: Puck.Abstractions.PuckPaths.Comparison)) {
@@ -605,7 +609,7 @@ internal static partial class LawProof {
                 _ = evidence.Append(value: $"  {path}\n");
             }
 
-            for (var index = 0; index < laws.Length; index++) {
+            for (var index = 0; (index < laws.Length); index++) {
                 if (laws.Length > 1) { _ = evidence.Append(value: $"Selector: {laws[index]}\n"); }
                 Describe(evidence: evidence, phase: "Without the fix", run: without[index]);
                 if (without[index].Failures.Count == 0) {
@@ -624,7 +628,7 @@ internal static partial class LawProof {
             if (!TryPhase(cancellationToken: cancellationToken, laws: laws, phase: "with the fix restored", project: lawProject, refusal: out refusal, results: Path.Combine(path1: scratch, path2: "restored"), runs: out var with, runner: runner, tree: tree)) {
                 return refusal;
             }
-            for (var index = 0; index < laws.Length; index++) {
+            for (var index = 0; (index < laws.Length); index++) {
                 if (!without[index].Tests.SequenceEqual(second: with[index].Tests, comparer: StringComparer.Ordinal)) {
                     return Refuse(what: laws[index], why: "the withheld and restored runs executed different tests, so the failed law was not proven to pass.");
                 }

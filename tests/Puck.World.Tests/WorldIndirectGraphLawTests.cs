@@ -19,10 +19,11 @@ public sealed class WorldIndirectGraphLawTests {
         using var residency = new SdfWorldResidency(pipelines: SdfTestPipelines.Cache(), frameSource: new UncapturedSource(),
             kernels: SdfTestPipelines.Kernels(), name: "world", width: 1, height: 1, brickPoolVoxelCapacity: 0);
         var views = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
-        using var environment = new SdfSkyEnvironmentPasses(views);
+        using var environment = new SdfSkyEnvironmentPasses(views: views);
         using var host = new WorldViewGraphHost(documentDirectory: directory.RootPath,
-            packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: directory.PathOf("pipelines")))) {
-            Pickers = views, Environment = environment,
+            packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: directory.PathOf(name: "pipelines")))) {
+            Environment = environment,
+            Pickers = views,
         };
         using var instances = FakeGraphInstances.Attach(host: host, create: static name => new ShaderPipelineRenderNode(
             deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false, name: name,
@@ -31,39 +32,42 @@ public sealed class WorldIndirectGraphLawTests {
         host.Reconcile(views: new WorldViewDefaults());
 
         var graph = instances.Instances;
-        var producer = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment);
+        var producer = Assert.Single(collection: graph.Instances, predicate: instance => (instance.ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment));
+
         Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
-        var worlds = graph.Instances.Where(instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld).ToArray();
+        var worlds = graph.Instances.Where(predicate: instance => (instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld)).ToArray();
+
         Assert.Equal(4, worlds.Length);
-        Assert.Contains(worlds, instance => instance.Name == "world");
+        Assert.Contains(collection: worlds, filter: instance => (instance.Name == "world"));
         Assert.All(worlds, world => {
             Assert.Equal(ShaderPipelineResourceKind.Image, world.Output);
-            var read = Assert.Single(world.Reads, edge => edge.Producer == producer.Name);
+            var read = Assert.Single(collection: world.Reads, predicate: edge => (edge.Producer == producer.Name));
+
             Assert.Equal(ShaderPipelineResourceKind.Buffer, read.Kind);
-            Assert.False(read.PreviousFrame);
-            Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf(producer.Name)) < graph.Order.ToList().IndexOf(graph.IndexOf(world.Name)));
+            Assert.False(condition: read.PreviousFrame);
+            Assert.True(condition: (graph.Order.ToList().IndexOf(item: graph.IndexOf(name: producer.Name)) < graph.Order.ToList().IndexOf(item: graph.IndexOf(name: world.Name))));
         });
     }
-
     [Fact]
     public void TheSharedEnvironmentRunsBeforeTheFiniteSolvesPinPass() {
-        Assert.True(RenderGraphInstanceSet.TryCreate([
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate([
             new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment),
             new(Name: "world", Refresh: RenderGraphRefresh.EveryFrame, Passes: 1,
                 Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),
             new(Name: "world$1", Refresh: RenderGraphRefresh.EveryFrame, Passes: 1,
                 Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),
-        ], out var set, out var refusal), refusal?.Message);
+        ], out var set, out var refusal), userMessage: refusal?.Message);
         var graph = WorldIndirectGraph.Append(set, new Dictionary<string, string> { ["world"] = "cache", ["world$1"] = "cache" });
-        var cache = Assert.Single(graph.Instances, instance => instance.ExternalPackage == RenderGraphPackageCatalog.Indirect);
-        Assert.Equal(5, cache.Passes);
-        var environment = Assert.Single(cache.Reads, read => read.Producer == "environment");
-        Assert.False(environment.PreviousFrame);
-        Assert.Equal(ShaderPipelineResourceKind.Buffer, environment.Kind);
-        Assert.True(graph.Order.ToList().IndexOf(graph.IndexOf("environment")) < graph.Order.ToList().IndexOf(graph.IndexOf("cache")));
-    }
+        var cache = Assert.Single(collection: graph.Instances, predicate: instance => (instance.ExternalPackage == RenderGraphPackageCatalog.Indirect));
 
+        Assert.Equal(5, cache.Passes);
+        var environment = Assert.Single(collection: cache.Reads, predicate: read => (read.Producer == "environment"));
+
+        Assert.False(condition: environment.PreviousFrame);
+        Assert.Equal(ShaderPipelineResourceKind.Buffer, environment.Kind);
+        Assert.True(condition: (graph.Order.ToList().IndexOf(item: graph.IndexOf(name: "environment")) < graph.Order.ToList().IndexOf(item: graph.IndexOf(name: "cache"))));
+    }
     [Fact]
     public void SharedViewsReadOneBufferProducerAndOffAddsNothing() {
         var views = new[] {
@@ -84,14 +88,14 @@ public sealed class WorldIndirectGraphLawTests {
         Assert.All(enabled.Instances.Take(count: 3), instance => {
             Assert.Equal(expected: 2, actual: instance.Reads.Count);
             foreach (var edge in instance.Reads) {
-            Assert.Equal(ShaderPipelineResourceKind.Buffer, edge.Kind);
-            Assert.False(condition: edge.PreviousFrame);
-            var producer = enabled.Instances.Single(predicate: item => (item.Name == edge.Producer));
+                Assert.Equal(ShaderPipelineResourceKind.Buffer, edge.Kind);
+                Assert.False(condition: edge.PreviousFrame);
+                var producer = enabled.Instances.Single(predicate: item => (item.Name == edge.Producer));
 
-            Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
-            Assert.Contains(expected: producer.ExternalPackage, collection: new[] { RenderGraphPackageCatalog.Indirect, RenderGraphPackageCatalog.SdfWorld });
-            Assert.True(condition: (enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: producer)) <
-                enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: instance))));
+                Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
+                Assert.Contains(expected: producer.ExternalPackage, collection: new[] { RenderGraphPackageCatalog.Indirect, RenderGraphPackageCatalog.SdfWorld });
+                Assert.True(condition: (enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: producer)) <
+                    enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: instance))));
             }
         });
         Assert.Equal(expected: 2, actual: enabled.Instances.Skip(count: 3).Count(predicate: instance => (instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld)));
@@ -103,7 +107,7 @@ public sealed class WorldIndirectGraphLawTests {
 
         Assert.Equal(SdfIndirectTier.Medium, settings.IndirectTier);
         foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
-            Assert.Equal(tier, new WorldRenderSettings(new WorldRenderDefaults(Indirect: new(Tier: tier))).IndirectTier);
+            Assert.Equal(tier, new WorldRenderSettings(defaults: new WorldRenderDefaults(Indirect: new(Tier: tier))).IndirectTier);
         }
         foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
             var before = settings.Revision;
@@ -131,6 +135,6 @@ public sealed class WorldIndirectGraphLawTests {
     }
     private sealed class UncapturedSource : ISdfFrameSource {
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            throw new InvalidOperationException("Graph composition needs no captured frame or GPU submission.");
+            throw new InvalidOperationException(message: "Graph composition needs no captured frame or GPU submission.");
     }
 }

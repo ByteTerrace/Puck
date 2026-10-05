@@ -29,6 +29,7 @@ public static class WorldViewNames {
     /// <param name="cache">The producer's complete generated name.</param>
     /// <returns>The name with its final light-camera part.</returns>
     public static string IndirectLight(string cache) => GeneratedName.Append(name: cache, part: "indirect-light");
+
     /// <summary>The first part of a session screen's view name.</summary>
     public const string SessionHead = "session";
     /// <summary>The part between a camera's name and the seat number in a seat-relative camera's view name.</summary>

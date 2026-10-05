@@ -98,16 +98,18 @@ public static class WorldIndirectGraph {
             var reads = new List<RenderGraphRead> {
                 new(Producer: WorldViewNames.IndirectLight(cache: cache), Kind: ShaderPipelineResourceKind.Buffer),
             };
-            foreach (var view in cacheByView.Where(pair => pair.Value == cache)) {
-                foreach (var read in set.Instances[set.IndexOf(view.Key)].Reads) {
-                    if (set.Instances[set.IndexOf(read.Producer)].ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment &&
-                        !reads.Any(existing => existing.Producer == read.Producer)) { reads.Add(read); }
+
+            foreach (var view in cacheByView.Where(predicate: pair => (pair.Value == cache))) {
+                foreach (var read in set.Instances[set.IndexOf(name: view.Key)].Reads) {
+                    if ((set.Instances[set.IndexOf(name: read.Producer)].ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment) &&
+                        !reads.Any(predicate: existing => (existing.Producer == read.Producer))) { reads.Add(item: read); }
                 }
             }
             instances.Add(item: new(Name: WorldViewNames.IndirectLight(cache: cache), Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfWorldPackage.LightViewFragment(maps: 0).Passes.Count, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld));
             var fragment = SdfWorldPackage.IndirectFragment(bytes: sizeof(uint));
-            if (reads.Count > 1) { fragment = SdfSkyEnvironmentGraph.WithIndirectEnvironment(fragment); }
+
+            if (reads.Count > 1) { fragment = SdfSkyEnvironmentGraph.WithIndirectEnvironment(fragment: fragment); }
             instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: fragment.Passes.Count,
                 Reads: reads,
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.Indirect));

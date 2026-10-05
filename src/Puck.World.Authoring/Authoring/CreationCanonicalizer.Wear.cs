@@ -52,7 +52,7 @@ public static partial class CreationCanonicalizer {
             path: $"palette[{index}].soften"
         );
 
-        if (entry.Receive is { } receive && (!float.IsFinite(receive) || receive < 0f)) {
+        if ((entry.Receive is { } receive) && (!float.IsFinite(f: receive) || (receive < 0f))) {
             errors.Add(item: new(
                 Message: "receive must be finite and non-negative.",
                 Path: $"palette[{index}].receive"
@@ -62,7 +62,7 @@ public static partial class CreationCanonicalizer {
         Color(entry.Bleed, "bleed");
 
         void Color(string? value, string name) {
-            if (value is not null && !HexColor.TryParse(rgb: out _, value: value) && !HexColor.IsStateBinding(value: value)) {
+            if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !HexColor.IsStateBinding(value: value)) {
                 errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
             }
         }

@@ -19,21 +19,26 @@ views {
   }
 }
 cameras [{
-  name: "eye"
-  renderWidth: 96
-  renderHeight: 96
-  rig {
     name: "eye"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [0, 0, 0]))
-      lookAt(subject: worldPoint(point: [0, 0, -1]))
-      fieldOfView(fieldOfViewRadians: 1)
-    ]
+    renderWidth: 96
+    renderHeight: 96
+    rig {
+      name: "eye"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 0]))
+        lookAt(subject: worldPoint(point: [0, 0, -1]))
+        fieldOfView(fieldOfViewRadians: 1)
+      ]
+    }
   }
-}]
+]
 render {
-  atmosphere { fog { density: 0 } }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
   sky {
     layers [
       gradient(name: "red", stops: [{ elevation: -1, color: "#FF0000" }, { elevation: 1, color: "#FF0000" }])
@@ -47,4 +52,6 @@ render {
     ]
   }
 }
-timeline { clocks [{ name: "second", periodSeconds: 1 }] }
+timeline {
+  clocks [{ name: "second", periodSeconds: 1 }]
+}

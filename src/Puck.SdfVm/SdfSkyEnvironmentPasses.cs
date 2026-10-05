@@ -14,12 +14,13 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
 
     /// <inheritdoc/>
     public bool OwnsBuffer(string? part) => true;
+
     /// <inheritdoc/>
     public bool SamplesReads => true;
+
     /// <inheritdoc/>
     public RenderGraphReadEpoch? ReadEpochOf(string instance, string producer) =>
-        Resolve(instance)?.Residency is { } residency ? views.ReadEpochOf(residency, producer) : null;
-
+        ((Resolve(instance: instance)?.Residency is { } residency) ? views.ReadEpochOf(producer: producer, residency: residency) : null);
     /// <summary>Names a residency's one producer while at least one of its views is demanded.</summary>
     /// <param name="name">The generated producer name.</param>
     /// <param name="residency">The existing residency whose environment it projects.</param>
@@ -81,15 +82,17 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         views.Begin(residency: residency);
         if (!residency.Prepare(context: context)) { return false; }
         var tables = residency.Tables!;
+
         tables.PollSkyEnvironment();
         // Image cadence is decided only after the runtime acquires the same reads that recording would sample.
-        return !tables.SkyEnvironmentHasImages && !tables.SkyEnvironmentOwes &&
-            !tables.ScreenEmissionHasImages && !tables.ScreenEmissionOwes;
+        return (!tables.SkyEnvironmentHasImages && !tables.SkyEnvironmentOwes &&
+            !tables.ScreenEmissionHasImages && !tables.ScreenEmissionOwes);
     }
     /// <inheritdoc/>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
-        var registration = Resolve(instance: context.Instance) ?? throw new InvalidOperationException(message: $"Environment instance '{context.Instance}' names no residency.");
+        var registration = (Resolve(instance: context.Instance) ?? throw new InvalidOperationException(message: $"Environment instance '{context.Instance}' names no residency."));
         var residency = registration.Residency;
+
         residency.Retain();
         try {
             await residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -104,36 +107,43 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     };
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
-        try { return new SdfSkyEnvironmentRecorder(context: context, groups: groups, built: (Built)built!, views: views); }
-        catch { built?.Dispose(); throw; }
+        try { return new SdfSkyEnvironmentRecorder(built: ((Built)built!), context: context, groups: groups, views: views); } catch { built?.Dispose(); throw; }
     }
 
     private sealed record Registration(SdfWorldResidency Residency, int View);
+
     private Registration? Resolve(string instance) { lock (m_gate) { return m_instances.GetValueOrDefault(key: instance); } }
 
     private sealed class EnvironmentCounter(SdfSkyEnvironmentPasses owner, string instance) : IShaderPipelineStorageCounter {
         private readonly Lock m_gate = new();
+
         private SdfWorldTables? m_tables;
+
         private int m_view = -1;
+
         private long m_revision;
+
         public long Revision {
             get {
                 var registration = owner.Resolve(instance: instance);
                 var tables = registration?.Residency.Tables;
-                var view = registration?.View ?? -1;
+                var view = (registration?.View ?? -1);
+
                 lock (m_gate) {
-                    if (!ReferenceEquals(objA: tables, objB: m_tables) || view != m_view) { m_tables = tables; m_view = view; m_revision++; }
+                    if (!ReferenceEquals(objA: tables, objB: m_tables) || (view != m_view)) { m_tables = tables; m_view = view; m_revision++; }
                     return m_revision;
                 }
             }
         }
-        public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Width: width, Height: height);
+
+        public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Height: height, Width: width);
     }
 
     internal sealed class Built(SdfWorldResidency residency, SdfWorldTables tables, int view) : IDisposable {
         public SdfWorldResidency Residency { get; } = residency;
         public SdfWorldTables Tables { get; } = tables;
         public int View { get; } = view;
+
         public void Dispose() => Residency.Release();
     }
 }

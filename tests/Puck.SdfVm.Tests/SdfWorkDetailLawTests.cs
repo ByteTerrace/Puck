@@ -33,14 +33,15 @@ public sealed class SdfWorkDetailLawTests {
         Assert.True(condition: SdfSkyDetails.IsFixed(label: "indirect-near"));
         Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_INDIRECT_NEAR 5u", actualString: SdfSkyKindsHlsl.Generate());
         var retained = details.Labels;
+
         for (var index = 0; (index < SdfSkyDetails.InitialCapacity); index++) {
-            Assert.Equal(expected: (uint)(8 + index), actual: details.RowOf(label: $"layer{index}"));
+            Assert.Equal(expected: ((uint)(8 + index)), actual: details.RowOf(label: $"layer{index}"));
         }
-        Assert.Equal(expected: 8 + SdfSkyDetails.InitialCapacity, actual: details.Labels.Count);
+        Assert.Equal(expected: (8 + SdfSkyDetails.InitialCapacity), actual: details.Labels.Count);
         Assert.Equal(expected: 8, actual: retained.Count);
-        Assert.Equal(expected: retained, actual: details.Labels.Take(retained.Count));
+        Assert.Equal(expected: retained, actual: details.Labels.Take(count: retained.Count));
         Assert.Equal(expected: 6u, actual: details.RowOf(label: "gradient"));
-        Assert.Equal(expected: (uint)details.Labels.Count, actual: details.RowOf(label: "another"));
+        Assert.Equal(expected: ((uint)details.Labels.Count), actual: details.RowOf(label: "another"));
         Assert.Equal(expected: "another", actual: details.Labels[^1]);
 
         var block = new byte[SdfFrameBlock.SizeBytes];

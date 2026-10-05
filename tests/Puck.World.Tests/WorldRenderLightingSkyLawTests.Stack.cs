@@ -140,10 +140,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             }))
         );
     }
-    [Theory]
     [InlineData(WorldSkyVisibility.Camera, SdfSkyVisibility.Camera)]
     [InlineData(WorldSkyVisibility.Lighting, SdfSkyVisibility.Lighting)]
     [InlineData(WorldSkyVisibility.Both, SdfSkyVisibility.Both)]
+    [Theory]
     public void ADeclaredPanoramaAdmitsAndPacksItsAuthoredVisibility(WorldSkyVisibility visibility, SdfSkyVisibility expected) {
         var definition = Fixtures.BuildDocument() with {
             RenderRaw = BaseDefaults() with {
@@ -152,17 +152,19 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             },
         };
 
-        Assert.True(WorldDefinitionValidator.TryValidate(definition, neighbours: null, reason: out var reason), reason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition, neighbours: null, reason: out var reason), userMessage: reason);
         var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: definition, mirror: ClientFixtures.StateMirror(definition), revision: 0);
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
-        environment.Sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: environment.Lights);
-        var panorama = Assert.Single(layers.Take((int)block.LayerCount), layer => layer.Kind == SdfSkyLayerKind.Panorama);
 
-        Assert.Equal(expected, panorama.Visibility);
-        var parameters = SdfSky.PayloadOf<SdfSkyPanorama>(ref panorama);
-        Assert.Equal(Fixtures.TestPatternScreenIndex, parameters.Screen);
-        Assert.Equal(0.7f, parameters.Intensity);
+        environment.Sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: environment.Lights);
+        var panorama = Assert.Single(collection: layers.Take(count: ((int)block.LayerCount)), predicate: layer => (layer.Kind == SdfSkyLayerKind.Panorama));
+
+        Assert.Equal(actual: panorama.Visibility, expected: expected);
+        var parameters = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref panorama);
+
+        Assert.Equal(actual: parameters.Screen, expected: Fixtures.TestPatternScreenIndex);
+        Assert.Equal(actual: parameters.Intensity, expected: 0.7f);
     }
     [Fact]
     public void SkyLayerName_AFixedRowsLabel_RefusesByName_ControlOtherNameClean() {

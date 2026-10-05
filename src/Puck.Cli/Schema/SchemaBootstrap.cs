@@ -6,6 +6,7 @@ namespace Puck.Cli.Schema;
 internal static class SchemaBootstrap {
     private const string Project = "src/Puck.Cli/Puck.Cli.csproj";
     private const string Artifact = "Puck.Cli.dll";
+
     private static readonly TimeSpan BuildBudget = TimeSpan.FromMinutes(value: 10);
     private static readonly TimeSpan SchemaBudget = TimeSpan.FromMinutes(value: 2);
 
@@ -23,17 +24,16 @@ internal static class SchemaBootstrap {
             repositoryRoot: repositoryRoot, directory: run.Path, bundle: bundle, check: check, output: output, clock: clock
         ));
     }
-
     // Injectable only at the existing process boundary: the build, required artifact and retained logs remain real.
     internal static int RunInDirectory(string repositoryRoot, string directory, bool bundle, bool check, string? output,
         TimeProvider clock, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null) {
         var artifacts = Path.Combine(path1: directory, path2: "artifacts");
         var binaries = Path.Combine(path1: directory, path2: "cli");
         var logs = Path.Combine(path1: directory, path2: "logs");
-        var capture = runner ?? ((arguments, timeout) => CliProcess.RunCaptured(
+        var capture = (runner ?? ((arguments, timeout) => CliProcess.RunCaptured(
             fileName: "dotnet", arguments: arguments, input: string.Empty, timeout: timeout,
             workingDirectory: repositoryRoot, clock: clock
-        ));
+        )));
 
         if (!CliProjectBuild.TryBuild(
             repositoryRoot: repositoryRoot, project: Project, outputDirectory: binaries, logDirectory: logs,
@@ -49,6 +49,7 @@ internal static class SchemaBootstrap {
         }
 
         List<string> command = [Path.Combine(path1: binaries, path2: Artifact), "schema"];
+
         if (bundle) { command.Add(item: "--bundle"); }
         if (check) { command.Add(item: "--check"); }
         if (output is not null) { command.AddRange(collection: ["--output", Path.GetFullPath(path: output)]); }

@@ -12,18 +12,19 @@ internal sealed partial class WorldInspectionCommandModule {
     public Action<CommandResult>? Report { get; set; }
 
     private CommandResult Explain(CommandContext context, WireArgs args) {
-        if (args.Count != 0) { return CommandResult.Usage(verb: "world.explain", form: ""); }
-        if (cursor is null || gpu is null) { return CommandResult.Error("[world.explain: requires GPU presentation]"); }
+        if (args.Count != 0) { return CommandResult.Usage(form: "", verb: "world.explain"); }
+        if ((cursor is null) || (gpu is null)) { return CommandResult.Error(output: "[world.explain: requires GPU presentation]"); }
         var result = cursor.Explain(context.Slot, DescribeExplanation);
+
         if (result.Settlement is not { } settlement) { return result; }
         context.TextSession?.HoldWhile(hold: () => !settlement.IsSettled);
         return CommandResult.Settling(settlement, late: verdict => Report?.Invoke(verdict));
     }
-
     private CommandResult DescribeExplanation(SdfPickResult answer) {
-        var reference = answer.Indirect is { } indirect ? WorldIndirectReference.Evaluate(indirect) : null;
-        cursor!.RetainReference(reference);
+        var reference = ((answer.Indirect is { } indirect) ? WorldIndirectReference.Evaluate(indirect) : null);
+
+        cursor!.RetainReference(reference: reference);
         return new CommandResult(string.Create(CultureInfo.InvariantCulture,
-            $"[world.explain: request={answer.Request} pixel={answer.X},{answer.Y}/{answer.Width},{answer.Height} material={answer.MaterialName ?? "unavailable"}\n{m_indirectText.Read(answer.Indirect, reference)}]"));
+            $"[world.explain: request={answer.Request} pixel={answer.X},{answer.Y}/{answer.Width},{answer.Height} material={(answer.MaterialName ?? "unavailable")}\n{m_indirectText.Read(pick: answer.Indirect, reference: reference)}]"));
     }
 }

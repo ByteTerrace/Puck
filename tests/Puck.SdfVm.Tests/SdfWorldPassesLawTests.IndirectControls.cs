@@ -6,38 +6,46 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
-    [Theory]
     [InlineData(SdfIndirectTier.Medium, 4, 3)]
     [InlineData(SdfIndirectTier.High, 0, 1)]
     [InlineData(SdfIndirectTier.High, 2, 3)]
+    [Theory]
     public void IndirectControlsCapFiniteDepthAndKeepApplyOutsideThePinnedSolve(SdfIndirectTier tier, int bounces, int sweeps) {
         var gpu = new FakeGpuDevice();
-        var source = Frame() with { FarDistance = 12f, IndirectTier = tier, IndirectBounces = bounces,
-            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Emission | SdfIndirectSources.Feedback };
+        var source = Frame() with {
+            FarDistance = 12f,
+            IndirectTier = tier,
+            IndirectBounces = bounces,
+            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Emission | SdfIndirectSources.Feedback,
+        };
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-            frameSource: new CapturingFrameSource(() => source), height: Extent, kernels: SdfTestPipelines.Kernels(),
+            frameSource: new CapturingFrameSource(capture: () => source), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "indirect-controls", pipelines: SdfTestPipelines.Cache(), width: Extent);
-        var context = ContextOf(gpu);
-        residency.ProduceFirstFrame(context);
+        var context = ContextOf(gpu: gpu);
+
+        residency.ProduceFirstFrame(context: context);
         var cache = residency.Tables!.Indirect!;
+
         void Produce() {
             residency.BeginFrame();
-            Assert.True(residency.Prepare(context));
-            _ = residency.Submit(context);
+            Assert.True(condition: residency.Prepare(context: context));
+            _ = residency.Submit(context: context);
             cache.Submitted(); cache.SubmittedLighting();
         }
         void Complete() => TestLiveness.Within(frames: 64, step: () => {
-            Produce(); return cache.IsComplete && cache.LightingComplete;
+            Produce(); return (cache.IsComplete && cache.LightingComplete);
         }, building: () => false, reason: () => "The finite indirect control solve did not complete.");
         Complete();
         Assert.Equal(sweeps, cache.PublishedSweeps);
         var held = cache.PublishedLightingSource;
-        Assert.NotNull(held);
+
+        Assert.NotNull(@object: held);
         var certificate = cache.CertificateRevision;
+
         source = source with { IndirectApply = new(.25f, Vector3.UnitX, 0f) };
         Produce();
         Assert.Same(held, cache.PublishedLightingSource);
-        Assert.True(cache.LightingComplete);
+        Assert.True(condition: cache.LightingComplete);
         source = source with { IndirectGains = source.IndirectGains with { Lights = .5f } };
         Complete();
         Assert.NotSame(held, cache.PublishedLightingSource);

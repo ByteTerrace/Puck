@@ -92,8 +92,8 @@ public static partial class WorldSessionLevers {
         render ??= WorldRenderDefaults.Absent;
 
         var captured = (render with {
-            Indirect = (render.Indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) == settings.IndirectTier
-                ? render.Indirect : (render.Indirect ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier },
+            Indirect = (((render.Indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) == settings.IndirectTier)
+                ? render.Indirect : (render.Indirect ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier }),
             Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
             ShadowLights = settings.ShadowSlots.Slots,
             ShadowFadeSlots = settings.ShadowSlots.FadeSlots,

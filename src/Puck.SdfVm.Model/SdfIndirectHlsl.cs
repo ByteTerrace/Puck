@@ -25,16 +25,18 @@ public static class SdfIndirectHlsl {
         }
         foreach (var field in typeof(SdfIndirectComparisonLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
             var value = field.GetRawConstantValue();
+
             if (field.FieldType == typeof(float)) {
-                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectAlternative{field.Name} = {(float)value!:R};\n");
+                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectAlternative{field.Name} = {((float)value!):R};\n");
             } else {
                 text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectAlternative{field.Name} = {value}u;\n");
             }
         }
         foreach (var field in typeof(SdfIndirectNearLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
             var value = field.GetRawConstantValue();
+
             if (field.FieldType == typeof(float)) {
-                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectNear{field.Name} = {(float)value!:R};\n");
+                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectNear{field.Name} = {((float)value!):R};\n");
             } else {
                 text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectNear{field.Name} = {value}u;\n");
             }

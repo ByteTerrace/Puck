@@ -27,11 +27,10 @@ public sealed partial class ShaderPipelineRenderNode {
     /// submission was made, on the one queue.</summary>
     /// <param name="leases">The leases, moved out of their list.</param>
     internal void HoldUntilLatestSubmission(LeaseRetireList leases) => leases.MoveTo(destination: m_slots[m_latestSlot].Leases);
-
     /// <summary>Holds one lifetime notification until the latest submission completes. Its slot releases the
     /// notification before its fence can be reused or disposed.</summary>
     /// <param name="lease">The notification of a resource read before this submission.</param>
-    internal void HoldUntilLatestSubmission(in GpuImageLease lease) => m_slots[m_latestSlot].Leases.Hold(in lease);
+    internal void HoldUntilLatestSubmission(in GpuImageLease lease) => m_slots[m_latestSlot].Leases.Hold(lease: in lease);
 
     /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
     /// installed graph samples when it renders.</summary>

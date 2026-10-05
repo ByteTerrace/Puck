@@ -30,11 +30,11 @@ public sealed class WorldCompareReportingLawTests {
         Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var sessions = host.Services.GetRequiredService<TerminalConsoleSessions>();
-        var inspection = Assert.Single(host.Services.GetServices<ICommandModule>(),
-            module => module.GetType().Name == "WorldInspectionCommandModule");
-        var report = verb == "world.compare"
+        var inspection = Assert.Single(collection: host.Services.GetServices<ICommandModule>(),
+            predicate: module => (module.GetType().Name == "WorldInspectionCommandModule"));
+        var report = ((verb == "world.compare")
             ? host.Services.GetRequiredService<WorldCompareCapture>().Report
-            : (Action<CommandResult>?)inspection.GetType().GetProperty("Report")!.GetValue(inspection);
+            : (Action<CommandResult>?)inspection.GetType().GetProperty(name: "Report")!.GetValue(obj: inspection));
         var message = $"[{verb}: late presentation verdict — β]";
 
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);

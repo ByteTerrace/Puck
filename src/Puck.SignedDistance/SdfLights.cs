@@ -180,7 +180,7 @@ public sealed class SdfLights {
             );
         }
 
-        if (!float.IsFinite(light.Bounce) || (light.Bounce < 0f)) {
+        if (!float.IsFinite(f: light.Bounce) || (light.Bounce < 0f)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(light), message: $"light {index}'s bounce must be finite and nonnegative.");
         }
 

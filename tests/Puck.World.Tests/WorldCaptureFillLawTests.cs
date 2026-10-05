@@ -316,7 +316,7 @@ public sealed class WorldCaptureFillLawTests {
 
         var fill = scene.Fills.Acquire(rgba: ImageSourceDescriptor.DefaultCaptureFill);
 
-        Assert.True(fill.Image.IsSameDeviceImage);
+        Assert.True(condition: fill.Image.IsSameDeviceImage);
         Assert.Equal(fill.ImageViewHandle, fill.Image.ImageViewHandle);
         Assert.Equal((1U, 1U), (fill.Image.Width, fill.Image.Height));
         Assert.Equal(GpuPixelFormat.R16G16B16A16Float, fill.Image.Format);

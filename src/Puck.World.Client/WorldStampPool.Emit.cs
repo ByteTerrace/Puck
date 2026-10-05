@@ -15,12 +15,14 @@ public sealed partial class WorldStampPool {
             shapes: shapes
         );
 
-        if (ownInstance) { _ = builder.BeginInstanceDynamic(
+        if (ownInstance) {
+            _ = builder.BeginInstanceDynamic(
             slot: boundSlot,
             boundOffset: Vector3.Zero,
             boundRadius: boundRadius,
             indirect: indirect
-        ); }
+        );
+        }
 
         if (groupNeedsScope) {
             _ = builder.PushField(compose: SdfBlendOp.Union);
@@ -90,7 +92,7 @@ public sealed partial class WorldStampPool {
     // placement's accumulator, and excluding this placement from indirect queries removes all its operands together.
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
         var document = live?.Creation.EngineDocument;
-        var indirect = live?.Row?.Indirect ?? live?.Indirect ?? SdfIndirectParticipation.Default;
+        var indirect = (live?.Row?.Indirect ?? (live?.Indirect ?? SdfIndirectParticipation.Default));
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
         // registers its creation's real palette, an unused one a single placeholder entry — both within the probe.
@@ -166,8 +168,9 @@ public sealed partial class WorldStampPool {
         );
 
         var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
+
         if (hasText) {
-            _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, (anyPartFollows ? 2f * reach : reach) + GroupBoundMargin, indirect: indirect)
+            _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin), indirect: indirect)
                 .PushField(compose: SdfBlendOp.Union);
         }
 
@@ -251,13 +254,15 @@ public sealed partial class WorldStampPool {
                 : ((WarpedReach(primitiveReach: tightPrimitiveReach) + dilateWorld) + onionWorld)
             ) + trimMargin);
 
-            if (!hasText) { _ = builder.BeginInstanceDynamic(
+            if (!hasText) {
+                _ = builder.BeginInstanceDynamic(
                 slot: slot,
                 boundOffset: Vector3.Zero,
                 boundRadius: boundRadius,
                 active: active,
                 indirect: indirect
-            ); }
+            );
+            }
             EmitShape(
                 bend: (placed?.Bend ?? 0f),
                 builder: builder,
@@ -333,12 +338,12 @@ public sealed partial class WorldStampPool {
 
             EmitGroup(
                 boundRadius: boundRadius,
-                indirect: indirect,
-                ownInstance: !hasText,
                 boundSlot: boundSlot,
                 builder: builder,
                 fromIndex: index,
                 groupId: groupId,
+                indirect: indirect,
+                ownInstance: !hasText,
                 paletteIds: paletteIds,
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,

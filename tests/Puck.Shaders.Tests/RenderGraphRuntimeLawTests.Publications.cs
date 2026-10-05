@@ -26,7 +26,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(step: () => {
             Next();
 
-            return (world.Seen.Count == 1 && world.Seen[0].ImageView != 0);
+            return ((world.Seen.Count == 1) && (world.Seen[0].ImageView != 0));
         });
         var original = Assert.Single(collection: world.Publications);
         var node = runtime.NodeOf(instance: ReadSource)!;
@@ -35,7 +35,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(original, recorders.Publications[ReadSource]);
         Assert.True(condition: original.IsKnown);
         node.Paused = true;
-        for (var held = 0; held < 4; held++) {
+        for (var held = 0; (held < 4); held++) {
             Next();
             Assert.Equal(expected: original, actual: Assert.Single(collection: world.Publications));
             Assert.Equal(original, recorders.Publications[ReadSource]);
@@ -44,11 +44,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         node.Reset();
         node.Paused = false;
         Next();
-        Assert.True(condition: Assert.Single(collection: world.Publications).Sequence > original.Sequence);
+        Assert.True(condition: (Assert.Single(collection: world.Publications).Sequence > original.Sequence));
         Assert.Same(expected: original.Owner, actual: Assert.Single(collection: world.Publications).Owner);
-        Assert.Equal(Assert.Single(world.Publications), recorders.Publications[ReadSource]);
+        Assert.Equal(Assert.Single(collection: world.Publications), recorders.Publications[ReadSource]);
     }
-
     [Fact]
     public void AForwardedExternalImageKeepsItsAcquiredPublicationThroughRepeatedReads() {
         var gpu = new FakePipelineGpu();
@@ -88,8 +87,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(step: () => {
             Next();
 
-            return (runtime.NodeOf(instance: "mid")!.PublishedBinding == "world" &&
-                world.Seen.Count == 1 && world.Seen[0].ImageView != 0);
+            return ((runtime.NodeOf(instance: "mid")!.PublishedBinding == "world") &&
+                (world.Seen.Count == 1) && (world.Seen[0].ImageView != 0));
         });
         var original = Assert.Single(collection: world.Publications);
 
@@ -97,7 +96,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(condition: original.IsKnown);
         Assert.Equal(expected: source.Produced, actual: original.Sequence);
         Assert.Equal(original, recorders.Publications["mid"]);
-        for (var read = 0; read < 4; read++) {
+        for (var read = 0; (read < 4); read++) {
             Next();
             Assert.Equal(expected: original, actual: Assert.Single(collection: world.Publications));
         }
@@ -107,7 +106,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var changed = Assert.Single(collection: world.Publications);
 
         Assert.Same(expected: source, actual: changed.Owner);
-        Assert.Equal(expected: original.Sequence + 1L, actual: changed.Sequence);
+        Assert.Equal(expected: (original.Sequence + 1L), actual: changed.Sequence);
         Assert.Equal(changed, recorders.Publications["mid"]);
         Assert.Equal(expected: source.ImageView, actual: Assert.Single(collection: world.Seen).ImageView);
     }

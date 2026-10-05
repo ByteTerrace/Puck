@@ -15,31 +15,33 @@ public static class SdfIndirectApproach {
     /// <param name="spacing">The receiver's lattice spacing.</param>
     /// <returns>The packed approach, or zero when either certificate or the finite representation is unavailable.</returns>
     public static uint Pack(Vector3 surface, Vector3 direction, Vector3 sample, float clearance, float surfaceClearance, float spacing) {
-        var distance = Vector3.Dot(surface - sample, direction);
-        if (!float.IsFinite(distance) || !float.IsFinite(clearance) || !float.IsFinite(surfaceClearance) ||
-            !float.IsFinite(spacing) || !(spacing > 0) || !(clearance > 0) || surfaceClearance < 0 || distance < 0 ||
-            distance > spacing * 0.5f || distance > 65504f || Vector3.Distance(surface, sample) > clearance + surfaceClearance) { return 0; }
-        var offset = BitConverter.HalfToUInt16Bits((Half)distance);
-        var reconstructed = Point(surface, direction, offset);
-        var radius = clearance - Vector3.Distance(sample, reconstructed);
-        if (!(radius > 0) || Vector3.Distance(surface, reconstructed) > spacing * 0.5f) { return 0; }
-        var rounded = BitConverter.HalfToUInt16Bits((Half)Math.Min(radius, 65504f));
-        if ((float)BitConverter.UInt16BitsToHalf(rounded) > radius) { rounded--; }
-        var stored = (float)BitConverter.UInt16BitsToHalf(rounded);
-        if (!(stored > 0) || Vector3.Distance(surface, reconstructed) > stored + surfaceClearance) { return 0; }
-        return offset | ((uint)rounded << 16);
-    }
+        var distance = Vector3.Dot(vector1: (surface - sample), vector2: direction);
 
+        if (!float.IsFinite(f: distance) || !float.IsFinite(f: clearance) || !float.IsFinite(f: surfaceClearance) ||
+            !float.IsFinite(f: spacing) || !(spacing > 0) || !(clearance > 0) || (surfaceClearance < 0) || (distance < 0) ||
+            (distance > (spacing * 0.5f)) || (distance > 65504f) || (Vector3.Distance(value1: surface, value2: sample) > (clearance + surfaceClearance))) { return 0; }
+        var offset = BitConverter.HalfToUInt16Bits(value: ((Half)distance));
+        var reconstructed = Point(direction: direction, packed: offset, surface: surface);
+        var radius = (clearance - Vector3.Distance(value1: sample, value2: reconstructed));
+
+        if (!(radius > 0) || (Vector3.Distance(value1: surface, value2: reconstructed) > (spacing * 0.5f))) { return 0; }
+        var rounded = BitConverter.HalfToUInt16Bits(value: ((Half)Math.Min(val1: radius, val2: 65504f)));
+
+        if (((float)BitConverter.UInt16BitsToHalf(value: rounded)) > radius) { rounded--; }
+        var stored = ((float)BitConverter.UInt16BitsToHalf(value: rounded));
+
+        if (!(stored > 0) || (Vector3.Distance(value1: surface, value2: reconstructed) > (stored + surfaceClearance))) { return 0; }
+        return offset | (((uint)rounded) << 16);
+    }
     /// <summary>Reconstructs the point named by the low half of an approach word.</summary>
     /// <param name="surface">The same accepted camera-ray sample used when packing.</param>
     /// <param name="direction">The same unit camera-ray direction.</param>
     /// <param name="packed">The approach word.</param>
     /// <returns>The point whose certified clearance <see cref="Clearance"/> returns.</returns>
     public static Vector3 Point(Vector3 surface, Vector3 direction, uint packed) =>
-        surface - direction * (float)BitConverter.UInt16BitsToHalf((ushort)packed);
-
+        (surface - (direction * ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)packed)))));
     /// <summary>Reads the certified clearance; zero means the primary march published no approach.</summary>
     /// <param name="packed">The approach word.</param>
     /// <returns>A nonnegative radius, zero for the absent word.</returns>
-    public static float Clearance(uint packed) => (float)BitConverter.UInt16BitsToHalf((ushort)(packed >> 16));
+    public static float Clearance(uint packed) => ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packed >> 16))));
 }

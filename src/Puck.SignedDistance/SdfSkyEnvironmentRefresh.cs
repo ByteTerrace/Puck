@@ -80,10 +80,10 @@ public sealed class SdfSkyEnvironmentRefresh {
     /// <param name="layers">The packed layer table.</param>
     /// <returns>Whether a panorama contributes to the lighting map.</returns>
     public static bool HasImages(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) {
-        var count = Math.Min((int)block.LayerCount, layers.Length);
+        var count = Math.Min(val1: ((int)block.LayerCount), val2: layers.Length);
 
-        for (var index = 0; index < count; index++) {
-            if (layers[index].Kind == SdfSkyLayerKind.Panorama && layers[index].Opacity > 0f && SdfSkyEnvironment.IsLit(in layers[index])) { return true; }
+        for (var index = 0; (index < count); index++) {
+            if ((layers[index].Kind == SdfSkyLayerKind.Panorama) && (layers[index].Opacity > 0f) && SdfSkyEnvironment.IsLit(layer: in layers[index])) { return true; }
         }
         return false;
     }

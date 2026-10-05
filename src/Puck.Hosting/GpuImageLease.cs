@@ -13,11 +13,10 @@ public readonly record struct GpuImagePublication(object? Owner, long Sequence) 
     public bool IsKnown => ((Owner is not null) && (Sequence > 0));
 
     /// <summary>Compares the publication stream by object identity and its completed write sequence.</summary>
-    public bool Equals(GpuImagePublication other) => (ReferenceEquals(Owner, other.Owner) && (Sequence == other.Sequence));
+    public bool Equals(GpuImagePublication other) => (ReferenceEquals(objA: Owner, objB: other.Owner) && (Sequence == other.Sequence));
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine((Owner is null ? 0 : RuntimeHelpers.GetHashCode(Owner)), Sequence);
+    public override int GetHashCode() => HashCode.Combine(value1: ((Owner is null) ? 0 : RuntimeHelpers.GetHashCode(o: Owner)), value2: Sequence);
 }
-
 /// <summary>One image a render node samples for one submitted frame. Most images carry only an image-view handle; an
 /// image another producer keeps writing also carries a release callback and token, and the node that sampled it holds
 /// the lease in a <see cref="LeaseRetireList"/> until the GPU has finished the submission that read it. An image another

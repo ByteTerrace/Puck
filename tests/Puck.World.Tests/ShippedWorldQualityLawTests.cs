@@ -79,8 +79,8 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
         );
         Assert.True(condition: (table.Preset(tier: QualityTier.Medium)?.Temporal ?? false));
         Assert.True(condition: (table.Preset(tier: QualityTier.High)?.Temporal ?? false));
-        Assert.Equal(SdfIndirectTier.Medium, table.Preset(QualityTier.Medium)?.Indirect);
-        Assert.Equal(SdfIndirectTier.High, table.Preset(QualityTier.High)?.Indirect);
+        Assert.Equal(SdfIndirectTier.Medium, table.Preset(tier: QualityTier.Medium)?.Indirect);
+        Assert.Equal(SdfIndirectTier.High, table.Preset(tier: QualityTier.High)?.Indirect);
         Assert.Equal(
             actual: (table with { LowRaw = null, MediumRaw = null, HighRaw = null }),
             expected: WorldRenderDefaults.Absent

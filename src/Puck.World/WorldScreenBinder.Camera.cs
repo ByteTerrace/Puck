@@ -1727,7 +1727,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                     : default)
             ) {
                 Image = Surface.SameDeviceImage(
-                    imageHandle: m_importedSurfaces is { } surfaces ? surfaces[slot].ImageHandle : m_images[slot].ImageHandle,
+                    imageHandle: ((m_importedSurfaces is { } surfaces) ? surfaces[slot].ImageHandle : m_images[slot].ImageHandle),
                     imageViewHandle: handle, width: m_images[slot].Width, height: m_images[slot].Height,
                     format: m_images[slot].Format),
             };

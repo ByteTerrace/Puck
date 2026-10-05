@@ -86,8 +86,11 @@ public sealed partial class SdfWorldPassesLawTests {
             case "medium": frame.Sky.Atmosphere.MediumExtinction = 0.2f; goto case "lighting";
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
             case "palette":
-                frame = frame with { Program = new SdfProgram(frame.Program.Instructions,
-                    [new SdfMaterial(new Vector3(.2f, .4f, .6f))]), ProgramChanged = true };
+                frame = frame with {
+                    Program = new SdfProgram(frame.Program.Instructions,
+                    [new SdfMaterial(new Vector3(x: .2f, y: .4f, z: .6f))]),
+                    ProgramChanged = true,
+                };
                 goto case "lighting";
             case "indirect-method":
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { IndirectMethod = SdfIndirectMethod.Screen } }] };

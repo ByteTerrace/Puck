@@ -150,28 +150,30 @@ public sealed class IrradianceScheduleLawTests {
         // Red legs: nominal fine reach misses x = 8, and a far-distance sphere around the lattice position misses
         // x = 10.25, which a probe relocated 0.45 toward +X can hit within its 10-unit ray.
     }
-
     [Fact]
     public void ReplacingOneCornerProbeWithdrawsItsWholeBrickAndNeighborPartitions() {
         IrradianceLevel[] levels = [new(Name: "local", Radius: 0, Reach: 0, Spacing: 1, Strata: 1)];
         var schedule = new IrradianceSchedule(levels, [2], traceBudget: 128, classifyBudget: 2, exitDistance: 0.1);
-        var inputs = new IrradianceFrameInputs([Double3.Zero], [new(Double3.Zero, double.PositiveInfinity)],
-            Double3.Zero, new(4.1, 0.1, 0.1));
-        schedule.Frame(inputs);
-        Assert.True(schedule.IsComplete);
-        var neighbor = new IrradianceBrickKey(0, 0, 0, 0);
-        var replaced = new IrradianceBrickKey(0, 1, 0, 0);
-        var motion = new IrradianceSphere(new(7, 0, 0), 0.01);
-        Assert.Equal(replaced, Assert.Single(schedule.MarkGeometry(motion, motion)));
-        Assert.False(schedule.IsClassified(replaced));
-        Assert.False(schedule.IsClassified(neighbor));
-        var plan = schedule.Frame(inputs);
-        Assert.Equal(replaced, Assert.Single(plan.Placed));
+        var inputs = new IrradianceFrameInputs([Double3.Zero], [new(Center: Double3.Zero, Radius: double.PositiveInfinity)],
+            Double3.Zero, new(X: 4.1, Y: 0.1, Z: 0.1));
+
+        schedule.Frame(inputs: inputs);
+        Assert.True(condition: schedule.IsComplete);
+        var neighbor = new IrradianceBrickKey(Level: 0, X: 0, Y: 0, Z: 0);
+        var replaced = new IrradianceBrickKey(Level: 0, X: 1, Y: 0, Z: 0);
+        var motion = new IrradianceSphere(Center: new(X: 7, Y: 0, Z: 0), Radius: 0.01);
+
+        Assert.Equal(replaced, Assert.Single(collection: schedule.MarkGeometry(current: motion, previous: motion)));
+        Assert.False(condition: schedule.IsClassified(key: replaced));
+        Assert.False(condition: schedule.IsClassified(key: neighbor));
+        var plan = schedule.Frame(inputs: inputs);
+
+        Assert.Equal(replaced, Assert.Single(collection: plan.Placed));
         Assert.Equal(new[] { neighbor, replaced }, plan.Classified.Order().ToArray());
         Assert.Equal(64, plan.Traces.Count);
-        Assert.All(plan.Traces, update => Assert.Equal(replaced, IrradianceLattice.BrickOf(update.Probe)));
+        Assert.All(plan.Traces, update => Assert.Equal(replaced, IrradianceLattice.BrickOf(key: update.Probe)));
         // x=4 is outside the changed sphere's 0.55-unit sweep, but its shared placement is rewritten too.
-        Assert.Contains(plan.Traces, update => update.Probe == new IrradianceProbeKey(0, 4, 0, 0));
+        Assert.Contains(collection: plan.Traces, filter: update => (update.Probe == new IrradianceProbeKey(Level: 0, X: 4, Y: 0, Z: 0)));
     }
 
     private static IrradianceSchedule Schedule(int[] pools, int traceBudget = 40, int classifyBudget = 3) => new(

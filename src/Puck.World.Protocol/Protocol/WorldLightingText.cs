@@ -469,17 +469,18 @@ public static class WorldLightingText {
         echo = AppendSky(echo: echo.Segment(), sky: definition.Render.Sky, atmosphere: definition.Render.Atmosphere);
         var environment = definition.Render.Environment;
         var indirect = definition.Render.Indirect;
+
         echo = echo.Segment().Head(head: "indirect")
             .Field(key: "tier", value: (indirect?.Tier ?? SdfIndirectTier.Medium).ToString().ToLowerInvariant())
-            .Field(key: "lights", value: Describe(indirect?.Sources?.Lights ?? new BindableScalar(1f)))
-            .Field(key: "emission", value: Describe(indirect?.Sources?.Emission ?? new BindableScalar(1f)))
-            .Field(key: "screens", value: Describe(indirect?.Sources?.Screens ?? new BindableScalar(1f)))
-            .Field(key: "sky", value: Describe(indirect?.Sources?.Sky ?? new BindableScalar(1f)))
-            .Field(key: "feedback", value: Describe(indirect?.Sources?.Feedback ?? new BindableScalar(1f)))
-            .Field(key: "bounces", value: indirect?.Bounces?.ToString(CultureInfo.InvariantCulture) ?? "tier")
-            .Field(key: "intensity", value: Describe(indirect?.Apply?.Intensity ?? new BindableScalar(1f)))
-            .Field(key: "tint", value: Describe(indirect?.Apply?.Tint ?? new BindableColor("#FFFFFF")))
-            .Field(key: "contact", value: Describe(indirect?.Apply?.Contact ?? new BindableScalar(1f)));
+            .Field(key: "lights", value: Describe((indirect?.Sources?.Lights ?? new BindableScalar(literal: 1f))))
+            .Field(key: "emission", value: Describe((indirect?.Sources?.Emission ?? new BindableScalar(literal: 1f))))
+            .Field(key: "screens", value: Describe((indirect?.Sources?.Screens ?? new BindableScalar(literal: 1f))))
+            .Field(key: "sky", value: Describe((indirect?.Sources?.Sky ?? new BindableScalar(literal: 1f))))
+            .Field(key: "feedback", value: Describe((indirect?.Sources?.Feedback ?? new BindableScalar(literal: 1f))))
+            .Field(key: "bounces", value: (indirect?.Bounces?.ToString(provider: CultureInfo.InvariantCulture) ?? "tier"))
+            .Field(key: "intensity", value: Describe((indirect?.Apply?.Intensity ?? new BindableScalar(literal: 1f))))
+            .Field(key: "tint", value: Describe((indirect?.Apply?.Tint ?? new BindableColor(Raw: "#FFFFFF"))))
+            .Field(key: "contact", value: Describe((indirect?.Apply?.Contact ?? new BindableScalar(literal: 1f))));
 
         echo = echo
             .Segment()

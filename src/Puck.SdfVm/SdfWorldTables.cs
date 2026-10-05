@@ -528,7 +528,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             scope: scope,
             tables: this
         );
-        m_screenEmission = new ScreenEmissionPass(this, gpu, scope);
+        m_screenEmission = new ScreenEmissionPass(gpu: gpu, scope: scope, tables: this);
 
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the

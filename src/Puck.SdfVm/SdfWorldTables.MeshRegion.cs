@@ -98,7 +98,7 @@ public sealed partial class SdfWorldTables {
         }
 
         m_meshDrawCount = ((uint)draws.Count);
-        StageIndirectMeshes(draws);
+        StageIndirectMeshes(draws: draws);
     }
     // Replaces the region with one grown by half again (or to the need, if larger), once the device is idle, since every
     // view's mesh pass reads it. The replacement starts owing every word, so the next write sends the whole packed list,

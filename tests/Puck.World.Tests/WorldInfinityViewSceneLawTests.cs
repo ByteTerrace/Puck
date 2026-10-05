@@ -80,17 +80,17 @@ public sealed class WorldInfinityViewSceneLawTests {
         var first = Fitted(spec: spec).Camera;
         var second = new CameraSnapshot(Position: new Vector3(x: -11f, y: 7f, z: 3f), Right: first.Right,
             Up: first.Up, Forward: first.Forward, TanHalfFieldOfView: first.TanHalfFieldOfView, AspectRatio: first.AspectRatio);
-        var nested = new SdfSkyViewBinding(Layer: "nested", Producer: "camera$sky$nested", Parameters: default);
+        var nested = new SdfSkyViewBinding(Layer: "nested", Parameters: default, Producer: "camera$sky$nested");
         SdfViewSnapshot[] views = [
-            new(Camera: first, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Screen } },
-            new(Camera: second, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { SkyViews = [nested], Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Cone } },
+            new(Camera: first, Region: new NormalizedRect(Height: 1, Width: 1, X: 0, Y: 0)) { Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Screen } },
+            new(Camera: second, Region: new NormalizedRect(Height: 1, Width: 1, X: 0, Y: 0)) { SkyViews = [nested], Quality = new SdfViewQuality { IndirectMethod = SdfIndirectMethod.Cone } },
         ];
         using var emitter = new WorldSessionSceneEmitter(
             domains: new WorldValueDomainGuard(), effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination)));
-        var scene = new WorldInfinityViewScene(inner: emitter, views: () => views, spec: spec);
+        var scene = new WorldInfinityViewScene(inner: emitter, spec: spec, views: () => views);
         var frame = new SdfCompositionFrameSource(dresser: scene, emitters: [emitter]).CaptureFrame(
-            deltaSeconds: 0, interpolationAlpha: 0, width: 160, height: 144);
+            deltaSeconds: 0, height: 144, interpolationAlpha: 0, width: 160);
 
         Assert.Equal(expected: new[] { first, second }, actual: frame.Views.Select(selector: static view => view.Camera));
         Assert.Equal(expected: nested, actual: Assert.Single(collection: frame.Views[1].SkyViews));

@@ -62,7 +62,7 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(material),
             subject: "A material fill tint"
         );
-        RequireNonNegative(value: material.Bleed ?? Vector3.One, paramName: nameof(material), subject: "A material bleed tint");
+        RequireNonNegative(value: (material.Bleed ?? Vector3.One), paramName: nameof(material), subject: "A material bleed tint");
         RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
@@ -209,10 +209,10 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundOffset,
             emit: emit,
+            indirect: indirect,
             isDynamic: true,
             radius: boundRadius,
-            slot: slot,
-            indirect: indirect
+            slot: slot
         );
 
         return this;
@@ -272,10 +272,10 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundCenter,
             emit: emit,
+            indirect: indirect,
             isDynamic: false,
             radius: boundRadius,
-            slot: 0,
-            indirect: indirect
+            slot: 0
         );
 
         return this;

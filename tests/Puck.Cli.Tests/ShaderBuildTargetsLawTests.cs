@@ -207,6 +207,7 @@ public sealed partial class ShaderBuildTargetsLawTests {
         // Restore identical tracked inputs with newer timestamps, as a persistent proof clone can do. Content is
         // unchanged, so neither compilation nor publication may run again, even with inputs newer than every output.
         var rewritten = File.GetLastWriteTimeUtc(path: sidecar).AddSeconds(value: 10);
+
         foreach (var path in new[] { "fixture.proj", "Assets/Shaders/a.comp.hlsl", "Assets/Shaders/conventional.hlsli", "Assets/Shaders/generated.hlsli", "Shared/outside.hlsli" }) {
             fixture.Write(path: path, text: File.ReadAllText(path: fixture.PathOf(path: path)));
             File.SetLastWriteTimeUtc(path: fixture.PathOf(path: path), lastWriteTimeUtc: rewritten);
@@ -246,28 +247,28 @@ public sealed partial class ShaderBuildTargetsLawTests {
         string[] properties = [];
 
         switch (change) {
-            case "source": File.WriteAllText(path: source, contents: "changed source"); break;
-            case "include": File.WriteAllText(path: include, contents: "changed declaration"); break;
+            case "source": File.WriteAllText(contents: "changed source", path: source); break;
+            case "include": File.WriteAllText(contents: "changed declaration", path: include); break;
             case "options": properties = ["PuckDxcComputeSpirv=-spirv -O3 -T cs_6_6 -E main -D CHANGED_RECIPE=1"]; break;
             case "command":
                 // A distinct real command changes the recipe while running the same controlled compiler behavior.
-                var alternate = fixture.PathOf(path: "another-dxc" + Path.GetExtension(path: fixture.CompilerPath));
+                var alternate = fixture.PathOf(path: ("another-dxc" + Path.GetExtension(path: fixture.CompilerPath)));
                 File.Copy(sourceFileName: fixture.CompilerPath, destFileName: alternate);
                 if (!OperatingSystem.IsWindows()) {
-                    File.SetUnixFileMode(path: alternate, mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, path: alternate);
                 }
                 properties = [$"DxcCommand={Puck.Abstractions.PuckPaths.Normalize(path: alternate)}"];
                 break;
-            case "bytecode": File.WriteAllText(path: bytecode, contents: "corrupted compiled bytes"); break;
+            case "bytecode": File.WriteAllText(contents: "corrupted compiled bytes", path: bytecode); break;
             case "sidecar": File.AppendAllText(path: sidecar, contents: File.ReadAllText(path: sidecar)); break;
-            case "recipe-missing": File.WriteAllLines(path: sidecar, contents: File.ReadAllLines(path: sidecar).Where(predicate: static line => !line.StartsWith(value: "recipe:", comparisonType: StringComparison.Ordinal))); break;
+            case "recipe-missing": File.WriteAllLines(path: sidecar, contents: File.ReadAllLines(path: sidecar).Where(predicate: static line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:"))); break;
             case "bytecode-missing": File.Delete(path: bytecode); break;
             case "sidecar-missing": File.Delete(path: sidecar); break;
             default: throw new ArgumentOutOfRangeException(paramName: nameof(change));
         }
         // Old input times cannot make changed bytes fresh; collection must refuse before a compiler repairs them.
         foreach (var path in new[] { source, include }) {
-            File.SetLastWriteTimeUtc(path: path, lastWriteTimeUtc: DateTime.UnixEpoch);
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UnixEpoch, path: path);
         }
         var collect = fixture.Run(target: "CollectShaderBytecode", properties: properties);
 
@@ -381,7 +382,7 @@ public sealed partial class ShaderBuildTargetsLawTests {
 
             WriteCompiler(mode: dxc);
             // Recipe item metadata is evaluated by the import, so the compiler must be selected before it.
-            project.AddFirst(content: new XElement("PropertyGroup", new XElement("PuckComputeShaderDxilEnabled", "false"), new XElement("DxcCommand", CompilerPath)));
+            project.AddFirst(content: new XElement("PropertyGroup", new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"), new XElement("DxcCommand", CompilerPath)));
             project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());

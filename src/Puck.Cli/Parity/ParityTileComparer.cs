@@ -145,6 +145,7 @@ internal static class ParityTileComparer {
 
                 var failed = ((metrics.MeanDelta > tileMeanDeltaThreshold) ||
                     (metrics.MaxDelta > tileMaxDeltaThreshold));
+
                 if (!hasWorst || (failed && passed) || ((failed == !passed) && IsWorse(candidate: metrics, current: worst))) {
                     worst = metrics;
                     hasWorst = true;

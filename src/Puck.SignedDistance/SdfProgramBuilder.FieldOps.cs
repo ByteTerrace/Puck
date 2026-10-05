@@ -227,7 +227,8 @@ public sealed partial class SdfProgramBuilder {
         }
 
         var scope = m_fieldScopes.Pop();
-        m_fieldScopes.Push((
+
+        m_fieldScopes.Push(item: (
             SdfBlendOp.Morph,
             0f,
             scope.ShapeCountAtOpen,
@@ -268,7 +269,8 @@ public sealed partial class SdfProgramBuilder {
         }
 
         var scope = m_fieldScopes.Pop();
-        m_fieldScopes.Push((
+
+        m_fieldScopes.Push(item: (
             blendOp,
             radius,
             scope.ShapeCountAtOpen,
@@ -341,7 +343,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((compose, smooth, m_shapeCount, default, 0f));
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push(item: (compose, smooth, m_shapeCount, default, 0f));
 
         // A bare marker: the compose blend + smooth ride the POP instruction (a POP is the candidate), so the PUSH
         // carries no data — the shader only saves the accumulator and reseeds. Not routed through Transform() because
@@ -395,7 +397,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push(item: (
             SdfBlendOp.Morph,
             0f,
             m_shapeCount,
@@ -449,7 +451,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push((
+        (m_fieldScopes ??= new(capacity: MaxFieldScopeDepth)).Push(item: (
             (subtraction
             ? SdfBlendOp.StairsSubtraction
             : SdfBlendOp.StairsUnion),

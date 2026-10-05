@@ -14,7 +14,6 @@ public abstract record WorldObservationSite : IComparable<WorldObservationSite> 
     /// <summary>A screen or placement face on the owning world.</summary>
     /// <param name="Index">The screen's resolved index.</param>
     public sealed record Screen(int Index) : WorldObservationSite;
-
     /// <summary>A named view layer in the owning world's sky.</summary>
     /// <param name="Name">The authored layer name.</param>
     public sealed record InfinityLayer(string Name) : WorldObservationSite;
@@ -30,7 +29,6 @@ public abstract record WorldObservationSite : IComparable<WorldObservationSite> 
         (InfinityLayer left, InfinityLayer right) => StringComparer.Ordinal.Compare(x: left.Name, y: right.Name),
         _ => throw new InvalidOperationException(message: "Unknown world observation site."),
     };
-
     /// <summary>Describes the screen index or named infinity layer.</summary>
     /// <returns>The surface's diagnostic label.</returns>
     public sealed override string ToString() => this switch {
@@ -39,7 +37,6 @@ public abstract record WorldObservationSite : IComparable<WorldObservationSite> 
         _ => throw new InvalidOperationException(message: "Unknown world observation site."),
     };
 }
-
 /// <summary>One session a world's screen or infinity layer observes its destination through, owned by the authority that
 /// declares it: the destination it resolved, the mirror its observation feeds, and the observation itself. A presentation
 /// reads it through <see cref="WorldInstanceHost.ScreenSession"/> or <see cref="WorldInstanceHost.InfinitySession"/>
@@ -85,12 +82,14 @@ public sealed class WorldObservationSession {
 public sealed partial class WorldInstanceHost {
     // Each owning instance's observations, and the definition they were reconciled against.
     private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedDictionary<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
+
     // Both indexes publish together. Presentation's per-frame lookups use value keys, so reading an existing session
     // does not construct another observation identity.
     private sealed record PublishedObservations(
         IReadOnlyDictionary<(string Owner, int Screen), WorldObservationSession> Screens,
         IReadOnlyDictionary<(string Owner, string Layer), WorldObservationSession> InfinityLayers
     );
+
     private volatile PublishedObservations m_publishedScreenSessions = new(Screens: new Dictionary<(string Owner, int Screen), WorldObservationSession>(), InfinityLayers: new Dictionary<(string Owner, string Layer), WorldObservationSession>());
 
     /// <summary>Reads the session a world's screen observes its destination through. Safe from any thread.</summary>
@@ -98,7 +97,6 @@ public sealed partial class WorldInstanceHost {
     /// <param name="screenIndex">The screen index.</param>
     /// <returns>The session, or <see langword="null"/> when the screen declares none or its owner holds none now.</returns>
     public WorldObservationSession? ScreenSession(string instanceName, int screenIndex) => m_publishedScreenSessions.Screens.GetValueOrDefault(key: (instanceName, screenIndex));
-
     /// <summary>Reads the authority-owned session a named infinity layer observes its destination through.
     /// It follows the same admission and nesting lifetime as a screen session. Safe from any thread.</summary>
     /// <param name="instanceName">The owning instance.</param>
@@ -126,7 +124,7 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        foreach (var layer in definition.Render.Sky?.Layers ?? []) {
+        foreach (var layer in (definition.Render.Sky?.Layers ?? [])) {
             if (layer is WorldRenderSkyLayer.View { Name: { } name, Destination: { } destination }) {
                 declared[new WorldObservationSite.InfinityLayer(Name: name)] = new WorldScreenSource.Session(Destination: destination);
             }
@@ -250,7 +248,7 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        m_publishedScreenSessions = new PublishedObservations(Screens: screens, InfinityLayers: layers);
+        m_publishedScreenSessions = new PublishedObservations(InfinityLayers: layers, Screens: screens);
     }
     // Opens one declared session: resolves its destination through the observation door, then observes it through the
     // destination's own admission. A refusal that leaves a destination this resolution started with nobody in it stops

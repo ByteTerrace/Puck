@@ -88,7 +88,7 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
-        if (TryResolveInfinityView(name, out view)) { return true; }
+        if (TryResolveInfinityView(name: name, view: out view)) { return true; }
 
         if (SessionFeedOf(name: name) is not { } feed) {
             return TryResolveNestedCameraView(
@@ -275,7 +275,7 @@ internal sealed partial class WorldScreenBinder {
         EnsureFeeds();
 
         foreach (var feed in m_feeds) {
-            if ((feed.FrameSource is null) || !InfinityShown(feed)) {
+            if ((feed.FrameSource is null) || !InfinityShown(feed: feed)) {
                 continue;
             }
 
@@ -299,7 +299,7 @@ internal sealed partial class WorldScreenBinder {
                 Width: width
             ) {
                 OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
-                Parent = (feed.ParentFeed?.RegistrationName ?? ((feed.ParentInfinity is { } infinity) ? InfinityParent(infinity) : null)),
+                Parent = (feed.ParentFeed?.RegistrationName ?? ((feed.ParentInfinity is { } infinity) ? InfinityParent(entry: infinity) : null)),
                 Reads = feed.Nested?.Reads,
             });
         }

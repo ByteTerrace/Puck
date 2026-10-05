@@ -182,15 +182,16 @@ public sealed class SdfKernelInterfaces {
         ShaderWorkCounters.DetailRowMember,
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyLayers, structure: ShaderInterfaceStructure.From<SdfSkyLayer>()),
-        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ScreenMappings, element: ShaderValueType.Float4),
-        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ScreenSources, length: SdfWorldPackage.ScreenSourceCount, type: ShaderValueType.Float4),
-        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.Samplers, length: SdfWorldPackage.SamplerCount),
-        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyEnvironment, element: ShaderValueType.Uint2),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ScreenMappings),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SdfWorldPackage.ScreenSourceCount, name: SdfWorldPackage.ScreenSources, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, length: SdfWorldPackage.SamplerCount, name: SdfWorldPackage.Samplers),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.Pass, name: SkyEnvironment),
         Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),
         Written(element: ShaderValueType.Float4, name: SkyCoefficientsWritten),
         Written(element: ShaderValueType.Float4, name: ScreenEmissionWritten),
         ShaderWorkCounters.BufferMember,
     ];
+
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the

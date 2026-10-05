@@ -1,7 +1,13 @@
 schema: "puck.world.definition.v1"
 basis: "scenes"
 documentId: "indirect-near-gloss-fog"
-render { atmosphere { fog { density: 0.2 } } }
+render {
+  atmosphere {
+    fog {
+      density: 0.2
+    }
+  }
+}
 prototypes {
   prototype "near-study" {
     document {

@@ -55,7 +55,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString("0.###", CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
     }
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
@@ -581,6 +581,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     "cone" => SdfIndirectMethod.Cone,
                     _ => ((SdfIndirectMethod?)null),
                 });
+
                 if (method is not { } selected) { return CommandResult.Usage(form: "cache|screen|cone", verb: "world.indirect-method"); }
                 settings.IndirectMethod = selected;
                 return Echo();
@@ -593,7 +594,8 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             description: "Pauses new update admission in every active residency: world.indirect-freeze [on|off]. Reads keep the retained cache; an already admitted frame may finish. Operator presentation control, not authoritative state.",
             handler: (_, args) => {
                 if (args.Count > 1) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
-                var freeze = ((args.Count == 1) ? ParseOnOff(args[0]) : null);
+                var freeze = ((args.Count == 1) ? ParseOnOff(token: args[0]) : null);
+
                 if ((args.Count == 1) && (freeze is null)) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
                 if (renderProbe.IndirectResidencies.Count == 0) {
                     return CommandResult.Error(output: "[world.indirect-freeze: no active indirect residency — select medium or high and wait for the renderer]");
@@ -610,7 +612,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             name: "world.indirect-reset",
             description: "Queues every active residency's presentation cache reset at its next renderable frame. Frozen caches withdraw their old publication and admit no replacement work. Takes no argument; changes no authoritative state.",
             handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args, "world.indirect-reset") is { } refusal) { return refusal; }
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.indirect-reset") is { } refusal) { return refusal; }
                 if (renderProbe.IndirectResidencies.Count == 0) {
                     return CommandResult.Error(output: "[world.indirect-reset: no active indirect residency — select medium or high and wait for the renderer]");
                 }
@@ -863,13 +865,14 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             name: "world.sky-field-scale",
             description: "Sets the sky field grid independently of the scene grid: world.sky-field-scale [1|0.5]. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.sky-field-scale: {settings.SkyFieldScale.ToString("0.###", CultureInfo.InvariantCulture)}]");
+                CommandResult Echo() => new(Output: $"[world.sky-field-scale: {settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}]");
                 if (args.Count == 0) { return Echo(); }
-                float? scale = args.Count == 1 ? args[0].ToString() switch {
+                float? scale = ((args.Count == 1) ? args[0].ToString() switch {
                     "1" => 1f,
                     "0.5" => .5f,
                     _ => null,
-                } : null;
+                } : null);
+
                 if (scale is not { } chosen) { return CommandResult.Usage(form: "1|0.5", verb: "world.sky-field-scale"); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.SkyFieldScale,
                     a: chosen, formatEcho: Echo);
@@ -936,11 +939,11 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     a: ((double)preset.Sky)
                 );
                 SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
-                SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, (double)(preset.Indirect ?? (tier switch {
+                SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
                     QualityTier.Low => SdfIndirectTier.Off,
                     QualityTier.Medium => SdfIndirectTier.Medium,
                     _ => SdfIndirectTier.High,
-                })));
+                }))));
                 SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
                     WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
                     section: WorldSection.Views);

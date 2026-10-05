@@ -151,7 +151,7 @@ public sealed partial class SdfWorldTables {
     /// pool. Read at the time asked, since a region grows by being replaced.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = (new GpuMemoryBytes(DeviceLocal: ((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes + ScreenEmission.SizeBytes), HostVisible: 0) + IndirectBytes);
+            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0) + IndirectBytes);
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {

@@ -56,13 +56,14 @@ public sealed class PaletteAdmissionLawTests {
     [Fact]
     public void IndirectPaletteInputsAreAdmittedBeforeStamping() {
         var entry = new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null);
-        AssertRefusesNaming(entry with { Bleed = "warm" }, "bleed");
+
+        AssertRefusesNaming(entry: entry with { Bleed = "warm" }, needle: "bleed");
         foreach (var invalid in new[] { -0.1f, float.NaN, float.PositiveInfinity }) {
-            AssertRefusesNaming(entry with { Receive = invalid }, "receive");
+            AssertRefusesNaming(entry: entry with { Receive = invalid }, needle: "receive");
         }
-        AssertAccepts(entry with { Bleed = "#000000", Receive = 0 });
-        AssertAccepts(entry with { Bleed = "#FFFFFF", Receive = 2 });
-        AssertAccepts(entry);
+        AssertAccepts(entry: entry with { Bleed = "#000000", Receive = 0 });
+        AssertAccepts(entry: entry with { Bleed = "#FFFFFF", Receive = 2 });
+        AssertAccepts(entry: entry);
     }
     [Fact]
     public void ANonFiniteRoughnessIsRefusedByName() {

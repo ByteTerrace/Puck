@@ -130,6 +130,7 @@ public sealed class TestCommandLawTests {
                 path1: input,
                 path2: index.ToString(provider: CultureInfo.InvariantCulture)
             ));
+
             Assert.True(condition: WorldDefinitionFileSource.TryReadDocumentFile(path: World(name: fixtures[index]),
                 content: out var bytes, reason: out var readReason), userMessage: readReason);
             var document = JsonNode.Parse(utf8Json: bytes!)!.AsObject();
@@ -486,21 +487,25 @@ public sealed class TestCommandLawTests {
     public void EveryAuthoredScheduledVerdictSourceIsCollectedWithoutAGeneratedTestBlock(string fixture) {
         using var scratch = new TemporaryDirectory(prefix: "puck-authored-verdict-collection-");
         var originalPath = World(name: fixture);
+
         Assert.True(condition: WorldDefinitionFileSource.TryReadDocumentFile(path: originalPath,
             content: out var bytes, reason: out var readReason), userMessage: readReason);
         var document = Assert.IsType<JsonObject>(@object: JsonNode.Parse(utf8Json: bytes!));
         var printed = Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: document);
         var recompiled = Puck.World.Transpiler.WorldCompiler.Compile(source: printed,
             sourcePath: originalPath, cancellationToken: TestContext.Current.CancellationToken);
+
         Assert.False(condition: recompiled.Diagnostics.HasErrors,
             userMessage: recompiled.Diagnostics.FormatReport(printed));
         Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: recompiled.RequireJson()));
-        document["basis"] = World(name: "phase-fixture").Replace(oldChar: '\\', newChar: '/');
+        document["basis"] = World(name: "phase-fixture").Replace(newChar: '/', oldChar: '\\');
         var name = Path.GetFileNameWithoutExtension(path: Path.GetFileNameWithoutExtension(path: fixture));
-        var source = Path.Combine(path1: scratch.RootPath, path2: name + ".puck");
+        var source = Path.Combine(path1: scratch.RootPath, path2: (name + ".puck"));
+
         File.WriteAllText(path: source, contents: Puck.World.Transpiler.Decompiler.WorldDecompiler.Decompile(root: document));
         var kept = Path.Combine(path1: scratch.RootPath, path2: "kept");
         var missing = Path.Combine(path1: scratch.RootPath, path2: "absent/Puck.World.dll");
+
         var (exit, output) = ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: [
             "test", source, "--keep", kept, "--world-artifact", missing,
         ]));
@@ -509,11 +514,13 @@ public sealed class TestCommandLawTests {
             expectedSubstring: $"test: {name} <- {source} (authored schedule and verdicts)");
         Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "--world-artifact");
         var staged = Assert.IsType<JsonObject>(@object: JsonNode.Parse(utf8Json: File.ReadAllBytes(
-            path: Path.Combine(path1: kept, path2: "generated", path3: name + ".world.json"))));
+            path: Path.Combine(path1: kept, path2: "generated", path3: (name + ".world.json")))));
         var stagedRows = staged["state"]!["world"]!.AsArray().OfType<JsonObject>();
+
         foreach (var row in document["state"]!["world"]!.AsArray().OfType<JsonObject>()) {
             var carried = Assert.Single(collection: stagedRows,
-                predicate: candidate => candidate["name"]!.GetValue<string>() == row["name"]!.GetValue<string>());
+                predicate: candidate => (candidate["name"]!.GetValue<string>() == row["name"]!.GetValue<string>()));
+
             Assert.True(condition: JsonNode.DeepEquals(node1: row, node2: carried));
         }
         Assert.True(condition: JsonNode.DeepEquals(node1: document["schedule"], node2: staged["schedule"]));

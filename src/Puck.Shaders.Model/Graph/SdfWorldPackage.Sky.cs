@@ -7,7 +7,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The float4 rows of one fitted record, matching the 80-byte <c>SdfSkyView</c> parameter record.</summary>
     public const int SkyViewRows = 5;
     /// <summary>The bytes the fitted records add to each sky pass block: forty float4 values.</summary>
-    public const int SkyViewBytes = (SkyViewCount * SkyViewRows * 16);
+    public const int SkyViewBytes = ((SkyViewCount * SkyViewRows) * 16);
     /// <summary>The fitted infinity records for the consumer this pass renders (<c>float4[40]</c>).</summary>
     public const string SkyViews = "skyViews";
     /// <summary>The active sky field grid, independent of the lit view's render grid and composite output.</summary>
@@ -58,7 +58,7 @@ public static partial class SdfWorldPackage {
             .. Values,
             Value(name: ResolvedSurface, type: ShaderValueType.Uint),
             Value(name: SkyFieldExtent, type: ShaderValueType.Uint2),
-            ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SkyViews, type: ShaderValueType.Float4, length: (SkyViewCount * SkyViewRows)),
+            ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (SkyViewCount * SkyViewRows), name: SkyViews, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SkyViewCount, name: SkyViewImages, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),

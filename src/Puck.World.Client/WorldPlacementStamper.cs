@@ -99,7 +99,7 @@ public static class WorldPlacementStamper {
                 ),
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
-                Receive: entry?.Receive ?? 1f
+                Receive: (entry?.Receive ?? 1f)
             ));
         }
     }

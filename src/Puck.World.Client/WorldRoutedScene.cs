@@ -88,7 +88,6 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// and windows' first, it adds a view of each camera of the world a screen shows, at an index the caller records.
     /// <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
-
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives this
     /// authority's resolved sky and the frame dimensions after seat, window and camera views have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }

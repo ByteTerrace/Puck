@@ -149,7 +149,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
-        return new WorldResolvedEnvironment(Lights: lights, Sky: sky, Indirect: m_indirect);
+        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky);
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
@@ -438,6 +438,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                     Index: index,
                     Section: "render.lighting.lights"
                 );
+
                 pinned.Bounce = Scalar(
                     fallback: 1f,
                     field: WorldValueFields.LightBounce,

@@ -165,12 +165,12 @@ public static partial class SdfWorldPackage {
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
             Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
             new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint)),
+                SizeBytes: (IndirectPickWords * sizeof(uint)), StrideBytes: sizeof(uint)),
             new ShaderPipelineResource(Name: IndirectDeferredClear, Kind: ShaderPipelineResourceKind.Buffer,
                 SizeBytes: sizeof(uint), StrideBytes: sizeof(uint), Retained: true),
             new ShaderPipelineResource(Name: IndirectDeferred, Kind: ShaderPipelineResourceKind.Buffer,
                 SizeBytes: sizeof(uint), StrideBytes: sizeof(uint), From: IndirectDeferredClear, PreservesPredecessor: true)],
-        Passes = [.. fragment.Passes.SelectMany(WithReceiverCompletion)],
+        Passes = [.. fragment.Passes.SelectMany(selector: WithReceiverCompletion)],
     };
 
     private static RenderGraphFragmentPass[] WithReceiverCompletion(RenderGraphFragmentPass pass) {

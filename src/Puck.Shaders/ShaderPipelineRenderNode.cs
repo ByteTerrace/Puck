@@ -929,7 +929,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             );
             SeedPassRegions();
             ConfigureCadence();
-            PrepareBufferPublications(next.Plan.Outputs.Count);
+            PrepareBufferPublications(count: next.Plan.Outputs.Count);
             // What an install counts belongs to no submission, whether it installs, fails partway or rebuilds after a
             // device loss.
             m_work.Discard();
@@ -1701,7 +1701,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var command = BeginFrameCommands(slot: slotIndex);
 
         commands.Clear();
-        RecordFrozenReads(command);
+        RecordFrozenReads(command: command);
         BeginCadenceFrame(slot: slotIndex);
         RecordPasses(
             command: command,

@@ -60,6 +60,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
+
     // The camera producer: a screen names a seat and a sensor, and the binder's shared per-device feeds serve it; the
     // feed a slot holds is only that (seat, sensor) reference, resolved every frame since the seat's device can change.
     private sealed class CameraProducer(WorldScreenBinder binder) : IWorldImageProducer {

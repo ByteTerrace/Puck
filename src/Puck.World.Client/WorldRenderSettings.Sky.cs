@@ -9,7 +9,7 @@ public sealed partial class WorldRenderSettings {
     public float SkyFieldScale {
         get => m_skyFieldScale;
         set {
-            if (value is not (1f or .5f)) { throw new ArgumentOutOfRangeException(nameof(value)); }
+            if (value is not (1f or .5f)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
             m_skyFieldScale = value;
             m_revision++;
         }

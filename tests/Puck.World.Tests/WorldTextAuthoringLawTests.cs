@@ -14,27 +14,31 @@ public sealed class WorldTextAuthoringLawTests {
         var canonical = CreationCanonicalizer.Canonicalize(document: creation.Document with {
             Shapes = [
                 creation.Document.Shapes![0] with { Dilate = .125f },
-                creation.Document.Shapes[0] with { Id = 2, Group = 1, Position = new Vector3(2f, 0f, 0f) },
-                creation.Document.Shapes[0] with { Id = 3, Group = 1, Blend = SdfBlendOp.Subtraction, Scale = new Vector3(.25f) },
+                creation.Document.Shapes[0] with { Id = 2, Group = 1, Position = new Vector3(x: 2f, y: 0f, z: 0f) },
+                creation.Document.Shapes[0] with { Id = 3, Group = 1, Blend = SdfBlendOp.Subtraction, Scale = new Vector3(value: .25f) },
             ],
             TextRuns = [creation.Document.TextRuns![0] with { Mode = TextRunDocument.ModeEngrave }],
         }, source: "engraved-body");
+
         creation = creation with { Document = canonical.Document, HashRaw = canonical.Hash };
         var pool = new WorldStampPool();
+
         pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
             new WorldStampPool.BodyStamp(0, creation, 1f, WorldLook.Implicit, SdfIndirectParticipation.Receive),
         ]);
-        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText("Hello") });
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
-        pool.Emit(builder, WorldBakedColors.Of(Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
+
+        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
             slotBase: 0, textCatalog: fonts);
         var program = builder.Build(buildInstanceGrid: false);
-        var instance = Assert.Single(program.Instances);
-        Assert.True(instance.IsDynamic);
+        var instance = Assert.Single(collection: program.Instances);
+
+        Assert.True(condition: instance.IsDynamic);
         Assert.Equal(SdfIndirectParticipation.Receive, instance.Indirect);
-        Assert.True(program.IndirectInstancesComposable);
-        Assert.Equal(3, program.Instructions.Count(instruction => instruction.Op == SdfOp.PushField));
-        Assert.Contains(program.Instructions, instruction => instruction.Op == SdfOp.ShapeBlend && instruction.Blend == (uint)SdfBlendOp.Subtraction);
+        Assert.True(condition: program.IndirectInstancesComposable);
+        Assert.Equal(3, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
+        Assert.Contains(collection: program.Instructions, filter: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == ((uint)SdfBlendOp.Subtraction))));
     }
 
     private static FontAtlas AtlasForText(string text) => new(

@@ -10,7 +10,7 @@ public sealed partial class SdfProgram {
     private void PackMaterials(int materialOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         for (var index = 0; (index < materialCount); index++) {
             var m = materialTable[index];
-            var bleed = m.Bleed ?? Vector3.One;
+            var bleed = (m.Bleed ?? Vector3.One);
             var materialBase = ((materialOffsetVectors + (MaterialVectorsPerEntry * index)) * WordsPerVector);
 
             void Row(int row, Vector4 value) => WriteVector4(
@@ -53,7 +53,7 @@ public sealed partial class SdfProgram {
                     w: m.Receive
                 )
             );
-            Row(row: 7, value: new Vector4(0, 0, bleed.Y, bleed.Z));
+            Row(row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;
 

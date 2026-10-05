@@ -1,34 +1,56 @@
 schema: "puck.world.definition.v1"
 basis: "base"
 documentId: "gi-furnace"
-render { indirect { bounces: 2, sources { feedback: 1 } } }
+render {
+  indirect {
+    bounces: 2
+    sources {
+      feedback: 1
+    }
+  }
+}
 prototypes {
   prototype "enclosure" {
     document {
       schema: "puck.creation.v1"
       name: "enclosure"
       palette [{ color: "#FFFFFF", emissive: 0.125, specular: 0, roughness: 1, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
-      shape Sphere "outer" { material: 0, position [0, 0, 0], scale [3.2, 3.2, 3.2] }
-      shape Sphere "inner" { material: 0, blend: Subtraction, position [0, 0, 0], scale [3, 3, 3] }
+      shape Sphere "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [3.2, 3.2, 3.2]
+      }
+      shape Sphere "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [3, 3, 3]
+      }
     }
   }
 }
-placements { placement "enclosure" { prototype: "enclosure", position [0, 0, 0] } }
-cameras [{
-  name: "furnace"
-  anchor: null
-  renderWidth: 128
-  renderHeight: 128
-  rig {
-    name: "furnace"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [0, -1, 1]))
-      lookAt(subject: worldPoint(point: [0, -3, 0]))
-      fieldOfView(fieldOfViewRadians: 0.65)
-    ]
+placements {
+  placement "enclosure" {
+    prototype: "enclosure"
+    position [0, 0, 0]
   }
-}]
+}
+cameras [{
+    name: "furnace"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "furnace"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, -1, 1]))
+        lookAt(subject: worldPoint(point: [0, -3, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
 views {
   layout "physical" {
     seatCount: 0

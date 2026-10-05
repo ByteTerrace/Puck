@@ -82,7 +82,8 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
 
         // Both belong to this write, before the release publication. A consumer must not pair an acquired slot
         // with the global Version, which may already describe a different slot when it reads it.
-        var version = checked(Interlocked.Read(location: ref m_version) + 1L);
+        var version = checked((Interlocked.Read(location: ref m_version) + 1L));
+
         Volatile.Write(location: ref m_versions![slot], value: version);
         Volatile.Write(
             location: ref m_fenceValues![slot],

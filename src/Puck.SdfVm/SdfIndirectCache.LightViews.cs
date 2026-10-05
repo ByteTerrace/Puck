@@ -10,7 +10,7 @@ public sealed partial class SdfIndirectCache {
     public ulong LightViewBytes {
         get {
             lock (m_lightBanksGate) {
-                return m_lightBanks.Aggregate(seed: 0UL, func: static (sum, bank) => checked(sum + bank.Buffer.SizeBytes));
+                return m_lightBanks.Aggregate(seed: 0UL, func: static (sum, bank) => checked((sum + bank.Buffer.SizeBytes)));
             }
         }
     }
@@ -20,9 +20,11 @@ public sealed partial class SdfIndirectCache {
     internal LightViewBank CreateLightViewBank(IGpuBufferFactory buffers, ulong bytes, GpuObjectName name) {
         Retain();
         IGpuBuffer? buffer = null;
+
         try {
-            buffer = buffers.CreateDeviceLocal(sizeBytes: bytes, usage: GpuBufferUsage.Storage, name: name);
-            var bank = new LightViewBank(owner: this, buffer: buffer);
+            buffer = buffers.CreateDeviceLocal(name: name, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+            var bank = new LightViewBank(buffer: buffer, owner: this);
+
             lock (m_lightBanksGate) { m_lightBanks.Add(item: bank); }
             return bank;
         } catch { buffer?.Dispose(); Dispose(); throw; }
@@ -30,6 +32,7 @@ public sealed partial class SdfIndirectCache {
 
     internal sealed class LightViewBank(SdfIndirectCache owner, IGpuBuffer buffer) : IDisposable {
         private SdfIndirectCache? m_owner = owner;
+
         public IGpuBuffer Buffer { get; } = buffer;
 
         public void Dispose() {

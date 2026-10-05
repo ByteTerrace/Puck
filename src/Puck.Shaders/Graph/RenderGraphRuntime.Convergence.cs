@@ -9,7 +9,7 @@ public sealed partial class RenderGraphRuntime {
 
     private readonly HashSet<int> m_convergenceInstances = [];
     private readonly HashSet<int> m_convergenceDemand = [];
-    private readonly HashSet<string> m_convergenceStarted = new(StringComparer.Ordinal);
+    private readonly HashSet<string> m_convergenceStarted = new(comparer: StringComparer.Ordinal);
     private readonly Stack<int> m_convergencePending = new();
     private IReadOnlyList<RenderGraphFootprint> m_captureFootprints = [];
 
@@ -29,34 +29,35 @@ public sealed partial class RenderGraphRuntime {
         m_convergenceContext = null;
         m_convergenceInstances.Clear();
         m_convergenceStarted.Clear();
-        RefreshConvergenceDemand(captured);
+        RefreshConvergenceDemand(captured: captured);
     }
     // Capacity and declared reads do not imply visible image demand. Keep standing, deferred and previous-frame
     // contributors, but require their actual positive footprint; buffer dependencies never need a pixel footprint.
     // A package joins this request only once, so changing demand cannot restart its samples or finite source epoch.
     private void RefreshConvergenceDemand(int captured) {
-        if (m_convergence is not { Request.Completion.IsCompleted: false } convergence ||
-            m_capture.PendingPath is null) { return; }
+        if ((m_convergence is not { Request.Completion.IsCompleted: false } convergence) ||
+            (m_capture.PendingPath is null)) { return; }
         m_convergenceDemand.Clear();
         m_convergencePending.Clear();
-        m_convergencePending.Push(captured);
-        while (m_convergencePending.TryPop(out var index)) {
-            if (!m_convergenceDemand.Add(index)) { continue; }
+        m_convergencePending.Push(item: captured);
+        while (m_convergencePending.TryPop(result: out var index)) {
+            if (!m_convergenceDemand.Add(item: index)) { continue; }
             foreach (var read in m_set.Reads[index]) {
-                if (read.Kind == ShaderPipelineResourceKind.Buffer || ShowsCaptureRead(index, read.Producer)) {
-                    m_convergencePending.Push(read.Producer);
+                if ((read.Kind == ShaderPipelineResourceKind.Buffer) || ShowsCaptureRead(consumer: index, producer: read.Producer)) {
+                    m_convergencePending.Push(item: read.Producer);
                 }
             }
         }
-        if (m_convergenceInstances.SetEquals(m_convergenceDemand)) { return; }
+        if (m_convergenceInstances.SetEquals(other: m_convergenceDemand)) { return; }
         m_convergenceInstances.Clear();
-        m_convergenceInstances.UnionWith(m_convergenceDemand);
+        m_convergenceInstances.UnionWith(other: m_convergenceDemand);
         foreach (var index in m_convergenceInstances) {
-            if (!m_convergenceStarted.Add(m_set.Instances[index].Name)) { continue; }
+            if (!m_convergenceStarted.Add(item: m_set.Instances[index].Name)) { continue; }
             var packages = new HashSet<string>(comparer: StringComparer.Ordinal);
-            if (m_set.Instances[index].ExternalPackage is { } declared &&
-                m_packages.TryGetFactory(declared, out var declaredFactory)) {
-                packages.Add(declared);
+
+            if ((m_set.Instances[index].ExternalPackage is { } declared) &&
+                m_packages.TryGetFactory(factory: out var declaredFactory, package: declared)) {
+                packages.Add(item: declared);
                 declaredFactory.BeginConvergence(m_set.Instances[index].Name, convergence);
             }
             if (m_graphs[index] is { } graph) {
@@ -73,10 +74,12 @@ public sealed partial class RenderGraphRuntime {
     private bool ShowsCaptureRead(int consumer, int producer) {
         var consumerName = m_set.Instances[consumer].Name;
         var producerName = m_set.Instances[producer].Name;
-        for (var index = 0; index < m_captureFootprints.Count; index++) {
+
+        for (var index = 0; (index < m_captureFootprints.Count); index++) {
             var footprint = m_captureFootprints[index];
-            if (footprint.Consumer == consumerName && footprint.Producer == producerName &&
-                footprint.Width > 0 && footprint.Height > 0) { return true; }
+
+            if ((footprint.Consumer == consumerName) && (footprint.Producer == producerName) &&
+                (footprint.Width > 0) && (footprint.Height > 0)) { return true; }
         }
         return false;
     }
@@ -91,21 +94,24 @@ public sealed partial class RenderGraphRuntime {
         ((m_convergence is { IsActive: true }) && m_convergenceInstances.Contains(item: index));
 
     private bool CanServeConvergence =>
-        CaptureReadiness.IsRendered &&
-        ((m_convergence is not { Request.Converge: > 0 } convergence) || (convergence.Samples >= (convergence.Request.Converge - 1)));
-
+        (CaptureReadiness.IsRendered &&
+        ((m_convergence is not { Request.Converge: > 0 } convergence) || (convergence.Samples >= (convergence.Request.Converge - 1))));
     private Puck.Hosting.FrameRender CaptureReadiness {
         get {
             if (m_convergence is not { Request.Completion.IsCompleted: false }) { return Puck.Hosting.FrameRender.Rendered; }
             var result = Puck.Hosting.FrameRender.Rendered;
+
             foreach (var index in m_convergenceInstances) {
                 if (m_graphs[index] is not { } graph) { continue; }
                 var name = m_set.Instances[index].Name;
                 var passes = graph.Pipeline.Plan.Passes;
-                for (var position = 0; position < passes.Count; position++) {
+
+                for (var position = 0; (position < passes.Count); position++) {
                     var pass = passes[position];
-                    if (pass.Package is not { } step || !m_packages.TryGetFactory(step.Package, out var factory)) { continue; }
-                    var readiness = factory.CaptureReadinessOf(name);
+
+                    if ((pass.Package is not { } step) || !m_packages.TryGetFactory(step.Package, out var factory)) { continue; }
+                    var readiness = factory.CaptureReadinessOf(instance: name);
+
                     if (readiness.Completion == Puck.Hosting.FrameCompletion.Refused) { return readiness; }
                     if (!readiness.IsRendered) { result = readiness; }
                 }

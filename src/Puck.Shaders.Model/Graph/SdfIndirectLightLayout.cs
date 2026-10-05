@@ -13,5 +13,5 @@ public static class SdfIndirectLightLayout {
     /// <summary>The bounded full-field evaluation allowance for a light-map texel or fallback shadow ray.</summary>
     public const int MarchSteps = 128;
     /// <summary>The bytes in one single-precision depth map.</summary>
-    public const int MapBytes = (Resolution * Resolution * sizeof(float));
+    public const int MapBytes = ((Resolution * Resolution) * sizeof(float));
 }

@@ -15,98 +15,112 @@ internal sealed record CountersBatchEvidence(string Manifest, string ManifestHas
 internal sealed record CountersBatchObservationEvidence(string Name, string Group, string Backend, string Workload,
     string Prelude, string PreludeHash, string Script, string ScriptHash, int Ordinal, ulong Tick, string Method,
     string Transcript, int ResponseLine, string CompletionTranscript, int CompletionLine, string Completion, string Report);
-
 internal static partial class CountersCommand {
-    private static readonly TimeSpan BatchBudget = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan BatchBudget = TimeSpan.FromMinutes(minutes: 15);
 
     private static int RunBatch(string manifestPath, string? output, bool check, bool record, IReadOnlyList<string?> conflicts) {
         var clock = Stopwatch.StartNew();
-        if (conflicts.Any(value => value is not null) || (check && record)) {
-            return CliExit.Refuse(Verb, "--batch", "a batch owns its workload, scripts and ceilings; --world, --script, --report and --ceilings refuse beside it, and --check and --record cannot be combined");
+
+        if (conflicts.Any(predicate: value => (value is not null)) || (check && record)) {
+            return CliExit.Refuse(verb: Verb, what: "--batch", why: "a batch owns its workload, scripts and ceilings; --world, --script, --report and --ceilings refuse beside it, and --check and --record cannot be combined");
         }
-        if (!CliPaths.TryGetRepositoryRoot(out var repositoryRoot)) { return CliExit.Refused; }
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) { return CliExit.Refused; }
         using var scratch = RunDirectory.Create(prefix: "puck-counters-batch-");
-        var products = output is null ? scratch.Path : Path.GetFullPath(output);
-        Console.Error.WriteLine($"{Verb}: batch artifacts {CliPaths.ToDisplay(scratch.Path)}");
+        var products = ((output is null) ? scratch.Path : Path.GetFullPath(path: output));
+
+        Console.Error.WriteLine(value: $"{Verb}: batch artifacts {CliPaths.ToDisplay(fullPath: scratch.Path)}");
         try {
-            var batch = CountersBatchInput.Read(manifestPath, products);
-            var checks = new Dictionary<string, WorldCountersCeilings>(PuckPaths.Comparer);
-            foreach (var observation in batch.Groups.SelectMany(group => group.Observations)) {
+            var batch = CountersBatchInput.Read(output: products, path: manifestPath);
+            var checks = new Dictionary<string, WorldCountersCeilings>(comparer: PuckPaths.Comparer);
+
+            foreach (var observation in batch.Groups.SelectMany(selector: group => group.Observations)) {
                 WorldCountersCeilings? existing = null;
-                if ((check || (record && File.Exists(observation.CeilingsPath)))
+
+                if ((check || (record && File.Exists(path: observation.CeilingsPath)))
                     && !CountersCeilings.TryRead(observation.CeilingsPath, out existing, out var reason)) {
-                    return CliExit.Refuse(Verb, observation.CeilingsPath, reason);
+                    return CliExit.Refuse(verb: Verb, what: observation.CeilingsPath, why: reason);
                 }
-                if (check) { checks.Add(observation.CeilingsPath, existing!); }
+                if (check) { checks.Add(key: observation.CeilingsPath, value: existing!); }
             }
             if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(batch.WorldPath, out var authored, out _, out var error)) {
-                return CliExit.Refuse(Verb, "the batch workload", error.ReplaceLineEndings(" "));
+                return CliExit.Refuse(verb: Verb, what: "the batch workload", why: error.ReplaceLineEndings(replacementText: " "));
             }
             var width = authored!.Host.Width;
             var height = authored.Host.Height;
             var compiler = new Puck.Shaders.ShaderToolchain().Identity;
+
             if (!WorldOffscreenLeg.TryResolveWorld(Verb, repositoryRoot, scratch.Path,
-                CliProcess.RemainingBudget(clock, BatchBudget), out var artifact)) { return CliExit.Refused; }
+                CliProcess.RemainingBudget(budget: BatchBudget, clock: clock), out var artifact)) { return CliExit.Refused; }
             using var lease = artifact;
-            var revision = new WorldCountersRevision(CliGit.TryResolveCommit(repositoryRoot, "HEAD", out var commit) ? commit : "unknown", artifact.Key);
+            var revision = new WorldCountersRevision(Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"), SourceState: artifact.Key);
+
             if (!TryCollectBatch(batch, width, height, compiler, (group, backend) => {
-                var directory = Path.Combine(scratch.Path, group.Name);
-                Directory.CreateDirectory(directory);
-                File.WriteAllText(Path.Combine(directory, "executed.script.txt"), group.Script, Utf8);
+                var directory = Path.Combine(path1: scratch.Path, path2: group.Name);
+
+                Directory.CreateDirectory(path: directory);
+                File.WriteAllText(Path.Combine(path1: directory, path2: "executed.script.txt"), group.Script, Utf8);
                 var exit = WorldOffscreenLeg.Run(Verb, artifact.Path, batch.WorldPath, backend, group.Script, [], directory,
                     exitAfterSeconds: 900, budget: BatchBudget, suiteClock: clock, process: out var process);
-                return exit == CliExit.Success ? process : null;
+
+                return ((exit == CliExit.Success) ? process : null);
             }, out var collected, out var collectionReason)) {
-                return CliExit.Refuse(Verb, "the batch observations", collectionReason);
+                return CliExit.Refuse(verb: Verb, what: "the batch observations", why: collectionReason);
             }
             var evidence = new List<CountersBatchObservationEvidence>();
             var reports = new List<(PreparedCountersObservation Observation, WorldCountersReport Report)>();
+
             foreach (var group in batch.Groups) {
                 foreach (var observation in group.Observations) {
-                    if (CliProcess.RemainingBudget(clock, BatchBudget) <= TimeSpan.Zero) {
-                        return CliExit.Refuse(Verb, "--batch", "the fifteen-minute phase cap was exhausted before all products were written");
+                    if (CliProcess.RemainingBudget(budget: BatchBudget, clock: clock) <= TimeSpan.Zero) {
+                        return CliExit.Refuse(verb: Verb, what: "--batch", why: "the fifteen-minute phase cap was exhausted before all products were written");
                     }
-                    var pair = collected.Where(item => ReferenceEquals(item.Observation, observation)).ToArray();
+                    var pair = collected.Where(predicate: item => ReferenceEquals(objA: item.Observation, objB: observation)).ToArray();
                     var report = new WorldCountersReport(revision,
                         CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: batch.WorldPath),
                         CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: observation.ScriptPath),
-                        pair.Select(item => item.Reading.Run).ToArray());
-                    Directory.CreateDirectory(Path.GetDirectoryName(observation.ReportPath)!);
-                    WriteReport(observation.ReportPath, report);
-                    reports.Add((observation, report));
+                        pair.Select(selector: item => item.Reading.Run).ToArray());
+
+                    Directory.CreateDirectory(path: Path.GetDirectoryName(path: observation.ReportPath)!);
+                    WriteReport(path: observation.ReportPath, report: report);
+                    reports.Add(item: (observation, report));
                     foreach (var item in pair) {
-                        var legReport = Path.Combine(products, "observations", $"{observation.Definition.Name}-{item.Backend}.json");
-                        Directory.CreateDirectory(Path.GetDirectoryName(legReport)!);
-                        WriteReport(legReport, report with { Runs = [item.Reading.Run] });
-                        evidence.Add(new CountersBatchObservationEvidence(observation.Definition.Name, group.Name, item.Backend,
-                            report.Workload, CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: group.PreludePath), Hash(group.Prelude),
-                            report.Script, Hash(observation.Script), item.Reading.Ordinal, item.Reading.Tick, item.Reading.Method,
-                            CliPaths.ToDisplay(Path.Combine(scratch.Path, group.Name, $"{item.Backend}-stdout.log")),
-                            item.Reading.Line, CliPaths.ToDisplay(Path.Combine(scratch.Path, group.Name, $"{item.Backend}-stderr.log")),
-                            item.CompletionLine, item.Completion, CliPaths.ToDisplay(legReport)));
+                        var legReport = Path.Combine(path1: products, path2: "observations", path3: $"{observation.Definition.Name}-{item.Backend}.json");
+
+                        Directory.CreateDirectory(path: Path.GetDirectoryName(path: legReport)!);
+                        WriteReport(path: legReport, report: report with { Runs = [item.Reading.Run] });
+                        evidence.Add(item: new CountersBatchObservationEvidence(observation.Definition.Name, group.Name, item.Backend,
+                            report.Workload, CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: group.PreludePath), Hash(text: group.Prelude),
+                            report.Script, Hash(text: observation.Script), item.Reading.Ordinal, item.Reading.Tick, item.Reading.Method,
+                            CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch.Path, path2: group.Name, path3: $"{item.Backend}-stdout.log")),
+                            item.Reading.Line, CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch.Path, path2: group.Name, path3: $"{item.Backend}-stderr.log")),
+                            item.CompletionLine, item.Completion, CliPaths.ToDisplay(fullPath: legReport)));
                     }
-                    Console.Out.WriteLine($"{Verb}: report {CliPaths.ToDisplay(observation.ReportPath)}");
+                    Console.Out.WriteLine(value: $"{Verb}: report {CliPaths.ToDisplay(fullPath: observation.ReportPath)}");
                 }
             }
-            var evidencePath = Path.Combine(products, "batch.observations.json");
+            var evidencePath = Path.Combine(path1: products, path2: "batch.observations.json");
+
             File.WriteAllText(evidencePath, JsonSerializer.Serialize(new CountersBatchEvidence(
-                CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: Path.GetFullPath(manifestPath)), batch.ManifestHash, revision, evidence), CountersBatchInput.Json), Utf8);
-            Console.Out.WriteLine($"{Verb}: {evidence.Count} backend observations, {reports.Count} paired reports; provenance {CliPaths.ToDisplay(evidencePath)}");
+                CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: Path.GetFullPath(path: manifestPath)), batch.ManifestHash, revision, evidence), CountersBatchInput.Json), Utf8);
+            Console.Out.WriteLine(value: $"{Verb}: {evidence.Count} backend observations, {reports.Count} paired reports; provenance {CliPaths.ToDisplay(fullPath: evidencePath)}");
             // A mismatch anywhere keeps all actual reports but records no batch ceilings.
-            var differences = reports.SelectMany(item => CountersComparison.AcrossBackends(item.Report.Runs[0], item.Report.Runs[1])).ToArray();
-            if (differences.Length != 0) { return Report(differences); }
+            var differences = reports.SelectMany(selector: item => CountersComparison.AcrossBackends(left: item.Report.Runs[0], right: item.Report.Runs[1])).ToArray();
+
+            if (differences.Length != 0) { return Report(differences: differences); }
             var result = CliExit.Success;
+
             foreach (var (observation, report) in reports) {
-                if (CliProcess.RemainingBudget(clock, BatchBudget) <= TimeSpan.Zero) {
-                    return CliExit.Refuse(Verb, "--batch", "the fifteen-minute phase cap was exhausted before all reports were judged");
+                if (CliProcess.RemainingBudget(budget: BatchBudget, clock: clock) <= TimeSpan.Zero) {
+                    return CliExit.Refuse(verb: Verb, what: "--batch", why: "the fifteen-minute phase cap was exhausted before all reports were judged");
                 }
-                var verdict = Judge(report, check ? checks[observation.CeilingsPath] : null, observation.CeilingsPath, record);
+                var verdict = Judge(report, (check ? checks[observation.CeilingsPath] : null), observation.CeilingsPath, record);
+
                 if (verdict != CliExit.Success) { result = verdict; }
             }
             return result;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException
-            or FormatException or ArgumentException or InvalidOperationException or KeyNotFoundException) {
-            return CliExit.Refuse(Verb, "--batch", exception.Message.ReplaceLineEndings(" "));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException
+            or FormatException or ArgumentException or InvalidOperationException or KeyNotFoundException)) {
+            return CliExit.Refuse(verb: Verb, what: "--batch", why: exception.Message.ReplaceLineEndings(replacementText: " "));
         } finally {
             // Transcript paths are part of every observation's provenance, even when outputs were requested elsewhere.
             scratch.Conclude(passed: false);
@@ -119,45 +133,49 @@ internal static partial class CountersCommand {
         Func<PreparedCountersGroup, string, CliProcessResult?> runLeg,
         [NotNullWhen(true)] out IReadOnlyList<CollectedCountersObservation>? observations, out string reason) {
         observations = null;
-        if (batch.Groups.Count == 0 || batch.Groups.Any(group => group.Observations.Count == 0 || group.Completion is not ("indirect" or "engine"))) {
+        if ((batch.Groups.Count == 0) || batch.Groups.Any(predicate: group => ((group.Observations.Count == 0) || (group.Completion is not ("indirect" or "engine"))))) {
             reason = "a batch must contain nonempty observation groups";
             return false;
         }
         var collected = new List<CollectedCountersObservation>();
+
         foreach (var group in batch.Groups) {
             foreach (var backend in WorldOffscreenLeg.Backends) {
                 var process = runLeg(group, backend);
-                if (process is null || process.TimedOut || process.ExitCode != 0) {
+
+                if ((process is null) || process.TimedOut || (process.ExitCode != 0)) {
                     reason = $"group {group.Name} on {backend} did not complete successfully; retained transcripts are diagnostic evidence, not counters products";
                     return false;
                 }
-                var stdout = process.OutputLines.Where(line => line.Stream == CliProcessOutputStream.Stdout)
-                    .Select(line => line.Line).ToArray();
-                var stderr = process.OutputLines.Where(line => line.Stream == CliProcessOutputStream.Stderr)
-                    .Select(line => line.Line).ToArray();
-                var completionPrefix = group.Completion == "engine" ? "[engine: ready at tick " : "[indirect: settled at tick ";
-                var failurePrefix = group.Completion == "engine" ? "[engine: not ready" : "[indirect: not settled";
-                var completions = stderr.Select((line, index) => (Line: line, Number: index + 1))
-                    .Where(item => item.Line.StartsWith(completionPrefix, StringComparison.Ordinal)).ToArray();
-                if (completions.Length != group.Observations.Count
-                    || stderr.Any(line => line.StartsWith(failurePrefix, StringComparison.Ordinal))) {
+                var stdout = process.OutputLines.Where(predicate: line => (line.Stream == CliProcessOutputStream.Stdout))
+                    .Select(selector: line => line.Line).ToArray();
+                var stderr = process.OutputLines.Where(predicate: line => (line.Stream == CliProcessOutputStream.Stderr))
+                    .Select(selector: line => line.Line).ToArray();
+                var completionPrefix = ((group.Completion == "engine") ? "[engine: ready at tick " : "[indirect: settled at tick ");
+                var failurePrefix = ((group.Completion == "engine") ? "[engine: not ready" : "[indirect: not settled");
+                var completions = stderr.Select(selector: (line, index) => (Line: line, Number: (index + 1)))
+                    .Where(predicate: item => item.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: completionPrefix)).ToArray();
+
+                if ((completions.Length != group.Observations.Count)
+                    || stderr.Any(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: failurePrefix))) {
                     reason = $"group {group.Name} on {backend}: expected {group.Observations.Count} {group.Completion} completion verdicts, found {completions.Length}";
                     return false;
                 }
-                if (!CountersReading.TryReadIndexed(stdout, group.Observations.Select(item => item.Definition.Method).ToArray(),
+                if (!CountersReading.TryReadIndexed(stdout, group.Observations.Select(selector: item => item.Definition.Method).ToArray(),
                     backend, width, height, compiler, out var readings, out reason)) {
                     reason = $"group {group.Name} on {backend}: {reason}";
                     return false;
                 }
-                for (var index = 0; index < readings.Count; index++) {
-                    var completed = group.Completion == "engine"
-                        ? CountersReading.TryReadEngineCompletion(completions[index].Line, out var warmTick)
-                        : CountersReading.TryReadIndirectCompletion(completions[index].Line, out warmTick);
-                    if (!completed || warmTick > ulong.MaxValue - 120 || readings[index].Tick < warmTick + 120) {
-                        reason = $"group {group.Name} on {backend}: observation {index + 1} lacks its trustworthy {group.Completion} completion before its active input";
+                for (var index = 0; (index < readings.Count); index++) {
+                    var completed = ((group.Completion == "engine")
+                        ? CountersReading.TryReadEngineCompletion(line: completions[index].Line, tick: out var warmTick)
+                        : CountersReading.TryReadIndirectCompletion(line: completions[index].Line, tick: out warmTick));
+
+                    if (!completed || (warmTick > (ulong.MaxValue - 120)) || (readings[index].Tick < (warmTick + 120))) {
+                        reason = $"group {group.Name} on {backend}: observation {(index + 1)} lacks its trustworthy {group.Completion} completion before its active input";
                         return false;
                     }
-                    collected.Add(new CollectedCountersObservation(group, group.Observations[index], backend, readings[index],
+                    collected.Add(item: new CollectedCountersObservation(group, group.Observations[index], backend, readings[index],
                         completions[index].Number, completions[index].Line));
                 }
             }
@@ -166,5 +184,6 @@ internal static partial class CountersCommand {
         reason = string.Empty;
         return true;
     }
-    private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+
+    private static string Hash(string text) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text)));
 }

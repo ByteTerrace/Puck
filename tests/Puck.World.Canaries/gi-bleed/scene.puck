@@ -2,23 +2,44 @@ schema: "puck.world.definition.v1"
 basis: "../gi-furnace/base"
 documentId: "gi-bleed-scene"
 render {
-  indirect { sources { lights: 1, emission: 0 } }
-  lighting { lights [directional(name: "wall-key", direction: [1, 0, 0], color: "#FFFFFF", weight: 1, shadow: never, bounce: 1)] }
+  indirect {
+    sources {
+      lights: 1
+      emission: 0
+    }
+  }
+  lighting {
+    lights [directional(name: "wall-key", direction: [1, 0, 0], color: "#FFFFFF", weight: 1, shadow: never, bounce: 1)]
+  }
 }
-state { world { slot station = 0 } }
+state {
+  world {
+    slot station = 0
+  }
+}
 prototypes {
   prototype "floor" {
     document {
       schema: "puck.creation.v1"
       name: "floor"
       palette [{ color: "#FFFFFF", specular: 0, roughness: 1, fill: "#000000", bleed: "#FFFFFF" }]
-      shape Box "floor" { material: 0, position [0, -0.025, 0], scale [2, 0.025, 2] }
+      shape Box "floor" {
+        material: 0
+        position [0, -0.025, 0]
+        scale [2, 0.025, 2]
+      }
     }
   }
 }
 placements {
-  placement "floor" { prototype: "floor", position [2, 0, 0] }
-  placement "wall" { prototype: "wall", position [0, 0, 0] }
+  placement "floor" {
+    prototype: "floor"
+    position [2, 0, 0]
+  }
+  placement "wall" {
+    prototype: "wall"
+    position [0, 0, 0]
+  }
 }
 cameras [
   {
@@ -30,41 +51,43 @@ cameras [
       name: "selected"
       version: "puck.camera.program.v1"
       operations [selectProgram(cases: [
-        { program: "near-camera", value: 0 }
-        { program: "far-camera", value: 1 }
-      ], default: "near-camera", key: "state.station")]
+          { program: "near-camera", value: 0 }
+          { program: "far-camera", value: 1 }
+        ], default: "near-camera", key: "state.station"
+        )
+      ]
     }
   }
   {
-  name: "near-camera"
-  anchor: null
-  renderWidth: 128
-  renderHeight: 128
-  rig {
     name: "near-camera"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [0.25, 1, 1.2]))
-      lookAt(subject: worldPoint(point: [0.25, 0, 0]))
-      fieldOfView(fieldOfViewRadians: 0.65)
-    ]
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "near-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0.25, 1, 1.2]))
+        lookAt(subject: worldPoint(point: [0.25, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
   }
-}
   {
-  name: "far-camera"
-  anchor: null
-  renderWidth: 128
-  renderHeight: 128
-  rig {
     name: "far-camera"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [2.5, 1, 1.2]))
-      lookAt(subject: worldPoint(point: [2.5, 0, 0]))
-      fieldOfView(fieldOfViewRadians: 0.65)
-    ]
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "far-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [2.5, 1, 1.2]))
+        lookAt(subject: worldPoint(point: [2.5, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
   }
-}
 ]
 views {
   layout "physical" {

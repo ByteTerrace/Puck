@@ -189,13 +189,13 @@ public sealed partial class ShaderPipelineCompiler {
 
                 var use = (arguments
                     ? ArgumentsUse
-                    : transfer ? new ShaderPipelineAccessState(Access: write ? GpuAccess.TransferWrite : GpuAccess.TransferRead,
+                    : (transfer ? new ShaderPipelineAccessState(Access: (write ? GpuAccess.TransferWrite : GpuAccess.TransferRead),
                         Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer) : UseOf(
                         graphics: graphics,
                         preserve: (mutate || (resource.From is not null)),
                         resource: resource,
                         write: (write || mutate)
-                    ));
+                    )));
 
                 roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (index, list.Count, use));
                 list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));

@@ -8,10 +8,12 @@ public sealed partial class ShaderBuildTargetsLawTests {
     [Fact]
     public async Task CompilerWorkersOverlapWithinTheRequestedBoundAndPublishOnlyAfterJoining() {
         using var fixture = new Fixture();
+
         fixture.ParallelProject(mode: "hold");
         var build = Task.Run(function: () => fixture.Run(target: "Build", properties: ["PuckShaderCompileJobs=2"]), cancellationToken: TestContext.Current.CancellationToken);
+
         try {
-            _ = WaitFor(find: () => (fixture.Started().Length >= 2 || build.IsCompleted ? "two compiler children or an early exit" : null));
+            _ = WaitFor(find: () => (((fixture.Started().Length >= 2) || build.IsCompleted) ? "two compiler children or an early exit" : null));
             Assert.False(condition: build.IsCompleted, userMessage: "The compiler workers did not hold at the real-process barrier.");
             Assert.Equal(expected: 2, actual: fixture.Started().Length);
             Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
@@ -25,39 +27,42 @@ public sealed partial class ShaderBuildTargetsLawTests {
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
     }
-
     [Fact]
     public async Task AFailedCompilerCancelsAndJoinsItsPeerBeforeRemovingTemporaryOutputs() {
         using var fixture = new Fixture();
+
         fixture.ParallelProject(mode: "fail-peer");
         var run = Task.Run(function: () => fixture.Run(target: "Build", properties: ["PuckShaderCompileJobs=2"]), cancellationToken: TestContext.Current.CancellationToken);
+
         try {
-            _ = WaitFor(find: () => (fixture.Started().Length >= 2 || run.IsCompleted ? "two compiler peers or an early exit" : null));
+            _ = WaitFor(find: () => (((fixture.Started().Length >= 2) || run.IsCompleted) ? "two compiler peers or an early exit" : null));
             // Cancellation has an observed process barrier. If it is missing, release the held peer after the
             // liveness bound so the law can inspect the wrong admission/completion rather than hang forever.
-            if (await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(value: 10), TestContext.Current.CancellationToken)) != run) { fixture.Write(path: "release", text: "watchdog release"); }
+            if (await Task.WhenAny(task1: run, task2: Task.Delay(TimeSpan.FromSeconds(value: 10), TestContext.Current.CancellationToken)) != run) { fixture.Write(path: "release", text: "watchdog release"); }
         } finally {
             if (!run.IsCompleted) { fixture.Write(path: "release", text: "release the test-owned compiler peer"); }
         }
         var build = await run;
+
         Assert.NotEqual(expected: 0, actual: build.ExitCode);
-        Assert.False(condition: build.TimedOut, userMessage: build.Stdout + build.Stderr);
-        Assert.Contains(expectedSubstring: "deliberate compiler failure", actualString: build.Stdout + build.Stderr);
+        Assert.False(condition: build.TimedOut, userMessage: (build.Stdout + build.Stderr));
+        Assert.Contains(expectedSubstring: "deliberate compiler failure", actualString: (build.Stdout + build.Stderr));
         Assert.Equal(expected: 2, actual: fixture.Started().Length);
         fixture.RequireChildrenExited();
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
     }
-
     [Fact]
     public void CancellationStopsAdmissionAndJoinsTheActualCompilerChildren() {
         using var fixture = new Fixture();
+
         fixture.ParallelProject(mode: "hold");
         // The wrapper compiles the production task's exact source and calls its public cancellation seam after two
         // real children reach the barrier. A watchdog releases them only if cancellation fails, allowing an intended
         // assertion failure instead of an indefinitely hung test process.
         var production = File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/PuckCompileShaderBytecode.cs"));
-        fixture.Write(path: "cancel-task.cs", text: "using System.Linq;\n" + production + """
+
+        fixture.Write(path: "cancel-task.cs", text: (("using System.Linq;\n" + production) + """
 
             public sealed class CancelCompilerFixture : Microsoft.Build.Utilities.Task {
                 public override bool Execute() {
@@ -81,14 +86,16 @@ public sealed partial class ShaderBuildTargetsLawTests {
                     }
                 }
             }
-            """);
+            """));
         var project = XDocument.Load(uri: fixture.PathOf(path: "fixture.proj"));
-        project.Root!.Add(new XElement("UsingTask", new XAttribute("TaskName", "CancelCompilerFixture"), new XAttribute("TaskFactory", "RoslynCodeTaskFactory"), new XAttribute("AssemblyFile", "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"), new XElement("Task", new XElement("Reference", new XAttribute("Include", "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll")), new XElement("Using", new XAttribute("Namespace", "System.Linq")), new XElement("Code", new XAttribute("Type", "Class"), new XAttribute("Language", "cs"), new XAttribute("Source", "cancel-task.cs")))));
-        project.Root.Add(new XElement("Target", new XAttribute("Name", "CancelCompilers"), new XElement("CancelCompilerFixture")));
+
+        project.Root!.Add(content: new XElement("UsingTask", new XAttribute(name: "TaskName", value: "CancelCompilerFixture"), new XAttribute(name: "TaskFactory", value: "RoslynCodeTaskFactory"), new XAttribute(name: "AssemblyFile", value: "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"), new XElement("Task", new XElement("Reference", new XAttribute(name: "Include", value: "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll")), new XElement("Using", new XAttribute(name: "Namespace", value: "System.Linq")), new XElement("Code", new XAttribute(name: "Type", value: "Class"), new XAttribute(name: "Language", value: "cs"), new XAttribute(name: "Source", value: "cancel-task.cs")))));
+        project.Root.Add(content: new XElement("Target", new XAttribute(name: "Name", value: "CancelCompilers"), new XElement(name: "CancelCompilerFixture")));
         fixture.Write(path: "fixture.proj", text: project.ToString());
         var build = fixture.Run(target: "CancelCompilers");
+
         Assert.NotEqual(expected: 0, actual: build.ExitCode);
-        Assert.False(condition: build.TimedOut, userMessage: build.Stdout + build.Stderr);
+        Assert.False(condition: build.TimedOut, userMessage: (build.Stdout + build.Stderr));
         Assert.Equal(expected: 2, actual: fixture.Started().Length);
         fixture.RequireChildrenExited();
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
@@ -97,6 +104,7 @@ public sealed partial class ShaderBuildTargetsLawTests {
     internal sealed partial class Fixture {
         private void WriteCompiler(string mode) {
             var compiler = (OperatingSystem.IsWindows() ? "fixture-dxc.cmd" : "fixture-dxc.sh");
+
             CompilerPath = Puck.Abstractions.PuckPaths.Normalize(path: PathOf(path: compiler));
             Write(path: "compiler-path.txt", text: CompilerPath);
             Write(path: "compiler-mode.txt", text: mode);
@@ -117,9 +125,11 @@ public sealed partial class ShaderBuildTargetsLawTests {
         public string[] Started() => Directory.GetFiles(path: PathOf(path: "started"));
         public void RequireChildrenExited() {
             foreach (var path in Started()) {
-                var pid = int.Parse(s: Path.GetFileName(path), provider: System.Globalization.CultureInfo.InvariantCulture);
+                var pid = int.Parse(s: Path.GetFileName(path: path), provider: System.Globalization.CultureInfo.InvariantCulture);
+
                 try {
                     using var process = Process.GetProcessById(processId: pid);
+
                     Assert.True(condition: process.HasExited, userMessage: $"Compiler child {pid} is still alive after the task returned.");
                 } catch (ArgumentException) { }
             }

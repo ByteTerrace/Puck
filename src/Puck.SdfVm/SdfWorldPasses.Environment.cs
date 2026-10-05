@@ -12,10 +12,10 @@ public sealed partial class SdfWorldPasses {
     /// <summary>Returns the residency's shared environment producer name, or null before it is registered.</summary>
     /// <param name="residency">The existing residency.</param>
     /// <returns>The producer exporting the map and coefficients as separate buffer dependencies.</returns>
-    public string? EnvironmentName(SdfWorldResidency residency) => m_environmentNames.TryGetValue(residency, out var source) ? source.Name : null;
+    public string? EnvironmentName(SdfWorldResidency residency) => (m_environmentNames.TryGetValue(key: residency, value: out var source) ? source.Name : null);
 
     private RenderGraphPackageFragment WithEnvironment(RenderGraphPackageFragment fragment, SdfWorldResidency? residency) {
-        if (residency is null || EnvironmentName(residency: residency) is null) { return fragment; }
+        if ((residency is null) || (EnvironmentName(residency: residency) is null)) { return fragment; }
         if (!m_environmentFragments.TryGetValue(key: fragment, value: out var environment)) {
             environment = SdfSkyEnvironmentGraph.WithEnvironment(fragment: fragment);
             m_environmentFragments.Add(key: fragment, value: environment);

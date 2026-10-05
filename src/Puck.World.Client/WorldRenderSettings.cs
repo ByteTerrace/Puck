@@ -74,7 +74,7 @@ public sealed partial class WorldRenderSettings {
         ShadowAmortize = defaults.ShadowAmortize;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
-        IndirectTier = defaults.Indirect?.Tier ?? SdfIndirectTier.Medium;
+        IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
         CadenceGate = true;

@@ -62,8 +62,8 @@ public sealed class PuckWriteShaderHashSidecars : Task {
             var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
             var recipeHash = PuckShaderHashing.HashRecipe(bytecode: bytecode);
 
-            if (!string.Equals(sourceHash, bytecode.GetMetadata("SourceHash"), StringComparison.Ordinal) ||
-                !string.Equals(recipeHash, bytecode.GetMetadata("RecipeHash"), StringComparison.Ordinal)) {
+            if (!string.Equals(a: sourceHash, b: bytecode.GetMetadata(metadataName: "SourceHash"), comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(a: recipeHash, b: bytecode.GetMetadata(metadataName: "RecipeHash"), comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(message: $"Shader inputs changed while '{bytecode.ItemSpec}' compiled. The cached bytecode and sidecar are left unchanged.");
                 return false;
             }
@@ -114,26 +114,29 @@ public sealed class PuckSelectShaderCompiles : Task {
 
     public override bool Execute() {
         var stale = new List<ITaskItem>();
+
         foreach (var bytecode in BytecodeFiles) {
-            var path = bytecode.GetMetadata("FullPath");
-            var sourceHash = PuckShaderHashing.HashConcatenated(bytecode.GetMetadata("SourcePath"), Includes);
-            var recipeHash = PuckShaderHashing.HashRecipe(bytecode);
+            var path = bytecode.GetMetadata(metadataName: "FullPath");
+            var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: bytecode.GetMetadata(metadataName: "SourcePath"), includes: Includes);
+            var recipeHash = PuckShaderHashing.HashRecipe(bytecode: bytecode);
             // Missing outputs cannot be reused. Do not wait for another publisher merely to request compilation.
-            if (File.Exists(path) && File.Exists(path + ".hash")) {
-                using (PuckShaderHashing.Lock(LockFile, Log)) {
-                    if (File.Exists(path) && File.Exists(path + ".hash")) {
-                        var recorded = PuckShaderHashing.ReadSidecar(path + ".hash");
-                        if (recorded.SourceHash == sourceHash && recorded.RecipeHash == recipeHash &&
-                            recorded.BytecodeHash == PuckShaderHashing.HashFile(path)) {
+            if (File.Exists(path: path) && File.Exists(path: (path + ".hash"))) {
+                using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+                    if (File.Exists(path: path) && File.Exists(path: (path + ".hash"))) {
+                        var recorded = PuckShaderHashing.ReadSidecar(path: (path + ".hash"));
+
+                        if ((recorded.SourceHash == sourceHash) && (recorded.RecipeHash == recipeHash) &&
+                            (recorded.BytecodeHash == PuckShaderHashing.HashFile(path: path))) {
                             continue;
                         }
                     }
                 }
             }
-            var selected = new TaskItem(bytecode);
-            selected.SetMetadata("SourceHash", sourceHash);
-            selected.SetMetadata("RecipeHash", recipeHash);
-            stale.Add(selected);
+            var selected = new TaskItem(sourceItem: bytecode);
+
+            selected.SetMetadata(metadataName: "SourceHash", metadataValue: sourceHash);
+            selected.SetMetadata(metadataName: "RecipeHash", metadataValue: recipeHash);
+            stale.Add(item: selected);
         }
         Stale = stale.ToArray();
         return true;
@@ -217,10 +220,10 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             var expectedBytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
 
             var (recordedSourceHash, recordedRecipeHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
-            var recipe = Array.Find(RecipeBytecode, item => string.Equals(item.GetMetadata("FullPath"), bytecodePath,
-                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            var recipe = Array.Find(array: RecipeBytecode, match: item => string.Equals(a: item.GetMetadata(metadataName: "FullPath"), b: bytecodePath,
+                comparisonType: ((Path.DirectorySeparatorChar == '\\') ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)));
 
-            if (recipe == null || recordedRecipeHash != PuckShaderHashing.HashRecipe(recipe)) {
+            if ((recipe is null) || (recordedRecipeHash != PuckShaderHashing.HashRecipe(bytecode: recipe))) {
                 Log.LogError(message: $"Shader bytecode '{bytecode.ItemSpec}' has no matching compiler recipe in its '.hash' sidecar. Build normally to refresh the bytecode and sidecar together.");
             }
 
@@ -445,8 +448,8 @@ internal static class PuckShaderHashing {
     /// <summary>Hashes the backend and exact effective compiler command/options, independently of output paths.</summary>
     public static string HashRecipe(ITaskItem bytecode) {
         using (var sha256 = SHA256.Create()) {
-            return ToHex(sha256.ComputeHash(Encoding.UTF8.GetBytes(
-                Path.GetExtension(bytecode.ItemSpec) + "\n" + bytecode.GetMetadata("Recipe"))));
+            return ToHex(bytes: sha256.ComputeHash(buffer: Encoding.UTF8.GetBytes(
+                s: ((Path.GetExtension(path: bytecode.ItemSpec) + "\n") + bytecode.GetMetadata(metadataName: "Recipe")))));
         }
     }
     /// <summary>Reads source, recipe and bytecode SHA-256 fields; malformed or absent fields are empty. Compile
@@ -455,22 +458,22 @@ internal static class PuckShaderHashing {
         var sourceHash = "";
         var recipeHash = "";
         var bytecodeHash = "";
-        var fields = new HashSet<string>(StringComparer.Ordinal);
+        var fields = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var line in Encoding.UTF8.GetString(bytes: ReadAllBytes(path: path)).Split('\n')) {
             if (line.Length == 0) { continue; }
-            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:") && fields.Add("source")) {
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:") && fields.Add(item: "source")) {
                 sourceHash = line.Substring(startIndex: "source:".Length).Trim();
-            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:") && fields.Add("recipe")) {
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:") && fields.Add(item: "recipe")) {
                 recipeHash = line.Substring(startIndex: "recipe:".Length).Trim();
-            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:") && fields.Add("bytecode")) {
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:") && fields.Add(item: "bytecode")) {
                 bytecodeHash = line.Substring(startIndex: "bytecode:".Length).Trim();
             } else {
                 return ("", "", "");
             }
         }
 
-        return (IsHash(sourceHash) ? sourceHash : "", IsHash(recipeHash) ? recipeHash : "", IsHash(bytecodeHash) ? bytecodeHash : "");
+        return ((IsHash(value: sourceHash) ? sourceHash : ""), (IsHash(value: recipeHash) ? recipeHash : ""), (IsHash(value: bytecodeHash) ? bytecodeHash : ""));
     }
     /// <summary>True when <paramref name="value"/> is a SHA-256 in the lowercase hex <see cref="ToHex"/> writes.</summary>
     public static bool IsHash(string value) {

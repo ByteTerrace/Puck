@@ -25,7 +25,7 @@ public sealed class IrradianceSurfaces {
         ArgumentNullException.ThrowIfNull(argument: emission);
 
         Albedo = albedo;
-        Reflection = reflection ?? ((_, _, material) => albedo(material));
+        Reflection = (reflection ?? ((_, _, material) => albedo(material)));
         Emission = emission;
         Direct = (direct ?? (static (_, _, _) => Double3.Zero));
         Sky = (sky ?? (static _ => Double3.Zero));
@@ -62,16 +62,16 @@ public sealed class IrradianceSurfaces {
             albedo: material => {
                 var entry = materials[material];
                 var diffuse = (1.0 - entry.Metal);
-                var bleed = entry.Bleed ?? System.Numerics.Vector3.One;
+                var bleed = (entry.Bleed ?? System.Numerics.Vector3.One);
 
-                return new Double3(X: (entry.Albedo.X * diffuse * bleed.X), Y: (entry.Albedo.Y * diffuse * bleed.Y), Z: (entry.Albedo.Z * diffuse * bleed.Z));
+                return new Double3(X: ((entry.Albedo.X * diffuse) * bleed.X), Y: ((entry.Albedo.Y * diffuse) * bleed.Y), Z: ((entry.Albedo.Z * diffuse) * bleed.Z));
             },
             direct: direct,
             emission: material => {
                 var entry = materials[material];
-                var bleed = entry.Bleed ?? System.Numerics.Vector3.One;
+                var bleed = (entry.Bleed ?? System.Numerics.Vector3.One);
 
-                return new Double3(X: (entry.Albedo.X * entry.Emissive * bleed.X), Y: (entry.Albedo.Y * entry.Emissive * bleed.Y), Z: (entry.Albedo.Z * entry.Emissive * bleed.Z));
+                return new Double3(X: ((entry.Albedo.X * entry.Emissive) * bleed.X), Y: ((entry.Albedo.Y * entry.Emissive) * bleed.Y), Z: ((entry.Albedo.Z * entry.Emissive) * bleed.Z));
             },
             sky: sky,
             screens: screens,

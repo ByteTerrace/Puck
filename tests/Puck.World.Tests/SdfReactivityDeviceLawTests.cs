@@ -122,7 +122,8 @@ public sealed class SdfReactivityDeviceLawTests {
         }
     }
     private sealed class Probe : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
-        public ulong ReadbackBytes => m_copies.Aggregate(0UL, static (bytes, copy) => checked(bytes + copy.SizeBytes));
+        public ulong ReadbackBytes => m_copies.Aggregate(0UL, static (bytes, copy) => checked((bytes + copy.SizeBytes)));
+
         private readonly IRenderGraphPackageRecorder m_inner;
         private readonly ProbeFactory m_owner;
         private readonly IGpuReadbackBuffer[] m_copies;

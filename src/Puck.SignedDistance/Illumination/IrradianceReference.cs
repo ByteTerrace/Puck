@@ -39,7 +39,7 @@ public sealed class IrradianceReference {
     public IrradianceReference(IrradianceField field, IrradianceSurfaces surfaces, double exitDistance, double feedbackGain = 1d) {
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: surfaces);
-        if (!double.IsFinite(feedbackGain) || feedbackGain < 0d || feedbackGain > 1d) { throw new ArgumentOutOfRangeException(nameof(feedbackGain)); }
+        if (!double.IsFinite(d: feedbackGain) || (feedbackGain < 0d) || (feedbackGain > 1d)) { throw new ArgumentOutOfRangeException(paramName: nameof(feedbackGain)); }
 
         m_field = field;
         m_surfaces = surfaces;
@@ -57,7 +57,6 @@ public sealed class IrradianceReference {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bounces"/> is negative or needs more prime bases
     /// than the sequence holds, or <paramref name="paths"/> is not positive.</exception>
     public IrradianceEstimate Estimate(Double3 point, Double3 normal, int bounces, int paths) => EstimateCore(point, normal, bounces, paths).Total;
-
     /// <summary>Estimates independent first-hit source categories and later feedback on the same paths, without
     /// deriving proportions from their final sum.</summary>
     /// <param name="point">The receiver surface point.</param>
@@ -67,7 +66,6 @@ public sealed class IrradianceReference {
     /// <returns>The source means and actual unresolved count.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The bounce depth or path count is outside its supported range.</exception>
     public IrradianceSourceEstimate EstimateSources(Double3 point, Double3 normal, int bounces, int paths) => EstimateCore(point, normal, bounces, paths).Sources;
-
     /// <summary>Estimates physical incoming radiance along a captured first ray, then follows the same attributed
     /// finite-bounce paths as <see cref="EstimateSources"/>. This independent reference has the field's query budget,
     /// not the renderer's bounded Near allowance, and consumes no cached radiance.</summary>
@@ -81,16 +79,17 @@ public sealed class IrradianceReference {
     /// <exception cref="ArgumentOutOfRangeException">The origin or direction is not finite, the direction is zero,
     /// or the bounce depth or path count is outside its supported range.</exception>
     public IrradianceSourceEstimate EstimateIncidentSources(Double3 origin, Double3 direction, int bounces, int paths = 64) {
-        if (!double.IsFinite(origin.X) || !double.IsFinite(origin.Y) || !double.IsFinite(origin.Z)) {
+        if (!double.IsFinite(d: origin.X) || !double.IsFinite(d: origin.Y) || !double.IsFinite(d: origin.Z)) {
             throw new ArgumentOutOfRangeException(nameof(origin), "The captured ray origin must be finite.");
         }
-        if (!double.IsFinite(direction.X) || !double.IsFinite(direction.Y) || !double.IsFinite(direction.Z) || direction == Double3.Zero) {
+        if (!double.IsFinite(d: direction.X) || !double.IsFinite(d: direction.Y) || !double.IsFinite(d: direction.Z) || (direction == Double3.Zero)) {
             throw new ArgumentOutOfRangeException(nameof(direction), "The captured ray direction must be finite and nonzero.");
         }
         ArgumentOutOfRangeException.ThrowIfGreaterThan(paths, 256);
         // Scaling first preserves a finite nonzero direction even when its raw squared length overflows or underflows.
-        var scale = Math.Max(Math.Abs(direction.X), Math.Max(Math.Abs(direction.Y), Math.Abs(direction.Z)));
-        var unit = new Double3(direction.X / scale, direction.Y / scale, direction.Z / scale).Normalize();
+        var scale = Math.Max(val1: Math.Abs(value: direction.X), val2: Math.Max(val1: Math.Abs(value: direction.Y), val2: Math.Abs(value: direction.Z)));
+        var unit = new Double3(X: (direction.X / scale), Y: (direction.Y / scale), Z: (direction.Z / scale)).Normalize();
+
         return EstimateCore(origin, default, bounces, paths, firstDirection: unit).Sources;
     }
 
@@ -107,11 +106,11 @@ public sealed class IrradianceReference {
             Double3 radiance;
             bool resolved;
             IrradianceContributions attributed;
+
             if (firstDirection is { } direction) {
-                radiance = IncidentRay(point, direction, path + 1, 0, bounces, out resolved, out attributed);
-            }
-            else {
-                radiance = Incident(point, normal, path + 1, 0, bounces, out resolved, out attributed);
+                radiance = IncidentRay(bounce: 0, bounces: bounces, contributions: out attributed, direction: direction, origin: point, path: (path + 1), resolved: out resolved);
+            } else {
+                radiance = Incident(bounce: 0, bounces: bounces, contributions: out attributed, normal: normal, path: (path + 1), point: point, resolved: out resolved);
             }
 
             if (!resolved) {
@@ -124,8 +123,9 @@ public sealed class IrradianceReference {
             contributions += attributed;
         }
 
-        return (new IrradianceEstimate(Irradiance: (sum * (1.0 / paths)), Paths: paths, Unresolved: unresolved), new IrradianceSourceEstimate(contributions * (1.0 / paths), paths, unresolved));
+        return (new IrradianceEstimate(Irradiance: (sum * (1.0 / paths)), Paths: paths, Unresolved: unresolved), new IrradianceSourceEstimate(Contributions: (contributions * (1.0 / paths)), Paths: paths, Unresolved: unresolved));
     }
+
     /// <summary>Returns a cosine-weighted direction on the hemisphere about a normal from two numbers in [0, 1).</summary>
     /// <param name="normal">The unit normal.</param>
     /// <param name="u">The first number.</param>
@@ -174,7 +174,6 @@ public sealed class IrradianceReference {
         }
         return IncidentRay(launch.Point, direction, path, bounce, bounces, out resolved, out contributions);
     }
-
     private Double3 IncidentRay(Double3 origin, Double3 direction, int path, int bounce, int bounces,
         out bool resolved, out IrradianceContributions contributions) {
         resolved = true;
@@ -183,7 +182,8 @@ public sealed class IrradianceReference {
 
         if (ray.Kind == IrradianceRayKind.Miss) {
             var sky = m_surfaces.Sky(arg: direction);
-            contributions = new(default, default, default, sky, default);
+
+            contributions = new(Direct: default, Emission: default, Feedback: default, Screens: default, Sky: sky);
             return sky;
         }
 
@@ -197,20 +197,22 @@ public sealed class IrradianceReference {
         // follow the incoming ray; flipping it would launch the reflection into the solid instead.
 
         var reflected = m_surfaces.Reflection(ray.Point, hitNormal, ray.Material);
-        var direct = reflected == Double3.Zero ? Double3.Zero
-            : m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
-        var screens = reflected == Double3.Zero ? Double3.Zero
-            : m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
-        var arriving = direct + screens;
+        var direct = ((reflected == Double3.Zero) ? Double3.Zero
+            : m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material));
+        var screens = ((reflected == Double3.Zero) ? Double3.Zero
+            : m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material));
+        var arriving = (direct + screens);
         var feedback = Double3.Zero;
-        if (bounce < bounces && reflected != Double3.Zero && m_feedbackGain > 0d) {
-            feedback = Incident(bounce: bounce + 1, bounces: bounces, normal: hitNormal, path: path,
-                point: ray.Point, resolved: out resolved, contributions: out _) * m_feedbackGain;
+
+        if ((bounce < bounces) && (reflected != Double3.Zero) && (m_feedbackGain > 0d)) {
+            feedback = (Incident(bounce: (bounce + 1), bounces: bounces, normal: hitNormal, path: path,
+                point: ray.Point, resolved: out resolved, contributions: out _) * m_feedbackGain);
             arriving += feedback;
         }
         var emission = m_surfaces.Emission(arg: ray.Material);
-        contributions = new(Double3.Multiply(reflected, direct), Double3.Multiply(reflected, feedback), emission,
-            default, Double3.Multiply(reflected, screens));
-        return Double3.Multiply(reflected, arriving) + emission;
+
+        contributions = new(Double3.Multiply(a: reflected, b: direct), Double3.Multiply(a: reflected, b: feedback), emission,
+            default, Double3.Multiply(a: reflected, b: screens));
+        return (Double3.Multiply(a: reflected, b: arriving) + emission);
     }
 }

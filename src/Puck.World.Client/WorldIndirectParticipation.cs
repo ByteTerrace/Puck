@@ -9,9 +9,10 @@ public static class WorldIndirectParticipation {
     /// <param name="placementId">The body's delivered placement identity, or null for an ordinary population body.</param>
     /// <returns>The placement override, then the owning world's body override, or Default for tier resolution.</returns>
     public static SdfIndirectParticipation ForPlacement(WorldDefinition definition, string? placementId) {
-        var placement = placementId is null ? SdfIndirectParticipation.Default :
-            WorldDefinitionRows.FindPlacement(definition.Placements, placementId)?.Indirect ?? SdfIndirectParticipation.Default;
-        return placement != SdfIndirectParticipation.Default ? placement :
-            definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default;
+        var placement = ((placementId is null) ? SdfIndirectParticipation.Default :
+            (WorldDefinitionRows.FindPlacement(definition.Placements, placementId)?.Indirect ?? SdfIndirectParticipation.Default));
+
+        return ((placement != SdfIndirectParticipation.Default) ? placement :
+            (definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default));
     }
 }

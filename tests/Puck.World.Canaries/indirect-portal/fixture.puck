@@ -10,7 +10,9 @@ host {
   exitAfterSeconds: 0
   targetHertz: 0
 }
-simulation { rateHz: 30 }
+simulation {
+  rateHz: 30
+}
 views {
   nestingDepth: 2
   layout "receiver" {
@@ -21,19 +23,20 @@ views {
   }
 }
 cameras [{
-  name: "eye"
-  renderWidth: 96
-  renderHeight: 96
-  rig {
     name: "eye"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [0, 2, 4]))
-      lookAt(subject: worldPoint(point: [0, 0, 1]))
-      fieldOfView(fieldOfViewRadians: 0.7)
-    ]
+    renderWidth: 96
+    renderHeight: 96
+    rig {
+      name: "eye"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2, 4]))
+        lookAt(subject: worldPoint(point: [0, 0, 1]))
+        fieldOfView(fieldOfViewRadians: 0.7)
+      ]
+    }
   }
-}]
+]
 destinations [{ name: "red-room", reference: "red-room", scope: global, durability: persisted }]
 references [{ name: "red-room", document: "red-room" }]
 render {
@@ -42,25 +45,57 @@ render {
   renderScale: 1
   farDistance: 16
   ambientOcclusion: false
-  environment { ambient: 0, reflection: 0 }
-  atmosphere { fog { density: 0 } }
-  lighting { lights [] }
-  sky { layers [gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])] }
-  indirect {
-    sources { lights: 0, emission: 0, screens: 1, sky: 0, feedback: 1 }
-    bounces: 2
-    apply { intensity: 1, tint: "#FFFFFF", contact: 0 }
+  environment {
+    ambient: 0
+    reflection: 0
   }
-  medium { temporal: false, dynamicResolution: false, renderScale: 1, ambientOcclusion: false }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  lighting {
+    lights []
+  }
+  sky {
+    layers [gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])]
+  }
+  indirect {
+    sources {
+      lights: 0
+      emission: 0
+      screens: 1
+      sky: 0
+      feedback: 1
+    }
+    bounces: 2
+    apply {
+      intensity: 1
+      tint: "#FFFFFF"
+      contact: 0
+    }
+  }
+  medium {
+    temporal: false
+    dynamicResolution: false
+    renderScale: 1
+    ambientOcclusion: false
+  }
 }
 prototypes {
   prototype "portal" {
     document {
       schema: "puck.creation.v1"
       name: "portal"
-      behavior { faces [{ name: "glass", shapeId: 0, defaultSource: null }] }
+      behavior {
+        faces [{ name: "glass", shapeId: 0, defaultSource: null }]
+      }
       palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 0 }]
-      shape Box "panel" { material: 0, position [0, 0, 0], scale [1.2, 1, 0.05] }
+      shape Box "panel" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.2, 1, 0.05]
+      }
     }
   }
   prototype "receiver" {
@@ -68,7 +103,11 @@ prototypes {
       schema: "puck.creation.v1"
       name: "receiver"
       palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
-      shape Box "floor" { material: 0, position [0, 0, 0], scale [3, 0.05, 3] }
+      shape Box "floor" {
+        material: 0
+        position [0, 0, 0]
+        scale [3, 0.05, 3]
+      }
     }
   }
 }
@@ -78,10 +117,14 @@ placements {
     position [0, 1.5, 0]
     yawDegrees: 180deg
     faceSources [{
-      face: "glass"
-      portal { arrival: "mapped", counterpart: "arch/glass", destination: "red-room" }
-      source: session(destination: "red-room", projection: window, resolution: [96, 96])
-    }]
+        face: "glass"
+        portal { arrival: "mapped", counterpart: "arch/glass", destination: "red-room" }
+        source: session(destination: "red-room", projection: window, resolution: [96, 96])
+      }
+    ]
   }
-  placement "receiver" { prototype: "receiver", position [0, -0.05, 1] }
+  placement "receiver" {
+    prototype: "receiver"
+    position [0, -0.05, 1]
+  }
 }

@@ -13,12 +13,13 @@ public sealed partial class SdfWorldPasses {
     /// <see cref="SdfWorldPackage.FragmentFor"/>.</remarks>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
         var entry = Refresh(instance: instance);
+
         if (entry.View is { LightView: true } light) { return LightFragment(residency: light.Residency); }
         var fragment = entry.Fragment;
         var tier = (entry.View?.Residency.IndirectTier ?? Puck.SignedDistance.SdfIndirectTier.Off);
 
         if (tier == Puck.SignedDistance.SdfIndirectTier.Off) { return WithEnvironment(fragment: fragment, residency: entry.View?.Residency); }
-        var maps = ((entry.View is { } current) && (LightViewName(residency: current.Residency) is not null) ? LightMapCount(residency: current.Residency) : -1);
+        var maps = (((entry.View is { } current) && (LightViewName(residency: current.Residency) is not null)) ? LightMapCount(residency: current.Residency) : -1);
         var key = (fragment, tier, maps);
 
         if (!m_indirectFragments.TryGetValue(key: key, value: out var indirect)) {

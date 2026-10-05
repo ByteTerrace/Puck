@@ -466,8 +466,8 @@ public sealed class ImageProducerLawTests {
 
         var filling = true;
         var filled = new List<uint>();
-        var fillImage = Surface.SameDeviceImage(imageHandle: 0xF110, imageViewHandle: 0xF111,
-            width: 1, height: 1, format: GpuPixelFormat.R16G16B16A16Float);
+        var fillImage = Surface.SameDeviceImage(format: GpuPixelFormat.R16G16B16A16Float, height: 1,
+            imageHandle: 0xF110, imageViewHandle: 0xF111, width: 1);
 
         GpuImageLease Fill(uint rgba) {
             filled.Add(item: rgba);

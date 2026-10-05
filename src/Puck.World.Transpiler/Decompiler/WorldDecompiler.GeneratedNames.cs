@@ -429,6 +429,7 @@ public static partial class WorldDecompiler {
             var refused = ((step["expect"] is JsonValue expectation) &&
                 expectation.TryGetValue<string>(value: out var outcome) &&
                 (outcome == nameof(WorldScheduleExpectation.Refused)));
+
             if ((step.ContainsKey(propertyName: "expect") && !refused) ||
                 (step.ContainsKey(propertyName: "refusal") &&
                     (!refused || (step["refusal"] is not JsonValue refusalValue) ||

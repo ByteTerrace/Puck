@@ -215,7 +215,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
     /// records. <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
-
     /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
     /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
@@ -323,7 +322,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             ? null
             : index => m_emittedScales[index]),
             picks: (probeWorstCase ? null : m_picks),
-            indirectFor: (probeWorstCase ? null : index => WorldIndirectParticipation.ForPlacement(m_mirror.Definition, m_mirror.PlacementId(index)))
+            indirectFor: (probeWorstCase ? null : index => WorldIndirectParticipation.ForPlacement(definition: m_mirror.Definition, placementId: m_mirror.PlacementId(index: index)))
         );
     }
     // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
@@ -558,7 +557,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            IndirectBodies = m_mirror.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default,
+            IndirectBodies = (m_mirror.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,

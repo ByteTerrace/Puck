@@ -78,6 +78,7 @@ public sealed class IrradianceVisibilityLawTests {
         );
         var under = new Double3(X: 0.3, Y: 0.0, Z: 0.2);
         var open = new Double3(X: 3.5, Y: 0.0, Z: 0.1);
+
         TableEdgeLaunchStaysOutside(field, surfaces, under, path: 1149);
         TableEdgeLaunchStaysOutside(field, surfaces, under, path: 1443);
         var model = Solved(field: field, max: new Double3(X: 6.5, Y: 6.5, Z: 6.5), min: new Double3(X: -6.5, Y: -6.5, Z: -6.5), partition: true, surfaces: surfaces);
@@ -192,26 +193,29 @@ public sealed class IrradianceVisibilityLawTests {
     // gradient follows the incoming direction, but still points toward positive field values, outside the solid.
     private static void TableEdgeLaunchStaysOutside(IrradianceField field, IrradianceSurfaces surfaces, Double3 point, int path) {
         var first = IrradianceCells.Launch(field: field, height: 0.004, normal: Up, surface: point);
-        Assert.NotNull(first);
+
+        Assert.NotNull(value: first);
         var direction = IrradianceReference.CosineDirection(normal: Up,
             u: IrradianceReference.RadicalInverse(index: path, primeBase: 2),
             v: IrradianceReference.RadicalInverse(index: path, primeBase: 3));
         var hit = field.Cast(origin: first.Value.Point, direction: direction, maxDistance: 60.0);
+
         Assert.Equal(IrradianceRayKind.Hit, hit.Kind);
-        Assert.True(field.TryGradient(hit.Point, out var gradient));
-        Assert.True(Double3.Dot(gradient, direction) > 0.0);
+        Assert.True(condition: field.TryGradient(hit.Point, out var gradient));
+        Assert.True(condition: (Double3.Dot(a: gradient, b: direction) > 0.0));
         var outward = IrradianceCells.Launch(field: field, height: 0.004, normal: gradient, surface: hit.Point);
-        Assert.NotNull(outward);
-        Assert.True(field.TryClampedDistance(outward.Value.Point, out var clearance, out _));
-        Assert.True(clearance > 0.0);
+
+        Assert.NotNull(value: outward);
+        Assert.True(condition: field.TryClampedDistance(outward.Value.Point, out var clearance, out _));
+        Assert.True(condition: (clearance > 0.0));
 
         // Facing the incoming ray would enter the solid. That failed launch remains unknown, never resolved black.
-        Assert.Null(IrradianceCells.Launch(field: field, height: 0.004, normal: -gradient, surface: hit.Point));
+        Assert.Null(value: IrradianceCells.Launch(field: field, height: 0.004, normal: -gradient, surface: hit.Point));
         var refused = new IrradianceReference(field, surfaces, exitDistance: 60.0)
             .Estimate(point: hit.Point, normal: -gradient, bounces: 1, paths: 1);
+
         Assert.Equal(1, refused.Unresolved);
     }
-
     private static void HoldsDarkInside(IrradianceField field, Double3 center, (Double3 Point, Double3 Normal)[] inside, (Double3 Point, Double3 Normal) outside) {
         var surfaces = IrradianceScenes.Uniform(albedo: 0.5, emission: 0.0, sky: 1.0);
         var min = (center - new Double3(X: 5.0, Y: 5.0, Z: 5.0));

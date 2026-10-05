@@ -93,11 +93,11 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
                 readback = new RenderGraphBufferReadback(Version: target.Box!, SourceOffsetBytes: 0, SizeBytes: BoxBytes,
                     Destination: target.Buffer!, DestinationOffsetBytes: ((ulong)target.RecordBytes));
                 return true;
-            case 2 when target.Cache is not null:
+            case 2 when (target.Cache is not null):
                 readback = new RenderGraphBufferReadback(Version: target.IndirectVersion!, SourceOffsetBytes: 0,
                     SizeBytes: IndirectBytes, Destination: target.IndirectBuffer!);
                 return true;
-            case 3 when target.Cache is not null:
+            case 3 when (target.Cache is not null):
                 readback = new RenderGraphBufferReadback(Version: target.CacheVersion!, SourceOffsetBytes: 0,
                     SizeBytes: target.ProbeBuffer!.SizeBytes, Destination: target.ProbeBuffer);
                 return true;
@@ -176,7 +176,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
             Flags = BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[12..]),
             TransformSlot = transformSlot,
             Transform = ((transformSlot is { } index) ? slot.TransformAt(slot: index) : null),
-            Indirect = AnswerIndirect(slot),
+            Indirect = AnswerIndirect(slot: slot),
         };
     }
 

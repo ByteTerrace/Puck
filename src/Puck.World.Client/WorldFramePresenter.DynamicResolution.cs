@@ -43,7 +43,11 @@ public sealed partial class WorldFramePresenter {
         } else {
             state.Controller.Reset();
         }
-        return view with { RenderScale = ceiling, ResolvedRenderScale = scale, UpscaleSharpness = m_settings.UpscaleSharpness,
-            Quality = view.Quality with { IndirectMethod = m_settings.IndirectMethod, SkyFieldScale = m_settings.SkyFieldScale } };
+        return view with {
+            RenderScale = ceiling,
+            ResolvedRenderScale = scale,
+            UpscaleSharpness = m_settings.UpscaleSharpness,
+            Quality = view.Quality with { IndirectMethod = m_settings.IndirectMethod, SkyFieldScale = m_settings.SkyFieldScale },
+        };
     }
 }

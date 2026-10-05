@@ -28,7 +28,6 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
     }
-
     // History follows its successful writer; other storage follows the submission slot. Host-owned, transient and
     // retained storage each share one instance across slots.
     private static int InstanceIndex(RuntimeResource resource, int slot, bool previous) =>

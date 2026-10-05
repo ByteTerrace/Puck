@@ -98,12 +98,12 @@ public sealed partial class SdfCompositeAtmosphereDeviceLawTests {
         SdfSky.PackAtmosphere(atmosphere: in atmosphere, block: ref sky, farDistance: SdfFrame.DefaultFarDistance, lights: lights);
         if (coverageProbe is not null) {
             coverageProbe.Sky.Pack(lights: lights, farDistance: SdfFrame.DefaultFarDistance, details: new SdfSkyDetails(), block: out sky, layers: layers);
-            for (var index = 0; index < sky.LayerCount; index++) {
+            for (var index = 0; (index < sky.LayerCount); index++) {
                 if (layers[index].Kind != SdfSkyLayerKind.View) { continue; }
                 var fitted = SdfSky.PayloadOf<SdfSkyView>(layer: ref layers[index]);
 
                 MemoryMarshal.AsBytes(span: new[] { fitted }.AsSpan()).CopyTo(destination: block.AsSpan(
-                    start: (((int)parameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews)) + (index * SdfWorldPackage.SkyViewRows * 16))));
+                    start: (((int)parameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews)) + ((index * SdfWorldPackage.SkyViewRows) * 16))));
             }
         }
         var skyBytes = MemoryMarshal.AsBytes(span: new[] { sky }.AsSpan()).ToArray();

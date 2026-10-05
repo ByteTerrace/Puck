@@ -558,7 +558,7 @@ internal static partial class CountersCommand {
             or a saved report that is not a report, included).
             """);
         command.Subcommands.Add(item: CreateCompare());
-        command.SetAction(action: parseResult => parseResult.GetValue(option: batchOption) is { } batch
+        command.SetAction(action: parseResult => ((parseResult.GetValue(option: batchOption) is { } batch)
             ? RunBatch(
                 manifestPath: batch,
                 output: parseResult.GetValue(option: outputOption),
@@ -575,7 +575,7 @@ internal static partial class CountersCommand {
             savedReport: parseResult.GetValue(option: reportOption),
             scriptPath: parseResult.GetValue(option: scriptOption),
             world: parseResult.GetValue(option: worldOption)
-        ));
+        )));
 
         return command;
     }

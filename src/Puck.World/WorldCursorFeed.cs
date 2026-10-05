@@ -287,7 +287,7 @@ internal sealed partial class WorldCursorFeed {
             return null;
         }
 
-        return m_panes.Hover(point: DisplayPosition(position));
+        return m_panes.Hover(point: DisplayPosition(position: position));
     }
     private Vector2 DisplayPosition(Vector2 position) {
         var clientWidth = m_viewports.ClientWidth;

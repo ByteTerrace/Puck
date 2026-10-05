@@ -19,6 +19,7 @@ public sealed partial class LawProofLawTests {
         checkout.Write(name: FixPath, text: "fixed");
         if (withholdShader) { checkout.Write(name: Shader, text: "fixed shader"); }
         var fix = checkout.Commit(message: "lib: fix");
+
         shaders.RequireSuccess(run: shaders.Run(target: "Build"));
         shaders.Write(path: "bin/managed.dll", text: "never transfer managed output");
         shaders.Write(path: "obj/managed.cache", text: "never transfer managed intermediate");
@@ -28,6 +29,7 @@ public sealed partial class LawProofLawTests {
         var runner = new FakeRunner {
             BeforeBuild = (tree, _) => {
                 using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+
                 ++builds;
                 // Both phases receive the original complete pair. Withheld source still forces the real target to compile.
                 Assert.True(condition: File.Exists(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv")));
@@ -40,26 +42,28 @@ public sealed partial class LawProofLawTests {
                 }
                 copied.RequireSuccess(run: copied.Run(target: "Build"));
                 var compiles = copied.PathOf(path: "compiles.txt");
+
                 Assert.Equal(expected: (withholdShader ? 1 : 0), actual: (File.Exists(path: compiles) ? File.ReadAllLines(path: compiles).Length : 0));
             },
         };
 
-        var caller = sourceOnlyCaller ? other.PathOf(name: "caller") : checkout.Root;
+        var caller = (sourceOnlyCaller ? other.PathOf(name: "caller") : checkout.Root);
+
         if (sourceOnlyCaller) {
             _ = checkout.Git("worktree", "add", "--detach", "--quiet", caller, fix);
             // The proven C# snapshot may differ from its donor while ordinary shader inputs still match.
-            File.WriteAllText(path: Path.Combine(caller, "src/Lib/Other.cs"), contents: "different managed source");
+            File.WriteAllText(path: Path.Combine(path1: caller, path2: "src/Lib/Other.cs"), contents: "different managed source");
         }
         try {
             var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, Shader] : [FixPath]), Revision: fix),
                 repository: caller, runner: runner, scratch: scratch);
 
             Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
-            Assert.Equal(expected: 2, actual: builds);
-            Assert.Contains(expectedSubstring: "warmed 1 shader artifact pair(s)", actualString: result.Error);
+            Assert.Equal(actual: builds, expected: 2);
+            Assert.Contains(actualString: result.Error, expectedSubstring: "warmed 1 shader artifact pair(s)");
             Assert.Equal(expected: sidecar, actual: File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
             if (sourceOnlyCaller) {
-                Assert.False(condition: File.Exists(path: Path.Combine(caller, "src/Lib/Assets/Shaders/a.comp.spv")));
+                Assert.False(condition: File.Exists(path: Path.Combine(path1: caller, path2: "src/Lib/Assets/Shaders/a.comp.spv")));
             }
         } finally {
             if (sourceOnlyCaller) { _ = checkout.Git("worktree", "remove", "--force", caller); }
@@ -75,15 +79,18 @@ public sealed partial class LawProofLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
         using var shaders = ShaderCheckout(checkout: checkout);
         const string Shader = "src/Lib/Assets/Shaders/a.comp.hlsl";
+
         checkout.Write(name: FixPath, text: "fixed");
         checkout.Write(name: Shader, text: "fixed shader");
         var fix = checkout.Commit(message: "lib: fix");
+
         shaders.RequireSuccess(run: shaders.Run(target: "Build"));
         var builds = 0;
         FileStream? publisher = null;
         var runner = new FakeRunner {
             BeforeBuild = (tree, _) => {
-                using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(tree, "src/Lib"));
+                using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+
                 copied.RequireSuccess(run: copied.Run(target: "Build"));
                 Assert.Equal(expected: ++builds, actual: File.ReadAllLines(path: copied.PathOf(path: "compiles.txt")).Length);
                 if (builds != 1) { return; }
@@ -98,11 +105,13 @@ public sealed partial class LawProofLawTests {
                 }
             },
         };
+
         try {
             var result = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath, Shader], Revision: fix), runner: runner, scratch: scratch);
-            Assert.True(condition: result.ExitCode == CliExit.Success, userMessage: result.Error);
-            Assert.Equal(expected: 2, actual: builds);
-            Assert.Single(collection: result.Error.Split('\n'), predicate: line => line.Contains("warmed 1 shader artifact pair(s)", StringComparison.Ordinal));
+
+            Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+            Assert.Equal(actual: builds, expected: 2);
+            Assert.Single(collection: result.Error.Split('\n'), predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: "warmed 1 shader artifact pair(s)"));
         } finally {
             publisher?.Dispose();
             checkout.Write(name: Shader, text: "fixed shader");
@@ -120,11 +129,13 @@ public sealed partial class LawProofLawTests {
 
         checkout.Write(name: FixPath, text: "fixed");
         var fix = checkout.Commit(message: "lib: fix");
+
         shaders.RequireSuccess(run: shaders.Run(target: "Build"));
         if (unavailable == "bytes") { shaders.Write(path: "Assets/Shaders/a.comp.spv", text: "corrupt bytecode"); }
         if (unavailable == "recipe") {
             var path = shaders.PathOf(path: "Assets/Shaders/a.comp.spv.hash");
-            File.WriteAllLines(path: path, contents: File.ReadAllLines(path: path).Where(predicate: static line => !line.StartsWith(value: "recipe:", comparisonType: StringComparison.Ordinal)));
+
+            File.WriteAllLines(path: path, contents: File.ReadAllLines(path: path).Where(predicate: static line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:")));
         }
         using var publisher = ((unavailable == "publisher")
             ? new FileStream(path: shaders.PathOf(path: "obj/shader-publish.lock"), mode: FileMode.Open, access: FileAccess.ReadWrite, share: FileShare.None)
@@ -133,6 +144,7 @@ public sealed partial class LawProofLawTests {
         var runner = new FakeRunner {
             BeforeBuild = (tree, _) => {
                 using var copied = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+
                 if (++builds == 1) {
                     Assert.False(condition: File.Exists(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv")));
                     Assert.False(condition: File.Exists(path: copied.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
@@ -145,8 +157,8 @@ public sealed partial class LawProofLawTests {
         var result = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath], Revision: fix), runner: runner, scratch: scratch);
 
         Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
-        Assert.Equal(expected: 2, actual: builds);
-        Assert.DoesNotContain(expectedSubstring: "warmed 1 shader artifact pair(s)", actualString: result.Error);
+        Assert.Equal(actual: builds, expected: 2);
+        Assert.DoesNotContain(actualString: result.Error, expectedSubstring: "warmed 1 shader artifact pair(s)");
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
 
@@ -156,6 +168,7 @@ public sealed partial class LawProofLawTests {
         checkout.Write(name: ".gitignore", text: "bin/\nobj/\n*.spv\n*.dxil\n*.hash\ncompiles.txt\nstarted/\n");
         checkout.Write(name: "src/Lib/Lib.csproj", text: "<Project />\n");
         var shaders = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: checkout.Root, path2: "src/Lib"));
+
         shaders.Write(path: "Assets/Shaders/a.comp.hlsl", text: "original shader");
         shaders.ShaderProject(body: """
             <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>

@@ -11,7 +11,6 @@ public enum SdfIndirectParticipation {
     /// <summary>The instance neither casts nor receives indirect lighting.</summary>
     Off = 3,
 }
-
 /// <summary>Resolves the same whole-instance policy packed for indirect field and receiver queries.</summary>
 public static class SdfIndirectPolicy {
     /// <summary>Resolves an instance override, then a dynamic body's frame default, then its tier.</summary>
@@ -22,6 +21,6 @@ public static class SdfIndirectPolicy {
     /// <returns>Cast, Receive or Off. Static Default always resolves to Cast.</returns>
     public static SdfIndirectParticipation Resolve(SdfIndirectParticipation participation, bool dynamic,
         SdfIndirectTier tier, SdfIndirectParticipation bodies = SdfIndirectParticipation.Default) =>
-        participation != SdfIndirectParticipation.Default ? participation : !dynamic ? SdfIndirectParticipation.Cast :
-        bodies != SdfIndirectParticipation.Default ? bodies : tier == SdfIndirectTier.High ? SdfIndirectParticipation.Cast : SdfIndirectParticipation.Receive;
+        ((participation != SdfIndirectParticipation.Default) ? participation : (!dynamic ? SdfIndirectParticipation.Cast :
+        ((bodies != SdfIndirectParticipation.Default) ? bodies : ((tier == SdfIndirectTier.High) ? SdfIndirectParticipation.Cast : SdfIndirectParticipation.Receive))));
 }

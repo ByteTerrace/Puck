@@ -139,7 +139,7 @@ internal sealed partial class WorldScreenBinder {
             feed: feed,
             views: views
         );
-        emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed, views, sky, width, height);
+        emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed: feed, height: height, sky: sky, views: views, width: width);
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);

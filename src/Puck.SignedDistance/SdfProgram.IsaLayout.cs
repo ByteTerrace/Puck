@@ -170,5 +170,5 @@ public sealed partial class SdfProgram {
             ? ShadowTransparentInstanceFlag
             : 0u) | (instance.CameraHidden
             ? CameraHiddenInstanceFlag
-            : 0u) | ((uint)instance.Indirect << IndirectInstanceShift);
+            : 0u) | (((uint)instance.Indirect) << IndirectInstanceShift);
 }

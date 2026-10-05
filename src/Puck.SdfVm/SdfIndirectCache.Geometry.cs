@@ -12,36 +12,38 @@ public sealed partial class SdfIndirectCache {
     /// <param name="previous">The complete geometry bound before the change.</param>
     /// <param name="current">The complete geometry bound after the change.</param>
     public void MarkGeometry(IrradianceSphere previous, IrradianceSphere current) {
-        var change = Cover(previous, current);
-        m_changedGeometry = m_changedGeometry is { } pending ? Cover(pending, change) : change;
+        var change = Cover(first: previous, second: current);
+
+        m_changedGeometry = ((m_changedGeometry is { } pending) ? Cover(first: pending, second: change) : change);
     }
 
     private void ApplyGeometryChanges() {
         if (m_changedGeometry is not { } change) { return; }
-        var changed = m_schedule.MarkGeometry(change, change);
+        var changed = m_schedule.MarkGeometry(current: change, previous: change);
+
         m_changedGeometry = null;
         if (changed.Count == 0) { return; }
-        CertificateRevision = checked(CertificateRevision + 1u);
+        CertificateRevision = checked((CertificateRevision + 1u));
         InvalidateLighting();
         foreach (var key in changed) {
-            m_placed.Remove(key);
-            Array.Clear(m_traceStates, m_slots[key] * SdfIndirectLayout.ProbesPerBrick, SdfIndirectLayout.ProbesPerBrick);
+            m_placed.Remove(item: key);
+            Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);
         }
-        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(m_traceStates.AsSpan()));
+        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
     }
-
     private static IrradianceSphere Cover(IrradianceSphere first, IrradianceSphere second) {
-        if (double.IsPositiveInfinity(first.Radius) || double.IsPositiveInfinity(second.Radius)) {
-            return new(default, double.PositiveInfinity);
+        if (double.IsPositiveInfinity(d: first.Radius) || double.IsPositiveInfinity(d: second.Radius)) {
+            return new(Center: default, Radius: double.PositiveInfinity);
         }
-        var delta = second.Center - first.Center;
+        var delta = (second.Center - first.Center);
         var distance = delta.Length;
-        if (distance + second.Radius <= first.Radius) { return first; }
-        if (distance + first.Radius <= second.Radius) { return second; }
-        var radius = (distance + first.Radius + second.Radius) * 0.5;
-        var center = first.Center + delta * ((radius - first.Radius) / distance);
+
+        if ((distance + second.Radius) <= first.Radius) { return first; }
+        if ((distance + first.Radius) <= second.Radius) { return second; }
+        var radius = (((distance + first.Radius) + second.Radius) * 0.5);
+        var center = (first.Center + (delta * ((radius - first.Radius) / distance)));
         // Include the represented centre's rounding error in the final conservative radius.
-        radius = Math.Max((center - first.Center).Length + first.Radius, (center - second.Center).Length + second.Radius);
-        return new(center, Math.BitIncrement(radius));
+        radius = Math.Max(val1: ((center - first.Center).Length + first.Radius), val2: ((center - second.Center).Length + second.Radius));
+        return new(Center: center, Radius: Math.BitIncrement(x: radius));
     }
 }

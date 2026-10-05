@@ -12,8 +12,8 @@ namespace Puck.Testing;
 // graph frame, and the view's readiness and captures are the World's: the residency's tables built and the root served.
 // The host backend also selects the display-encode shaders when a float output is captured.
 internal sealed class SdfTestView : IDisposable {
-    public const string Instance = "world";
     public const string EnvironmentInstance = "world.environment";
+    public const string Instance = "world";
 
     private readonly uint m_extent;
 
@@ -44,7 +44,7 @@ internal sealed class SdfTestView : IDisposable {
                 Refresh: RenderGraphRefresh.EveryFrame
             ), new RenderGraphInstance(Name: EnvironmentInstance, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment,
                 Passes: 2, Reads: [], Output: ShaderPipelineResourceKind.Buffer, Refresh: RenderGraphRefresh.EveryFrame) {
-                OutputExtent = new RenderGraphPixelExtent(Width: Puck.SignedDistance.SdfSkyEnvironment.Size, Height: Puck.SignedDistance.SdfSkyEnvironment.Size),
+                OutputExtent = new RenderGraphPixelExtent(Height: Puck.SignedDistance.SdfSkyEnvironment.Size, Width: Puck.SignedDistance.SdfSkyEnvironment.Size),
             }],
             refusal: out var setRefusal,
             set: out var set
@@ -67,10 +67,10 @@ internal sealed class SdfTestView : IDisposable {
     }
 
     public ICaptureRequestTarget CaptureTarget => Runtime.CaptureTarget(instance: Instance);
+    public SdfSkyEnvironmentPasses Environment { get; }
     public bool IsReady => (Residency.IsReady && (Runtime.UnservedCaptureReason is null));
     public string? NotReadyReason => (Residency.NotReadyReason ?? Runtime.UnservedCaptureReason);
     public SdfWorldPasses Passes { get; }
-    public SdfSkyEnvironmentPasses Environment { get; }
     public SdfWorldResidency Residency { get; }
     public RenderGraphRuntime Runtime { get; }
 

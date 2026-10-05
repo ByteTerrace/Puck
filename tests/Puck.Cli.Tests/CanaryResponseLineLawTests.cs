@@ -106,7 +106,7 @@ public sealed class CanaryResponseLineLawTests {
     }
     [Fact]
     public void AFieldNamedInThePrefixKeepsItsSelectedRecordAndComponents() {
-        var transcript = (string[])[
+        var transcript = ((string[])[
             "[world.counters: gpu",
             "  cpu-reference=(1,2,3) emission=7,8,9",
             "]",
@@ -114,7 +114,7 @@ public sealed class CanaryResponseLineLawTests {
             "  cpu-reference=(4,5,6) emission=10,11,12",
             "]",
             "cpu-reference=(99,99,99) emission=99,99,99",
-        ];
+        ]);
 
         Assert.True(condition: Evaluate(
             line: "cpu-reference=",
@@ -290,7 +290,7 @@ public sealed class CanaryResponseLineLawTests {
             primaryTranscript: new CanaryTranscript(
                 RunDirectory: ".",
                 Stderr: [],
-                Stdout: transcript ?? Transcript
+                Stdout: (transcript ?? Transcript)
             )
         ).Passed;
 }

@@ -9,7 +9,6 @@ public static class SdfIndirectNearLayout {
     /// <summary>The finest-level interval in world units. Its clear endpoint continues the original cached direction.</summary>
     public const float Reach = 0.5f;
 }
-
 /// <summary>The actual selected receiver's near-field outcome, retained with its ordinary indirect pick.</summary>
 public enum SdfIndirectNearOutcome {
     /// <summary>The tier, method, source guard or interleaving phase admitted no near sample.</summary>

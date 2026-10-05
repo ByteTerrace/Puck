@@ -81,7 +81,7 @@ public sealed partial class WorldInspectorText {
             handler: $"steps={(hit?.Steps ?? 0)} queries={(hit?.Queries ?? 0)} selection={(snapshot.Selection ?? "none")}") && Line(text: scratch[..written], lines: NameLines));
         // A captured indirect explanation reserves the remaining panel before optional live presentation rows.
         // Its reference and provenance must not disappear behind camera, sky or timing diagnostics.
-        if (hit?.Indirect is not null) { Indirect(snapshot); }
+        if (hit?.Indirect is not null) { Indirect(snapshot: snapshot); }
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"camera={camera.Position.X:0.###},{camera.Position.Y:0.###},{camera.Position.Z:0.###} forward={camera.Forward.X:0.###},{camera.Forward.Y:0.###},{camera.Forward.Z:0.###}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
@@ -101,7 +101,7 @@ public sealed partial class WorldInspectorText {
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"instances={snapshot.Instances}/{SdfProgramBuilder.MaxInstances} headroom={(SdfProgramBuilder.MaxInstances - snapshot.Instances)}") && Line(text: scratch[..written]));
         _ = Line(lines: ReloadLines, text: m_reloadLine);
-        if (hit?.Indirect is null) { Indirect(snapshot); }
+        if (hit?.Indirect is null) { Indirect(snapshot: snapshot); }
         Environment(snapshot: snapshot);
     }
 

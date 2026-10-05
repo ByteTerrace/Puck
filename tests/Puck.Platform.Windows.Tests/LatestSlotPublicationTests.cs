@@ -54,8 +54,8 @@ public sealed class LatestSlotPublicationTests {
 
         publication.Configure(targetCount: 2);
         publication.Publish(fenceValue: 0UL, slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var first));
-        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var second));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var first, version: out _));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var second, version: out _));
         Assert.Equal(
             actual: second,
             expected: first
@@ -81,15 +81,15 @@ public sealed class LatestSlotPublicationTests {
 
         publication.Configure(targetCount: 3);
         publication.Publish(fenceValue: 0UL, slot: 0);
-        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var firstLease));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var firstLease, version: out _));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var second));
         publication.Publish(fenceValue: 0UL, slot: second);
-        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var secondLease));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var secondLease, version: out _));
 
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var third));
         publication.Publish(fenceValue: 0UL, slot: third);
-        Assert.True(condition: publication.TryAcquireLatest(version: out _, fenceValue: out _, slot: out var thirdLease));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var thirdLease, version: out _));
         Assert.False(condition: publication.TryReserveWriteSlot(slot: out _));
 
         publication.Release(slot: firstLease);
@@ -132,9 +132,9 @@ public sealed class LatestSlotPublicationTests {
                 );
             }
 
-            Assert.True(condition: publication.TryAcquireLatest(version: out _,
-                fenceValue: out var fenceValue,
-                slot: out var leased
+            Assert.True(condition: publication.TryAcquireLatest(fenceValue: out var fenceValue,
+                slot: out var leased,
+                version: out _
             ));
             Assert.Equal(expected: ((ulong)written[leased]), actual: fenceValue);
             held.Enqueue(item: (leased, written[leased]));
@@ -161,27 +161,27 @@ public sealed class LatestSlotPublicationTests {
             fenceValue: 7UL,
             slot: first
         );
-        Assert.True(condition: publication.TryAcquireLatest(version: out var firstVersion,
-            fenceValue: out var firstValue,
-            slot: out var firstLease
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out var firstValue,
+            slot: out var firstLease,
+            version: out var firstVersion
         ));
         Assert.True(condition: publication.TryReserveWriteSlot(slot: out var second));
         publication.Publish(
             fenceValue: 0UL,
             slot: second
         );
-        Assert.True(condition: publication.TryAcquireLatest(version: out var secondVersion,
-            fenceValue: out var secondValue,
-            slot: out var secondLease
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out var secondValue,
+            slot: out var secondLease,
+            version: out var secondVersion
         ));
 
         Assert.Equal(
             actual: (firstLease, firstValue, secondLease, secondValue),
             expected: (first, 7UL, second, 0UL)
         );
-        Assert.Equal(expected: (1L, 2L), actual: (firstVersion, secondVersion));
-        Assert.True(condition: publication.TryAcquireLatest(version: out var repeatedVersion, fenceValue: out _, slot: out var repeatedLease));
-        Assert.Equal(expected: secondVersion, actual: repeatedVersion);
+        Assert.Equal(actual: (firstVersion, secondVersion), expected: (1L, 2L));
+        Assert.True(condition: publication.TryAcquireLatest(fenceValue: out _, slot: out var repeatedLease, version: out var repeatedVersion));
+        Assert.Equal(actual: repeatedVersion, expected: secondVersion);
         publication.Release(slot: repeatedLease);
 
         publication.Release(slot: firstLease);

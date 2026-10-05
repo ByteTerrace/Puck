@@ -132,74 +132,85 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void ARefreshNeverOverwritesItsUnreadGraphCounts() {
         using var rig = new EnvironmentRig(holdFences: true);
+
         rig.Render();
         rig.Complete();
         var written = new long[3];
         var unread = new bool[3];
         var observed = new List<long>();
         var kind = GpuWork.KernelKinds.IndexOf(GpuWork.SkyEvaluations);
+
         rig.Gpu.WriteReadback = (name, destination) => {
-            if (name.Owner != SdfTestView.EnvironmentInstance || name.Part != "kernel counters") { return; }
-            if (unread[name.Index]) { observed.Add(written[name.Index]); }
-            BinaryPrimitives.WriteInt64LittleEndian(destination[(kind * sizeof(long))..], written[name.Index]);
+            if ((name.Owner != SdfTestView.EnvironmentInstance) || (name.Part != "kernel counters")) { return; }
+            if (unread[name.Index]) { observed.Add(item: written[name.Index]); }
+            BinaryPrimitives.WriteInt64LittleEndian(destination: destination[(kind * sizeof(long))..], value: written[name.Index]);
             unread[name.Index] = false;
         };
 
-        for (var projection = 1; projection <= 7; projection++) {
-            var slot = (int)(rig.Node.FrameCounter % 3);
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.1f * projection), elevation: 1f, index: 1);
+        for (var projection = 1; (projection <= 7); projection++) {
+            var slot = ((int)(rig.Node.FrameCounter % 3));
+
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * projection)), elevation: 1f, index: 1);
             rig.Render();
-            Assert.Equal(expected: projection + 1L, actual: rig.Engine.SkyEnvironmentRenders);
+            Assert.Equal(expected: (projection + 1L), actual: rig.Engine.SkyEnvironmentRenders);
             Assert.False(condition: unread[slot], userMessage: $"Projection {projection} overwrote unread slot {slot}.");
-            written[slot] = 1000L * projection;
+            written[slot] = (1000L * projection);
             unread[slot] = true;
         }
         rig.Complete();
-        Assert.Equal(expected: Enumerable.Range(1, 7).Select(static index => 1000L * index), actual: observed.Order());
+        Assert.Equal(expected: Enumerable.Range(count: 7, start: 1).Select(selector: static index => (1000L * index)), actual: observed.Order());
         var sample = new GpuWorkSample();
+
         Assert.True(condition: rig.Node.TryReadCompleted(sample: sample));
         Assert.True(condition: sample.TryGetPassCount(0, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
-        Assert.Equal(expected: 7000L, actual: evaluations);
+        Assert.Equal(actual: evaluations, expected: 7000L);
     }
     [Fact]
     public void NewLayerIdentitiesGrowCompletedEnvironmentSlotsAndRetainEarlierSamples() {
         using var rig = new EnvironmentRig(holdFences: true);
+
         rig.Render();
         rig.Complete();
         var earlier = new GpuWorkSample();
+
         Assert.True(condition: rig.Node.TryReadCompleted(sample: earlier));
         var oldLabels = rig.Engine.SkyDetails.Labels.ToArray();
         var beforeBytes = rig.Node.OwnedBytes;
-        for (var index = 0; index < 40; index++) { _ = rig.Engine.SkyDetails.RowOf($"retired-{index}"); }
-        var lastRow = rig.Engine.SkyDetails.RowOf("retired-39");
+
+        for (var index = 0; (index < 40); index++) { _ = rig.Engine.SkyDetails.RowOf(label: $"retired-{index}"); }
+        var lastRow = rig.Engine.SkyDetails.RowOf(label: "retired-39");
         // Two passes, the map's plain detail row, then each retained layer identity.
-        var expectedBytes = (3 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes;
+        var expectedBytes = ((3 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes);
         var reads = new List<int>();
+
         rig.Gpu.WriteReadback = (name, destination) => {
-            if (name.Owner != SdfTestView.EnvironmentInstance || name.Part != "kernel counters") { return; }
-            reads.Add(destination.Length);
+            if ((name.Owner != SdfTestView.EnvironmentInstance) || (name.Part != "kernel counters")) { return; }
+            reads.Add(item: destination.Length);
             Assert.Equal(expected: expectedBytes, actual: destination.Length);
             var kind = GpuWork.KernelKinds.IndexOf(GpuWork.SkyEvaluations);
-            BinaryPrimitives.WriteInt64LittleEndian(destination[(kind * sizeof(long))..], 70);
-            BinaryPrimitives.WriteInt64LittleEndian(destination[((3 + (int)lastRow) * GpuKernelCounters.RowBytes + kind * sizeof(long))..], 70);
+
+            BinaryPrimitives.WriteInt64LittleEndian(destination: destination[(kind * sizeof(long))..], value: 70);
+            BinaryPrimitives.WriteInt64LittleEndian(destination: destination[(((3 + ((int)lastRow)) * GpuKernelCounters.RowBytes) + (kind * sizeof(long)))..], value: 70);
         };
         // Visit every recording slot; each new pair's actual bytes enter the graph's account.
-        for (var index = 1; index <= 3; index++) {
-            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.2f * index), elevation: 1f, index: 1);
+        for (var index = 1; (index <= 3); index++) {
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.2f * index)), elevation: 1f, index: 1);
             rig.Render();
             rig.Complete();
         }
-        Assert.Equal(expected: new[] { expectedBytes, expectedBytes, expectedBytes }, actual: reads);
-        Assert.Equal(expected: oldLabels, actual: earlier.Details.ToArray().Skip(1).Select(static detail => detail.Detail));
+        Assert.Equal(actual: reads, expected: new[] { expectedBytes, expectedBytes, expectedBytes });
+        Assert.Equal(expected: oldLabels, actual: earlier.Details.ToArray().Skip(count: 1).Select(selector: static detail => detail.Detail));
         // The first slot already had the original details; the other two held only the two pass rows.
-        var originalCounterBytes = 2UL * (ulong)GpuKernelCounters.RowBytes * (ulong)(3 + oldLabels.Length + 2 + 2);
-        Assert.Equal(expected: beforeBytes - originalCounterBytes + 6UL * (ulong)expectedBytes, actual: rig.Node.OwnedBytes);
+        var originalCounterBytes = ((2UL * ((ulong)GpuKernelCounters.RowBytes)) * ((ulong)(((3 + oldLabels.Length) + 2) + 2)));
+
+        Assert.Equal(expected: ((beforeBytes - originalCounterBytes) + (6UL * ((ulong)expectedBytes))), actual: rig.Node.OwnedBytes);
         Assert.Equal(expected: rig.Node.OwnedBytes, actual: rig.Node.InstalledAccount.SteadyBytes);
         var sample = new GpuWorkSample();
+
         Assert.True(condition: rig.Node.TryReadCompleted(sample: sample));
-        Assert.True(condition: sample.TryGetDetailCount((int)lastRow + 1, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
-        Assert.Equal(expected: 70L, actual: evaluations);
-        Assert.Equal(expected: "retired-39", actual: sample.Details[(int)lastRow + 1].Detail);
+        Assert.True(condition: sample.TryGetDetailCount((((int)lastRow) + 1), GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
+        Assert.Equal(actual: evaluations, expected: 70L);
+        Assert.Equal(expected: "retired-39", actual: sample.Details[(((int)lastRow) + 1)].Detail);
     }
     [Fact]
     public void TheEnvironmentKeepsOneMapAndOneSetOfCoefficients() {

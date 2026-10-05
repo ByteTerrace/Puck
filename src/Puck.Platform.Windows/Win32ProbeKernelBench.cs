@@ -180,7 +180,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
                                 if (
                                     (ringViews is not null) &&
-                                    ringInput.Slots.TryAcquireLatest(version: out _, fenceValue: out var fenceValue, slot: out var slot)
+                                    ringInput.Slots.TryAcquireLatest(fenceValue: out var fenceValue, slot: out var slot, version: out _)
                                 ) {
                                     ringSlots[input] = slot;
                                     ringFences[input] = fenceValue;

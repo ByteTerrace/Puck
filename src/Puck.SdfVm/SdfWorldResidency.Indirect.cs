@@ -5,6 +5,7 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldResidency {
     private readonly WorkCounterSet m_indirectWork = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
+
     private int m_indirectResetRequested;
     private bool m_captureLightingReset;
 
@@ -20,19 +21,20 @@ public sealed partial class SdfWorldResidency {
     /// control survives tier changes and table replacement; views continue to read and count the retained cache.</summary>
     public bool IndirectFrozen { get; set; }
     /// <summary>Gets whether an explicit cache reset is waiting for the next frame this residency can render.</summary>
-    public bool IndirectResetPending => Volatile.Read(ref m_indirectResetRequested) != 0;
+    public bool IndirectResetPending => (Volatile.Read(location: ref m_indirectResetRequested) != 0);
     /// <summary>Gets whether the latest desired, packed frame's shared indirect cache has finished transport and its
     /// finite lighting solve, and an existing view readback fence has completed that exact allocation, epoch,
     /// publication and captured source. An older completed source never satisfies a newer desired frame.</summary>
     /// <remarks>Read on the render/console owner thread after frame preparation. This starts no work and allocates
     /// no readback. It describes the shared cache, not every view's receiver-certificate admission; an absent or off
     /// cache, pending reset, or frame waiting for packing is not ready.</remarks>
-    public bool IsIndirectReady => !IndirectResetPending && !m_captureLightingReset && m_packed && m_renders && m_pendingFrame is null &&
-        !m_programPending && m_frame is { } frame && ReferenceEquals(frame, m_packedFrame) &&
-        m_tables?.Indirect is { } cache && cache.Layout.Tier == IndirectTier && cache.IsReadyFor(frame);
+    public bool IsIndirectReady => (!IndirectResetPending && !m_captureLightingReset && m_packed && m_renders && (m_pendingFrame is null) &&
+        !m_programPending && (m_frame is { } frame) && ReferenceEquals(objA: frame, objB: m_packedFrame) &&
+        (m_tables?.Indirect is { } cache) && (cache.Layout.Tier == IndirectTier) && cache.IsReadyFor(frame: frame));
+
     /// <summary>Queues a presentation-cache reset for the next renderable frame. It changes no authoritative world
     /// state; while frozen it withdraws old lighting without admitting replacement updates.</summary>
-    public void RequestIndirectReset() => Interlocked.Exchange(ref m_indirectResetRequested, 1);
+    public void RequestIndirectReset() => Interlocked.Exchange(location1: ref m_indirectResetRequested, value: 1);
 
     private void PrepareIndirect(SdfWorldTables tables, SdfFrame frame) {
         tables.SetIndirect(tier: IndirectTier, farDistance: frame.FarDistance, work: m_indirectWork);
@@ -42,11 +44,11 @@ public sealed partial class SdfWorldResidency {
         if (m_captureLightingReset) {
             m_captureLightingReset = false;
             tables.Indirect?.ResetLightingForCapture();
-            Array.Clear(m_renderedSignatures);
+            Array.Clear(array: m_renderedSignatures);
         }
-        if (Interlocked.Exchange(ref m_indirectResetRequested, 0) == 0) { return; }
+        if (Interlocked.Exchange(location1: ref m_indirectResetRequested, value: 0) == 0) { return; }
         tables.ResetIndirectPresentation();
         IndirectLightViews.InvalidateStorage();
-        Array.Clear(m_renderedSignatures);
+        Array.Clear(array: m_renderedSignatures);
     }
 }

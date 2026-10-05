@@ -54,83 +54,83 @@ public sealed partial class SdfWorkCountingLawTests {
             .Select(selector: path => (path, CodeOf(path: path)))
             .Where(predicate: static kernel => kernel.Item2.Contains(comparisonType: StringComparison.Ordinal, value: "void CSMain"))
             .ToArray();
+
         Assert.NotEmpty(collection: kernels);
         foreach (var (path, code) in kernels) {
             switch (path) {
                 case "passes/sdf-brick-bake.comp.hlsl":
                     // The existing sliced brick baker owns no pass-work counter interface.
-                    Assert.Contains("#include \"../isa/sdf-bricks.interface.hlsli\"", code);
+                    Assert.Contains(actualString: code, expectedSubstring: "#include \"../isa/sdf-bricks.interface.hlsli\"");
                     break;
                 case "passes/sdf-light-depth.comp.hlsl":
-                    Assert.Contains("if (any(id.xy >= passGroup.imageExtent) || passGroup.lightMap == 0u) { return; }", code);
-                    Assert.Matches(@"indirectLightDepthRW\[address\] = depth;\s*puckCountWork\(0u, 1u\);", code);
+                    Assert.Contains(actualString: code, expectedSubstring: "if (any(id.xy >= passGroup.imageExtent) || passGroup.lightMap == 0u) { return; }");
+                    Assert.Matches(actualString: code, expectedRegexPattern: @"indirectLightDepthRW\[address\] = depth;\s*puckCountWork\(0u, 1u\);");
                     break;
                 case "passes/sdf-indirect-shade.comp.hlsl":
-                    Assert.Contains("#include \"../indirect/sdf-indirect-shade.hlsli\"", code);
-                    Assert.Contains("sdfIndirectShadeProbe(index, update.z, lattice, lane, passGroup.indirectReadGeneration,", code);
-                    Assert.Empty(CountPattern().Matches(code));
+                    Assert.Contains(actualString: code, expectedSubstring: "#include \"../indirect/sdf-indirect-shade.hlsli\"");
+                    Assert.Contains(actualString: code, expectedSubstring: "sdfIndirectShadeProbe(index, update.z, lattice, lane, passGroup.indirectReadGeneration,");
+                    Assert.Empty(collection: CountPattern().Matches(input: code));
                     break;
                 case "passes/sdf-screen-emission.comp.hlsl":
-                    AssertScreenEmissionCounts(code);
+                    AssertScreenEmissionCounts(code: code);
                     break;
                 default:
                     // New kernels keep the ordinary contract until their actual specialized work is witnessed here.
-                    Assert.Contains("puckCountWork(sdfWorkSteps, sdfWorkTexels);", code);
+                    Assert.Contains(actualString: code, expectedSubstring: "puckCountWork(sdfWorkSteps, sdfWorkTexels);");
                     break;
             }
         }
         foreach (var path in Sources) {
-            var calls = CountPattern().Matches(CodeOf(path)).Select(static match => match.Value).ToArray();
+            var calls = CountPattern().Matches(input: CodeOf(path: path)).Select(selector: static match => match.Value).ToArray();
+
             switch (path) {
                 case "passes/sdf-light-depth.comp.hlsl":
-                    Assert.Equal(["puckCountWork(0u, 1u)"], calls);
+                    Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(0u, 1u)"]);
                     break;
                 case "passes/sdf-indirect-trace.comp.hlsl":
-                    Assert.Equal(["puckCountWork(0u, 1u)", "puckCountWork(sdfWorkSteps, sdfWorkTexels)"], calls);
+                    Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(0u, 1u)", "puckCountWork(sdfWorkSteps, sdfWorkTexels)"]);
                     break;
                 case "indirect/sdf-indirect-shade.hlsli":
-                    Assert.Equal(["puckCountWork(sdfWorkSteps, passGroup.workCounterRowDetail == 0u ? 1u : 0u)"], calls);
+                    Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(sdfWorkSteps, passGroup.workCounterRowDetail == 0u ? 1u : 0u)"]);
                     break;
                 default:
-                    Assert.All(calls, static call => Assert.Equal("puckCountWork(sdfWorkSteps, sdfWorkTexels)", call));
+                    Assert.All(calls, static call => Assert.Equal(actual: call, expected: "puckCountWork(sdfWorkSteps, sdfWorkTexels)"));
                     break;
             }
         }
-        var trace = CodeOf("passes/sdf-indirect-trace.comp.hlsl");
-        Assert.Matches(@"if \(group.x == 0u && lane == 0u\) \{\s*" +
-            @"indirectCacheRW\[sdfIndirectReceiverProofWordOffset\(passGroup.indirectTier\)\] = 0u;\s*" +
-            @"puckCountDetail\(4u, 0u, 1u, 0u, 0u, 0u\);\s*" +
-            @"if \(passGroup.workCounterRowDetail == 0u\) \{ puckCountWork\(0u, 1u\); \}", trace);
-        Assert.Contains("if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }", trace);
-        var shade = CodeOf("indirect/sdf-indirect-shade.hlsli");
-        Assert.Contains("void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint readGeneration, uint readPublication,", shade);
-        Assert.Contains("indirectCacheRW[address + source] = sdfIndirectPackRadiance", shade);
-        Assert.Matches(@"puckCountDetail\(detail, 0u, 1u, 0u, sdfIndirectHashes, sdfIndirectLoads\);\s*" +
-            @"if \(passGroup.workCounterRowDetail != 0u\) \{ sdfWorkSteps = 0u; \}\s*" +
-            @"puckCountWork\(sdfWorkSteps, passGroup.workCounterRowDetail == 0u \? 1u : 0u\);", shade);
+        var trace = CodeOf(path: "passes/sdf-indirect-trace.comp.hlsl");
+
+        Assert.Matches(actualString: trace, expectedRegexPattern: "if \\(group.x == 0u && lane == 0u\\) \\{\\s*indirectCacheRW\\[sdfIndirectReceiverProofWordOffset\\(passGroup.indirectTier\\)\\] = 0u;\\s*puckCountDetail\\(4u, 0u, 1u, 0u, 0u, 0u\\);\\s*if \\(passGroup.workCounterRowDetail == 0u\\) \\{ puckCountWork\\(0u, 1u\\); \\}");
+        Assert.Contains(actualString: trace, expectedSubstring: "if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }");
+        var shade = CodeOf(path: "indirect/sdf-indirect-shade.hlsli");
+
+        Assert.Contains(actualString: shade, expectedSubstring: "void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint readGeneration, uint readPublication,");
+        Assert.Contains(actualString: shade, expectedSubstring: "indirectCacheRW[address + source] = sdfIndirectPackRadiance");
+        Assert.Matches(actualString: shade, expectedRegexPattern: "puckCountDetail\\(detail, 0u, 1u, 0u, sdfIndirectHashes, sdfIndirectLoads\\);\\s*if \\(passGroup.workCounterRowDetail != 0u\\) \\{ sdfWorkSteps = 0u; \\}\\s*puckCountWork\\(sdfWorkSteps, passGroup.workCounterRowDetail == 0u \\? 1u : 0u\\);");
     }
 
     private static void AssertScreenEmissionCounts(string code) {
-        Assert.Contains("#include \"../isa/sdf-sky-environment.interface.hlsli\"", code);
-        Assert.Contains("if ((passGroup.screenEmissionWriteMask & (1u << screen)) == 0u) { return; }", code);
-        Assert.Contains("uint samples = 0u;", code);
-        Assert.Contains("uint writes = 0u;", code);
-        Assert.Equal(2, ScreenLoadPattern().Matches(code).Count);
-        Assert.Equal(2, ScreenWritePattern().Matches(code).Count);
-        Assert.Matches(@"sum \+= max\(screenSources\[screen\]\.Load\(int3\(at, 0\)\)\.rgb, 0.0\);\s*samples\+\+;", code);
-        Assert.Matches(@"average = float4\(max\(screenSources\[screen\]\.Load\(int3\(at, 0\)\)\.rgb, 0.0\), 1.0\);\s*samples\+\+;", code);
-        Assert.Matches(@"sdfScreenEmissionRW\[row \+ cell\] = average;\s*writes\+\+;", code);
-        Assert.Matches(@"sdfScreenEmissionRW\[row \+ SDF_SCREEN_EMISSION_MEAN\] = total.w > 0.0\s*" +
-            @"\? float4\(total.rgb / total.w, SDF_SCREEN_EMISSION_DIRECT_GAIN\) : 0.0;\s*writes\+\+;", code);
+        Assert.Contains(actualString: code, expectedSubstring: "#include \"../isa/sdf-sky-environment.interface.hlsli\"");
+        Assert.Contains(actualString: code, expectedSubstring: "if ((passGroup.screenEmissionWriteMask & (1u << screen)) == 0u) { return; }");
+        Assert.Contains(actualString: code, expectedSubstring: "uint samples = 0u;");
+        Assert.Contains(actualString: code, expectedSubstring: "uint writes = 0u;");
+        Assert.Equal(2, ScreenLoadPattern().Matches(input: code).Count);
+        Assert.Equal(2, ScreenWritePattern().Matches(input: code).Count);
+        Assert.Matches(actualString: code, expectedRegexPattern: @"sum \+= max\(screenSources\[screen\]\.Load\(int3\(at, 0\)\)\.rgb, 0.0\);\s*samples\+\+;");
+        Assert.Matches(actualString: code, expectedRegexPattern: @"average = float4\(max\(screenSources\[screen\]\.Load\(int3\(at, 0\)\)\.rgb, 0.0\), 1.0\);\s*samples\+\+;");
+        Assert.Matches(actualString: code, expectedRegexPattern: @"sdfScreenEmissionRW\[row \+ cell\] = average;\s*writes\+\+;");
+        Assert.Matches(actualString: code, expectedRegexPattern: "sdfScreenEmissionRW\\[row \\+ SDF_SCREEN_EMISSION_MEAN\\] = total.w > 0.0\\s*\\? float4\\(total.rgb / total.w, SDF_SCREEN_EMISSION_DIRECT_GAIN\\) : 0.0;\\s*writes\\+\\+;");
         Assert.Equal(["puckCountDetail(0u, 0u, writes, 0u, 0u, samples)"],
-            DetailCountPattern().Matches(code).Select(static match => match.Value).ToArray());
-        Assert.Empty(CountPattern().Matches(code));
-        Assert.Contains("Screens ? [\"screen-images\"]", File.ReadAllText(RepositoryPaths.Resolve("src/Puck.SdfVm/SdfSkyEnvironmentRecorder.cs")));
-        var counters = CodeOf("isa/sdf-sky-environment.interface.hlsli");
-        Assert.Matches(@"void puckCountDetail\([^)]*\) \{\s*if \(passGroup.workCounterRowDetail == 0u\) \{\s*return;\s*\}", counters);
-        Assert.Contains("puckAddWork((row + PuckWorkTexelsWord), texels);", counters);
-        Assert.Contains("puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);", counters);
+            DetailCountPattern().Matches(input: code).Select(selector: static match => match.Value).ToArray());
+        Assert.Empty(collection: CountPattern().Matches(input: code));
+        Assert.Contains("Screens ? [\"screen-images\"]", File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/SdfSkyEnvironmentRecorder.cs")));
+        var counters = CodeOf(path: "isa/sdf-sky-environment.interface.hlsli");
+
+        Assert.Matches(actualString: counters, expectedRegexPattern: @"void puckCountDetail\([^)]*\) \{\s*if \(passGroup.workCounterRowDetail == 0u\) \{\s*return;\s*\}");
+        Assert.Contains(actualString: counters, expectedSubstring: "puckAddWork((row + PuckWorkTexelsWord), texels);");
+        Assert.Contains(actualString: counters, expectedSubstring: "puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);");
     }
+
     [Fact]
     public void EveryVolumeSampleCountsAStepBeforeItCanBeSkipped() {
         var integration = VolumeLoopPattern().Match(input: CodeOf(path: "shade/shade-volumes.hlsli"));

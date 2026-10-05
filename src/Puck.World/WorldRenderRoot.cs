@@ -32,6 +32,7 @@ internal sealed class WorldOverlayGlyphs {
     /// <summary>Gets the loaded pack, or <see langword="null"/> when none could be loaded.</summary>
     public OverlayGlyphSdfPack? Pack { get; }
 }
+
 /// <summary>Builds the render root both GPU presentation shapes present and capture: the world's SDF residency and the
 /// <c>sdf.world</c> passes every view renders through, the graph's packages (<c>place</c>, every post-process package a
 /// <c>views.post</c> row may name, and the overlay when the shape draws one), and the <see cref="RenderGraphRuntime"/>
@@ -167,7 +168,7 @@ public static class WorldRenderRoot {
             } else {
                 indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
             }
-            indirectProbe.RegisterIndirectResidency(residency: cacheResidency, active: added);
+            indirectProbe.RegisterIndirectResidency(active: added, residency: cacheResidency);
         };
         packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);
         // The root places each pane where the host's composer shows it this frame.

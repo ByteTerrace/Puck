@@ -39,8 +39,8 @@ public sealed class IrradianceField {
     /// render-policy filter; its ordinary collision field must not be mislabeled as the indirect caster field.</exception>
     public IrradianceField(SdfProgram program) {
         ArgumentNullException.ThrowIfNull(program);
-        if (program.Instances.Any(instance => instance.Active && instance.Indirect is SdfIndirectParticipation.Receive or SdfIndirectParticipation.Off)) {
-            throw new ArgumentException("The CPU indirect field does not yet interpret per-instance Receive/Off participation.", nameof(program));
+        if (program.Instances.Any(predicate: instance => (instance.Active && (instance.Indirect is SdfIndirectParticipation.Receive or SdfIndirectParticipation.Off)))) {
+            throw new ArgumentException(message: "The CPU indirect field does not yet interpret per-instance Receive/Off participation.", paramName: nameof(program));
         }
         m_evaluator = new SdfFieldEvaluator(program: program);
     }

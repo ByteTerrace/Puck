@@ -13,25 +13,27 @@ namespace Puck.SdfVm;
 /// <param name="Bodies">The resolved dynamic indirect participation; changing it changes the caster field.</param>
 public readonly record struct SdfLightGeometry(ulong Program, ulong Poses, long Mesh, ulong Decals,
     SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default);
-
 /// <summary>A finite receiver box from the allocated bricks of one cache level.</summary>
 /// <param name="Min">Least corner.</param>
 /// <param name="Max">Greatest corner.</param>
 public readonly record struct SdfLightRegion(Double3 Min, Double3 Max);
-
 /// <summary>One residency's bounded light-view schedule. It retains exact owner names and revision tuples, plans one
 /// region per frame, and publishes its validity only after the depth writer submits. An absent finite caster volume
 /// or unnamed owner never authorizes a map lookup.</summary>
 public sealed class SdfIndirectLightViews {
-    private readonly Map[] m_maps = [.. Enumerable.Range(start: 0, count: SdfIndirectLightLayout.MaxMaps).Select(selector: static _ => new Map())];
+    private readonly Map[] m_maps = [.. Enumerable.Range(count: SdfIndirectLightLayout.MaxMaps, start: 0).Select(selector: static _ => new Map())];
+
     private int m_cursor;
+
     private long m_frame = -1;
+
     private object? m_geometryOwner;
     private SdfLightGeometry m_geometry;
     private ulong m_geometryGeneration;
 
     /// <summary>Gets the region scheduled this frame, or -1 when all usable regions stand.</summary>
     public int Pending { get; private set; } = -1;
+
     /// <summary>Gets the package frame already planned, or -1 after its storage is invalidated.</summary>
     public long Frame => m_frame;
     /// <summary>Gets the allocation's region capacity, including inactive incoming slots.</summary>
@@ -48,8 +50,7 @@ public sealed class SdfIndirectLightViews {
     /// <param name="geometry">The reader's captured geometry revisions.</param>
     /// <returns>True when a submitted region may be used by that geometry snapshot.</returns>
     public bool MatchesGeometry(object owner, SdfLightGeometry geometry) =>
-        ReferenceEquals(m_geometryOwner, owner) && m_geometry == geometry;
-
+        (ReferenceEquals(objA: m_geometryOwner, objB: owner) && (m_geometry == geometry));
     /// <summary>Invalidates publications when the graph releases the depth-bank allocation they describe.</summary>
     public void InvalidateStorage() {
         foreach (var map in m_maps) { map.Valid = false; }
@@ -57,7 +58,6 @@ public sealed class SdfIndirectLightViews {
         m_frame = -1;
         Revision++;
     }
-
     /// <summary>Plans against the current uploaded geometry, selected light identities and allocated region bounds.</summary>
     /// <param name="frame">The package frame, used to admit only one region.</param>
     /// <param name="geometryOwner">The table allocation; a replacement invalidates equal numeric revisions.</param>
@@ -77,6 +77,7 @@ public sealed class SdfIndirectLightViews {
             m_geometryGeneration++;
         }
         var slots = lights.ShadowSlots;
+
         MapCount = ((slots.SlotCount + slots.FadeCapacity) * SdfIndirectLightLayout.RegionsPerLight);
         for (var index = 0; (index < m_maps.Length); index++) {
             var map = m_maps[index];
@@ -88,15 +89,17 @@ public sealed class SdfIndirectLightViews {
             var owner = ((channel < slots.SlotCount) ? slots.Owner(slot: channel)
                 : ((incoming < slots.FadeCount) ? slots.IncomingOwner(channel: incoming) : null));
             var bounds = ((region < regions.Count) ? regions[region] : null);
+
             if ((index >= MapCount) || (lightIndex < 0) || (lightIndex >= lights.Count) || (owner is null) ||
                 (bounds is not { } receiver) || (casters is not { } caster) ||
                 (lights[lightIndex] is not { Kind: SdfLightKind.Directional, Param: > 0f } light)) {
                 if (map.Projection is not null) { map.Projection = null; map.Valid = false; Revision++; }
                 continue;
             }
-            var changed = (map.Projection is null) || !StringComparer.Ordinal.Equals(x: owner, y: map.Owner) ||
+            var changed = ((map.Projection is null) || !StringComparer.Ordinal.Equals(x: owner, y: map.Owner) ||
                 (map.GeometryGeneration != m_geometryGeneration) || (map.Receiver != receiver) || (map.Casters != caster) ||
-                SdfLightMotion.Changed(direction: light.Direction, penumbra: light.Param, anchorDirection: map.Direction, anchorPenumbra: map.Penumbra);
+                SdfLightMotion.Changed(anchorDirection: map.Direction, anchorPenumbra: map.Penumbra, direction: light.Direction, penumbra: light.Param));
+
             map.LightIndex = lightIndex;
             if (!changed) { continue; }
             map.Owner = owner;
@@ -114,13 +117,13 @@ public sealed class SdfIndirectLightViews {
         }
         for (var offset = 0; (offset < MapCount); offset++) {
             var index = ((m_cursor + offset) % MapCount);
+
             if ((m_maps[index].Projection is not null) && !m_maps[index].Valid) {
                 Pending = index;
                 return;
             }
         }
     }
-
     /// <summary>Commits the scheduled region after its depth writer submits; failed recordings retain no validity.</summary>
     public void Submitted() {
         if (Pending < 0) { return; }
@@ -135,10 +138,13 @@ public sealed class SdfIndirectLightViews {
     /// <returns>The map's immutable snapshot.</returns>
     public SdfLightMap Snapshot(int index) {
         var map = m_maps[index];
-        return new SdfLightMap(Projection: map.Projection, Receiver: map.Receiver, LightIndex: map.LightIndex,
-            Valid: map.Valid, LightGeneration: map.LightGeneration, GeometryGeneration: map.GeometryGeneration);
+
+        return new SdfLightMap(GeometryGeneration: map.GeometryGeneration, LightGeneration: map.LightGeneration, LightIndex: map.LightIndex,
+            Projection: map.Projection, Receiver: map.Receiver, Valid: map.Valid);
     }
+
     private static Double3 Point(Vector3 value) => new(X: value.X, Y: value.Y, Z: value.Z);
+
     private sealed class Map {
         public string? Owner;
         public Vector3 Direction;
@@ -152,7 +158,6 @@ public sealed class SdfIndirectLightViews {
         public bool Valid;
     }
 }
-
 /// <summary>The immutable identity and projection of a depth-map region.</summary>
 /// <param name="Projection">The camera, absent when the region cannot be represented finitely.</param>
 /// <param name="Receiver">The allocated receiver bounds.</param>

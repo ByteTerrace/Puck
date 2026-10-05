@@ -6,8 +6,9 @@ namespace Puck.World.Tests;
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed partial class WorldWaitReadyLawTests {
     private sealed class IndirectReadiness : IWorldIndirectReadiness {
-        public long Frame { get; set; } = 20;
         public IReadOnlyList<WorldIndirectReadyIdentity>? Captured { get; set; }
+        public long Frame { get; set; } = 20;
+
         public bool TryBegin([NotNullWhen(true)] out IWorldIndirectWait? wait, out string reason) {
             wait = new WorldIndirectWait(() => Frame, () => Captured);
             reason = string.Empty;
@@ -19,21 +20,23 @@ public sealed partial class WorldWaitReadyLawTests {
     public void AnIndirectWaitNeedsANewerFrameAndEveryCurrentSourceFenceBeforeItsExactVerdict() {
         using var row = HostRow.Build(definition: Fixtures.BuildDocument(), name: "boot");
         var readiness = new IndirectReadiness();
+
         var (source, session, answered) = Console(row, readiness: null, indirect: readiness);
-        session.Enqueue("world.wait indirect 180");
-        session.Enqueue("probe");
+        session.Enqueue(line: "world.wait indirect 180");
+        session.Enqueue(line: "probe");
         source.Collect();
-        readiness.Captured = [new WorldIndirectReadyIdentity("world", 7, 3, 1, 19, 23)];
+        readiness.Captured = [new WorldIndirectReadyIdentity(Allocation: 7, Epoch: 3, Generation: 1, Residency: "world", Source: 23, Stamp: 19)];
         source.Collect();
-        Assert.Single(answered);
+        Assert.Single(collection: answered);
         readiness.Frame++;
         readiness.Captured = null;
         source.Collect();
-        Assert.Single(answered);
-        readiness.Captured = [new WorldIndirectReadyIdentity("world", 8, 4, 0, 29, 31),
-            new WorldIndirectReadyIdentity("observer", 9, 4, 0, 29, 32)];
+        Assert.Single(collection: answered);
+        readiness.Captured = [new WorldIndirectReadyIdentity(Allocation: 8, Epoch: 4, Generation: 0, Residency: "world", Source: 31, Stamp: 29),
+            new WorldIndirectReadyIdentity(Allocation: 9, Epoch: 4, Generation: 0, Residency: "observer", Source: 32, Stamp: 29)];
         var original = System.Console.Error;
         using var captured = new StringWriter();
+
         try {
             System.Console.SetError(newError: captured);
             source.Collect();
@@ -41,34 +44,35 @@ public sealed partial class WorldWaitReadyLawTests {
             System.Console.SetError(newError: original);
         }
         var error = captured.ToString();
-        Assert.Equal(["world.wait indirect 180", "probe"], answered.Select(item => item.Line));
-        Assert.Contains("residency=world allocation=8 epoch=4 generation=0 stamp=29 source=31", error, StringComparison.Ordinal);
-        Assert.Contains("residency=observer allocation=9 epoch=4 generation=0 stamp=29 source=32", error, StringComparison.Ordinal);
-        Assert.DoesNotContain("allocation=7", error, StringComparison.Ordinal);
-    }
 
+        Assert.Equal(["world.wait indirect 180", "probe"], answered.Select(selector: item => item.Line));
+        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "residency=world allocation=8 epoch=4 generation=0 stamp=29 source=31");
+        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "residency=observer allocation=9 epoch=4 generation=0 stamp=29 source=32");
+        Assert.DoesNotContain(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "allocation=7");
+    }
     [Fact]
     public void ACompletedIndirectWaitRetainsItsCapturedIdentityWhenTheLiveSourceChanges() {
-        long frame = 0;
-        var identities = new[] { new WorldIndirectReadyIdentity("world", 11, 2, 1, 5, 7) };
-        var wait = new WorldIndirectWait(() => frame, () => identities);
-        Assert.False(wait.IsSettled);
-        frame++;
-        Assert.True(wait.IsSettled);
-        identities[0] = new WorldIndirectReadyIdentity("world", 13, 3, 0, 9, 17);
-        Assert.True(wait.IsSettled);
-        Assert.Equal(new WorldIndirectReadyIdentity("world", 11, 2, 1, 5, 7), Assert.Single(wait.Identities));
-    }
+        var frame = 0L;
+        var identities = new[] { new WorldIndirectReadyIdentity(Allocation: 11, Epoch: 2, Generation: 1, Residency: "world", Source: 7, Stamp: 5) };
+        var wait = new WorldIndirectWait(capture: () => identities, framesProduced: () => frame);
 
-    [Theory]
+        Assert.False(condition: wait.IsSettled);
+        frame++;
+        Assert.True(condition: wait.IsSettled);
+        identities[0] = new WorldIndirectReadyIdentity(Allocation: 13, Epoch: 3, Generation: 0, Residency: "world", Source: 17, Stamp: 9);
+        Assert.True(condition: wait.IsSettled);
+        Assert.Equal(new WorldIndirectReadyIdentity(Allocation: 11, Epoch: 2, Generation: 1, Residency: "world", Source: 7, Stamp: 5), Assert.Single(collection: wait.Identities));
+    }
     [InlineData("world.wait indirect 5", true)]
     [InlineData("world.wait indirect 0", false)]
     [InlineData("world.wait indirect 601", false)]
+    [Theory]
     public void AnIndirectWaitRefusesWithoutItsRendererOrOutsideItsDeadline(string line, bool absent) {
         using var row = HostRow.Build(definition: Fixtures.BuildDocument(), name: "boot");
-        var (source, session, answered) = Console(row, readiness: null, indirect: absent ? null : new IndirectReadiness());
-        session.Enqueue(line);
+
+        var (source, session, answered) = Console(row, readiness: null, indirect: (absent ? null : new IndirectReadiness()));
+        session.Enqueue(line: line);
         source.Collect();
-        Assert.True(Assert.Single(answered).Result.IsError);
+        Assert.True(condition: Assert.Single(collection: answered).Result.IsError);
     }
 }

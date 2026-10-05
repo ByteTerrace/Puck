@@ -267,7 +267,7 @@ internal static class SchemaCommand {
             return CliExit.Refused;
         }
         if (bootstrap && !SchemaBootstrap.IsBootstrap) {
-            return SchemaBootstrap.Run(repositoryRoot: repositoryRoot, bundle: bundle, check: check, output: output, clock: clock);
+            return SchemaBootstrap.Run(bundle: bundle, check: check, clock: clock, output: output, repositoryRoot: repositoryRoot);
         }
         if (!WorldSchema.HasXmlDocumentation) {
             Console.Error.WriteLine(value: "schema: an XML documentation file is missing beside its assembly — the generated schema will carry no descriptions.");
@@ -482,7 +482,7 @@ internal static class SchemaCommand {
             check: parseResult.GetValue(option: checkOption),
             output: parseResult.GetValue(option: outputOption),
             bootstrap: parseResult.GetValue(option: bootstrapOption),
-            clock: clock ?? TimeProvider.System
+            clock: (clock ?? TimeProvider.System)
         ));
 
         return command;

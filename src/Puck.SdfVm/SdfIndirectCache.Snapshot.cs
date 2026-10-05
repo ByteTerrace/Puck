@@ -10,7 +10,6 @@ namespace Puck.SdfVm;
 /// <param name="Epoch">The cache geometry epoch.</param>
 /// <param name="Publication">The completed lighting publication sequence.</param>
 public readonly record struct SdfIndirectHistory(long Allocation, uint Epoch, ulong Publication);
-
 /// <summary>One allocated brick's actual host admission and submitted trace masks. Probe classes and proof results
 /// live on the GPU and are deliberately absent from this host snapshot.</summary>
 /// <param name="Key">The world-space lattice brick.</param>
@@ -18,7 +17,6 @@ public readonly record struct SdfIndirectHistory(long Allocation, uint Epoch, ul
 /// <param name="Placed">Whether its placements have been admitted to the update stream.</param>
 /// <param name="SubmittedStrata">One submitted stratum mask for each of its 64 probes, in lattice order.</param>
 public sealed record SdfIndirectBrickSnapshot(IrradianceBrickKey Key, int Slot, bool Placed, IReadOnlyList<uint> SubmittedStrata);
-
 /// <summary>An immutable copy of the current cache's CPU-owned inventory. Its geometry and submission tokens qualify
 /// separate fenced GPU pick records; this record never guesses GPU classifications from schedule counts.</summary>
 /// <param name="Allocation">The process-local identity of this exact cache allocation, unchanged by an epoch reset.</param>
@@ -45,13 +43,13 @@ public sealed record SdfIndirectCacheSnapshot(long Allocation, SdfIndirectTier T
     bool TraceComplete, int PendingPlacements, int PendingClassifications, int PendingTraces, int PendingShades,
     int CompletedSweeps, bool LightingComplete, int PublishedGeneration, uint PublishedStamp, int PublishedSweeps, bool Frozen, GpuMemoryBytes Bytes,
     IReadOnlyList<IrradianceLevel> Levels, IReadOnlyList<SdfIndirectBrickSnapshot> Bricks);
-
 public sealed partial class SdfIndirectCache {
     private static long NextAllocation;
-    private readonly long m_allocation = Interlocked.Increment(ref NextAllocation);
+
+    private readonly long m_allocation = Interlocked.Increment(location: ref NextAllocation);
 
     /// <summary>Gets the exact identity temporal readers see, including completed lighting publications.</summary>
-    public SdfIndirectHistory History => new(m_allocation, Epoch, LightingPublication);
+    public SdfIndirectHistory History => new(Allocation: m_allocation, Epoch: Epoch, Publication: LightingPublication);
     /// <summary>Gets the lighting publication sequence, advanced by a complete submitted sweep or a reset that
     /// withdraws the old publication.</summary>
     public ulong LightingPublication { get; private set; }
@@ -62,12 +60,14 @@ public sealed partial class SdfIndirectCache {
     public SdfIndirectCacheSnapshot Snapshot() {
         var bricks = new SdfIndirectBrickSnapshot[m_slots.Count];
         var index = 0;
-        foreach (var (key, slot) in m_slots.OrderBy(static entry => entry.Key)) {
-            var masks = m_traceStates.AsSpan(slot * SdfIndirectLayout.ProbesPerBrick, SdfIndirectLayout.ProbesPerBrick).ToArray();
-            bricks[index++] = new SdfIndirectBrickSnapshot(key, slot, m_placed.Contains(key), Array.AsReadOnly(masks));
+
+        foreach (var (key, slot) in m_slots.OrderBy(keySelector: static entry => entry.Key)) {
+            var masks = m_traceStates.AsSpan(length: SdfIndirectLayout.ProbesPerBrick, start: (slot * SdfIndirectLayout.ProbesPerBrick)).ToArray();
+
+            bricks[index++] = new SdfIndirectBrickSnapshot(key, slot, m_placed.Contains(item: key), Array.AsReadOnly(array: masks));
         }
         return new SdfIndirectCacheSnapshot(m_allocation, Layout.Tier, Epoch, Frame, FarDistance, IsComplete,
             PlaceCount, ClassifyCount, TraceCount, ShadeCount, CompletedSweeps, LightingComplete, PublishedGeneration, PublishedStamp,
-            PublishedSweeps, Frozen, Bytes, Array.AsReadOnly(Layout.Levels.ToArray()), Array.AsReadOnly(bricks));
+            PublishedSweeps, Frozen, Bytes, Array.AsReadOnly(array: Layout.Levels.ToArray()), Array.AsReadOnly(array: bricks));
     }
 }

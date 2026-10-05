@@ -203,11 +203,11 @@ public sealed partial class ShaderPipelineCompiler {
         // Sampled images still cannot share the successor write layout during one pass.
         foreach (var pass in definition.ShaderPasses) {
             foreach (var output in pass.OutputReferences) {
-                if (!resources.TryGetValue(output.Name, out var successor) ||
+                if (!resources.TryGetValue(key: output.Name, value: out var successor) ||
                     (successor.PreservesPredecessor && (successor.Kind == ShaderPipelineResourceKind.Buffer))) { continue; }
-                var consumed = PredecessorContents(successor, resources);
+                var consumed = PredecessorContents(resources: resources, successor: successor);
 
-                foreach (var input in ReadsOf(pass: pass).Where(input => !input.PreviousFrame && consumed.Contains(input.Name))) {
+                foreach (var input in ReadsOf(pass: pass).Where(predicate: input => (!input.PreviousFrame && consumed.Contains(item: input.Name)))) {
                     Add(
                         diagnostics,
                         "SHADERPIPE_DISCARDED_READ",
@@ -223,7 +223,7 @@ public sealed partial class ShaderPipelineCompiler {
         var contents = new HashSet<string>(comparer: StringComparer.Ordinal);
         var current = successor;
 
-        while (current.From is { } predecessor && contents.Add(predecessor) && resources.TryGetValue(predecessor, out var previous)) {
+        while ((current.From is { } predecessor) && contents.Add(item: predecessor) && resources.TryGetValue(key: predecessor, value: out var previous)) {
             current = previous;
             if (!current.PreservesPredecessor) { break; }
         }
@@ -251,12 +251,12 @@ public sealed partial class ShaderPipelineCompiler {
                 dependencies[overwriter].Add(item: writer);
             }
             if (successor.PreservesPredecessor) { continue; }
-            var consumed = PredecessorContents(successor, resources);
+            var consumed = PredecessorContents(resources: resources, successor: successor);
 
             for (var passIndex = 0; (passIndex < definition.ShaderPasses.Count); passIndex++) {
                 if (
                     (passIndex != overwriter) &&
-                    ReadsOf(pass: definition.ShaderPasses[passIndex]).Any(predicate: input => (!input.PreviousFrame && consumed.Contains(input.Name)))
+                    ReadsOf(pass: definition.ShaderPasses[passIndex]).Any(predicate: input => (!input.PreviousFrame && consumed.Contains(item: input.Name)))
                 ) {
                     dependencies[overwriter].Add(item: passIndex);
                 }

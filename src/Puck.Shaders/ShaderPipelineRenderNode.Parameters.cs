@@ -135,6 +135,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return false;
     }
+
     /// <summary>Copies one pass's live packed parameter block for inspection or persistence.</summary>
     public bool TryGetConfigSnapshot(string passName, out byte[] bytes) {
         ArgumentException.ThrowIfNullOrWhiteSpace(passName);

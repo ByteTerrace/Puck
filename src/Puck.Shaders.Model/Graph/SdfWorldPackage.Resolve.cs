@@ -109,7 +109,7 @@ public static partial class SdfWorldPackage {
             ],
             Passes: [
                 .. NativeFragment.Passes.TakeWhile(predicate: static pass => (pass.Name != Parts.Sky)).Select(selector: static pass => ((pass.Name == Parts.Views)
-                    ? pass with { Outputs = [.. pass.Outputs.Select(static output => output.Name == Parts.Lit ? new ResourceReference(Name: CurrentColor) : output)] }
+                    ? pass with { Outputs = [.. pass.Outputs.Select(selector: static output => ((output.Name == Parts.Lit) ? new ResourceReference(Name: CurrentColor) : output))] }
                     : pass)),
                 Pass(inputs: ResolveInputs, name: Resolve, outputs: ResolveOutputs) with { Members = ResolveMembers },
                 Pass(inputs: SkyInputs, name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },

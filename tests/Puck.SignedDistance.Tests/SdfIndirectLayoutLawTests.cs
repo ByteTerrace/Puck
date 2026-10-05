@@ -36,11 +36,11 @@ public sealed class SdfIndirectLayoutLawTests {
         Assert.Equal((layout.RadianceWordOffset + (2 * layout.RadianceGenerationWords)), layout.IrradianceWordOffset);
         Assert.Equal((layout.IrradianceWordOffset + (2 * layout.IrradianceGenerationWords)), layout.PublicationWordOffset);
         Assert.Equal((layout.PublicationWordOffset + (2 * layout.ProbeCapacity)), layout.ReceiverProofWordOffset);
-        Assert.Equal(layout.ReceiverProofWordOffset + (tier == SdfIndirectTier.Off ? 0 : 1), layout.WordCount);
-        Assert.Equal(layout.ProbeCapacity - layout.RadianceProbeOffset, layout.RadianceProbeCapacity);
-        Assert.Equal(5, SdfIndirectLayout.SourceCount);
-        Assert.Equal(layout.RadianceProbeCapacity * layout.RaysPerProbe * 5, layout.RadianceGenerationWords);
-        Assert.Equal(layout.ProbeCapacity * 64 * 5, layout.IrradianceGenerationWords);
+        Assert.Equal((layout.ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1)), layout.WordCount);
+        Assert.Equal((layout.ProbeCapacity - layout.RadianceProbeOffset), layout.RadianceProbeCapacity);
+        Assert.Equal(actual: SdfIndirectLayout.SourceCount, expected: 5);
+        Assert.Equal(((layout.RadianceProbeCapacity * layout.RaysPerProbe) * 5), layout.RadianceGenerationWords);
+        Assert.Equal(((layout.ProbeCapacity * 64) * 5), layout.IrradianceGenerationWords);
         Assert.Equal((((ulong)layout.WordCount) * sizeof(uint)), layout.ByteLength);
     }
     [Fact]

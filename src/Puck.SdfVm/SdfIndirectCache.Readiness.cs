@@ -8,15 +8,14 @@ public sealed partial class SdfIndirectCache {
     private SdfIndirectLightingCompletion m_completedLighting;
 
     internal SdfIndirectLightingCompletion LightingCompletion => new(History, PublishedStamp,
-        PublishedLightingSource?.Sequence ?? 0UL);
+        (PublishedLightingSource?.Sequence ?? 0UL));
 
     internal void CompleteLightingReadback(SdfIndirectLightingCompletion completion) {
-        if (completion.Stamp != 0u && completion.Source != 0UL && completion == LightingCompletion) {
+        if ((completion.Stamp != 0u) && (completion.Source != 0UL) && (completion == LightingCompletion)) {
             m_completedLighting = completion;
         }
     }
-
-    internal bool IsReadyFor(SdfFrame frame) => IsComplete && LightingComplete && PublishedStamp != 0u &&
-        PublishedLightingSource is not null && ReferenceEquals(PublishedLightingSource, LightingSource) &&
-        Lighting is { } lighting && lighting.Matches(frame) && m_completedLighting == LightingCompletion;
+    internal bool IsReadyFor(SdfFrame frame) => (IsComplete && LightingComplete && (PublishedStamp != 0u) &&
+        (PublishedLightingSource is not null) && ReferenceEquals(objA: PublishedLightingSource, objB: LightingSource) &&
+        (Lighting is { } lighting) && lighting.Matches(frame: frame) && (m_completedLighting == LightingCompletion));
 }

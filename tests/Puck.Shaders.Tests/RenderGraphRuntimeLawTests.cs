@@ -251,7 +251,9 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
         public Dictionary<string, GpuImagePublication> Publications { get; } = new(comparer: StringComparer.Ordinal);
+
         public void OutputPublished(string instance, GpuImagePublication publication) => Publications[instance] = publication;
+
         // A fake's default profile stages a host buffer port's region, which copies through this kernel's pipeline, the
         // one UploadModelGpu runs.
         public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));

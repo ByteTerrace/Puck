@@ -1,4 +1,10 @@
 schema: "puck.world.definition.v1"
 basis: "fixture"
 documentId: "gi-furnace-feedback-off"
-render { indirect { sources { feedback: 0 } } }
+render {
+  indirect {
+    sources {
+      feedback: 0
+    }
+  }
+}

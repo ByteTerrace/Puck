@@ -59,41 +59,43 @@ public sealed class SdfMaterialLawTests {
             actualString: refusal.Message
         );
     }
-    [Theory]
     [InlineData(-0.1f)]
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
+    [Theory]
     public void BothMaterialDoorsRefuseInvalidIndirectInputs(float value) {
         foreach (var material in new[] {
-            new SdfMaterial(Vector3.One, Bleed: new Vector3(1, value, 1)),
+            new SdfMaterial(Vector3.One, Bleed: new Vector3(x: 1, y: value, z: 1)),
             new SdfMaterial(Vector3.One, Receive: value),
         }) {
-            Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
-            Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
         }
-        _ = NewBuilder().AddMaterial(new SdfMaterial(Vector3.One, Bleed: Vector3.Zero, Receive: 0));
+        _ = NewBuilder().AddMaterial(material: new SdfMaterial(Vector3.One, Bleed: Vector3.Zero, Receive: 0));
         _ = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Receive: 2)]);
     }
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void IndirectInputsUseTheirReservedMaterialLanesWithAndWithoutInset(bool inset) {
-        var material = new SdfMaterial(Vector3.One, Fill: new Vector3(0.2f, 0.3f, 0.4f),
-            Bleed: new Vector3(0.5f, 0.6f, 0.7f), Receive: 2f,
-            Inset: inset ? new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1f,
-                new([new(0, Vector3.Zero), new(1, Vector3.One)])) : null);
+        var material = new SdfMaterial(Vector3.One, Fill: new Vector3(x: 0.2f, y: 0.3f, z: 0.4f),
+            Bleed: new Vector3(x: 0.5f, y: 0.6f, z: 0.7f), Receive: 2f,
+            Inset: (inset ? new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1f,
+                new([new(0, Vector3.Zero), new(1, Vector3.One)])) : null));
         var program = new SdfProgram([Shape()], [material]);
-        var offset = (int)program.Words[SdfProgram.ProgramMaterialOffsetLane] * 4;
-        Assert.Equal(0.5f, BitConverter.UInt32BitsToSingle(program.Words[offset + 11]));
-        Assert.Equal(2f, BitConverter.UInt32BitsToSingle(program.Words[offset + 15]));
-        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(program.Words[offset + 30]));
-        Assert.Equal(0.7f, BitConverter.UInt32BitsToSingle(program.Words[offset + 31]));
-        Assert.Equal(0.2f, BitConverter.UInt32BitsToSingle(program.Words[offset + 12]));
+        var offset = (((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
+
+        Assert.Equal(0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 11)]));
+        Assert.Equal(2f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 15)]));
+        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 30)]));
+        Assert.Equal(0.7f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 31)]));
+        Assert.Equal(0.2f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 12)]));
 
         var defaults = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One)]);
-        var defaultOffset = (int)defaults.Words[SdfProgram.ProgramMaterialOffsetLane] * 4;
+        var defaultOffset = (((int)defaults.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
+
         foreach (var lane in new[] { 11, 15, 30, 31 }) {
-            Assert.Equal(1f, BitConverter.UInt32BitsToSingle(defaults.Words[defaultOffset + lane]));
+            Assert.Equal(1f, BitConverter.UInt32BitsToSingle(value: defaults.Words[(defaultOffset + lane)]));
         }
     }
     // A caller carrying over the retired raw exponent's magnitude (32, the old default) into the new normalized

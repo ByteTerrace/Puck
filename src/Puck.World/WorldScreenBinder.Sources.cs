@@ -31,11 +31,11 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         opening: opening
     );
     /// <inheritdoc/>
-    public bool Emits(int screen) => m_slots.TryGetValue(screen, out var slot) && (ShownOf(screen) switch {
+    public bool Emits(int screen) => (m_slots.TryGetValue(key: screen, value: out var slot) && (ShownOf(screen: screen) switch {
         WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
-        WorldScreenSource.Session => slot.Session is { } feed && feed.InstanceName != WorldInstanceHost.BootInstanceName,
+        WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldInstanceHost.BootInstanceName)),
         _ => false,
-    });
+    }));
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
     public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(

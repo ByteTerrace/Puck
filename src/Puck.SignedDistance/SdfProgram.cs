@@ -183,8 +183,9 @@ public sealed partial class SdfProgram {
             m_convexPolygonProfiles[profileIndex] = (profile.InstructionIndex, ((Vector2[])[.. profile.Vertices]));
         }
 
-        var materialTable = SnapshotMaterials(materials);
-        m_materialsView = Array.AsReadOnly(materialTable);
+        var materialTable = SnapshotMaterials(materials: materials);
+
+        m_materialsView = Array.AsReadOnly(array: materialTable);
 
         m_instancesView = Array.AsReadOnly(array: m_instances);
         m_instructionsView = Array.AsReadOnly(array: m_instructions);
@@ -217,6 +218,7 @@ public sealed partial class SdfProgram {
             instructionsParamName: nameof(instructions),
             screenSurfacesParamName: nameof(screenSurfaces)
         );
+
         IndirectInstancesComposable = CanTracePartsIndependently();
 
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
@@ -1072,6 +1074,7 @@ public sealed partial class SdfProgram {
                 }
 
                 var childBound = scopeBound;
+
                 (scopeBound, scopeHasShape) = scopes[--scopeDepth];
 
                 // The closed scope composes into the instance as one operand: unbounded if the scope's own field is.
@@ -1088,9 +1091,9 @@ public sealed partial class SdfProgram {
                 }
 
                 if (scopeDepth > 0) {
-                    scopeBound = scopeHasShape
-                        ? SdfBoundAlgebra.Compose(scopeBound, childBound, (SdfBlendOp)instruction.Blend)
-                        : childBound;
+                    scopeBound = (scopeHasShape
+                        ? SdfBoundAlgebra.Compose(scopeBound, childBound, ((SdfBlendOp)instruction.Blend))
+                        : childBound);
                     scopeHasShape = true;
                 }
 
@@ -1283,7 +1286,7 @@ public sealed partial class SdfProgram {
                 );
 
                 // Sibling fields join by their widest reach; subsequent parent modifiers can grow that field again.
-                scopeReach = MathF.Max(scopeReach, parents[--scopeDepth]);
+                scopeReach = MathF.Max(x: scopeReach, y: parents[--scopeDepth]);
                 if (scopeDepth == 0) { scopeReach = 0f; }
 
                 continue;
@@ -1305,7 +1308,7 @@ public sealed partial class SdfProgram {
             };
         }
 
-        return (margin * NestedFieldMarginScale(first, end));
+        return (margin * NestedFieldMarginScale(end: end, first: first));
     }
     /// <summary>Returns the coupling halo an instance's soft blends need on top of their geometry bound: past it,
     /// evaluating the member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see
@@ -1385,7 +1388,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        return (margin * NestedFieldMarginScale(first, end));
+        return (margin * NestedFieldMarginScale(end: end, first: first));
     }
     // Packs the analysis into the two word-stream tables: the per-shape table (2 uvec4 per INSTRUCTION, only shape
     // records populated) and the segment directory (a count header, then 2 uvec4 per segment).

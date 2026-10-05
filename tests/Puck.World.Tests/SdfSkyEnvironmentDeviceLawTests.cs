@@ -223,7 +223,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         var blockBytes = new byte[parameters.SizeBytes];
 
         parameters.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
-        BinaryPrimitives.WriteUInt32LittleEndian(blockBytes.AsSpan((int)parameters.BlockOffsetOf(SdfKernelInterfaces.ScreenEmissionWriteMask)), screenWriteMask);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionWriteMask))), value: screenWriteMask);
 
         var padded = new byte[((((((ulong)blockBytes.Length) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
         var framePadded = new byte[((((((ulong)parameters.FrameBlockSizeBytes) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
@@ -245,34 +245,35 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         using var frame = services.BufferFactory.CreateHostVisible(data: framePadded, name: default, usage: GpuBufferUsage.Uniform);
         using var skyBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: new[] { block }.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         using var layerBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: layers.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        var mappingBytes = new byte[SdfWorldTables.MaxScreenSurfaces * 7 * 16];
+        var mappingBytes = new byte[((SdfWorldTables.MaxScreenSurfaces * 7) * 16)];
+
         if (!screenPixels.IsEmpty) {
             // Three mapped/bound sources: only screen zero has both acquired-image and emission admission.
-            for (var screen = 0; screen < 3; screen++) {
-                BinaryPrimitives.WriteSingleLittleEndian(mappingBytes.AsSpan(screen * 112 + 44), 1f);
-                BinaryPrimitives.WriteSingleLittleEndian(mappingBytes.AsSpan(screen * 112 + 96), 1f);
-                BinaryPrimitives.WriteSingleLittleEndian(mappingBytes.AsSpan(screen * 112 + 104), screen == 1 ? 0f : 1f);
+            for (var screen = 0; (screen < 3); screen++) {
+                BinaryPrimitives.WriteSingleLittleEndian(destination: mappingBytes.AsSpan(start: ((screen * 112) + 44)), value: 1f);
+                BinaryPrimitives.WriteSingleLittleEndian(destination: mappingBytes.AsSpan(start: ((screen * 112) + 96)), value: 1f);
+                BinaryPrimitives.WriteSingleLittleEndian(destination: mappingBytes.AsSpan(start: ((screen * 112) + 104)), value: ((screen == 1) ? 0f : 1f));
             }
-            BinaryPrimitives.WriteUInt32LittleEndian(blockBytes.AsSpan((int)parameters.BlockOffsetOf(SdfKernelInterfaces.ScreenEmissionMask)), 3u);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionMask))), value: 3u);
         }
         using var mappings = services.BufferFactory.CreateHostVisible(data: mappingBytes, name: default, usage: GpuBufferUsage.Storage);
         using var filler = services.SurfaceTransferFactory.CreateUpload();
-        var fillerView = filler.Upload(pixels: screenPixels.IsEmpty ? new byte[] { 0, 0, 0, 255 } : screenPixels,
-            format: GpuPixelFormat.R8G8B8A8Unorm, width: (uint)screenWidth, height: (uint)screenHeight);
+        var fillerView = filler.Upload(pixels: (screenPixels.IsEmpty ? new byte[] { 0, 0, 0, 255 } : screenPixels),
+            format: GpuPixelFormat.R8G8B8A8Unorm, width: ((uint)screenWidth), height: ((uint)screenHeight));
         var sampler = services.Bindings.CreateSampler();
         using var map = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage);
         using var coefficients = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage);
         using var screens = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage);
-        using var seed = screenSeed.IsEmpty ? null : services.BufferFactory.CreateHostVisible(data: screenSeed.Span, name: default, usage: GpuBufferUsage.Storage);
+        using var seed = (screenSeed.IsEmpty ? null : services.BufferFactory.CreateHostVisible(data: screenSeed.Span, name: default, usage: GpuBufferUsage.Storage));
         // Two pass rows, an unused row, then one detail row each of the sky's detail rows.
-        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)((DetailRow + SdfSkyDetails.InitialCapacity + 1) * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
+        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(((DetailRow + SdfSkyDetails.InitialCapacity) + 1) * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
         using var mapRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: SdfSkyEnvironment.MapBytes);
         using var coefficientRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: SdfSkyEnvironment.CoefficientBytes);
         using var screenRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: SdfScreenEmission.Bytes);
         using var counterRead = services.BufferFactory.CreateReadback(name: default, sizeBytes: counters.SizeBytes);
         using var commands = services.CommandPoolFactory.Create(name: default);
-        var pool = services.Bindings.CreatePool(name: default, sizes: (GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups) +
-            GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups) + GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups)));
+        var pool = services.Bindings.CreatePool(name: default, sizes: ((GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups) +
+            GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups)) + GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups)));
         var blocks = new List<IGpuStorageBuffer>();
 
         try {
@@ -292,7 +293,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
 
             for (var kernel = 0; (kernel < 3); kernel++) {
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row))), value: rows[kernel]);
-                BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))), value: ((uint)(DetailRow + (kernel == 2 ? SdfSkyDetails.InitialCapacity : 0))));
+                BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))), value: ((uint)(DetailRow + ((kernel == 2) ? SdfSkyDetails.InitialCapacity : 0))));
                 blockBytes.CopyTo(array: padded, index: 0);
 
                 var passBlock = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
@@ -310,12 +311,12 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
 
                             services.Bindings.WriteConstantBuffer(arrayElement: 0, binding: binding.Binding, bufferHandle: constants.BufferHandle, bufferSize: constants.SizeBytes, descriptorSetHandle: set);
                         } else if (binding.Kind == GpuBindingKind.SampledImage) {
-                            for (var element = 0u; element < binding.Count; element++) {
+                            for (var element = 0u; (element < binding.Count); element++) {
                                 services.Bindings.WriteSampledImage(arrayElement: element, binding: binding.Binding,
                                     descriptorSetHandle: set, imageViewHandle: fillerView);
                             }
                         } else if (binding.Kind == GpuBindingKind.Sampler) {
-                            for (var element = 0u; element < binding.Count; element++) {
+                            for (var element = 0u; (element < binding.Count); element++) {
                                 services.Bindings.WriteSampler(arrayElement: element, binding: binding.Binding,
                                     descriptorSetHandle: set, samplerHandle: sampler);
                             }
@@ -338,7 +339,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
                 foreach (var (group, set) in kernelSets) {
                     recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: group, pipelineLayoutHandle: pipeline.LayoutHandle);
                 }
-                recorder.Dispatch(commandBufferHandle: command, groupCountX: groups, groupCountY: rows ?? groups, groupCountZ: 1);
+                recorder.Dispatch(commandBufferHandle: command, groupCountX: groups, groupCountY: (rows ?? groups), groupCountZ: 1);
             }
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
@@ -352,11 +353,11 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             Dispatch(groups: 1u, kernelSets: sets[1], pipeline: reducePipeline);
             if (seed is not null) {
                 // The host-coherent seed is written before submission and has no prior GPU access.
-                Barrier(seed, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.TransferRead, GpuStage.Transfer);
-                Barrier(screens, GpuAccess.None, GpuStage.TopOfPipe, GpuAccess.CopyWrite, GpuStage.Transfer);
+                Barrier(buffer: seed, destination: GpuAccess.TransferRead, destinationStage: GpuStage.Transfer, source: GpuAccess.None, sourceStage: GpuStage.TopOfPipe);
+                Barrier(buffer: screens, destination: GpuAccess.CopyWrite, destinationStage: GpuStage.Transfer, source: GpuAccess.None, sourceStage: GpuStage.TopOfPipe);
                 recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: seed.BufferHandle, destinationBufferHandle: screens.BufferHandle,
                     sizeBytes: screens.SizeBytes);
-                Barrier(screens, GpuAccess.CopyWrite, GpuStage.Transfer, GpuAccess.ShaderWrite, GpuStage.ComputeShader);
+                Barrier(buffer: screens, destination: GpuAccess.ShaderWrite, destinationStage: GpuStage.ComputeShader, source: GpuAccess.CopyWrite, sourceStage: GpuStage.Transfer);
             } else {
                 Barrier(buffer: screens, destination: GpuAccess.ShaderWrite, destinationStage: GpuStage.ComputeShader, source: GpuAccess.None, sourceStage: GpuStage.TopOfPipe);
             }
@@ -399,8 +400,8 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             }
 
             return (mapBytes, coefficientBytes, evaluations, Count(kind: 1, row: 0), Count(kind: 1, row: 1), screenBytes,
-                Count(kind: GpuWork.KernelKinds.IndexOf(GpuWork.SkyTextureLoads), row: DetailRow + SdfSkyDetails.InitialCapacity),
-                Count(kind: 1, row: DetailRow + SdfSkyDetails.InitialCapacity));
+                Count(kind: GpuWork.KernelKinds.IndexOf(GpuWork.SkyTextureLoads), row: (DetailRow + SdfSkyDetails.InitialCapacity)),
+                Count(kind: 1, row: (DetailRow + SdfSkyDetails.InitialCapacity)));
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
             services.Bindings.DestroySampler(samplerHandle: sampler);

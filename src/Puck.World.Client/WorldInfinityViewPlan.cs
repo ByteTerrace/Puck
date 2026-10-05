@@ -49,18 +49,19 @@ public sealed class WorldInfinityViewPlan {
     /// <returns>The descendants with the direct children's parent made local to the consuming camera.</returns>
     public WorldInfinityViewPlan Below(string? parent) {
         if (parent is null) { return this; }
-        var kept = new HashSet<string>(StringComparer.Ordinal) { parent };
+        var kept = new HashSet<string>(comparer: StringComparer.Ordinal) { parent };
         var views = new List<WorldInfinityView>();
-        foreach (var view in Views) {
-            if ((view.Parent is null) || !kept.Contains(view.Parent)) { continue; }
-            _ = kept.Add(view.Name);
-            views.Add(view with { Parent = ((view.Parent == parent) ? null : view.Parent) });
-        }
-        var fallbacks = Fallbacks.Where(fallback => (fallback.Parent is not null) && kept.Contains(fallback.Parent))
-            .Select(fallback => fallback with { Parent = ((fallback.Parent == parent) ? null : fallback.Parent) }).ToArray();
-        return new WorldInfinityViewPlan(views, fallbacks);
-    }
 
+        foreach (var view in Views) {
+            if ((view.Parent is null) || !kept.Contains(item: view.Parent)) { continue; }
+            _ = kept.Add(item: view.Name);
+            views.Add(item: view with { Parent = ((view.Parent == parent) ? null : view.Parent) });
+        }
+        var fallbacks = Fallbacks.Where(predicate: fallback => ((fallback.Parent is not null) && kept.Contains(item: fallback.Parent)))
+            .Select(selector: fallback => fallback with { Parent = ((fallback.Parent == parent) ? null : fallback.Parent) }).ToArray();
+
+        return new WorldInfinityViewPlan(fallbacks: fallbacks, views: views);
+    }
     /// <summary>Checks the infinity views one world's sky authors: every record sound, names distinct, no more than the
     /// cap.</summary>
     /// <param name="specs">The views one world authors.</param>

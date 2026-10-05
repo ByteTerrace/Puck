@@ -26,19 +26,20 @@ public sealed partial class RenderGraphRuntime {
     // Unlike ordinary cadence, a finite package operation may need its submitted image to remain immutable while
     // sibling producers advance. Only an own image whose whole graph consents can stand across those input changes.
     private bool PackagesHoldOutput(int index) {
-        if (m_sources[index] is not null || m_producers[index] is not null || m_nodes[index] is not { IsReady: true } ||
-            m_set.Instances[index].Output != ShaderPipelineResourceKind.Image || m_graphs[index] is not { } graph ||
-            m_current[index] is not { Frame: >= 0, StandsFor.IsOwn: true, Publication.IsKnown: true } output ||
-            graph.Pipeline.Plan.Passes.Count == 0) { return false; }
+        if ((m_sources[index] is not null) || (m_producers[index] is not null) || (m_nodes[index] is not { IsReady: true }) ||
+            (m_set.Instances[index].Output != ShaderPipelineResourceKind.Image) || (m_graphs[index] is not { } graph) ||
+            (m_current[index] is not { Frame: >= 0, StandsFor.IsOwn: true, Publication.IsKnown: true } output) ||
+            (graph.Pipeline.Plan.Passes.Count == 0)) { return false; }
         var passes = graph.Pipeline.Plan.Passes;
-        for (var position = 0; position < passes.Count; position++) {
+
+        for (var position = 0; (position < passes.Count); position++) {
             var pass = passes[position];
-            if (pass.Package is not { } package || !m_packages.TryGetFactory(package.Package, out var factory) ||
-                !factory.HoldsOutput(m_set.Instances[index].Name, output.Publication)) { return false; }
+
+            if ((pass.Package is not { } package) || !m_packages.TryGetFactory(package.Package, out var factory) ||
+                !factory.HoldsOutput(instance: m_set.Instances[index].Name, publication: output.Publication)) { return false; }
         }
         return true;
     }
-
     // Whether an instance renders its package's graph on a node: an external instance whose package no producer or upload
     // serves and a recorder does.
     private static bool RunsPackage(RenderGraphInstance instance, RenderGraphPackageRecorders packages) => (
@@ -80,10 +81,12 @@ public sealed partial class RenderGraphRuntime {
         }
 
         var outputs = new ShaderPipelineResource[fragment.OutputVersions.Count];
-        for (var index = 0; index < outputs.Length; index++) {
+
+        for (var index = 0; (index < outputs.Length); index++) {
             var version = fragment.OutputVersions[index];
             var output = fragment.Resources.FirstOrDefault(predicate: resource => string.Equals(
                 a: resource.Name, b: version, comparisonType: StringComparison.Ordinal));
+
             if (output is null) {
                 fault = $"selected a fragment whose output '{version}' has no resource declaration";
                 return null;
@@ -99,7 +102,7 @@ public sealed partial class RenderGraphRuntime {
                 new RenderGraphPackagePass(
                     Name: package,
                     Inputs: [.. fragment.InputVersions.Select(selector: name => new ResourceReference(Name: name))],
-                    Outputs: [.. fragment.OutputVersions.Select(static name => new ResourceReference(Name: name))],
+                    Outputs: [.. fragment.OutputVersions.Select(selector: static name => new ResourceReference(Name: name))],
                     Package: package
                 ),
             ],
@@ -116,7 +119,7 @@ public sealed partial class RenderGraphRuntime {
             Inputs = [.. inputResources.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
                 Access: FragmentAccess(fragment: fragment, name: resource.Name, input: true),
                 StrideBytes: resource.StrideBytes, Count: resource.Count))],
-            Outputs = [.. outputs.Select(resource => new RenderGraphPackagePort(Kind: resource.Kind,
+            Outputs = [.. outputs.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
                 Access: FragmentAccess(fragment: fragment, name: resource.Name, input: false),
                 StrideBytes: resource.StrideBytes, Count: resource.Count))],
         }])).TryCompile(
@@ -141,10 +144,12 @@ public sealed partial class RenderGraphRuntime {
     }
     private static RenderGraphPortAccess FragmentAccess(RenderGraphPackageFragment fragment, string name, bool input) {
         var selected = (input ? RenderGraphPortAccess.ComputeRead : RenderGraphPortAccess.ComputeWrite);
+
         foreach (var pass in fragment.Passes) {
             var versions = (input ? pass.Inputs : pass.Outputs);
             var accesses = (input ? pass.InputAccesses : pass.OutputAccesses);
-            for (var index = 0; index < versions.Count; index++) {
+
+            for (var index = 0; (index < versions.Count); index++) {
                 if (versions[index].Name != name) { continue; }
                 if (accesses[index] == RenderGraphPortAccess.ComputeReadWrite) { return accesses[index]; }
                 selected = accesses[index];
@@ -209,7 +214,7 @@ public sealed partial class RenderGraphRuntime {
     // A counter change must reach ProduceFrame's rebuild check even when the package's content is unchanged;
     // the node keeps being polled until the matching build installs, including buffer graphs with no pixel footprint.
     private bool MatchesAllocatedExtent(int index, in RenderGraphFrame frame) {
-        if (m_nodes[index] is not { IsReady: true } node || node.CountsChanged) {
+        if ((m_nodes[index] is not { IsReady: true } node) || node.CountsChanged) {
             return false;
         }
         if (m_set.Instances[index].Output == ShaderPipelineResourceKind.Buffer) {

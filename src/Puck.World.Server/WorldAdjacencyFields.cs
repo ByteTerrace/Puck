@@ -672,7 +672,6 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             mirror.CopySnapshotTo(
                 active: m_active,
                 addresses: m_addresses,
-                placementIds: m_placementIds,
                 arrivalTimestamp: out m_pinnedArrivalTimestamp,
                 bodyContacts: m_bodyContacts,
                 catalogRigs: m_catalogRigs,
@@ -681,6 +680,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 currentOrientations: m_currentOrientations,
                 currentPositions: m_currentPositions,
                 looks: m_looks,
+                placementIds: m_placementIds,
                 previousOrientations: m_previousOrientations,
                 previousPositions: m_previousPositions,
                 revision: out m_pinnedSnapshotRevision,

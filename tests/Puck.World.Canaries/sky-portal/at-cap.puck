@@ -20,34 +20,41 @@ views {
   }
 }
 cameras [{
-  name: "eye"
-  renderWidth: 96
-  renderHeight: 96
-  rig {
     name: "eye"
-    version: "puck.camera.program.v1"
-    operations [
-      anchor(subject: worldPoint(point: [0, 0, 0]))
-      lookAt(subject: worldPoint(point: [0, 0, -1]))
-      fieldOfView(fieldOfViewRadians: 1)
-    ]
+    renderWidth: 96
+    renderHeight: 96
+    rig {
+      name: "eye"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0, 0]))
+        lookAt(subject: worldPoint(point: [0, 0, -1]))
+        fieldOfView(fieldOfViewRadians: 1)
+      ]
+    }
   }
-}]
+]
 destinations [{ name: "lobby", reference: "lobby", scope: global, durability: persisted }]
 references [{ name: "lobby", document: "lobby" }]
 render {
   farDistance: 100
-  atmosphere { fog { density: 0 } }
-  sky { layers [
-    view(name: "cap0", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap1", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap2", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap3", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap4", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap5", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap6", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-    view(name: "cap7", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
-  ] }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  sky {
+    layers [
+      view(name: "cap0", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap1", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap2", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap3", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap4", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap5", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap6", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+      view(name: "cap7", destination: "lobby", refresh: 1, scale: 0.125, fallback: "#FF00FF")
+    ]
+  }
 }
 prototypes {
   prototype "planet" {
@@ -55,8 +62,17 @@ prototypes {
       schema: "puck.creation.v1"
       name: "planet"
       palette [{ color: "#0000FF", emissive: 1, metal: 1, roughness: 1, specular: 0 }]
-      shape Sphere "sphere" { material: 0, position [0, 0, 0], scale [20, 20, 20] }
+      shape Sphere "sphere" {
+        material: 0
+        position [0, 0, 0]
+        scale [20, 20, 20]
+      }
     }
   }
 }
-placements { placement "planet" { prototype: "planet", position [0, 0, -200] } }
+placements {
+  placement "planet" {
+    prototype: "planet"
+    position [0, 0, -200]
+  }
+}

@@ -186,9 +186,10 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             );
             if (package.Fragment is { } inputFragment) {
                 foreach (var part in inputFragment.Passes) {
-                    for (var index = 0; (index < Math.Min(part.Inputs.Count, part.InputAccesses.Count)); index++) {
+                    for (var index = 0; (index < Math.Min(val1: part.Inputs.Count, val2: part.InputAccesses.Count)); index++) {
                         if (part.InputAccesses[index] != RenderGraphPortAccess.ComputeReadWrite) { continue; }
                         var port = IndexOf(list: inputFragment.InputVersions, name: part.Inputs[index].Name);
+
                         if ((port >= 0) && (package.Inputs[port].Access == RenderGraphPortAccess.ComputeReadWrite)) { continue; }
                         Add(diagnostics, "RENDERGRAPH_MUTABLE_INPUT",
                             $"Fragment pass '{pass.Name}${part.Name}' updates '{part.Inputs[index].Name}' without a mutable package input port.", pass.Name);
