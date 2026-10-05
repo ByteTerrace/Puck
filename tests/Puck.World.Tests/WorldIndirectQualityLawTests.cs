@@ -72,7 +72,7 @@ public sealed class WorldIndirectQualityLawTests {
         ];
         foreach (var row in rows) {
             Assert.False(WorldDefinitionValidator.TryValidate(Fixtures.BuildDocument() with { RenderRaw = row },
-                neighbours: null, out var reason));
+                neighbours: null, reason: out var reason));
             Assert.Contains("indirect", reason);
         }
     }

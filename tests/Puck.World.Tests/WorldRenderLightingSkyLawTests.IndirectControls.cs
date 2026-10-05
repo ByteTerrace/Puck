@@ -44,7 +44,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         ];
         foreach (var control in controls) {
             var definition = Fixtures.BuildDocument() with { RenderRaw = BaseDefaults() with { Indirect = control } };
-            Assert.False(WorldDefinitionValidator.TryValidate(definition, neighbours: null, out var reason));
+            Assert.False(WorldDefinitionValidator.TryValidate(definition, neighbours: null, reason: out var reason));
             Assert.Contains("render.indirect", reason);
         }
     }
@@ -54,7 +54,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     [InlineData(5)]
     public void IndirectDepthRefusesBeyondTheExistingTierCapacity(int depth) {
         var definition = Fixtures.BuildDocument() with { RenderRaw = BaseDefaults() with { Indirect = new(Bounces: depth) } };
-        Assert.False(WorldDefinitionValidator.TryValidate(definition, neighbours: null, out var reason));
+        Assert.False(WorldDefinitionValidator.TryValidate(definition, neighbours: null, reason: out var reason));
         Assert.Contains("render.indirect.bounces", reason);
     }
 }

@@ -78,7 +78,7 @@ public sealed class WorldSkyFieldScaleLawTests {
             new(SkyFieldScale: fraction), new(LowRaw: new(ShadowTier.Off, false, 1f, SkyFieldScale: fraction)),
         }) {
             Assert.False(WorldDefinitionValidator.TryValidate(Fixtures.BuildDocument() with { RenderRaw = render },
-                neighbours: null, out var reason));
+                neighbours: null, reason: out var reason));
             Assert.Contains("skyFieldScale", reason);
         }
         var settings = new WorldRenderSettings(WorldRenderDefaults.Absent);
@@ -103,7 +103,7 @@ public sealed class WorldSkyFieldScaleLawTests {
               low { shadows: "Off" ambientOcclusion: false renderScale: 1 skyFieldScale: 0.5 }
             }
             """);
-        var compilation = WorldCompiler.CompileFile(source);
+        var compilation = WorldCompiler.CompileFile(path: source, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(compilation.Success, "The authored sky field fraction must compile.");
         Assert.Equal(.5f, compilation.RequireJson()["render"]!["skyFieldScale"]!.GetValue<float>());
         Assert.Equal(.5f, compilation.RequireJson()["render"]!["low"]!["skyFieldScale"]!.GetValue<float>());
