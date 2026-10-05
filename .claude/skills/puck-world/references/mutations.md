@@ -126,9 +126,10 @@ A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
 
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
-(`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) edit what
-the NEXT boot wakes on while live session levers keep their values
-(`world.save` folds levers back into the fields). Two rows split honestly and
+(`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) update document
+defaults while live session levers keep their values (`world.save` folds levers
+back into the fields). This echo classification does not defer fields read from
+the delivered definition: authored lighting applies live. Two rows split timing and
 the accept echo narrates the split: `SetAuthoringDefaults` (headroom/repeat
 caps boot-consumed, candidate/layout/preview live) and `SetPopulationDefaults`
 (census figures next boot, spawn policy live for future activations).

@@ -420,10 +420,10 @@ public sealed partial class WorldDocument {
             Host.Machines.Finish(plan: machinePlan);
         }
 
-        // A defaults-class mutation edits what the NEXT boot wakes on while the live
-        // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
-        // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
-        // classes at once (WorldPlacementPolicyDefaults' own remarks name which field is which) — the headroom/repeat-cap
+        // A defaults-class mutation updates the document while live session levers keep their values (world.save
+        // folds them). Fields read from the delivered definition, including authored lighting, still apply live.
+        // SetAuthoringDefaults carries both timing classes in one whole-row mutation
+        // (WorldPlacementPolicyDefaults' own remarks name which field is which): the headroom/repeat-cap
         // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
         // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
         // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
@@ -436,7 +436,7 @@ public sealed partial class WorldDocument {
             WorldMutation.SetPopulationDistribution => $"{WorldServer.Describe(mutation: mutation)} applied — spawn policy live for future activations, standing bodies unmoved",
             WorldMutation.SetPopulationCensus => $"{WorldServer.Describe(mutation: mutation)} applied — census figures next boot",
             _ => $"{WorldServer.Describe(mutation: mutation)} applied{(documentOnly
-            ? " — document default (next boot; live levers unchanged)"
+            ? " — document default updated; live levers unchanged"
             : string.Empty)}",
         };
 
