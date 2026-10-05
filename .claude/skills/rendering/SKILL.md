@@ -2744,6 +2744,10 @@ an indirect-frozen control refuses by name without thawing or altering its
 bank. `TaintedOf` carries actual retained-bank and history taint independently
 of current graph inputs. Do not count convergence or forward a capture while
 the retained source still waits, and do not require a lighting fence at Off.
+Check retained package taint before forwarding, then attach the submitted
+package state to the new output. Preserve actual acquired-input taint; do not
+carry the previous output's package taint across a clean replacement render or
+exclude that first clean sample from convergence.
 
 Emitting and lighting-visible Panorama reads between different world residencies
 use the existing view owner's two-round screen closure. Its initial derived

@@ -1384,7 +1384,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule.Next.Withdraw(index, prior);
                 continue;
             }
-            NotePackageTaint(index);
             // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
             if (
                 (source is null) &&
@@ -1408,6 +1407,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null) &&
+                !HasPackageTaint(index) &&
                 (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0)) &&
                 !MarkReadStale(index: index, schedule: schedule)
             ) {

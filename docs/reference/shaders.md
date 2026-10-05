@@ -821,6 +821,10 @@ stays held until that target completes the capture. A package's
 finite-source completion; a refusal fails the request by name. `TaintedOf`
 also joins the graph's acquired-input taint, so an older retained result or
 history cannot become clean merely because a newer input is clean.
+Before rendering, retained package taint prevents forwarding a capture. After a
+successful submission, the new output carries that submitted package state and
+its acquired-input taint. A clean render that replaces tainted history counts
+as the first clean sample; the previous output's taint does not delay it again.
 After retaining an image output, `OutputPublished` reports that same publication
 to its package factories. A forwarded image keeps its acquired producer and
 sequence. An owner can associate already-submitted source state with that image;
