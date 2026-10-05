@@ -13,8 +13,8 @@ render {
     clock: change
     lights [point(name: "probe-light", position: [100, 100, 100], radius: 0.1, color: "#FFFFFF", weight: 1, bounce: 1)]
     keys [
-      { at: 0, lights { `probe-light`: point(position: [100, 100, 100]) } }
-      { at: 0.5, lights { `probe-light`: point(position: [0, 0.05, 0]) } }
+      { at: 0, lights { "probe-light": point(position: [100, 100, 100]) } }
+      { at: 0.5, lights { "probe-light": point(position: [0, 0.05, 0]) } }
     ]
   }
 }
