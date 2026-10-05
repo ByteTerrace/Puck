@@ -191,7 +191,7 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
-    /// (<see cref="SdfFrameBlock"/>), written with no render extent. A collision would need a
+    /// (<see cref="SdfFrameBlock"/>), written with no render extent, and its separate sky field fraction. A collision would need a
     /// 64-bit hash clash across two genuinely different input sets — negligible, and still only presentation, never
     /// simulation.</summary>
     /// <param name="frame">The frame the tables packed.</param>
@@ -219,6 +219,7 @@ public sealed partial class SdfWorldTables {
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
+        hash.Add(value: BitConverter.SingleToUInt32Bits(frame.Views[view].Quality.SkyFieldFraction));
         AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;

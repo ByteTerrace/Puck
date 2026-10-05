@@ -40,6 +40,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("palette", false)]
     [InlineData("indirect-method", false)]
     [InlineData("geometry-only", false)]
+    [InlineData("sky-field-scale", false)]
     [InlineData("indirect-sources", false)]
     [InlineData("shadow-direction", false)]
     [InlineData("camera", false)]
@@ -51,6 +52,7 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("palette", true)]
     [InlineData("indirect-method", true)]
     [InlineData("geometry-only", true)]
+    [InlineData("sky-field-scale", true)]
     [InlineData("indirect-sources", true)]
     [InlineData("shadow-direction", true)]
     [InlineData("camera", true)]
@@ -61,6 +63,9 @@ public sealed partial class SdfWorldPassesLawTests {
         string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
 
         switch (change) {
+            case "sky-field-scale":
+                frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { SkyFieldScale = .5f } }] };
+                break;
             case "geometry-only":
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { GeometryOnly = true } }] };
                 executed = [SdfWorldPackage.Parts.Composite];
