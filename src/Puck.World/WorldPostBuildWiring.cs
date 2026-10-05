@@ -254,14 +254,18 @@ public static class WorldPostBuildWiring {
 
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => valueDomains.Restart(mirror: restoredState);
 
-        services.GetRequiredService<WorldCompareCapture>().Report = result => {
+        void ReportPresentationResult(CommandResult result) {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.
             if (result.IsError) { consoleRegistry.NoteDeferredRejection(); }
             toasts?.Publish(isError: result.IsError, message: result.Output);
             consoleSessions.RecordAdministrativeEcho(message: result.Output, refused: result.IsError);
             if (string.IsNullOrEmpty(value: result.Output)) { return; }
             if (result.IsError) { consoleOutput.WriteErrorLine(value: result.Output); } else { consoleOutput.WriteLine(value: result.Output); }
-        };
+        }
+        services.GetRequiredService<WorldCompareCapture>().Report = ReportPresentationResult;
+        foreach (var inspection in services.GetServices<ICommandModule>().OfType<WorldInspectionCommandModule>()) {
+            inspection.Report = ReportPresentationResult;
+        }
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
         var sourceWatch = services.GetRequiredService<WorldSourceWatch>();

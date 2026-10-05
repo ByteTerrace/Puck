@@ -8,10 +8,16 @@ namespace Puck.World;
 internal sealed partial class WorldInspectionCommandModule {
     private readonly WorldIndirectPickText m_indirectText = new();
 
+    /// <summary>Gets or sets the host's late-result fan-out, including named cancellation refusals.</summary>
+    public Action<CommandResult>? Report { get; set; }
+
     private CommandResult Explain(CommandContext context, WireArgs args) {
         if (args.Count != 0) { return CommandResult.Usage(verb: "world.explain", form: ""); }
         if (cursor is null || gpu is null) { return CommandResult.Error("[world.explain: requires GPU presentation]"); }
-        return cursor.Explain(context.Slot, DescribeExplanation);
+        var result = cursor.Explain(context.Slot, DescribeExplanation);
+        if (result.Settlement is not { } settlement) { return result; }
+        context.TextSession?.HoldWhile(hold: () => !settlement.IsSettled);
+        return CommandResult.Settling(settlement, late: verdict => Report?.Invoke(verdict));
     }
 
     private CommandResult DescribeExplanation(SdfPickResult answer) {

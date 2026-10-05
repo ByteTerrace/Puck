@@ -8,13 +8,15 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Late comparison verdicts reach the script streams, administrative tape, and refusal count exactly once.</summary>
+/// <summary>Late presentation verdicts reach the script streams, administrative tape, and refusal count exactly once.</summary>
 [Collection(AllocationCollection.Name)]
 public sealed class WorldCompareReportingLawTests {
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, "world.compare")]
+    [InlineData(true, "world.compare")]
+    [InlineData(false, "world.explain")]
+    [InlineData(true, "world.explain")]
     [Theory]
-    public void InstalledComparisonReportPreservesStreamsTapeAndRefusalCount(bool refused) {
+    public void InstalledComparisonReportPreservesStreamsTapeAndRefusalCount(bool refused, string verb) {
         using var files = new TemporaryDirectory();
         using var stdout = new MemoryStream();
         using var stderr = new MemoryStream();
@@ -28,20 +30,24 @@ public sealed class WorldCompareReportingLawTests {
         Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var sessions = host.Services.GetRequiredService<TerminalConsoleSessions>();
-        var capture = host.Services.GetRequiredService<WorldCompareCapture>();
-        const string Message = "[world.compare: late capture verdict — β]";
+        var inspection = Assert.Single(host.Services.GetServices<ICommandModule>(),
+            module => module.GetType().Name == "WorldInspectionCommandModule");
+        var report = verb == "world.compare"
+            ? host.Services.GetRequiredService<WorldCompareCapture>().Report
+            : (Action<CommandResult>?)inspection.GetType().GetProperty("Report")!.GetValue(inspection);
+        var message = $"[{verb}: late presentation verdict — β]";
 
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
-        Assert.NotNull(@object: capture.Report);
-        capture.Report(obj: new CommandResult(Output: Message) { IsError = refused });
+        Assert.NotNull(@object: report);
+        report(obj: new CommandResult(Output: message) { IsError = refused });
         output.Flush();
         Assert.True(condition: sessions.OperatorStore.TrySnapshot(frame: out var tape));
         var line = Assert.Single(collection: tape.Lines);
 
         Assert.Multiple(
-            () => Assert.Equal(expected: (refused ? "" : (Message + Environment.NewLine)), actual: Encoding.UTF8.GetString(bytes: stdout.ToArray())),
-            () => Assert.Equal(expected: (refused ? (Message + Environment.NewLine) : ""), actual: Encoding.UTF8.GetString(bytes: stderr.ToArray())),
-            () => Assert.Equal(expected: new ConsoleTapeLine(Refused: refused, Text: Message), actual: line),
+            () => Assert.Equal(expected: (refused ? "" : (message + Environment.NewLine)), actual: Encoding.UTF8.GetString(bytes: stdout.ToArray())),
+            () => Assert.Equal(expected: (refused ? (message + Environment.NewLine) : ""), actual: Encoding.UTF8.GetString(bytes: stderr.ToArray())),
+            () => Assert.Equal(expected: new ConsoleTapeLine(Refused: refused, Text: message), actual: line),
             () => Assert.Equal(expected: (refused ? "[wire.errors: 1 rejected]" : "[wire.errors: 0 rejected]"),
                 actual: registry.Submit(line: "wire.errors").Output));
     }

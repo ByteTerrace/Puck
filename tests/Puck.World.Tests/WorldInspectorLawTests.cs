@@ -138,7 +138,22 @@ public sealed class WorldInspectorLawTests {
         var positioned = registry.Submit("world.view.pointer");
         Assert.False(positioned.IsError, positioned.Output);
         Assert.Contains("position=32,96", positioned.Output);
-        var request = registry.Submit("world.explain");
+        var inspection = Assert.Single(services.GetServices<ICommandModule>(),
+            module => module.GetType().Name == "WorldInspectionCommandModule");
+        var reports = new List<CommandResult>();
+        inspection.GetType().GetProperty("Report")!.SetValue(inspection, (Action<CommandResult>)reports.Add);
+        var commands = new TextCommandSource(registry);
+        var issued = new List<(string Line, CommandResult Result)>();
+        var other = new List<string>();
+        using var issuer = commands.CreateSession(Principal.Console, onResult: (line, result) => issued.Add((line, result)));
+        using var observer = commands.CreateSession(Principal.Console, onResult: (line, _) => other.Add(line));
+        issuer.Enqueue("world.explain");
+        issuer.Enqueue("world.inspect");
+        observer.Enqueue("world.inspect");
+        commands.Collect();
+        var request = Assert.Single(issued).Result;
+        Assert.Equal("world.explain", issued[0].Line);
+        Assert.Equal("world.inspect", Assert.Single(other));
         Assert.False(request.IsError, request.Output);
         var settlement = Assert.IsType<CommandSettlement>(request.Settlement);
         var picker = Assert.IsType<SdfWorldPicker>(views.FindPicker(display.Source.Name));
@@ -148,9 +163,28 @@ public sealed class WorldInspectorLawTests {
         var result = CommandResult.Settling(settlement);
         Assert.False(result.IsError, result.Output);
         Assert.Contains("pixel=32,96/128,128", result.Output);
+        Assert.Equal(result, Assert.Single(reports));
+        commands.Collect();
+        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(item => item.Line));
+
+        // The same issuing-session barrier and late sink also own a route cancellation, rather than leaving a
+        // pending line silent or letting its next line overtake the named refusal.
+        issued.Clear();
+        reports.Clear();
+        issuer.Enqueue("world.explain");
+        issuer.Enqueue("world.inspect");
+        commands.Collect();
+        var cancelled = Assert.IsType<CommandSettlement>(Assert.Single(issued).Result.Settlement);
         Assert.False(registry.Submit("world.view.pointer clear").IsError);
         Produce();
+        Assert.True(cancelled.IsSettled);
+        var refusal = Assert.Single(reports);
+        Assert.True(refusal.IsError, refusal.Output);
+        Assert.Contains("acting seat or pane changed", refusal.Output);
+        commands.Collect();
+        Assert.Equal(new[] { "world.explain", "world.inspect" }, issued.Select(item => item.Line));
         Assert.True(registry.Submit("world.explain").IsError);
+        Assert.Single(reports);
     }
     [Fact]
     public void FormatterNamesCapturedPlacementMaterialAndPixelCostWithoutSteadyAllocation() {

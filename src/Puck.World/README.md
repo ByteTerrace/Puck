@@ -39,7 +39,10 @@ The acting seat's sky and air use the same text as `world.lighting`, followed
 by its named clocks' presented ticks, phases, holds and rates. Long sky text
 uses the panel's ordinary wrapping and elision.
 `world.explain` takes one surfaced sample through the acting seat or pane's
-existing pointer picker. It waits for that sample's fence and evaluates its
+existing pointer picker. It holds only the issuing console session's next line
+until the sample completes or names its cancellation, and reports that verdict
+once through the terminal, operator transcript and refusal count. It waits for
+that sample's fence and evaluates its
 captured cache publication with the independent CPU irradiance reference once.
 The echo and inspector share the actual receiver, corner weights and stamps,
 source categories, allocation, epoch, published sweep depth and fenced probe
