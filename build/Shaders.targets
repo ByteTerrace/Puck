@@ -174,7 +174,7 @@
             <Recipe>&quot;$(DxcCommand)&quot; $(PuckDxcComputeDxil)</Recipe>
             <Enabled>$(PuckComputeShaderDxilEnabled)</Enabled>
         </_PuckShaderBytecode>
-        <_PuckExpectedBytecode Include="@(_PuckShaderBytecode)" Condition="'%(_PuckShaderBytecode.Enabled)' == 'true'" />
+        <_PuckExpectedBytecode Include="@(_PuckShaderBytecode->WithMetadataValue('Enabled', 'true'))" />
     </ItemGroup>
     <!-- ResolveProjectReferences can restore a missing generated include after evaluation's glob expanded. Refresh
          before compilation and collection, preserving explicit outside includes and the same hash order in no-build readers. -->
