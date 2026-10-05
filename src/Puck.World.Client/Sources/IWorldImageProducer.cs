@@ -29,7 +29,8 @@ public interface IWorldImportFeed : IWorldImageFeed {
     FrameRender Answer { get; }
 
     /// <summary>Acquires the image for one submitted frame. A feed whose image another thread keeps writing returns a
-    /// lease the sampling node retires once that submission completes.</summary>
+    /// lease the sampling node retires once that submission completes. When the import exposes a complete native
+    /// image, <see cref="GpuImageLease.Image"/> describes the same acquired slot as its view, publication and wait.</summary>
     /// <returns>The lease, or one holding a zero handle while the feed has no image.</returns>
     GpuImageLease AcquireFrame();
     /// <summary>Returns the current image-view handle for a read that submits no GPU work.</summary>

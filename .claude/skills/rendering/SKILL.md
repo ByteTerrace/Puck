@@ -697,10 +697,12 @@ These are one-line cautions; the owning pages hold the derivations.
   it moves (a machine replaced by one of another extent or format), the runtime
   rebuilds that source before the frame schedules
   (`RenderGraphRuntime.RebuildDriftedSources`, the running set reconfigured
-  onto itself, where a drifted source is not kept), never faults the old one. Such an imported source hands out an
-  image view alone (an empty `RenderGraphExternalOutput.Image`, the view on the
-  lease), so only an external producer samples it, and a graph instance
-  reading it draws a stand-in (`RenderGraphRuntime.Bind`).
+  onto itself, where a drifted source is not kept), never faults the old one.
+  Imported rings and converted pixels carry their complete `GpuImageLease.Image`
+  with the same acquired view, publication and wait. `WorldImageFeedProducer`
+  forwards that surface; a feed exposing only a view still hands out an empty
+  surface and cannot be copied. Never recover an image handle from a view or
+  treat retaining the metadata as freezing its pixels.
   An `sdf.world` pass maps the reads its instance is handed that its graph
   binds to no version (`IRenderGraphPackageFactory.SamplesReads`) to its
   screens through `ISdfScreenSources` (`ReadOf` names each screen's instance in

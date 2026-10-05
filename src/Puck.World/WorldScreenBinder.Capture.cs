@@ -304,7 +304,7 @@ internal sealed partial class WorldScreenBinder {
                 renderDevice: deviceContext
             ),
             images: images,
-            importedViews: null,
+            importedSurfaces: null,
             imports: null,
             ring: slots,
             targetDevice: null

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Hosting;
 
@@ -33,6 +34,10 @@ public readonly record struct GpuImagePublication(object? Owner, long Sequence) 
 /// <param name="Publication">The acquired image's publication, captured together with its lease and fence. A handle
 /// or release token identifies storage or an acquisition and cannot substitute for a publication.</param>
 public readonly record struct GpuImageLease(nint ImageViewHandle, Action<int>? Release = null, int ReleaseToken = 0, GpuExternalWait Wait = default, GpuImagePublication Publication = default) {
+    /// <summary>Gets the complete same-device image acquired with this lease, when its producer exposes one. The
+    /// image, view, extent, format, publication and wait all describe the same acquired slot; an empty surface means
+    /// only sampling through the view is supported. Holding this metadata alone never freezes the image's pixels.</summary>
+    public Surface Image { get; init; }
     /// <summary>Gets whether the sampling submission must wait on another device's fence (<see cref="Wait"/>).</summary>
     public bool HasWait => (Wait.Fence is not null);
     /// <summary>Gets whether this lease must be retired once the submission that sampled it has finished.</summary>

@@ -10,9 +10,9 @@ namespace Puck.World.Client;
 /// imported producer a host registers): it owns the feed the instance's factory opened, publishes it when the runtime
 /// renders the instance, and hands its image out through the capture gate (<see cref="WorldCaptureGate.Resolve"/>),
 /// which makes <see cref="TryAcquireOutput"/> the one place a source's image is acquired. A filled source hands out its
-/// fill and never acquires the feed. The image arrives from another thread or device as an image view alone, so the
-/// output's <see cref="RenderGraphExternalOutput.Image"/> is empty and its lease carries the view: an external producer
-/// samples it, and a graph instance reading it draws a stand-in. Every member runs on the thread that produces frames.
+/// fill and never acquires the feed. A producer that exposes the complete acquired image carries it with the same
+/// lease, publication and wait; a view-only feed still exposes no copyable surface. Every member runs on the thread
+/// that produces frames.
 /// </summary>
 public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWorkSource {
     private readonly Func<uint, GpuImageLease> m_fill;
@@ -103,7 +103,8 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     }
     /// <inheritdoc/>
     /// <remarks>The image is the feed's acquired frame, tainted when its content is external, or its capture fill while
-    /// the gate fills its content class; the output's image is empty and its lease carries the image view.</remarks>
+    /// the gate fills its content class. The output carries the complete image when that same acquisition exposes it;
+    /// a view-only acquisition remains available for sampling.</remarks>
     public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
         if (Feed is not { } feed) {
             output = default;
@@ -125,7 +126,7 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
         }
 
         output = new RenderGraphExternalOutput(
-            Image: default,
+            Image: lease.Image,
             Layout: GpuImageLayout.ShaderReadOnly,
             Lease: lease,
             Tainted: tainted

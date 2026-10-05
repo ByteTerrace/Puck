@@ -475,7 +475,7 @@ internal sealed partial class WorldScreenBinder {
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: height,
             images: out var images,
-            importedViews: out var views,
+            importedSurfaces: out var surfaces,
             imports: out var imports,
             sharedFence: true,
             width: width
@@ -493,7 +493,7 @@ internal sealed partial class WorldScreenBinder {
         var targets = new SharedTargetRing(
             fence: fence,
             images: images,
-            importedViews: views,
+            importedSurfaces: surfaces,
             imports: imports,
             ring: slots,
             targetDevice: m_cameraTargetDevice

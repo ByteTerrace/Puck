@@ -775,7 +775,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 format: stream.TargetFormat,
                 height: stream.Height,
                 images: out var images,
-                importedViews: out var views,
+                importedSurfaces: out var surfaces,
                 imports: out var imports,
                 sharedFence: true,
                 width: stream.Width
@@ -790,7 +790,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             var targets = new SharedTargetRing(
                 fence: fence,
                 images: images,
-                importedViews: views,
+                importedSurfaces: surfaces,
                 imports: imports,
                 ring: stream,
                 targetDevice: m_cameraTargetDevice
@@ -829,11 +829,11 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     // writes on the GPU (a camera stream) gets a shared fence beside its targets; a probe output, whose kernel waits on
     // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out GpuImportedSurface[]? importedSurfaces, out SharedRingFence? fence, out string fault) {
         var allocated = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
-        nint[]? createdViews = null;
+        GpuImportedSurface[]? createdSurfaces = null;
         SharedRingFence? createdFence = null;
 
         try {
@@ -867,16 +867,16 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 var transfers = deviceContext.Services.SurfaceTransferFactory;
 
                 createdImports = new IGpuSurfaceImport[allocated.Length];
-                createdViews = new nint[allocated.Length];
+                createdSurfaces = new GpuImportedSurface[allocated.Length];
 
                 for (var index = 0; (index < allocated.Length); index++) {
                     createdImports[index] = transfers.CreateImport();
-                    createdViews[index] = createdImports[index].Import(
+                    createdSurfaces[index] = createdImports[index].Import(
                         format: format,
                         height: checked((uint)height),
                         sharedHandle: handles[index],
                         width: checked((uint)width)
-                    ).ImageViewHandle;
+                    );
                 }
             }
 
@@ -890,7 +890,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
             images = allocated;
             imports = createdImports;
-            importedViews = createdViews;
+            importedSurfaces = createdSurfaces;
             fence = createdFence;
             fault = "";
 
@@ -910,7 +910,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
             images = [];
             imports = null;
-            importedViews = null;
+            importedSurfaces = null;
             fence = null;
             fault = exception.Message;
 
@@ -1576,7 +1576,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     private sealed class SharedTargetRing {
         private readonly SharedRingFence? m_fence;
         private readonly IReadOnlyList<IGpuExportableImage> m_images;
-        private readonly nint[]? m_importedViews;
+        private readonly GpuImportedSurface[]? m_importedSurfaces;
         private readonly IGpuSurfaceImport[]? m_imports;
         private readonly Action<int> m_release;
         private readonly nint[] m_sharedHandles;
@@ -1599,10 +1599,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         /// has none).</summary>
         public string FenceRefusal => (m_fence?.Refusal ?? "");
 
-        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, GpuImportedSurface[]? importedSurfaces, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_fence = fence;
             m_images = images;
-            m_importedViews = importedViews;
+            m_importedSurfaces = importedSurfaces;
             m_imports = imports;
             m_stream = ring;
             m_release = Release;
@@ -1656,8 +1656,8 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 return 0;
             }
 
-            return (((m_importedViews is { } views) && (slot < views.Length))
-                ? views[slot]
+            return (((m_importedSurfaces is { } surfaces) && (slot < surfaces.Length))
+                ? surfaces[slot].ImageViewHandle
                 : m_images[slot].ImageViewHandle
             );
         }
@@ -1725,7 +1725,12 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 Wait: ((0UL != fenceValue)
                     ? m_fence!.WaitFor(value: fenceValue)
                     : default)
-            );
+            ) {
+                Image = Surface.SameDeviceImage(
+                    imageHandle: m_importedSurfaces is { } surfaces ? surfaces[slot].ImageHandle : m_images[slot].ImageHandle,
+                    imageViewHandle: handle, width: m_images[slot].Width, height: m_images[slot].Height,
+                    format: m_images[slot].Format),
+            };
 
             return true;
         }

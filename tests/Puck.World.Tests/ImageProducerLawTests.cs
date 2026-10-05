@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
 using Puck.Hosting;
@@ -465,11 +466,13 @@ public sealed class ImageProducerLawTests {
 
         var filling = true;
         var filled = new List<uint>();
+        var fillImage = Surface.SameDeviceImage(imageHandle: 0xF110, imageViewHandle: 0xF111,
+            width: 1, height: 1, format: GpuPixelFormat.R16G16B16A16Float);
 
         GpuImageLease Fill(uint rgba) {
             filled.Add(item: rgba);
 
-            return ((nint)0xF111);
+            return new GpuImageLease(0xF111) { Image = fillImage };
         }
 
         using var source = new WorldImageFeedProducer(
@@ -493,6 +496,7 @@ public sealed class ImageProducerLawTests {
 
         for (var frame = 0; (frame < 3); frame++) {
             Assert.True(condition: source.TryAcquireOutput(output: out var output));
+            Assert.Equal(fillImage, output.Image);
             Assert.Equal(
                 actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout, output.Tainted),
                 expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly, false)

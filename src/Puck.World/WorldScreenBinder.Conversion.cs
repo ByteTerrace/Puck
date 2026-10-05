@@ -113,7 +113,7 @@ internal sealed partial class WorldScreenBinder {
                 Publication: shown.Converter.Publication,
                 Release: m_release,
                 ReleaseToken: shown.Token
-            );
+            ) { Image = shown.Converter.Output };
         }
         // Drops every converter's device objects after a device loss; each converts again on the recreated device.
         public void OnDeviceLost() {
