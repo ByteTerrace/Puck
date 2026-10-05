@@ -42,7 +42,7 @@ public sealed class WorldIndirectParticipationLawTests {
             RenderRaw = WorldRenderDefaults.Absent with { Indirect = new WorldRenderIndirect(SdfIndirectParticipation.Off) } };
         var bytes = WorldDefinitionSerialization.Serialize(definition);
         using var wire = JsonDocument.Parse(bytes);
-        Assert.Equal("off", wire.RootElement.GetProperty("render").GetProperty("indirect").GetProperty("bodies").GetString());
+        Assert.Equal("Off", wire.RootElement.GetProperty("render").GetProperty("indirect").GetProperty("bodies").GetString());
         var restored = WorldDefinitionSerialization.Deserialize(bytes);
         Assert.Equal(SdfIndirectParticipation.Off, restored.Render.Indirect!.Bodies);
         Assert.Equal(policy == SdfIndirectParticipation.Default ? SdfIndirectParticipation.Off : policy,
