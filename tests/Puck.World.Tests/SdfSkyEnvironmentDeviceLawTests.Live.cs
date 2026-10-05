@@ -154,6 +154,32 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         source.Converter = converter;
         var context = LiveContext(device);
         var index = 0L;
+        var stage = "residency pipelines";
+        string? previousStatus = null;
+        string Status() => $"{extension} {stage}: frame={index}, residency={residency.NotReadyReason ?? "ready"}; " +
+            $"converter={converter.Render.Reason ?? "rendered"}, source={converter.Publication.Sequence}; " +
+            $"environment={NodeStatus(graph.Node(1))}, observer={NodeStatus(graph.Node(2))}; " +
+            $"submitted={residency.Tables?.SubmittedSkyEnvironment?.Sequence}, completed={residency.Tables?.CompletedSkyEnvironment.Sequence}; " +
+            $"graph={graph.Render.Reason ?? "rendered"}";
+        static string NodeStatus(ShaderPipelineRenderNode node) => node.LastSwapError?.Message ??
+            $"ready={node.IsReady}, building={node.IsBuildingCandidate}, pending={node.HasPendingCandidate}";
+        void Report() {
+            var status = Status();
+            if (status != previousStatus) { Console.Error.WriteLine(status); previousStatus = status; }
+            Assert.Null(residency.Refusal);
+            Assert.NotEqual(FrameCompletion.Refused, graph.Render.Completion);
+            Assert.Null(graph.Node(1).LastSwapError);
+            Assert.Null(graph.Node(2).LastSwapError);
+        }
+        // Finish the actual pipeline work before counting graph transitions. A cold driver wait names the
+        // outstanding kernels; a completed build that cannot advance the fixture fails in a bounded frame count.
+        TestLiveness.Within(frames: 8, step: () => {
+            residency.BeginFrame();
+            var ready = residency.Prepare(context);
+            Report();
+            if (!ready) { _ = residency.WaitPipelineBuilds(TestContext.Current.CancellationToken); }
+            return ready;
+        }, building: () => false, reason: Status);
         void Produce() {
             views.BeginFrame(context);
             residency.BeginFrame();
@@ -161,9 +187,12 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             _ = graph.ProduceFrame(new(DisplayHeight: 4, DisplayWidth: 4, DisplayHertz: 60, Index: index, Tick: index++,
                 Roots: [new("observer", 1, 1)], Footprints: [new("environment", "feed", 1, 1), new("observer", "feed", 1, 1)]), context);
             device.WaitIdle();
+            Report();
         }
-        TestLiveness.Until(() => { Produce(); return residency.Tables?.CompletedSkyEnvironment.IsKnown == true; },
-            reason: () => residency.NotReadyReason ?? graph.Render.Reason, wait: residency.WaitPipelineBuilds);
+        bool Building() => converter.IsBuilding || graph.Node(1).IsBuildingCandidate || graph.Node(2).IsBuildingCandidate;
+        stage = "initial panorama publication";
+        TestLiveness.Within(frames: 16, step: () => { Produce(); return residency.Tables?.CompletedSkyEnvironment.IsKnown == true; },
+            building: Building, reason: Status);
         var tables = residency.Tables!;
         var initial = tables.CompletedSkyEnvironment;
         Assert.True(tables.SubmittedSkyEnvironment!.Value.Tainted);
@@ -174,7 +203,9 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         source.Red = false;
         source.Tainted = false;
         source.Revision++;
-        TestLiveness.Until(() => { Produce(); return tables.CompletedSkyEnvironment != initial; }, reason: () => graph.Render.Reason);
+        stage = "changed panorama publication";
+        TestLiveness.Within(frames: 16, step: () => { Produce(); return tables.CompletedSkyEnvironment != initial; },
+            building: Building, reason: Status);
         Assert.NotEqual(input, converter.Publication);
         Assert.Same(initial.Owner, tables.CompletedSkyEnvironment.Owner);
         Assert.Equal(initial.Sequence + 1, tables.CompletedSkyEnvironment.Sequence);
@@ -265,7 +296,18 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
                 var input = reads[0];
                 owner.Seen[instance] = new(input.Image, input.Layout, input.Publication, input.Tainted);
                 recording.Leases.Hold(reads.Take(0));
-                recording.Recorder.ClearStorageImage(recording.CommandBuffer, recording.Outputs[0].Image.ImageHandle, GpuPixelFormat.R8G8B8A8Unorm);
+                var image = recording.Outputs[0].Image.ImageHandle;
+                // The package boundary is ComputeWrite. Its test clear is a transfer on Vulkan and a UAV write on
+                // DirectX; restore that declared boundary before the graph records the consumer's next access.
+                recording.Recorder.TransitionImageLayout(recording.CommandBuffer, image,
+                    oldLayout: GpuImageLayout.General, newLayout: GpuImageLayout.General,
+                    sourceAccessMask: GpuAccess.ShaderWrite, destinationAccessMask: GpuAccess.TransferWrite,
+                    sourceStageMask: GpuStage.ComputeShader, destinationStageMask: GpuStage.Transfer);
+                recording.Recorder.ClearStorageImage(recording.CommandBuffer, image, GpuPixelFormat.R8G8B8A8Unorm);
+                recording.Recorder.TransitionImageLayout(recording.CommandBuffer, image,
+                    oldLayout: GpuImageLayout.General, newLayout: GpuImageLayout.General,
+                    sourceAccessMask: GpuAccess.TransferWrite, destinationAccessMask: GpuAccess.ShaderWrite,
+                    sourceStageMask: GpuStage.Transfer, destinationStageMask: GpuStage.ComputeShader);
                 return RenderGraphPackageOutcome.Drew;
             }
         }
