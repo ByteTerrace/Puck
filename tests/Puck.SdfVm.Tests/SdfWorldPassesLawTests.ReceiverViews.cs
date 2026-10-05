@@ -89,9 +89,11 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(4, clears.Count(item => item.Buffer == sources[Captured] && item.Bytes == sizeof(uint)));
         Assert.DoesNotContain(clears, item => item.Buffer == cache.Buffer.BufferHandle);
         foreach (var (owner, buffer) in sources) {
-            Assert.Contains(transitions, item => item.Buffer == buffer &&
+            var readyForShaders = transitions.Any(item => item.Buffer == buffer &&
                 item.SourceAccess == GpuAccess.TransferWrite && item.SourceStage == GpuStage.Transfer &&
                 item.DestinationAccess == (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) && item.DestinationStage == GpuStage.ComputeShader);
+            Assert.True(readyForShaders,
+                $"Camera '{owner}' reset source buffer {buffer}; its transitions: {string.Join("; ", transitions.Where(item => item.Buffer == buffer))}");
             var readyForCopy = transitions.Any(item => item.Buffer == buffer &&
                 item.SourceAccess == (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) && item.SourceStage == GpuStage.ComputeShader &&
                 item.DestinationAccess == GpuAccess.TransferRead && item.DestinationStage == GpuStage.Transfer);
