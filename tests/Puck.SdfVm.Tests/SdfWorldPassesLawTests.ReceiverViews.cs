@@ -88,17 +88,20 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(4, clears.Count(item => item.Buffer == sources[Earlier] && item.Bytes == sizeof(uint)));
         Assert.Equal(4, clears.Count(item => item.Buffer == sources[Captured] && item.Bytes == sizeof(uint)));
         Assert.DoesNotContain(clears, item => item.Buffer == cache.Buffer.BufferHandle);
+        // Views reads the cleared predecessor before its preserving output. Both ports share this allocation;
+        // the atomic write must follow that read, and its copy must follow the write on the same buffer.
+        var expected = new[] {
+            (GpuAccess.TransferWrite, GpuAccess.ShaderRead, GpuStage.Transfer, GpuStage.ComputeShader),
+            (GpuAccess.ShaderRead, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
+            (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.TransferRead, GpuStage.ComputeShader, GpuStage.Transfer),
+        };
         foreach (var (owner, buffer) in sources) {
-            var readyForShaders = transitions.Any(item => item.Buffer == buffer &&
-                item.SourceAccess == GpuAccess.TransferWrite && item.SourceStage == GpuStage.Transfer &&
-                item.DestinationAccess == (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) && item.DestinationStage == GpuStage.ComputeShader);
-            Assert.True(readyForShaders,
-                $"Camera '{owner}' reset source buffer {buffer}; its transitions: {string.Join("; ", transitions.Where(item => item.Buffer == buffer))}");
-            var readyForCopy = transitions.Any(item => item.Buffer == buffer &&
-                item.SourceAccess == (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) && item.SourceStage == GpuStage.ComputeShader &&
-                item.DestinationAccess == GpuAccess.TransferRead && item.DestinationStage == GpuStage.Transfer);
-            Assert.True(readyForCopy,
-                $"Camera '{owner}' copied source buffer {buffer}; its transitions: {string.Join("; ", transitions.Where(item => item.Buffer == buffer))}");
+            var actual = transitions.Where(item => item.Buffer == buffer)
+                .Select(item => (item.SourceAccess, item.DestinationAccess, item.SourceStage, item.DestinationStage)).ToArray();
+            var ordered = Enumerable.Range(0, Math.Max(0, actual.Length - expected.Length + 1))
+                .Any(index => actual.AsSpan(index, expected.Length).SequenceEqual(expected));
+            Assert.True(ordered,
+                $"Camera '{owner}' copied source buffer {buffer}; expected reset/read/write/copy chain {string.Join("; ", expected)}; actual transitions: {string.Join("; ", actual)}");
         }
     }
 }
