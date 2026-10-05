@@ -26,7 +26,7 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "7af050f784d473c5";
+        public const string WorldReleaseExerciseResultCurrentSchema = "8b03931f9b917479";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
         public const string WorldReleaseQualificationRunnerMarker = "2b8f77ee9173c72c";
     }
@@ -56,6 +56,15 @@ namespace Puck.Cli.Canary {
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CanaryCeilingsLedger.Format</c>, declared in <c>src/Puck.Cli/Canary/CanaryCeilingsLedger.cs</c>.</summary>
         public const string CanaryCeilingsLedgerFormat = "704107433b8ecf5b";
+    }
+}
+
+namespace Puck.Cli.Counters {
+    /// <summary>The shape fingerprint of each format this namespace declares: the digest <c>puck formats</c> records for it.
+    /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
+    internal static class FormatShapes {
+        /// <summary>The shape fingerprint of <c>CountersBatchManifest.SchemaVersion</c>, declared in <c>src/Puck.Cli/Counters/CountersBatchManifest.cs</c>.</summary>
+        public const string CountersBatchManifestSchemaVersion = "3ae09f512e13ec6a";
     }
 }
 
@@ -95,6 +104,6 @@ namespace Puck.Cli.Qualification {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
         public const string QualificationReportSchemaVersion = "508d00a8cebebddc";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "33b7377faadf6d4c";
+        public const string ReleaseProfileSchemaVersion = "35fff44f5e126300";
     }
 }
