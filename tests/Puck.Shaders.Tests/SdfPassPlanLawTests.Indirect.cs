@@ -47,4 +47,50 @@ public sealed partial class SdfPassPlanLawTests {
         var views = Assert.Single(fragment.Passes, pass => pass.Name == SdfWorldPackage.Parts.Views);
         Assert.Contains(views.Outputs, output => output.Name == SdfWorldPackage.IndirectVisibility);
     }
+    [InlineData("native", false)]
+    [InlineData("native", true)]
+    [InlineData("reduced", false)]
+    [InlineData("reduced", true)]
+    [InlineData("temporal", false)]
+    [InlineData("temporal", true)]
+    [Theory]
+    public void EveryViewPlansOneWritableVisibilityAllocationBeforeItsLaterReaders(string quality, bool indirect) {
+        var fragment = quality switch {
+            "native" => SdfWorldPackage.NativeFragment,
+            "reduced" => SdfWorldPackage.Fragment,
+            _ => SdfWorldPackage.TemporalFragment,
+        };
+        if (indirect) { fragment = SdfWorldPackage.WithIndirect(fragment, 4096); }
+        var package = RenderGraphPackageCatalog.Engine.Packages.Single(item => item.Id == RenderGraphPackageCatalog.SdfWorld) with {
+            Fragment = fragment,
+            Inputs = indirect ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeReadWrite, strideBytes: 4, count: null)] : [],
+        };
+        var plan = new RenderGraphCompiler(new RenderGraphPackageCatalog(packages: [package])).Compile(definition: new RenderGraphDefinition(
+            Name: "visibility", Schema: RenderGraphSchemas.Graph, Outputs: [SdfWorldPackage.Color],
+            Resources: [new ShaderPipelineResource(Name: SdfWorldPackage.Color, Format: RenderGraphPackageCatalog.WorkingFormat.ToString(), Dimensions: ShaderPipelineDimensions.Relative()),
+                .. (indirect ? new[] { new ShaderPipelineResource(Name: SdfWorldPackage.IndirectCache, Kind: ShaderPipelineResourceKind.Buffer,
+                    SizeBytes: 4096, StrideBytes: 4, Initialization: ShaderPipelineInitialization.External) } : [])],
+            Packages: [new RenderGraphPackagePass(Name: Sdf, Package: package.Id,
+                Inputs: indirect ? [SdfWorldPackage.IndirectCache] : [], Outputs: [SdfWorldPackage.Color])])).Pipeline;
+        var views = Assert.Single(plan.Passes, pass => pass.Package!.Part == SdfWorldPackage.Parts.Views);
+        var visibility = Assert.Single(plan.Storages, storage => storage.Name == $"{Sdf}${SdfWorldPackage.Parts.Visibility}");
+        var write = Assert.Single(views.Accesses, access => access.Version == $"{Sdf}${SdfWorldPackage.IndirectVisibility}");
+
+        Assert.True(visibility.Declaration.Retained);
+        Assert.Equal(96u, visibility.Declaration.StrideBytes);
+        Assert.Equal(visibility.Index, write.Storage);
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Use.Access);
+        Assert.Equal(GpuStage.ComputeShader, write.Use.Stage);
+        Assert.Equal(ShaderPipelineBarrierKind.Buffer, write.Barrier.Kind);
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Barrier.DestinationAccess);
+        Assert.Equal(1, views.Accesses.Count(access => access.Storage == visibility.Index && access.Use.Writes));
+        var later = Assert.Single(plan.Passes, pass => pass.Package!.Part == (quality == "native" ? SdfWorldPackage.Parts.Composite : SdfWorldPackage.Resolve));
+        var read = Assert.Single(later.Accesses, access => access.Storage == visibility.Index);
+
+        Assert.True(later.Index > views.Index);
+        Assert.Equal(views.Index, read.PriorPass);
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, read.Barrier.SourceAccess);
+        Assert.Equal(GpuAccess.ShaderRead, read.Barrier.DestinationAccess);
+        Assert.Equal(fragment.Passes.Count, plan.Passes.Count);
+    }
 }

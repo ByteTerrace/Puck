@@ -11,7 +11,7 @@ using Microsoft.Build.Utilities;
 /// <summary>
 /// Publishes each shader bytecode file compiled this pass and writes a "&lt;bytecode-file&gt;.hash" sidecar beside it, recording
 /// a source-side hash (the source <c>.hlsl</c> concatenated with every <c>ShaderInclude</c> item, in item
-/// order — a real streamed byte concatenation) and a bytecode-side hash of the compiled file itself.
+/// order — a real streamed byte concatenation), the effective compiler recipe, and the compiled bytes.
 /// <para>A bytecode file and its sidecar are published as one transaction, under the project's publication lock
 /// (<see cref="LockFile"/>, <see cref="PuckShaderHashing.Lock"/>), which every reader of a pair takes too: the old sidecar
 /// is removed, the bytecode DXC wrote under the run's <see cref="Token"/> is moved into place whole, and the new sidecar
@@ -28,7 +28,8 @@ using Microsoft.Build.Utilities;
 /// </remarks>
 public sealed class PuckWriteShaderHashSidecars : Task {
     /// <summary>Every compiled bytecode file (.spv/.dxil) produced this pass; each item's <c>SourcePath</c>
-    /// metadata names its originating <c>.hlsl</c>.</summary>
+    /// metadata names its originating <c>.hlsl</c>, and <c>Recipe</c>/<c>SourceHash</c>/<c>RecipeHash</c>
+    /// retain the command and input identities selected before compilation.</summary>
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
@@ -59,6 +60,13 @@ public sealed class PuckWriteShaderHashSidecars : Task {
             }
 
             var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
+            var recipeHash = PuckShaderHashing.HashRecipe(bytecode: bytecode);
+
+            if (!string.Equals(sourceHash, bytecode.GetMetadata("SourceHash"), StringComparison.Ordinal) ||
+                !string.Equals(recipeHash, bytecode.GetMetadata("RecipeHash"), StringComparison.Ordinal)) {
+                Log.LogError(message: $"Shader inputs changed while '{bytecode.ItemSpec}' compiled. The cached bytecode and sidecar are left unchanged.");
+                return false;
+            }
             var bytecodeHash = PuckShaderHashing.HashFile(path: compiledPath);
 
             // Publish a complete file rather than truncating one a live asset reader may have memory-mapped.
@@ -67,7 +75,7 @@ public sealed class PuckWriteShaderHashSidecars : Task {
             var temporaryPath = (((sidecarPath + ".") + Guid.NewGuid().ToString(format: "N")) + ".tmp");
 
             try {
-                File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
+                File.WriteAllText(contents: $"source:{sourceHash}\nrecipe:{recipeHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
                 PuckShaderHashing.Retry(
                     log: Log,
                     operation: () => {
@@ -89,16 +97,57 @@ public sealed class PuckWriteShaderHashSidecars : Task {
         return !Log.HasLoggedErrors;
     }
 }
+/// <summary>Selects only shader outputs whose source, effective recipe or compiled bytes differ from their
+/// committed sidecar. Equal content is reusable regardless of file times, including restored proof-tree inputs.
+/// Existing pairs are inspected under the publication lock; an absent pair needs compilation without reading it.</summary>
+public sealed class PuckSelectShaderCompiles : Task {
+    /// <summary>Enabled outputs, with their <c>SourcePath</c> and effective <c>Recipe</c> metadata.</summary>
+    public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The shared include inputs in their declared order.</summary>
+    public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The source tree's publication lock, shared with publishers and collectors.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
+    /// <summary>Stale outputs with the exact input hashes the publisher must still observe after compilation.</summary>
+    [Output]
+    public ITaskItem[] Stale { get; private set; } = Array.Empty<ITaskItem>();
+
+    public override bool Execute() {
+        var stale = new List<ITaskItem>();
+        foreach (var bytecode in BytecodeFiles) {
+            var path = bytecode.GetMetadata("FullPath");
+            var sourceHash = PuckShaderHashing.HashConcatenated(bytecode.GetMetadata("SourcePath"), Includes);
+            var recipeHash = PuckShaderHashing.HashRecipe(bytecode);
+            // Missing outputs cannot be reused. Do not wait for another publisher merely to request compilation.
+            if (File.Exists(path) && File.Exists(path + ".hash")) {
+                using (PuckShaderHashing.Lock(LockFile, Log)) {
+                    if (File.Exists(path) && File.Exists(path + ".hash")) {
+                        var recorded = PuckShaderHashing.ReadSidecar(path + ".hash");
+                        if (recorded.SourceHash == sourceHash && recorded.RecipeHash == recipeHash &&
+                            recorded.BytecodeHash == PuckShaderHashing.HashFile(path)) {
+                            continue;
+                        }
+                    }
+                }
+            }
+            var selected = new TaskItem(bytecode);
+            selected.SetMetadata("SourceHash", sourceHash);
+            selected.SetMetadata("RecipeHash", recipeHash);
+            stale.Add(selected);
+        }
+        Stale = stale.ToArray();
+        return true;
+    }
+}
 /// <summary>
-/// Collects the project's shader bytecode and independently recomputes both hashes
+/// Collects the project's shader bytecode and independently recomputes all three hashes
 /// <see cref="PuckWriteShaderHashSidecars"/> writes, under the same publication lock as the collection and
 /// expected-output check, and compares them against each cached <c>.hash</c> sidecar — catching a cached
 /// bytecode file that is stale relative to its source (an edited <c>.hlsl</c>/<c>.hlsli</c> whose recompiled
 /// bytecode and sidecar were not refreshed) or relative to its own sidecar (bytecode bytes changed without a
 /// recompile). Deliberately independent of <see cref="PuckWriteShaderHashSidecars"/>'s own run this pass: on a
 /// build where the source changed, the write task above already refreshed the sidecar to match, so this task
-/// passes trivially; on an incremental build where nothing recompiled (MSBuild's own Inputs/Outputs
-/// timestamp check saw no textual change), this task is what actually reads the cached sidecar.
+/// passes trivially; a no-build pack still checks the same content and recipe without invoking a compiler.
 /// </summary>
 public sealed class PuckValidateShaderBytecodeFresh : Task {
     /// <summary>The project whose Assets/Shaders directory holds the bytecode to collect.</summary>
@@ -106,6 +155,9 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
     public string ProjectDirectory { get; set; } = "";
     /// <summary>Every bytecode output the project's declared shader stages require.</summary>
     public ITaskItem[] ExpectedBytecode { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>Declared outputs for every backend, including disabled outputs retained from a prior build,
+    /// with their current effective <c>Recipe</c> metadata.</summary>
+    public ITaskItem[] RecipeBytecode { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>Every validated bytecode file (.spv/.dxil), relative to the project, for its content list.</summary>
     [Output]
     public ITaskItem[] BytecodeFiles { get; private set; } = Array.Empty<ITaskItem>();
@@ -157,15 +209,20 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
 
             if (!File.Exists(path: sidecarPath)) {
                 Log.LogError(
-                    message: (((string)$"Shader bytecode '{bytecode.ItemSpec}' has no '.hash' sidecar. Recompile (edit and save its source, or delete the bytecode so a rebuild regenerates it) to refresh the ") +
-                        "bytecode and sidecar together."));
+                    message: $"Shader bytecode '{bytecode.ItemSpec}' has no '.hash' sidecar. Build normally to refresh the bytecode and sidecar together.");
                 continue;
             }
 
             var expectedSourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
             var expectedBytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
 
-            var (recordedSourceHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+            var (recordedSourceHash, recordedRecipeHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+            var recipe = Array.Find(RecipeBytecode, item => string.Equals(item.GetMetadata("FullPath"), bytecodePath,
+                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+
+            if (recipe == null || recordedRecipeHash != PuckShaderHashing.HashRecipe(recipe)) {
+                Log.LogError(message: $"Shader bytecode '{bytecode.ItemSpec}' has no matching compiler recipe in its '.hash' sidecar. Build normally to refresh the bytecode and sidecar together.");
+            }
 
             if (!string.Equals(a: recordedSourceHash, b: expectedSourceHash, comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(
@@ -242,7 +299,7 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
                 continue;
             }
 
-            var (_, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+            var (_, _, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
 
             if (!string.Equals(a: recordedBytecodeHash, b: PuckShaderHashing.HashFile(path: bytecodePath), comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(message: $"Shader bytecode '{display}' has no matching HLSL source '{sourceName}' and its bytes are not the ones its '.hash' sidecar records, so the build leaves it in place. Remove it or add the source.");
@@ -265,7 +322,7 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
                 continue;
             }
 
-            var (recordedSourceHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
+            var (recordedSourceHash, _, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
 
             if (!PuckShaderHashing.IsHash(value: recordedSourceHash) || !PuckShaderHashing.IsHash(value: recordedBytecodeHash)) {
                 continue;
@@ -385,20 +442,35 @@ internal static class PuckShaderHashing {
             return ToHex(bytes: sha256.ComputeHash(buffer: ReadAllBytes(path: path)));
         }
     }
-    /// <summary>Reads a two-line "source:&lt;hex&gt;" / "bytecode:&lt;hex&gt;" sidecar.</summary>
-    public static (string SourceHash, string BytecodeHash) ReadSidecar(string path) {
+    /// <summary>Hashes the backend and exact effective compiler command/options, independently of output paths.</summary>
+    public static string HashRecipe(ITaskItem bytecode) {
+        using (var sha256 = SHA256.Create()) {
+            return ToHex(sha256.ComputeHash(Encoding.UTF8.GetBytes(
+                Path.GetExtension(bytecode.ItemSpec) + "\n" + bytecode.GetMetadata("Recipe"))));
+        }
+    }
+    /// <summary>Reads source, recipe and bytecode SHA-256 fields; malformed or absent fields are empty. Compile
+    /// admission requires all three. Orphan removal needs only evidence of ownership of the compiled bytes.</summary>
+    public static (string SourceHash, string RecipeHash, string BytecodeHash) ReadSidecar(string path) {
         var sourceHash = "";
+        var recipeHash = "";
         var bytecodeHash = "";
+        var fields = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var line in Encoding.UTF8.GetString(bytes: ReadAllBytes(path: path)).Split('\n')) {
-            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:")) {
+            if (line.Length == 0) { continue; }
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:") && fields.Add("source")) {
                 sourceHash = line.Substring(startIndex: "source:".Length).Trim();
-            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:")) {
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:") && fields.Add("recipe")) {
+                recipeHash = line.Substring(startIndex: "recipe:".Length).Trim();
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:") && fields.Add("bytecode")) {
                 bytecodeHash = line.Substring(startIndex: "bytecode:".Length).Trim();
+            } else {
+                return ("", "", "");
             }
         }
 
-        return (sourceHash, bytecodeHash);
+        return (IsHash(sourceHash) ? sourceHash : "", IsHash(recipeHash) ? recipeHash : "", IsHash(bytecodeHash) ? bytecodeHash : "");
     }
     /// <summary>True when <paramref name="value"/> is a SHA-256 in the lowercase hex <see cref="ToHex"/> writes.</summary>
     public static bool IsHash(string value) {

@@ -13,8 +13,12 @@ dotnet build src/Puck.SdfVm -c Release          # dxc on PATH, or /p:DxcCommand=
 
 The recipe is `build/Shaders.targets`, imported into every project by
 `Directory.Build.targets`; projects without shader items never run DXC. DXC runs in place in the source tree and compiles each `.hlsl` to both
-SPIR-V and DXIL. Editing any `.hlsl`, `.hlsli`, the project file, or the targets
-file recompiles the whole set. The `.spv`, `.dxil`, and `.hash` outputs are
+SPIR-V and DXIL. Admission compares each kernel's source plus ordered includes,
+effective compiler command and backend options, and compiled bytes with its
+sidecar. Equal content with newer timestamps reuses the pair; changed source
+recompiles that kernel, and changed include content conservatively recompiles
+the whole project. Changed recipes, missing recipe identities and damaged pairs
+also require compilation. The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them.
 `ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
 when its sidecar records its bytes (the build wrote it), printing one line per

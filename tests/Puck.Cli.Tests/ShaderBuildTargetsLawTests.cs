@@ -63,8 +63,6 @@ public sealed class ShaderBuildTargetsLawTests {
         var directory = fixture.PathOf(path: "Assets/Shaders");
 
         fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
-        // A source newer than every output keeps the incremental gate open, so each build compiles and publishes.
-        File.SetLastWriteTimeUtc(lastWriteTimeUtc: new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2099), path: fixture.PathOf(path: "Assets/Shaders/a.comp.hlsl"));
         fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "earlier bytecode");
         fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: "earlier sidecar");
         fixture.ShaderProject(body: """
@@ -92,6 +90,7 @@ public sealed class ShaderBuildTargetsLawTests {
         });
 
         heldSidecar.Dispose();
+        _ = WaitFor(find: () => (!File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")) ? "the old commit record was removed" : null));
 
         // Publisher B compiles meanwhile. Once its compiler output exists it either publishes its whole pair at once or
         // waits for A to finish; either way A is then let go.
@@ -165,7 +164,7 @@ public sealed class ShaderBuildTargetsLawTests {
 
         using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
         using var waiting = new ManualResetEventSlim();
-        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true"], target: "_GetPackageFiles", waiting: waiting));
+        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true", "PuckDxcComputeSpirv=fixture-recipe"], target: "_GetPackageFiles", waiting: waiting));
 
         try {
             _ = WaitFor(find: () => (File.Exists(path: fixture.PathOf(path: "collecting.txt")) ? "collecting" : null));
@@ -178,8 +177,9 @@ public sealed class ShaderBuildTargetsLawTests {
             if (commitSidecar) {
                 var sourceHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "source")));
                 var bytecodeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "bytecode")));
+                var recipeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: ".spv\n\"dxc\" fixture-recipe")));
 
-                fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
+                fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: $"source:{sourceHash}\nrecipe:{recipeHash}\nbytecode:{bytecodeHash}\n");
             }
         } finally {
             heldLock.Dispose();
@@ -214,6 +214,8 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.Contains(expectedSubstring: "deliberate compiler failure", actualString: build.Stdout);
         Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.spv", searchOption: SearchOption.AllDirectories));
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
     }
     [Fact]
     public void AnIncludeRestoredByAReferenceIsAnInputOnTheFirstBuildAndTheNextBuildSkipsCompilation() {
@@ -245,9 +247,70 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));
         Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: bytecode));
 
+        // Restore identical tracked inputs with newer timestamps, as a persistent proof clone can do. Content is
+        // unchanged, so neither compilation nor publication may run again, even with inputs newer than every output.
+        var rewritten = File.GetLastWriteTimeUtc(path: sidecar).AddSeconds(value: 10);
+        foreach (var path in new[] { "fixture.proj", "Assets/Shaders/a.comp.hlsl", "Assets/Shaders/conventional.hlsli", "Assets/Shaders/generated.hlsli", "Shared/outside.hlsli" }) {
+            fixture.Write(path: path, text: File.ReadAllText(path: fixture.PathOf(path: path)));
+            File.SetLastWriteTimeUtc(path: fixture.PathOf(path: path), lastWriteTimeUtc: rewritten);
+        }
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));
         Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: bytecode));
+        Assert.Equal(expected: committed, actual: File.ReadAllText(path: sidecar));
+    }
+    [InlineData("source", 3)]
+    [InlineData("include", 4)]
+    [InlineData("options", 4)]
+    [InlineData("command", 4)]
+    [InlineData("bytecode", 3)]
+    [InlineData("sidecar", 3)]
+    [InlineData("recipe-missing", 3)]
+    [InlineData("bytecode-missing", 3)]
+    [InlineData("sidecar-missing", 3)]
+    [Theory]
+    public void ChangedContentOrRecipeRecompilesOnlyInvalidPairs(string change, int expectedCompiles) {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
+        fixture.Write(path: "Assets/Shaders/c.comp.hlsl", text: "independent source");
+        fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
+        fixture.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            """);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+
+        var source = fixture.PathOf(path: "Assets/Shaders/a.comp.hlsl");
+        var include = fixture.PathOf(path: "Assets/Shaders/shared.hlsli");
+        var bytecode = fixture.PathOf(path: "Assets/Shaders/a.comp.spv");
+        var sidecar = (bytecode + ".hash");
+        string[] properties = [];
+
+        switch (change) {
+            case "source": File.WriteAllText(path: source, contents: "changed source"); break;
+            case "include": File.WriteAllText(path: include, contents: "changed declaration"); break;
+            case "options": properties = ["PuckDxcComputeSpirv=-spirv -O3 -T cs_6_6 -E main -D CHANGED_RECIPE=1"]; break;
+            case "command": properties = ["DxcCommand=another-dxc"]; break;
+            case "bytecode": File.WriteAllText(path: bytecode, contents: "corrupted compiled bytes"); break;
+            case "sidecar": File.AppendAllText(path: sidecar, contents: File.ReadAllText(path: sidecar)); break;
+            case "recipe-missing": File.WriteAllLines(path: sidecar, contents: File.ReadAllLines(path: sidecar).Where(predicate: static line => !line.StartsWith(value: "recipe:", comparisonType: StringComparison.Ordinal))); break;
+            case "bytecode-missing": File.Delete(path: bytecode); break;
+            case "sidecar-missing": File.Delete(path: sidecar); break;
+            default: throw new ArgumentOutOfRangeException(paramName: nameof(change));
+        }
+        // Old input times cannot make changed bytes fresh; collection must refuse before a compiler repairs them.
+        foreach (var path in new[] { source, include }) {
+            File.SetLastWriteTimeUtc(path: path, lastWriteTimeUtc: DateTime.UnixEpoch);
+        }
+        var collect = fixture.Run(target: "CollectShaderBytecode", properties: properties);
+
+        Assert.NotEqual(expected: 0, actual: collect.ExitCode);
+        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build", properties: properties));
+        Assert.Equal(expected: expectedCompiles, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
     }
     [Fact]
     public void ACompilerThatProducesNoOutputCannotBlessCachedBytecodeWithANewSidecar() {

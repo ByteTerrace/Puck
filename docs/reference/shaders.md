@@ -112,9 +112,15 @@ sidecar fails the build and stays in place.
 
 
 A package declaration carries no hashes. The build writes a `<bytecode>.hash`
-sidecar (source-plus-includes hash and bytecode hash) on every recompile and,
-on every build, recomputes both from what is on disk and refuses a stale pair
-(`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). Collection
+sidecar with three hashes: source plus ordered includes, effective compiler
+command and backend options, and compiled bytes. Before invoking DXC, the build
+checks those identities and compiles only stale or missing pairs. Rewriting
+equal inputs, including in a persistent law proof clone, does not compile them
+again. Changing an include conservatively invalidates every kernel in that
+project. A missing recipe identity requires compilation; it is never inferred
+from file times. Publication also checks that the selected inputs still match
+after compilation. Collection independently recomputes all three identities and
+refuses a stale pair (`build/Shaders.targets`, `PuckValidateShaderBytecodeFresh`). It
 uses the same refreshed include order as compilation, including
 explicit includes outside the conventional shader directory, even when the
 reader skips compilation. A post-process
@@ -1746,6 +1752,11 @@ more pieces of vocabulary:
   Its writes must replace its own fields idempotently. A package can read the
   predecessor buffer in the same pass while writing its preserving successor;
   both ports share one storage and the planned compute read/write barriers.
+  Its recorder reads and writes through the writable buffer binding; it must
+  not use simultaneous SRV reads and UAV writes to that allocation. Preserving
+  writers precede readers of their new version but do not consume predecessor
+  reads. The next destructive writer waits for readers of every older version
+  whose contents the intervening writers preserve.
   Ordinary destructive forwarding and simultaneous image sampling remain refused.
   Ordinary forwarding
   invalidates predecessor contents; preserving forwarding keeps their logical

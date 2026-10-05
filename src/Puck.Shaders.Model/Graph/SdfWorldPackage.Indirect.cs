@@ -144,8 +144,8 @@ public static partial class SdfWorldPackage {
             new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
-    /// <summary>Adds the cache's buffer edge to views, which publishes receiver proofs and a preserving visibility
-    /// version. Primary uses the tier and complete field, without a dependency on mutable cache contents.</summary>
+    /// <summary>Adds the cache's buffer edge and selected-receiver diagnostic to views. Every view already publishes
+    /// the preserving visibility version; Primary has no dependency on mutable cache contents.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>
     /// <param name="bytes">The residency's cache size.</param>
     /// <returns>The view fragment with its external cache dependency.</returns>
@@ -154,15 +154,12 @@ public static partial class SdfWorldPackage {
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
             Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
             new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint)),
-            fragment.Resources.Single(resource => resource.Name == Parts.ShadowVisibility) with {
-                Name = IndirectVisibility, From = Parts.ShadowVisibility, PreservesPredecessor = true,
-            }],
+                SizeBytes: IndirectPickWords * sizeof(uint), StrideBytes: sizeof(uint))],
         Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name == Parts.Views) ? pass with {
             Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache)],
             InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeReadWrite],
-            Outputs = [.. pass.Outputs, IndirectPick, IndirectVisibility],
-            OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+            Outputs = [.. pass.Outputs, IndirectPick],
+            OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
         } : pass))],
     };
 }

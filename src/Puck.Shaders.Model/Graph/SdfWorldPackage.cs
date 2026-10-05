@@ -482,7 +482,10 @@ public static partial class SdfWorldPackage {
             Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
             Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
             Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit),
+            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit) with {
+                Outputs = [Parts.Lit, IndirectVisibility],
+                OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+            },
             Pass(inputs: [Parts.Lit, Parts.CullBounds], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
             Pass(inputs: [Parts.Lit, Parts.CullBounds, Parts.ShadowVisibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
@@ -526,6 +529,7 @@ public static partial class SdfWorldPackage {
             Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
             Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
             Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
+            Visibility(from: Parts.ShadowVisibility, name: IndirectVisibility),
         ]
     );
 

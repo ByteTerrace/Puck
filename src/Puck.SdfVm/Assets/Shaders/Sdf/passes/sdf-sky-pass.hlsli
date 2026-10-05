@@ -1,6 +1,6 @@
 // What the sky's field runs (sdf-sky-runs.comp.hlsl) and the composite (sdf-composite.comp.hlsl) share: the sky interface
 // (SdfWorldPackage.SkyMembers), one invocation a pixel of the pass's extent, and the reads of what the views or the
-// resolve left for them. The sky runs on the render grid and reads the color views wrote, and a native view's composite
+// resolve left for them. The sky runs on its full or ceil-half field grid and reads the color views wrote; a native view's composite
 // reads views' lit image and visibility records: each current only inside the dispatch box cull-args wrote, outside which
 // the beam proved every tile empty, so a pixel there reads as a miss. A reduced or temporal view's composite reads the
 // resolve's lit image and transport at the output extent, written for every pixel (passGroup.resolvedSurface). A pixel's
@@ -68,10 +68,10 @@ ViewportData sdfSkyPassView() {
 
     return view;
 }
-// The sky's field runs at a pixel of the pass's extent, filtered from the render grid (passGroup.imageExtent) the sky
+// The sky's field runs at a pixel of the pass's extent, filtered from the field grid (passGroup.skyFieldExtent) the sky
 // evaluated them on: the bilinear taps beside the pixel, each weighted by whether the sky evaluated it, so an unevaluated
-// texel never darkens the sky. False when the sky evaluated none of them. On a native view's grid every pixel lands on its
-// own texel and reads it alone. The base is read at every tap and counts its load in the lowest run's row; each upper run
+// texel never darkens the sky. False when the sky evaluated none of them. With equal output and field grids each pixel reads its
+// own texel alone. The base is read at every tap and counts its load in the lowest run's row; each upper run
 // reads the upper images holding its six half floats (its scale, then its offset) and counts them in its own row.
 bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS], out float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS]) {
     int2 grid = int2(passGroup.skyFieldExtent);

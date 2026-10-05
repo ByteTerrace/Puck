@@ -199,7 +199,13 @@ shader writes: it must preserve predecessor-owned fields and replace its own
 fields idempotently. An accumulated query counter or an overwritten sky image
 violates that contract. A same-pass predecessor buffer read is legal only with
 this validated retained package contract; the planned output remains a compute
-read/write access. An ordinary destructive forward or sampled image overlap is
+read/write access. The package reads and writes through that writable binding,
+not simultaneous SRV/UAV aliases. Views declares its preserving visibility
+successor in native, reduced and temporal fragments even with indirect Off;
+only its I-row certificate stores depend on indirect demand. Keep the recorder's
+binding, shader load alias and fragment output together. A later destructive
+forward orders readers of all still-preserved ancestor versions before it.
+An ordinary destructive forward or sampled image overlap is
 still refused. Force a null signature for unversioned borrowed inputs
 and for demanded work whose recording must run, including readback, capture
 and temporal convergence. Existing dependency preparation retains its own

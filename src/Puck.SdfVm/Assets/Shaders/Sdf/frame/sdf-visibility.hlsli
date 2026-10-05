@@ -31,9 +31,9 @@
 // is identity 0. An SDF hit's source is the winning instance's program ordinal plus one, so source 0 is
 // geometry outside any instance. A mesh hit's source is its draw.
 //
-// The views set binds the one buffer twice: primary, surface, ambient and shadow write it through
-// sdfVisibilityRecordsRW; views reads through sdfVisibilityRecords and writes only I through its declared preserving
-// output. Loads use sdfVisibilityRecordBuffer; stores use the writable binding.
+// Each writing stage reads and writes the one buffer through sdfVisibilityRecordsRW. Views declares its preserving
+// output at every tier, including Off, and writes only I. Resolve and composite use the read-only binding after the
+// planned transition. One dispatch never aliases SRV reads with UAV writes to the same allocation.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
@@ -41,7 +41,7 @@
 #include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
-#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else
@@ -269,11 +269,11 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     return sample;
 }
 
-#if defined(SDF_VISIBILITY_WRITABLE) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_VISIBILITY_WRITABLE)
 // Writes one word of the pixel's record: every store below goes through it, so a pass that writes any of a pixel's record
 // counts the pixel as a texel it wrote (sdfWorkTexels).
 void sdfVisibilityStoreWord(uint word, uint value) {
-    sdfVisibilityRecordsRW[word] = value;
+    sdfVisibilityRecordBuffer[word] = value;
     sdfWorkTexels = 1u;
 }
 void sdfStoreVisibilityQueries(uint record, uint word, float queries) {
