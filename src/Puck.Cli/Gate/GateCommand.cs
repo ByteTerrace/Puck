@@ -18,8 +18,9 @@ internal static class GateCommand {
 
         // The build rewrites every project's output, and a CLI running from one holds its assemblies open.
         var running = Path.GetDirectoryName(path: typeof(GateCommand).Assembly.Location)!;
+        var relative = Path.GetRelativePath(path: running, relativeTo: repositoryRoot);
 
-        if (!Path.GetRelativePath(path: running, relativeTo: repositoryRoot).StartsWith(comparisonType: StringComparison.Ordinal, value: "..")) {
+        if (!Path.IsPathRooted(path: relative) && !relative.StartsWith(comparisonType: StringComparison.Ordinal, value: "..")) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: running), why: "the gate rebuilds the checkout this CLI runs from; run it from a copy of the CLI outside the checkout.");
         }
 
