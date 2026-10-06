@@ -704,7 +704,7 @@ internal static partial class Subjects {
     }
 
     /// <summary>Proves <c>IsPrime</c> against an exhaustive sieve of Eratosthenes over its whole band, pins the
-    /// twelve-base witness set base by base against the published psi_k table, and compares the carrier ladder against
+    /// rejection of the published psi_k composites, and compares the carrier ladder against
     /// the exact BigInteger decision.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? PrimeFieldIsPrimeAgainstSieveAndWitnesses() =>
@@ -722,9 +722,8 @@ internal static partial class Subjects {
             if (PrimeField64.IsPrime(value: ((ulong)value)) != sieve[value]) { return $"IsPrime disagrees with the sieve at {value}"; }
         }
 
-        // Each row makes ONE FURTHER BASE load-bearing: truncating the twelve-base set to the row's count would accept
-        // that value as prime. Rows like these are the only thing that catches the truncation: cutting IsPrime from
-        // twelve bases to eleven went undetected by a 164,000-value replay above 10^12.
+        // The survival counts describe the independent reference's leading prime bases. The shipped machineword set
+        // uses different seven witnesses, so these rows pin composite rejection rather than its individual bases.
         foreach (var (value, bases) in PrimeFieldWitnessPseudoprimes) {
             var survived = 0;
 
@@ -925,7 +924,7 @@ internal static partial class Subjects {
 
             if (accepted != (half && lucas)) { return $"IsBaillieProbablePrime({value}) is not the conjunction of its two halves (base-two {half}, Lucas {lucas})"; }
             if (accepted != Oracles.ExactPrimality(value: value)) { return $"Baillie-PSW and the exact BigInteger decision disagree at {value}; below 2^64 that is either a defect or the first known counterexample"; }
-            if (accepted != PrimeField64.IsPrime(value: value)) { return $"Baillie-PSW and the twelve-base decision disagree at {value}"; }
+            if (accepted != PrimeField64.IsPrime(value: value)) { return $"Baillie-PSW and the machineword decision disagree at {value}"; }
         }
 
         return null;

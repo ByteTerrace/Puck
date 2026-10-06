@@ -586,10 +586,10 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the supported-ceiling singleton/window and JacobiSymbol(1001, 9907)",
-        "Against": "4294967291 is the largest 32-bit prime; Jacobi(1001/9907) = -1",
+        "Subject": "the uint boundary window, the full-ulong top singleton, and JacobiSymbol(1001, 9907)",
+        "Against": "4294967291 is the largest 32-bit prime; ulong.MaxValue is composite because it is divisible by three and five; Jacobi(1001/9907) = -1",
         "Shared": "",
-        "Citation": "standard published integer/Jacobi examples, paired with direct range and refusal assertions",
+        "Citation": "standard published integer/Jacobi examples, paired with direct range assertions and exact divisibility of 2^64 - 1",
         "Absolute": ""
       },
       {

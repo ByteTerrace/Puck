@@ -128,12 +128,9 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>
     /// <remarks>
-    /// Primality is decided exactly by strong-pseudoprime rounds to a fixed set of witness bases. The twelve bases
-    /// <c>2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37</c> are a proven complete witness set for every value strictly
-    /// below <see cref="PrimeKernels.LeastWitnessFailure"/> — exactly <c>318665857834031151167461</c>, about
-    /// <c>3.18 * 10^23</c> — which is past <see cref="ulong"/> and far past this field's <c>2^62</c> ceiling, so the
-    /// decision is deterministic rather than probabilistic. Nothing else is precomputed, so constructing a field costs
-    /// only the primality test.
+    /// Primality uses the shared exact word decision: the uint kernel for smaller values, and Sinclair's seven
+    /// strong-probable-prime witnesses for larger values. Their complete domain is every value below 2⁶⁴, so this
+    /// field's 2⁶² modulus ceiling is covered. Constructing a field costs only the primality test.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is at or above <see cref="MaximumModulus"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="modulus"/> is even or composite, so the quotient ring is not a field.</exception>
@@ -196,10 +193,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <see cref="ulong"/>, so nothing here is extrapolated: the complete set of base-two Fermat pseudoprimes below
     /// <c>2^64</c> was enumerated exhaustively and independently by Feitsma and by Galway — the strong ones are a
     /// derived subset — and no member of that subset is simultaneously a strong Lucas pseudoprime to these parameters. That guarantee rests on a third-party exhaustive
-    /// computation — the same epistemic class as the <see cref="PrimeKernels.LeastWitnessFailure"/> bound
-    /// (exactly <c>318665857834031151167461</c>) <see cref="IsPrime(ulong)"/>'s twelve-base witness set rests on,
-    /// which is Sorenson and Webster's computed value of the twelfth strong-pseudoprime threshold, quoted exactly
-    /// rather than rounded.
+    /// computation, as does Sinclair's complete seven-witness set used by the exact word decision.
     /// </para>
     /// <para>
     /// <see cref="IsPrime(ulong)"/> remains the exact decision and the oracle this composition is measured against.
@@ -215,66 +209,11 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
-    /// Strong-pseudoprime rounds to the twelve-base complete witness set, valid past <see cref="ulong.MaxValue"/>. The
-    /// even candidates are settled before the rounds begin, so the survivors are odd and one <see cref="ScaledResidueRing64"/>
-    /// carries every round's squaring chain: the chains spend no hardware division, and each witness pays exactly one
-    /// remainder at entry to reduce it below the modulus. The ring is a
-    /// bijective re-encoding of the residues, so comparing a power against the ring's own one and minus one decides
-    /// exactly what comparing the ordinary residues against <c>1</c> and <c>value - 1</c> would.
+    /// Delegates to the same exact word decision as <see cref="PrimeExploration.IsPrime(ulong)"/>.
+    /// The uint kernel handles small words; larger words pass wheel rejection and the seven complete witnesses.
+    /// Every witness chain runs in exact Montgomery arithmetic and shares the candidate's ring.
     /// </remarks>
-    public static bool IsPrime(ulong value) {
-        if (2UL > value) { return false; }
-        if (2UL == value) { return true; }
-        if (0UL == (value & 1UL)) { return false; }
-
-        // A witness set proven complete for every value strictly below PrimeKernels.LeastWitnessFailure =
-        // 318665857834031151167461 (about 3.18 * 10^23), which exceeds ulong.MaxValue. The table is PrimeKernels',
-        // shared with the arbitrary-width decision so the two cannot drift.
-        var witnesses = PrimeKernels.WitnessBases;
-        var oddPart = (value - 1UL);
-        var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
-
-        oddPart >>>= twoExponent;
-
-        var ring = new ScaledResidueRing64(modulus: value);
-        var one = ring.One;
-        var negativeOne = ring.NegativeOne;
-
-        foreach (var witnessBase in witnesses) {
-            var residue = (((ulong)witnessBase) % value);
-
-            if (0UL == residue) { continue; }
-
-            var power = ring.Power(
-                value: ring.Encode(value: residue),
-                exponent: oddPart
-            );
-
-            if (
-                (one == power) ||
-                (negativeOne == power)
-            ) { continue; }
-
-            var composite = true;
-
-            for (var round = 1; (round < twoExponent); ++round) {
-                power = ring.Multiply(
-                    left: power,
-                    right: power
-                );
-
-                if (negativeOne == power) {
-                    composite = false;
-
-                    break;
-                }
-            }
-
-            if (composite) { return false; }
-        }
-
-        return true;
-    }
+    public static bool IsPrime(ulong value) => PrimeKernels.IsPrimeWord(value: value);
     /// <summary>Returns a value indicating whether <paramref name="value"/> passes the strong Lucas probable-prime test with Selfridge's Method A parameters.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is a strong Lucas probable prime; otherwise <see langword="false"/>.</returns>
@@ -461,7 +400,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// A PROBABLE-prime test: a failed round proves compositeness, a passed one proves nothing. Writing
     /// <c>value - 1 = d * 2^s</c> with <c>d</c> odd, the round accepts when <c>witness^d</c> is one or when
     /// <c>witness^(d * 2^r)</c> is minus one for some <c>r</c> below <c>s</c> — the two ways a prime modulus allows the
-    /// square roots of one. This is the round <see cref="IsPrime(ulong)"/> repeats over its twelve-base witness set and
+    /// square roots of one. This is the round the exact word decision repeats over its seven-base witness set and
     /// the first half of <see cref="IsBaillieProbablePrime(ulong)"/>, exposed so that either composition's halves can be
     /// addressed on their own. The squaring chain runs in one <see cref="ScaledResidueRing64"/>.
     /// </remarks>
@@ -470,37 +409,14 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         if (2UL == value) { return true; }
         if (0UL == (value & 1UL)) { return false; }
 
-        var residue = (witness % value);
-
-        if (0UL == residue) { return true; }
-
         var oddPart = (value - 1UL);
         var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
 
         oddPart >>>= twoExponent;
 
         var ring = new ScaledResidueRing64(modulus: value);
-        var negativeOne = ring.NegativeOne;
-        var power = ring.Power(
-            value: ring.Encode(value: residue),
-            exponent: oddPart
-        );
 
-        if (
-            (ring.One == power) ||
-            (negativeOne == power)
-        ) { return true; }
-
-        for (var round = 1; (round < twoExponent); ++round) {
-            power = ring.Multiply(
-                left: power,
-                right: power
-            );
-
-            if (negativeOne == power) { return true; }
-        }
-
-        return false;
+        return PrimeKernels.PassesWitness(oddPart: oddPart, ring: in ring, twoExponent: twoExponent, witness: witness);
     }
     /// <summary>Computes the quadratic character of a field element by the exponentiation criterion.</summary>
     /// <param name="value">The reduced element to test.</param>

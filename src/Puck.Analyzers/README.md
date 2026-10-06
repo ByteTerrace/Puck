@@ -27,7 +27,8 @@ The [CLI reference](../../docs/reference/cli.md) documents the related inspectio
 ENV001 refuses any read of the process environment whose variable is not named,
 with its reason and the assemblies that may read it, in `EnvironmentReadAllowlist`,
 and any read whose name is not a compile-time constant. Nothing in Puck is
-switched by an environment variable; the
+switched by an environment variable. The CLI may record allowlisted .NET runtime
+startup variables as benchmark evidence; these reads do not configure Puck. The
 [configuration guide](../../docs/development/contributing.md#configuration-and-diagnostics)
 names what replaces one.
 

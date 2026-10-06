@@ -42,7 +42,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "every rung of the committed fifteen-rung modulus ladder, BEFORE Create is ever handed it",
-        "Against": "Oracles.ExactPrimality \u2014 trial division by the primes below 8192 and then twenty BigInteger strong-probable-prime rounds. No ladder constant is taken on its word, which is the same distrust binary-field.product-and-reduction-vs-oracle shows its own five moduli; a mistyped rung fails HERE, by name, rather than silently weakening every other case that runs the ladder. Both sides EXACT, so the substrate condition does not arise. ENVELOPE, and it is not the same statement at both ends of the ladder: the six rungs at or below 8191\u00B2 = 67092481 are decided by TRIAL DIVISION, which shares no idea with anything in Puck.Maths, while the nine above it are decided by the twenty BigInteger rounds \u2014 whose base set opens with two, the base PrimeField64\u0027s own twelve-base IsPrime and its Baillie composition both run. Those nine rungs therefore share the CRITERION with the type they gate and differ in arithmetic, in base set and in loop structure only",
+        "Against": "Oracles.ExactPrimality \u2014 trial division by the primes below 8192 and then twenty BigInteger strong-probable-prime rounds. No ladder constant is taken on its word, which is the same distrust binary-field.product-and-reduction-vs-oracle shows its own five moduli; a mistyped rung fails HERE, by name, rather than silently weakening every other case that runs the ladder. Both sides EXACT, so the substrate condition does not arise. ENVELOPE, and it is not the same statement at both ends of the ladder: the six rungs at or below 8191\u00B2 = 67092481 are decided by TRIAL DIVISION, which shares no idea with anything in Puck.Maths, while the nine above it are decided by the twenty BigInteger rounds \u2014 whose base set opens with two, the base PrimeField64\u0027s own machineword IsPrime and its Baillie composition both run. Those nine rungs therefore share the CRITERION with the type they gate and differ in arithmetic, in base set and in loop structure only",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -483,7 +483,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the twelve-base witness set, pinned base by base",
+        "Subject": "rejection of the published leading-prime-base pseudoprimes",
         "Against": "Subjects.PrimeFieldWitnessPseudoprimes \u2014 eight (value, leading-base-count) rows drawn from the published psi_k table",
         "Shared": "",
         "Citation": "psi_k is the LEAST composite that is a strong probable prime to the first k prime bases. The chain matters, because it is the LEAST-ness that this leg\u0027s counting rests on and it is not all one author\u0027s: Jaeschke (1993) determined psi_1 through psi_8 exactly and gave psi_9, psi_10 and psi_11 \u2264 3825123056546413051 as a BOUND, which later work proved least; Sorenson and Webster (2015) settled psi_12 = 318665857834031151167461 and psi_13. Each row\u0027s base count is DERIVED from that table rather than captured from any implementation: a value strictly below psi_(k\u002B1) survives at most k leading bases, and psi_7 == psi_8 and psi_9 == psi_10 == psi_11 are why two rows read 8 and 11 rather than the indices the values are tabulated under. Every count is then MEASURED in the law by Oracles.ModularStrongProbablePrime, so a mistranscribed row fails rather than passing quietly",
@@ -492,7 +492,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "each pseudoprime row makes ONE FURTHER BASE load-bearing: truncating the twelve-base set to the row\u0027s count would accept that value as prime. That matters beyond this member: truncating the set from twelve bases to ELEVEN once went entirely undetected, passing every check then in place, including a 164,000-value replay above 10^12. Read that as history of what a large sampled sweep failed to catch \u2014 the replay itself is gone and does not stand behind this law \u2014 which is why the rows below carry their counts explicitly rather than trusting scale. ENVELOPE, re-spelled because the earlier wording over-claimed: the rows do NOT cover every truncation from one through eleven. They carry the counts 1, 2, 3, 4, 5, 6, 8 and 11, and the published table contains no value whose leading-base count is exactly seven, nine or ten \u2014 a consequence of psi_7 == psi_8 and psi_9 == psi_10 == psi_11, which is a statement about the LEAST such composites and not a theorem about every value below 2^64. So bases eight, ten and eleven are pinned only JOINTLY with the neighbours they are truncated alongside, and this law does not reach them individually",
+        "Subject": "Each tabulated composite is checked against the independent reference\u0027s leading-prime-base survival count before rejection by the exact machineword decision is demanded. The rows have counts 1, 2, 3, 4, 5, 6, 8 and 11. ENVELOPE: these counts describe the historical first-prime-base criterion, not Sinclair\u0027s seven different machineword witnesses; this law does not pin those seven bases individually",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -502,7 +502,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "IsPrime over a twenty-five-value carrier ladder \u2014 both sides of 2^31, 2^32, 2^61, 2^62 and 2^63, the largest prime below 2^32, the three values at the top of the carrier, and the smallest values where the guards outnumber the arithmetic",
-        "Against": "Oracles.ExactPrimality. ENVELOPE, stated rather than implied: through 8191\u00B2 = 67092481 \u2014 just under 2^26 \u2014 that oracle decides by TRIAL DIVISION alone and shares no idea with the subject; above that band it runs twenty BigInteger strong-probable-prime rounds and so shares the CRITERION, differing in arithmetic (plain residues versus one shared ScaledResidueRing64), in base set (twenty is a strict superset of twelve) and in loop structure. That upper leg therefore pins the subject\u0027s arithmetic, its witness loop, its Montgomery encoding and its witness set \u2014 and does not independently re-derive the completeness theorem, which is a third-party computation on both sides",
+        "Against": "Oracles.ExactPrimality. ENVELOPE, stated rather than implied: through 8191\u00B2 = 67092481 \u2014 just under 2^26 \u2014 that oracle decides by TRIAL DIVISION alone and shares no idea with the subject; above that band it runs twenty BigInteger strong-probable-prime rounds and so shares the CRITERION, differing in arithmetic (plain residues versus one shared ScaledResidueRing64), in base set (twenty leading prime bases versus seven different machineword witnesses above uint) and in loop structure. That upper leg therefore pins the subject\u0027s arithmetic, its witness loop, its Montgomery encoding and its witness set \u2014 and does not independently re-derive the completeness theorem, which is a third-party computation on both sides",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -523,7 +523,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "PrimeField64.IsPrime over the swept candidate stream \u2014 both drawn raws read as ulong and each additionally forced odd, so the sweep meets the arithmetic and not only the even short-circuit \u2014 across the WHOLE carrier, which is where the sieve band cannot reach",
-        "Against": "Oracles.ExactPrimality. Both sides EXACT, so condition (B) drops out. ENVELOPE, the same one prime-field.is-prime-vs-sieve-and-witness-ladder\u0027s ladder leg states and stated again because this law lives almost entirely above it: through 8191\u00B2 the oracle is trial division and shares no idea with the subject; above it the oracle runs twenty BigInteger rounds against the subject\u0027s twelve Montgomery ones, so the criterion is shared and the arithmetic, the base set and the loop are not",
+        "Against": "Oracles.ExactPrimality. Both sides EXACT, so condition (B) drops out. ENVELOPE, the same one prime-field.is-prime-vs-sieve-and-witness-ladder\u0027s ladder leg states and stated again because this law lives almost entirely above it: through 8191\u00B2 the oracle is trial division and shares no idea with the subject; above it the oracle runs twenty BigInteger rounds against the subject\u0027s seven Montgomery witnesses above uint, so the criterion is shared and the arithmetic, the base set and the loop are not",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -728,7 +728,7 @@
         "Kind": "InTreeIndependent",
         "Flavor": "None",
         "Subject": "IsBaillieProbablePrime over the same stream",
-        "Against": "PrimeField64.IsPrime, the twelve-base decision \u2014 a second shipped route to the same answers, and a comparison that would become a TAUTOLOGY if IsPrime were ever re-pointed at this composition \u2014 reading green while testing nothing, because both sides would then be the same decision",
+        "Against": "PrimeField64.IsPrime, the exact machineword decision \u2014 a second shipped route to the same answers, and a comparison that would become a TAUTOLOGY if IsPrime were ever re-pointed at this composition \u2014 reading green while testing nothing, because both sides would then be the same decision",
         "Shared": "",
         "Citation": "both sides are PrimeField64, so this leg is not independent evidence about the field\u0027s arithmetic; what makes it worth declaring is that the two decisions rest on different theorems. IsPrime is itself anchored classically in prime-field.is-prime-vs-sieve-and-witness-ladder against a sieve of Eratosthenes over 0..20,000 and against Oracles.ExactPrimality on the carrier ladder. If IsPrime is re-pointed, THIS leg goes vacuous and must be deleted \u2014 the classical leg above does not, because its reference is outside Puck.Maths",
         "Absolute": ""
@@ -922,7 +922,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "PrimeField64.IsPrime across eight sampled bands straddling the widening seam, the 2^62 field ceiling and the top of the carrier, plus a dense 4,000-value run at the very top where every reduction rides the wrapping-quotient path, and the carrier's largest prime located by the subject under an explicit 800-step budget",
-        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192, then TWENTY strong-probable-prime rounds evaluated entirely in BigInteger against a base set that is a strict SUPERSET of the subject's twelve Montgomery ones. ENVELOPE: above the trial-division band the criterion is shared and the arithmetic, the base set and the loop are not",
+        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192, then TWENTY strong-probable-prime rounds evaluated entirely in BigInteger against a different base set from the subject's seven machineword Montgomery witnesses. ENVELOPE: above the trial-division band the criterion is shared and the arithmetic, the base set and the loop are not",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -930,7 +930,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "PrimeField64.IsPrime on the four tabulated psi_k values — 3215031751, 3474749660383, 341550071728321 and 3825123056546413051 — each of which is a strong probable prime to every one of the first k prime bases, so truncating the twelve-base witness set to k accepts it and NOTHING else in this suite notices",
+        "Subject": "PrimeField64.IsPrime on the four tabulated psi_k values — 3215031751, 3474749660383, 341550071728321 and 3825123056546413051 — each of which is a strong probable prime to every one of the first k prime bases. They pin rejection by the machineword decision, but do not individually pin its seven different witness bases",
         "Against": "the tabulated psi_k table, each row carrying the measured number of leading bases the value actually survives rather than the index it is catalogued under: 341550071728321 is tabulated as psi_7 and survives eight, 3825123056546413051 is tabulated as psi_9 and survives eleven",
         "Shared": "",
         "Citation": "the psi_k values are Sorenson and Webster's published least strong pseudoprimes to the first k prime bases, transcribed from the literature and derived nowhere in this repository; the surviving-base counts beside them were measured here against Oracles.ModularStrongProbablePrime",

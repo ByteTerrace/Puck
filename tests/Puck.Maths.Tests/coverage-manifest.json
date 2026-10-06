@@ -1372,6 +1372,62 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.Block",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.Channel",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.CompareTo(Puck.Maths.CandidateAddress)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.Packed",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.TryFromCoordinates(System.UInt64,System.Byte,Puck.Maths.CandidateAddress&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.TryFromPacked(System.UInt64,Puck.Maths.CandidateAddress&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.TryFromValue(System.UInt64,Puck.Maths.CandidateAddress&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.coordinate-boundaries"
+      ],
+      "Id": "Puck.Maths.CandidateAddress.Value",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "certified.certificate-vs-partial-quotients",
         "sampling.certified-low-discrepancy-measured-across-scales"
       ],
@@ -17182,6 +17238,91 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeByteLayout.Algebraic",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeByteLayout.Numeric",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeByteLayout.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation..ctor(System.ReadOnlySpan<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.AdmissibleMask",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.Offsets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-primality-swept",
+        "prime-exploration.primality-swept-vs-reference",
+        "prime-exploration.primality-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.IsPrime(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-primality-swept",
+        "prime-exploration.primality-swept-vs-reference",
+        "prime-exploration.primality-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.IsPrimeCandidate(Puck.Maths.CandidateAddress)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.factorization-full-width-sweep",
         "core.prime-extensions-vs-trial-division"
       ],
@@ -17257,8 +17398,11 @@
     },
     {
       "CoveredBy": [
+        "deep.prime-exploration-primality-swept",
         "deep.prime-field-baillie-and-populations",
         "deep.prime-field-is-prime-exact",
+        "prime-exploration.primality-swept-vs-reference",
+        "prime-exploration.primality-vs-independent",
         "prime-field.baillie-composition",
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
@@ -17694,6 +17838,232 @@
         "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.PrimeFieldMaterial.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Automatic",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Eratosthenes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Presieve",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeSieveMode.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.BucketPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.CacheBlockedPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.CarriedPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.EightStreams",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.PhaseSortedPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.SpecializedPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.packets-vs-integer-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.UnrolledPackets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.enumeration-refusals"
+      ],
+      "Id": "Puck.Maths.PrimeSieveStrategy.WheelSteps",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeSieveStrategy.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.ChannelCounts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.Count",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.GapCounts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.Measure(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.SmallPrimeCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.SmallPrimeMask",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.TransitionCount(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.statistics-vs-prime-list"
+      ],
+      "Id": "Puck.Maths.PrimeStatistics.TransitionCounts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.ChannelAtNumericIndex(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Inverse(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Multiply(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericChannels",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericIndex(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericResidues",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PermuteMask(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PermuteMask(System.Byte,System.Int32,System.Boolean)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Residue(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Residues",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.TryChannel(System.Byte,System.Byte&)",
       "State": "covered"
     },
     {

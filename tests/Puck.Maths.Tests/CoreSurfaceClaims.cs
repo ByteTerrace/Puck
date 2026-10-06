@@ -312,13 +312,14 @@ internal static class CoreSurfaceClaims {
             onPrime: ceilingPrime.Add
         );
         Assert.Equal(actual: ceilingPrime, expected: [4_294_967_291UL]);
-        _ = Assert.Throws<ArgumentOutOfRangeException>(
-            testCode: () => NumberTheoryFunctions.SegmentedPrimeSieve(
-                high: ulong.MaxValue,
-                low: ulong.MaxValue,
-                onPrime: static _ => { }
-            )
+        var topSingleton = new List<ulong>();
+
+        NumberTheoryFunctions.SegmentedPrimeSieve(
+            high: ulong.MaxValue,
+            low: ulong.MaxValue,
+            onPrime: topSingleton.Add
         );
+        Assert.Empty(collection: topSingleton);
 
         Assert.Equal(expected: -1, actual: NumberTheoryFunctions.JacobiSymbol(denominator: 9907, numerator: 1001));
 

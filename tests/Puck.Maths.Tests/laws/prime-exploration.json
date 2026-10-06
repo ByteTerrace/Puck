@@ -1,0 +1,447 @@
+[
+  {
+    "Id": "prime-exploration.group-vs-residue-arithmetic",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Residues"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericResidues"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericChannels"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "TryChannel"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericIndex"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "ChannelAtNumericIndex"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "PermuteMask"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "All 64 group products, eight inverses, 2048 channel mask actions, 7168 rotation/swap actions including negative and extreme int exponents, and explicit algebraic/numeric tables",
+        "Against": "Ordinary integer multiplication modulo 30 followed by independently recorded residue labels; mask expectations push each selected residue separately. No channel-addition, nibble rotation, or shipped wheel lookup appears in the reference.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "All byte representatives are checked for acceptance and failure-output zero; invalid channel/index operands refuse with the documented parameter names.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.coordinate-boundaries",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "Packed"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "Block"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "Channel"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "TryFromValue"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "TryFromPacked"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "TryFromCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.CandidateAddress",
+        "Name": "CompareTo"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Address encoding and decoding at block zero, small blocks, the uint boundary, and both final blocks; low values and the final 129 ulong values",
+        "Against": "Oracles.PrimeExplorationValue forms 30*block+explicit residue in BigInteger, so representability is checked before narrowing; direct remainder labels decide integer acceptance without shipped conversions.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Default addresses one. Every Try failure leaves default. Bit63 and blocks/channels beyond the carrier are rejected. All 64 within-block comparisons follow numerical rather than packed order, with equality and hash coherence checked.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.primality-vs-independent",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrimeCandidate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Full-ulong machineword decision, candidate entry point, and field entry point",
+        "Against": "Oracles.PrimeSieve decides every value through 100000 by integer-index crossing-out; Oracles.ExactPrimality supplies trial division through 8191 and twenty BigInteger rounds with a different witness set and arithmetic. ENVELOPE: the high values share the strong-probable-prime criterion, but no implementation, modular substrate, or reference data with the seven machineword bases. The boundary ladder contains both carrier extremes, a known factored near-top square, 341550071728321, 3825123056546413051, and witness-divisor primes 73 and 193.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The candidate address of one is composite; the complete small band also includes the exceptional primes two, three, and five.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.primality-swept-vs-reference",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrimeCandidate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Full-width raw and forced-odd domain candidates through both public primality entry points and PrimeField64.IsPrime",
+        "Against": "Oracles.ExactPrimality: independent trial-division screen and twenty BigInteger strong rounds. ENVELOPE: large operands share the criterion, with different bases, arithmetic and loop structure; no shipped prime kernel is called.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-exploration-primality-swept",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "IsPrimeCandidate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeField64",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-exploration.primality-swept-vs-reference at strictly stronger Deep operands",
+        "Against": "The same independent trial-division and BigInteger reference over the larger Deep domain stream; no additional independence is claimed.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.enumeration-vs-sieve",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Enumerate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Count"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Enumeration and count with periodic filtering both enabled and disabled against the independent prime list for all marking strategies, layouts and modes; segment sizes 1, 2, 31 and 32768 include population-count word tails; inclusive partial endpoints, prime squares, empty intervals and tiny upper-carrier windows",
+        "Against": "Oracles.PrimeSieve supplies ordinary integer-index crossing-out through 100000 (through 10000 for tiny segments); Oracles.ExactPrimality independently decides high windows. ENVELOPE: only bounded presieving/automatic modes are tested at ulong.MaxValue; complete Eratosthenes beyond uint is tested around 65537 squared, not at the multi-hundred-megabyte maximum base table.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.patterns-vs-integer-sieve",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Periodic small-prime filtering and population count for both strategies and layouts; integer band 0..600000 crosses every pattern period more than once; shifted starts, primes through 163, their boundary, and partial endpoints with 63/64/65/4096/32768-byte segments",
+        "Against": "Oracles.PrimeSieve: independent integer-index crossing-out from each prime square, with no wheel coordinates, grouped tables, bit relabeling, or shipped primality kernel. The same ordered list pins both enumeration and count. ENVELOPE: the portable tail and hardware-selected vector width run here; disabled-ISA subprocess runs are separate verification evidence.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.packets-vs-integer-sieve",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "UnrolledPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "CarriedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "CacheBlockedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "PhaseSortedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "SpecializedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "BucketPackets" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "Eight-byte quotient states for packet unrolling, carried positions, cache chunks, residue specialization, phase sorting and direct phase-bucket transfers; both layouts and pattern choices through two million, shifted intervals, the 49..50-million medium-prime band, and the final four million uint values with 32768/1048576-byte requests that exercise three cache chunks per adaptive segment",
+        "Against": "Oracles.PrimeSieve and PrimeExplorationIntegerWindow: independent integer-index crossing-out. Windows cross repeated cache boundaries, prime-square activation, medium buckets and partial chunks; these references have no wheel phase, byte lifting, carried cursor, grouped patterns, or shipped primality decisions.",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.constellations-vs-naive",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "Offsets"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "AdmissibleMask"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "Enumerate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Copied offsets, all admissibility masks, and constellation starts across every strategy/layout/mode and a top-of-ulong presieve window",
+        "Against": "The reference applies divisibility by 2/3/5 directly to every shifted residue, and checks prime tuples with BigInteger offset sums and Oracles.ExactPrimality. No lane mask or shipped candidate address feeds the tuple reference. Both endpoints bound every tuple member.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Empty, nonzero-first, duplicate and descending offsets are refused by parameter name. The zero-mask patterns [0,1] and [0,2,4] retain their exceptional anchors two and three; top additions cannot wrap.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.statistics-vs-prime-list",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "Measure"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "SmallPrimeCount"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "SmallPrimeMask"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "ChannelCounts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "TransitionCounts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "GapCounts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeStatistics",
+        "Name": "TransitionCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Counts, eight channels, sixty-four transitions, exceptional-prime mask and consecutive gap histogram with one-byte segments",
+        "Against": "An independently sieved list is counted directly; residues are labelled by an explicit switch. Adjacent pairs are formed from that list, including segment seams, and no neighbor outside the interval is invented.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Transition coordinates outside zero through seven refuse with source/target parameter names.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.enumeration-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Enumerate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveStrategy",
+        "Name": "WheelSteps"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveStrategy",
+        "Name": "EightStreams"
+      },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "UnrolledPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "CarriedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "CacheBlockedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "PhaseSortedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "SpecializedPackets" },
+      { "Type": "Puck.Maths.PrimeSieveStrategy", "Name": "BucketPackets" },
+      {
+        "Type": "Puck.Maths.PrimeByteLayout",
+        "Name": "Numeric"
+      },
+      {
+        "Type": "Puck.Maths.PrimeByteLayout",
+        "Name": "Algebraic"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Automatic"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Eratosthenes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Presieve"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Enumeration validates null callback; enumeration and count validate segment size and every option before returning an empty reversed interval; enum ordinal values match their explicit dispatch contract.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

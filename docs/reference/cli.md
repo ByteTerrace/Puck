@@ -2513,6 +2513,7 @@ pristine-input forward/inverse latency, and explicit plan-construction cost:
 | Curvature splines | `CurvatureSplineKernels` | Compiling a spline and evaluating it. |
 | Lattices and noise | `LatticeKernels`, `LayerSequenceQueries` | Field noise (one sample and four octaves), lattice value noise, hex distance, the modular cusp and a sieve window; layer lookup and location in a layer sequence. |
 | Finite fields | `ReedSolomonKernels`, `PrimeFieldBatchInverse` | Reed–Solomon generator construction and syndromes; batch inversion against one inverse at a time. |
+| Prime exploration | `PrimeCandidateScan`, `PrimeChannelMasks`, `PrimePrimality`, `PrimeSieveSegments` | Shared traversal and checksum/buffer sinks for numeric/algebraic scans and grouped/mixed mask actions; matched Montgomery/UInt128 witness schedules with trial budgets; count and callback operations across sieve strategies/layouts. |
 | Signed-distance culling | `SdfFieldCull` | One distance query over one near sphere and 4000 far instances of eight spheres each, where each far instance should cost one bound test. |
 | State kernels | `StateArithmeticKernels`, `StateExpressionKernels`, `StateBulkKernels` | Binary, unary and bit-field expression operations; a compiled expression program across token counts, operand reads and dependency shapes; block clear, copy, scan and sort. |
 | Vector ranking | `VectorNearest` | One `nearest` firing through the effect host over a 256-key, 256-dimension table into a five-match ranking. Its tests hold the firing to zero allocation and one scoring per key; this is where its latency is read. |
@@ -2576,6 +2577,55 @@ kernels are measured exactly as written (the `Int128` widening multiply in the
 wide path is deliberate and is not "fixed" here). Do not commit result artifacts;
 this verb produces evidence for a decision, not baselines to pin—the
 `BenchmarkDotNet.Artifacts/` directory it writes under the cwd is git-ignored.
+
+### `puck bench primes`
+
+Runs a serial survey of thirty-wheel marking strategies and both bit layouts,
+with periodic small-prime patterns enabled and disabled independently,
+with 16 KiB, 32 KiB, 1 MiB and 8 MiB requested segments. `--segments` selects
+distinct KiB multiples in 16 KiB..8 MiB. `--upper` selects a closed
+interval beginning at zero, through `uint.MaxValue` (default 100,000,000).
+`--strategies` selects distinct managed marking strategies, defaulting to all;
+both layouts and pre-sieve choices remain paired for each selected strategy.
+`--warmups` selects 1..100 untimed rounds (default three); `--samples` selects
+1..100 measured rounds (default five). All variants warm before measurement;
+rounds rotate their starting variant and alternate traversal direction.
+`--count-only` omits callback enumeration for a count-output comparison.
+On Windows, `--cpu` pins the survey to an available logical CPU in `0..63`;
+native children inherit the same affinity. The original process mask is restored
+on exit. `LogicalCpu` records the selection; omitting it leaves scheduler placement.
+`--primesieve` optionally supplies an existing executable for a one-thread
+native comparison. `--output` supplies the parent for a unique report directory.
+The JSON report retains every sample, execution order, runtime settings,
+executable hashes, active managed bitmap sizes, and deterministic marking counts.
+Scalar marking counts exclude primes handled by patterns; pattern rows also
+record logical table input bytes and bitmap passes. Pattern construction is
+outside warm measurements; the retained tables are additional workspace.
+Packet alternatives isolate unrolling, carried positions, 16 KiB marking
+chunks within the requested bitmap, and constant masks and lifts for each prime
+residue and bit layout. The specialized and runtime-table kernels instantiate
+the same source routines. `PhaseSortedPackets` additionally counting-sorts
+active medium states within each residue group. Reports count logical phase-sort
+candidates above `min(segment length, 32768) / 5`, including singleton groups
+whose copy is skipped. Reports distinguish active prime/chunk
+visits from start initializations. `BucketPackets` uses adaptive actual segments,
+cache-sized small-prime chunks with cutoff `chunk bytes / 8`, eight-byte quotient states and direct medium-state
+phase transfers. Its visit count combines small-prime chunk visits and medium-prime
+whole-segment visits. `ManagedBucketTransfers` counts the latter; the chunk-size
+and chunk-count fields describe its small-prime partition. Actual bitmap fields
+use its resolved segment size.
+Prime-multiple counts describe logical
+in-interval exclusions; stores to endpoint padding and overlapping final pattern
+vectors are additional work. Alignment padding adds up to 63 pooled bytes per bitmap.
+Managed count and callback rows are separate; native rows count primes, with printed
+internal time reported separately from process time. A requested segment above
+the interval's byte count has a smaller active working set. Native sizes are
+adaptive upper limits. The pinned 12.15 multi-segment 16 KiB setting is explicitly
+marked with its source-established full-bitmap size; other rows leave that field
+null. The prime-exploration reference explains separately how the pinned source
+and reported L1 determine the bitmap for the billion-integer band under native
+defaults. Equal bitmap sizes do not imply equal additional workspace.
+See [prime exploration](prime-exploration.md) for API semantics and limitations.
 
 ### `puck bench state-evidence`
 

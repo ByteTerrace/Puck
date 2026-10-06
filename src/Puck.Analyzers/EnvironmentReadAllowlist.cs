@@ -2,7 +2,7 @@ namespace Puck.Analyzers;
 
 /// <summary>
 /// The one list of environment variables Puck may read (<see cref="EnvironmentReadAnalyzer"/>, ENV001): each a value
-/// the operating system, the .NET SDK or a CI host defines, never one Puck invents to switch itself. An entry names
+/// the operating system, the .NET runtime or SDK, or a CI host defines, never one Puck invents to switch itself. An entry names
 /// the assemblies that may read it, so a CI-provided value stays inside the CI-facing verbs, and states why the read
 /// cannot be a flag, a document, or a profile row instead.
 /// </summary>
@@ -16,6 +16,16 @@ public static class EnvironmentReadAllowlist {
 
     /// <summary>Gets every allowlisted variable, keyed by its exact (case-sensitive) name.</summary>
     public static IReadOnlyDictionary<string, EnvironmentReadEntry> Entries { get; } = new Dictionary<string, EnvironmentReadEntry>(comparer: StringComparer.Ordinal) {
+        ["DOTNET_TieredCompilation"] = new(Assemblies: Cli, Reason: "The .NET runtime's startup JIT setting; benchmark reports record it without changing Puck behavior."),
+        ["DOTNET_TieredPGO"] = new(Assemblies: Cli, Reason: "The .NET runtime's startup PGO setting; benchmark reports record it without changing Puck behavior."),
+        ["DOTNET_ReadyToRun"] = new(Assemblies: Cli, Reason: "The .NET runtime's startup precompiled-code setting; benchmark reports record it without changing Puck behavior."),
+        ["DOTNET_TC_QuickJitForLoops"] = new(Assemblies: Cli, Reason: "The .NET runtime's startup loop-JIT setting; benchmark reports record it without changing Puck behavior."),
+        ["DOTNET_gcServer"] = new(Assemblies: Cli, Reason: "The .NET runtime's startup GC setting; benchmark reports record it without changing Puck behavior."),
+        ["COMPlus_TieredCompilation"] = new(Assemblies: Cli, Reason: "The .NET runtime's alternate startup JIT variable; benchmark reports record it without changing Puck behavior."),
+        ["COMPlus_TieredPGO"] = new(Assemblies: Cli, Reason: "The .NET runtime's alternate startup PGO variable; benchmark reports record it without changing Puck behavior."),
+        ["COMPlus_ReadyToRun"] = new(Assemblies: Cli, Reason: "The .NET runtime's alternate precompiled-code variable; benchmark reports record it without changing Puck behavior."),
+        ["COMPlus_TC_QuickJitForLoops"] = new(Assemblies: Cli, Reason: "The .NET runtime's alternate loop-JIT variable; benchmark reports record it without changing Puck behavior."),
+        ["COMPlus_gcServer"] = new(Assemblies: Cli, Reason: "The .NET runtime's alternate GC variable; benchmark reports record it without changing Puck behavior."),
         ["CI"] = new(
             Assemblies: CliAndBootstrap,
             Reason: "Set by every CI host; the World artifact key keys a CI build apart, and the bootstrap app refuses to run under CI."

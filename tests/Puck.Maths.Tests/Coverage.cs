@@ -337,6 +337,9 @@ internal static class Coverage {
             Type: typeof(SymmetryLattice)
         ), SymmetryLatticeReason),
 
+        (new CoverRef(Name: "value__", Type: typeof(PrimeSieveStrategy)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(PrimeByteLayout)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(PrimeSieveMode)), EnumStorageReason),
         // ---- the presented charged algebra ----
         // One CATEGORY reason per kind, repeated verbatim; an individual reason appears only where the category does
         // not honestly fit. Nothing here is arithmetic: every member that computes a value answers to a law.

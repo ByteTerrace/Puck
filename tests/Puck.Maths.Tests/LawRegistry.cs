@@ -709,6 +709,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain PrimeExplorationPrimalityDomain = new(
+        Key: "prime-exploration-primality",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain PrimeFieldLucas = new(
         Key: "prime-field-lucas",
         Block: 256,
@@ -828,6 +834,17 @@ internal static partial class LawRegistry {
         .. BinaryPolynomialRingCases(),
         .. BinaryFieldQuotientCases(),
         .. PrimeFieldCases(),
+        ClaimCase(claim: Subjects.PrimeExplorationGroup, id: "prime-exploration.group-vs-residue-arithmetic"),
+        ClaimCase(claim: Subjects.PrimeExplorationCoordinates, id: "prime-exploration.coordinate-boundaries"),
+        ClaimCase(claim: Subjects.PrimeExplorationPrimality, id: "prime-exploration.primality-vs-independent"),
+        SweptCase(claim: Subjects.PrimeExplorationPrimalitySweep, domain: PrimeExplorationPrimalityDomain, id: "prime-exploration.primality-swept-vs-reference", width: 1),
+        SweptCase(claim: Subjects.PrimeExplorationPrimalitySweep, domain: PrimeExplorationPrimalityDomain, id: "deep.prime-exploration-primality-swept", width: 1),
+        ClaimCase(claim: Subjects.PrimeExplorationEnumeration, id: "prime-exploration.enumeration-vs-sieve"),
+        ClaimCase(claim: Subjects.PrimeExplorationPatterns, id: "prime-exploration.patterns-vs-integer-sieve"),
+        ClaimCase(claim: Subjects.PrimeExplorationPackets, id: "prime-exploration.packets-vs-integer-sieve"),
+        ClaimCase(claim: Subjects.PrimeExplorationConstellations, id: "prime-exploration.constellations-vs-naive"),
+        ClaimCase(claim: Subjects.PrimeExplorationStatistics, id: "prime-exploration.statistics-vs-prime-list"),
+        ClaimCase(claim: Subjects.PrimeExplorationRefusals, id: "prime-exploration.enumeration-refusals"),
         .. ExtensionFieldCases(),
         .. SamplingRefusalCases(),
         .. DeepEdgeCrossCases(),

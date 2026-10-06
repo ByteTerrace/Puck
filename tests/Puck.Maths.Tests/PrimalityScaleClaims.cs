@@ -41,9 +41,9 @@ internal static class PrimalityScaleClaims {
         5_459UL, 5_777UL, 10_877UL, 16_109UL, 18_971UL, 22_499UL, 24_569UL,
         25_199UL, 40_309UL, 58_519UL, 75_077UL, 97_439UL,
     ];
-    /// <summary>The four values that make <see cref="PrimeField64.IsPrime(ulong)"/>'s TWELFTH witness base
-    /// load-bearing: each is the least value that is a strong probable prime to every one of the first <c>k</c> prime
-    /// bases, so a witness set truncated to <c>k</c> accepts it. The base count on each row is the number of leading
+    /// <summary>Four published psi_k composites that <see cref="PrimeField64.IsPrime(ulong)"/> must reject.
+    /// Each is the least value that is a strong probable prime to every one of the first <c>k</c> prime
+    /// bases. The base count on each row is the number of leading
     /// bases the value actually survives, measured, not the psi index it is tabulated under.</summary>
     private static readonly (ulong Value, int Bases)[] WitnessPseudoprimes = [
         (3_215_031_751UL, 4),
@@ -1105,7 +1105,7 @@ internal static class PrimalityScaleClaims {
         }
 
         // Past 10^12 no sieve reaches, so the reference becomes the exact decision: trial division then twenty
-        // BigInteger strong rounds, a strict superset of the subject's twelve Montgomery ones.
+        // BigInteger strong rounds with different bases and arithmetic from the seven machineword witnesses.
         int[] bandShifts = [32, 33, 40, 52, 61, 62, 63, 64];
 
         foreach (var shift in bandShifts) {
@@ -1149,8 +1149,8 @@ internal static class PrimalityScaleClaims {
             }
         }
 
-        // The witness set itself, pinned base by base: truncating the twelve to k accepts psi_k and nothing else here
-        // notices.
+        // Published composites that survive many leading prime bases still have to fail the machineword decision.
+        // Their leading-prime counts do not individually pin the seven different machineword witnesses.
         foreach (var (pseudoprime, baseCount) in WitnessPseudoprimes) {
             if (PrimeField64.IsPrime(value: pseudoprime)) {
                 return $"IsPrime accepted {pseudoprime}, a strong probable prime to the first {baseCount} bases: the witness set is short";

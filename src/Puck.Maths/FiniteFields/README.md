@@ -754,17 +754,16 @@ follows.
 ## Primality on `ulong`
 
 `PrimeField64.IsPrime` is the exact decision for every 64-bit unsigned value. It
-runs strong-probable-prime rounds against the fixed twelve-base witness set
-`2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37`. A **witness** is a base you test
+runs the existing exact `uint` decision for narrow inputs and strong-probable-prime
+rounds against the seven-base witness set
+`2, 325, 9375, 28178, 450775, 9780504, 1795265022` for larger inputs. A **witness** is a base you test
 the candidate against, and a set of them is **complete** below some bound when
-no composite under that bound survives all of them. This set is proven complete
-for every value strictly below `318665857834031151167461` (about `3.18 × 10²³`
-—the exact threshold, quoted rather than rounded, because rounding it up would
-place the one counterexample inside the promise), which is four orders of
-magnitude past `ulong.MaxValue` and far past this field's `2⁶²` ceiling, so the
-decision is deterministic rather than probabilistic. The even candidates are settled before
+no composite under that bound survives all of them. This set is complete below
+`2⁶⁴`, as recorded in the [Miller–Rabin computational results](https://miller-rabin.appspot.com/),
+so the decision covers the entire `ulong` domain and this field's `2⁶²` ceiling.
+Factors two, three and five are settled before
 the rounds begin, so the survivors are odd and one `ScaledResidueRing64` carries
-every round's squaring chain: the twelve rounds share one ring, the chains
+every round's squaring chain: the seven rounds share one ring, the chains
 themselves spend no hardware division, and the only division per witness is the
 remainder that reduces it into the field. The ring is a bijective re-encoding of
 the residues, so comparing a power against the ring's own one and minus one
@@ -851,10 +850,10 @@ extrapolated. The complete set of base-two Fermat pseudoprimes below `2⁶⁴` w
 enumerated exhaustively and independently by Feitsma and by Galway—the strong
 ones are a derived subset of it—and no member of that subset is simultaneously
 a strong Lucas pseudoprime to these parameters. That guarantee rests on a
-third-party exhaustive computation, which puts it in the same epistemic class as
-the `318665857834031151167461` bound the twelve-base witness set rests on:
-Sorenson and Webster's computed value of the twelfth strong-pseudoprime
-threshold, quoted exactly rather than rounded. The verification is for Selfridge
+third-party exhaustive computation, as does the published seven-witness
+unsigned-64-bit decision used by `IsPrime`. The arbitrary-width twelve-base
+decision separately rests on Sorenson and Webster's computed twelfth
+strong-pseudoprime threshold `318665857834031151167461`. The verification is for Selfridge
 Method A with the strong Lucas test, which is exactly what this implementation
 runs.
 

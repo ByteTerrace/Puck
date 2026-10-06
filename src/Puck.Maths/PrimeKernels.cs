@@ -5,7 +5,7 @@ namespace Puck.Maths;
 
 /// <summary>
 /// The word-sized prime machinery every public prime entry point in the library runs on: the base-prime table, the
-/// window marker both sieves stride with, the exact primality dispatch, and the deterministic cycle-walk splitter.
+/// odd-window marker, the exact primality dispatch, and the deterministic cycle-walk splitter.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,8 +13,8 @@ namespace Puck.Maths;
 /// word offers, and the narrower public surfaces widen into it rather than carrying their own copy:
 /// <see cref="PrimeExtensions.Factorize(uint, Span{uint})"/> and
 /// <see cref="UnsignedNumberFunctions.EnumeratePrimeFactors{T}(T)"/> both reach <see cref="Factorize(ulong, Span{ulong})"/>,
-/// and <see cref="NumberTheoryFunctions.SegmentedPrimeSieve(ulong, ulong, Action{ulong})"/> and
-/// <see cref="PrimeExtensions.NthPrime(uint)"/> both stride <see cref="MarkWindow(ReadOnlySpan{uint}, Span{ulong}, ulong, ulong)"/>.
+/// <see cref="PrimeExtensions.NthPrime(uint)"/> strides <see cref="MarkWindow(ReadOnlySpan{uint}, Span{ulong}, ulong, ulong)"/>.
+/// <see cref="PrimeExploration"/> owns thirty-wheel marking and uses that odd-window marker to generate upper base primes.
 /// </para>
 /// <para>
 /// The arbitrary-width counterparts live in <see cref="BigIntegerFunctions"/>. That split is real rather than
@@ -34,11 +34,14 @@ internal static class PrimeKernels {
     /// below <see cref="LeastWitnessFailure"/>.</summary>
     /// <remarks>
     /// Sorenson and Webster's computed twelfth strong-pseudoprime threshold is what makes the set complete rather than
-    /// merely unrefuted. <see cref="PrimeField64.IsPrime(ulong)"/> and <see cref="BigIntegerFunctions.IsPrime(BigInteger)"/>
-    /// read this one table rather than each transcribing it, so a correction to the bound cannot land on one carrier and
-    /// miss the other.
+    /// merely unrefuted. <see cref="BigIntegerFunctions.IsPrime(BigInteger)"/> uses this arbitrary-width table;
+    /// the machine-word decision uses the smaller <see cref="WordWitnessBases"/> set.
     /// </remarks>
     internal static ReadOnlySpan<int> WitnessBases => [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+    /// <summary>Gets Sinclair's seven strong-probable-prime witnesses, complete below 2⁶⁴.</summary>
+    /// <remarks>The finite-domain computation is recorded at https://miller-rabin.appspot.com/ . A base is reduced
+    /// modulo the candidate; zero skips that round, never the remaining witnesses.</remarks>
+    internal static ReadOnlySpan<ulong> WordWitnessBases => [2UL, 325UL, 9375UL, 28178UL, 450775UL, 9780504UL, 1795265022UL];
 
     /// <summary>Gets the divisibility ceilings paired with <see cref="SmallFactorPrimes"/>: a value is divisible by the paired prime exactly when its inverse-product does not exceed the ceiling, and the product is then the exact quotient.</summary>
     private static ReadOnlySpan<ulong> SmallFactorCeilings => new ulong[16] {
@@ -205,14 +208,58 @@ internal static class PrimeKernels {
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// <see cref="PrimeExtensions.IsPrime(uint)"/> settles the 32-bit range on one strong-probable-prime round plus a
-    /// finite correction table, where <see cref="PrimeField64.IsPrime(ulong)"/> must spend twelve; above that range only
-    /// the twelve-base decision applies. Both are exact, so the dispatch is a cost choice and never a correctness one.
+    /// finite correction table. Above that range, wheel rejection precedes the seven-base decision.
+    /// Both are exact, so the dispatch is a cost choice and never a correctness one.
     /// </remarks>
-    internal static bool IsPrimeWord(ulong value) =>
-        ((value <= uint.MaxValue)
-            ? ((uint)value).IsPrime()
-            : PrimeField64.IsPrime(value: value)
-        );
+    internal static bool IsPrimeWord(ulong value) {
+        if (value <= uint.MaxValue) { return ((uint)value).IsPrime(); }
+        if (((value & 1UL) == 0UL) || ((value % 3UL) == 0UL) || ((value % 5UL) == 0UL)) { return false; }
+
+        return IsPrimeCandidateWord(value: value);
+    }
+    /// <summary>Decides a word already known to be coprime to thirty, including the nonprime value one.</summary>
+    /// <param name="value">The wheel candidate.</param>
+    /// <returns>Its exact primality.</returns>
+    internal static bool IsPrimeCandidateWord(ulong value) {
+        if (value < 2UL) { return false; }
+
+        var oddPart = (value - 1UL);
+        var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
+
+        oddPart >>= twoExponent;
+
+        var ring = new ScaledResidueRing64(modulus: value);
+
+        foreach (var witness in WordWitnessBases) {
+            if (!PassesWitness(oddPart: oddPart, ring: in ring, twoExponent: twoExponent, witness: witness)) { return false; }
+        }
+
+        return true;
+    }
+    /// <summary>Runs one strong-probable-prime round in an already-created odd residue ring.</summary>
+    /// <param name="ring">The ring over an odd candidate greater than one.</param>
+    /// <param name="oddPart">The odd part of the candidate minus one.</param>
+    /// <param name="twoExponent">Its exponent of two.</param>
+    /// <param name="witness">The unreduced witness.</param>
+    /// <returns>Whether the round passes; a zero reduced witness carries no evidence and passes.</returns>
+    internal static bool PassesWitness(in ScaledResidueRing64 ring, ulong oddPart, int twoExponent, ulong witness) {
+        var residue = (witness % ring.Modulus);
+
+        if (residue == 0UL) { return true; }
+
+        var power = ring.Power(value: ring.Encode(value: residue), exponent: oddPart);
+        var negativeOne = ring.NegativeOne;
+
+        if ((power == ring.One) || (power == negativeOne)) { return true; }
+
+        for (var round = 1; (round < twoExponent); ++round) {
+            power = ring.Multiply(left: power, right: power);
+
+            if (power == negativeOne) { return true; }
+        }
+
+        return false;
+    }
     /// <summary>Sieves the odd values <c>low + 2i</c> for <c>i</c> in <c>[0, bits)</c>, setting bit <c>i</c> of <paramref name="bitmap"/> when the value is composite.</summary>
     /// <param name="basePrimes">The ascending odd primes from <see cref="BasePrimes"/>.</param>
     /// <param name="bitmap">The destination bitmap; its tail word is left unmasked.</param>

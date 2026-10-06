@@ -83,12 +83,29 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **Three measurement harnesses exist: the kernels (Maths, SDF and state), the World server
-  tick path, and real-process startup.** `puck bench kernels` is the BenchmarkDotNet microscope for them —
+- **Measurement harnesses cover kernels (Maths, SDF and state), the World server
+  tick path, real-process startup, and prime surveys.** `puck bench kernels` is the BenchmarkDotNet microscope for them —
   disassembly, allocation columns, percentiles — and `puck bench world` is a
   stopwatch lane over server construction, the idle tick, and a scripted
   Klondike deal. `puck bench startup` measures console readiness and rendered
-  capture completion in isolated fresh processes without building. They are documented in
+  capture completion in isolated fresh processes without building. `puck bench primes`
+  compares complete single-thread counting with optional native primesieve and
+  reports callback enumeration separately. Samples follow warmup rounds with
+  rotating, alternating variant order. Reports distinguish requested segments,
+  Windows `--cpu` placement (also inherited by native children),
+  exact managed bitmap/work counts, and the pinned native 16 KiB full-bitmap
+  case; other rows leave the native bitmap field null. Source-derived sizes for
+  other cases must state the pinned configuration and reported L1 assumptions.
+  Prime surveys pair
+  scalar and periodic small-prime filters, recording individual marks separately
+  from logical pattern input bytes and bitmap passes. Packet strategies isolate
+  unrolling, position carry, cache chunks, residue specialization and medium-state
+  phase sorting with shared marking routines; reports count phase-sort candidates,
+  direct bucket transfers, adaptive bucket bitmaps, and small-prime cache chunks,
+  active prime/chunk visits and start initializations separately. Logical
+  exclusions exclude stores to endpoint padding. Kernel alternatives
+  share traversal and sinks, including buffer output and mixed mask order.
+  Confirm specialization and inlining in optimized assembly. These harnesses are documented in
   [`docs/reference/cli.md`](../../../docs/reference/cli.md),
   which also carries the measurement hygiene: numbers taken on a busy machine
   are garbage rather than merely pessimistic, and two runs disagreeing by more
@@ -102,7 +119,7 @@ outside this contract and takes the references as written.
   least as a count for a ceiling, and `Total` counts one run of a body that
   cannot repeat. Write allocation laws, stages and diagnostics with it rather
   than reading the counter by hand.
-  Outside those three, say which harness you built and why it measures the claim.
+  Outside these harnesses, say which harness you built and why it measures the claim.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;
