@@ -229,12 +229,26 @@ step, permutation, and sink operations inline, and that bounds checks do not
 distort a comparison. `PrimeSieveSegments` measures count-only and callback
 enumeration separately; its callback is allocated once during setup.
 
+`PrimeSurvivorDecisions` compares the current Montgomery seven-witness test,
+Baillie–PSW, and the `UInt128` remainder reference with the same candidate
+traversal and checksum. Bands begin near 10¹², 10¹⁸ and the top of `ulong`.
+The presieved stream excludes factors through 65,535; the prime-only stream
+isolates the cost of accepting primes. Setup checks every decision outside
+timing and reports the candidate count, prime count and stream identity.
+Sieving and candidate construction are excluded from these kernel times.
+
 `puck bench primes --upper 100000000 --primesieve <executable> --output <directory>`
 runs a serial survey with all strategies and both layouts, bulk patterns enabled and
 disabled, and 16 KiB, 32 KiB, 1 MiB and
 8 MiB requested segments. `--segments` selects distinct KiB multiples in that
-range; `--strategies` selects distinct marking strategies while keeping both
-layouts and pre-sieve choices paired. `--count-only` omits callback enumeration.
+range; `--strategies` selects distinct marking strategies. `--layouts` selects
+layouts, and `--patterns Both|Enabled|Disabled` selects the periodic-filter
+controls. `--count-only` omits callback enumeration. `--low` and `--upper`
+select any closed unsigned-64-bit interval. `--mode` accepts distinct modes
+in the same rounds, defaulting to `Eratosthenes`; `Automatic` and `Presieve`
+include exact survivor decisions where their API policies require them.
+Each full-sieve call includes upper-base generation and storage; those costs
+are not amortized across survey calls. Shared pattern construction remains warm.
 On Windows, `--cpu` selects an available logical CPU in `0..63`; the native
 child processes inherit the same affinity, and the managed process restores its
 original mask on exit. Reports record the selection as `LogicalCpu`; an omitted
@@ -242,12 +256,19 @@ selection leaves scheduler placement in effect. Use the same explicit CPU for
 repeat comparisons. `--warmups` defaults to three
 untimed rounds and `--samples` to five measured rounds. All variants warm before
 measurement; subsequent rounds rotate their starting variant and alternate
-direction. Actual active segment bytes cannot exceed
-`upper / 30 + 1`; a requested size above that band does not measure a full cache
+direction. `--batch` repeats each managed call within a sample and divides
+elapsed time and calling-thread allocations by that count; every call checks
+its prime count. This reduces timer quantization for narrow intervals.
+Allocations exclude the harness but do not measure retained pools or peak memory.
+Actual active segment bytes cannot exceed the number of thirty-integer blocks
+intersecting the candidate interval; a request above that band does not measure a full cache
 working set. JSON includes execution order, runtime settings, executable hashes,
 native version and CPU/cache information. Managed rows record active bitmap
 bytes, full segments, the tail, active prime/marking-chunk visits, and logical
-in-interval prime-multiple exclusions. Exclusions count repeats across different sieving primes and exclude primes
+in-interval prime-multiple exclusions where supported. Fine-grained marking
+counters cover only zero-origin complete uint sieves and are null otherwise;
+bitmap metadata, allocations and pattern counts remain available throughout.
+Exclusions count repeats across different sieving primes and exclude primes
 handled by periodic patterns. Pattern rows additionally record logical pattern
 input bytes (sixteen per bitmap byte) and bitmap passes (four per segment);
 these are algorithm counts, not hardware memory traffic. These deterministic

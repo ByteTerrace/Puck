@@ -89,8 +89,17 @@ outside this contract and takes the references as written.
   stopwatch lane over server construction, the idle tick, and a scripted
   Klondike deal. `puck bench startup` measures console readiness and rendered
   capture completion in isolated fresh processes without building. `puck bench primes`
-  compares complete single-thread counting with optional native primesieve and
-  reports callback enumeration separately. Samples follow warmup rounds with
+  compares single-thread counting with optional native primesieve and
+  reports callback enumeration separately. `--low`, `--upper`, and `--mode`
+  compare high or narrow intervals with full sieving or bounded presieving.
+  `--layouts` and `--patterns` narrow controls; `--batch` reports per-call time
+  and allocations over repeated managed calls. Full-sieve upper-base generation
+  stays inside each call. Allocations do not measure retained pools or peak memory.
+  Fine-grained marking counts are null outside zero-origin complete uint sieves;
+  bitmap metadata remains available. `PrimeSurvivorDecisions` compares existing
+  primality tests on identical presieved and prime-only candidate streams,
+  with candidate construction excluded from timing.
+  Samples follow warmup rounds with
   rotating, alternating variant order. Reports distinguish requested segments,
   Windows `--cpu` placement (also inherited by native children),
   exact managed bitmap/work counts, and the pinned native 16 KiB full-bitmap

@@ -2513,7 +2513,7 @@ pristine-input forward/inverse latency, and explicit plan-construction cost:
 | Curvature splines | `CurvatureSplineKernels` | Compiling a spline and evaluating it. |
 | Lattices and noise | `LatticeKernels`, `LayerSequenceQueries` | Field noise (one sample and four octaves), lattice value noise, hex distance, the modular cusp and a sieve window; layer lookup and location in a layer sequence. |
 | Finite fields | `ReedSolomonKernels`, `PrimeFieldBatchInverse` | Reed–Solomon generator construction and syndromes; batch inversion against one inverse at a time. |
-| Prime exploration | `PrimeCandidateScan`, `PrimeChannelMasks`, `PrimePrimality`, `PrimeSieveSegments` | Shared traversal and checksum/buffer sinks for numeric/algebraic scans and grouped/mixed mask actions; matched Montgomery/UInt128 witness schedules with trial budgets; count and callback operations across sieve strategies/layouts. |
+| Prime exploration | `PrimeCandidateScan`, `PrimeChannelMasks`, `PrimePrimality`, `PrimeSieveSegments`, `PrimeSurvivorDecisions` | Shared traversal and checksum/buffer sinks for numeric/algebraic scans and grouped/mixed mask actions; matched Montgomery/UInt128 witness schedules with trial budgets; count and callback operations across sieve strategies/layouts; existing primality tests on identical high presieved and prime-only streams. |
 | Signed-distance culling | `SdfFieldCull` | One distance query over one near sphere and 4000 far instances of eight spheres each, where each far instance should cost one bound test. |
 | State kernels | `StateArithmeticKernels`, `StateExpressionKernels`, `StateBulkKernels` | Binary, unary and bit-field expression operations; a compiled expression program across token counts, operand reads and dependency shapes; block clear, copy, scan and sort. |
 | Vector ranking | `VectorNearest` | One `nearest` firing through the effect host over a 256-key, 256-dimension table into a five-match ranking. Its tests hold the firing to zero allocation and one scoring per key; this is where its latency is read. |
@@ -2583,10 +2583,19 @@ this verb produces evidence for a decision, not baselines to pin—the
 Runs a serial survey of thirty-wheel marking strategies and both bit layouts,
 with periodic small-prime patterns enabled and disabled independently,
 with 16 KiB, 32 KiB, 1 MiB and 8 MiB requested segments. `--segments` selects
-distinct KiB multiples in 16 KiB..8 MiB. `--upper` selects a closed
-interval beginning at zero, through `uint.MaxValue` (default 100,000,000).
+distinct KiB multiples in 16 KiB..8 MiB. `--low` and `--upper` select a closed
+unsigned-64-bit interval (defaults zero and 100,000,000). `--mode` selects
+distinct `Automatic`, `Eratosthenes`, or `Presieve` modes to compare in the
+same rounds; the default is `Eratosthenes`. Full sieving includes base-prime
+generation on every call, so a high, narrow interval can spend most of its
+time preparing bases. `Automatic` switches to bounded presieving above `uint.MaxValue`.
 `--strategies` selects distinct managed marking strategies, defaulting to all;
-both layouts and pre-sieve choices remain paired for each selected strategy.
+`--layouts` selects distinct layouts, defaulting to both. `--patterns` selects
+`Both` (default), `Enabled`, or `Disabled` periodic patterns. `--batch` repeats
+each managed call 1..100000 times per sample (default one), checking every
+count and reporting time and calling-thread allocated bytes per call. Native
+rows still run once per sample. Allocation counts exclude the harness and
+do not measure retained pool capacity or peak workspace.
 `--warmups` selects 1..100 untimed rounds (default three); `--samples` selects
 1..100 measured rounds (default five). All variants warm before measurement;
 rounds rotate their starting variant and alternate traversal direction.
@@ -2597,7 +2606,10 @@ on exit. `LogicalCpu` records the selection; omitting it leaves scheduler placem
 `--primesieve` optionally supplies an existing executable for a one-thread
 native comparison. `--output` supplies the parent for a unique report directory.
 The JSON report retains every sample, execution order, runtime settings,
-executable hashes, active managed bitmap sizes, and deterministic marking counts.
+executable hashes, endpoints, mode, active managed bitmap sizes, and allocations.
+Fine-grained deterministic marking counts are provided for zero-origin complete
+uint sieves; unsupported counters are null for other intervals or `Presieve`.
+Bitmap sizes and pattern passes still describe the actual selected interval.
 Scalar marking counts exclude primes handled by patterns; pattern rows also
 record logical table input bytes and bitmap passes. Pattern construction is
 outside warm measurements; the retained tables are additional workspace.
@@ -2626,6 +2638,14 @@ null. The prime-exploration reference explains separately how the pinned source
 and reported L1 determine the bitmap for the billion-integer band under native
 defaults. Equal bitmap sizes do not imply equal additional workspace.
 See [prime exploration](prime-exploration.md) for API semantics and limitations.
+
+The `PrimeSurvivorDecisions` kernel benchmark compares the existing Montgomery
+seven-witness decision, Baillie–PSW, and the ordinary `UInt128` remainder
+reference on identical candidates around 10¹², 10¹⁸ and the top of `ulong`.
+Its `Presieved` workload contains consecutive candidates with no factor at
+most 65,535; `Primes` retains only primes from that stream. Setup checks each
+answer and records candidate identities. These kernel times exclude sieving
+and do not measure an integrated Baillie–PSW enumeration policy.
 
 ### `puck bench state-evidence`
 
