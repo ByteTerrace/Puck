@@ -104,7 +104,15 @@ through 19. Easy leaves use reflected grouping and one persistent sieve
 through the square root, with a 16 KiB bitmap and 8 KiB prefix-count array.
 Hard leaves use 32 KiB wheel segments and incrementally updated population
 counters. Filtering their factor coordinates in batches separates candidate
-selection, quotient division and prefix queries. Signed 128-bit sums preserve
+selection, quotient division and prefix queries. Fixed-width SIMD compares
+32, 16 or 8 packed factors at once, according to the available hardware; a
+scalar tail and fallback cover the remainder. The comparison masks retain
+exactly the same factors as the scalar predicate. Consuming the highest set
+lane first preserves descending factor order and increasing prefix queries.
+The vector helper is inlined, and instruction-set dispatch folds away when
+the method is compiled. No threads or additional buffers are involved.
+Each batch contains at most 128 leaf counts, each below 2^43, so its signed
+sum fits in 64 bits. The full sums use signed 128-bit arithmetic to preserve
 intermediate cancellation exactly.
 
 The semiprime correction streams primes downward from the square root in

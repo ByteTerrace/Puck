@@ -1,3 +1,7 @@
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+
 namespace Puck.Maths;
 
 public static partial class PrimeExtensions {
@@ -34,6 +38,7 @@ public static partial class PrimeExtensions {
             quotients: quotients, squareRootIndex: squareRootIndex);
         Span<int> coordinates = stackalloc int[GourdonHardLeafBatchSize];
         Span<uint> offsets = stackalloc uint[GourdonHardLeafBatchSize];
+        var vectorWidth = (Vector512.IsHardwareAccelerated ? 32 : (Vector256.IsHardwareAccelerated ? 16 : 8));
         var sum = Int128.Zero;
 
         if (profile is not null) {
@@ -80,6 +85,28 @@ public static partial class PrimeExtensions {
                 // With z=y the maximum-prime-factor condition is automatic. A
                 // masked factor >p selects exactly square-free m with lpf(m)>p.
                 // Separate filtering, division and phi queries into short batches.
+                if (Vector128.IsHardwareAccelerated) {
+                    for (; (coordinate >= (last + vectorWidth)); coordinate -= vectorWidth) {
+                        if ((coordinate & 16383) < vectorWidth) { cancellationToken.ThrowIfCancellationRequested(); }
+
+                        var start = ((coordinate - vectorWidth) + 1);
+                        var mask = GourdonFactorSurvivorMask(source: ref factors[start], prime: prime);
+
+                        // Loads ascend in memory; consume the highest set lane first
+                        // to preserve descending m and increasing prefix queries.
+                        while (mask != 0) {
+                            var lane = BitOperations.Log2(value: mask);
+
+                            coordinates[count++] = (start + lane);
+                            mask ^= (1U << lane);
+                        }
+                        if (count > (GourdonHardLeafBatchSize - vectorWidth)) {
+                            sum += CountGourdonHardBatch(coordinates: coordinates[..count], offsets: offsets,
+                                factors: factors, quotient: quotient, low: low, previous: phi[index], sieve: sieve);
+                            count = 0;
+                        }
+                    }
+                }
                 for (; (coordinate >= (last + 4)); coordinate -= 4) {
                     if ((coordinate & 16383) <= 3) { cancellationToken.ThrowIfCancellationRequested(); }
 
@@ -136,6 +163,24 @@ public static partial class PrimeExtensions {
         }
         return sum;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GourdonFactorSurvivorMask(ref ushort source, uint prime) {
+        // The sign bit stores mu, not the factor. After masking, signed compares
+        // are exact: factors <=32767 and this loop's p<=sqrt(y)<32767.
+        if (Vector512.IsHardwareAccelerated) {
+            var factors = (Vector512.LoadUnsafe(source: ref source) & Vector512.Create(value: CombinatorialFactorMask)).AsInt16();
+
+            return ((uint)Vector512.GreaterThan(left: factors, right: Vector512.Create(value: ((short)prime))).ExtractMostSignificantBits());
+        }
+        if (Vector256.IsHardwareAccelerated) {
+            var factors = (Vector256.LoadUnsafe(source: ref source) & Vector256.Create(value: CombinatorialFactorMask)).AsInt16();
+
+            return Vector256.GreaterThan(left: factors, right: Vector256.Create(value: ((short)prime))).ExtractMostSignificantBits();
+        }
+        var narrowFactors = (Vector128.LoadUnsafe(source: ref source) & Vector128.Create(value: CombinatorialFactorMask)).AsInt16();
+
+        return Vector128.GreaterThan(left: narrowFactors, right: Vector128.Create(value: ((short)prime))).ExtractMostSignificantBits();
+    }
     private static Int128 CountGourdonHardBatch(ReadOnlySpan<int> coordinates, Span<uint> offsets,
         ushort[] factors, ulong quotient, ulong low, ulong previous, CombinatorialLeafSieve sieve) {
         for (var index = 0; (index < coordinates.Length); ++index) {
@@ -144,13 +189,15 @@ public static partial class PrimeExtensions {
             offsets[index] = ((uint)((quotient / number) - low));
         }
 
-        var sum = Int128.Zero;
+        // Each count is <=x/y<2^43 since y>cbrt(x). At most 128 leaves
+        // contribute less than 2^50 in magnitude; only the outer sum needs Int128.
+        var sum = 0L;
 
         for (var index = 0; (index < coordinates.Length); ++index) {
             var count = (previous + sieve.CountPrefix(offset: offsets[index]));
 
             sum += (((factors[coordinates[index]] & CombinatorialNegativeMoebius) == 0)
-                ? -((Int128)count) : ((Int128)count));
+                ? -((long)count) : ((long)count));
         }
         return sum;
     }

@@ -6,6 +6,9 @@ algebraic cancellation with Sigma0. The cutoff and corrected x-star bounds
 adapt src/util.cpp, with local storage bounds. The compressed prime-count
 lookup follows src/PiTable.hpp; the segmented lookup and reflected easy leaves
 follow src/gourdon/SegmentedPiTable.cpp and doc/Easy-Special-Leaves.pdf.
+Vector filtering follows the approach described in
+doc/Hard-Special-Leaves-SIMD-Filtering.pdf and src/gourdon/D_avx512.hpp,
+with local packed-factor masks and descending set-bit extraction.
 The retained small-prime partial sieve and compact factor helpers originate
 from the earlier adaptation of src/lmo/pi_lmo5.cpp.
 Upstream: https://github.com/kimwalisch/primecount
