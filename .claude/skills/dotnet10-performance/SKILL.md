@@ -103,8 +103,11 @@ outside this contract and takes the references as written.
   operations. Random controls preserve uniform rejection semantics, generator
   type and shared static traversal; a random-start successor walk is a different
   distribution. Warm table lookups exclude first-use initialization.
-  Samples follow warmup rounds with
-  rotating, alternating variant order. Reports distinguish requested segments,
+  `PrimeFilterDecisions` screens reciprocal-filter depth and primality decisions
+  on identical candidate streams, reporting survivor counts. Confirm a winning
+  kernel policy with the three-seed `RandomPrimeRequests` cases before promotion.
+  Prime surveys follow warmup rounds with
+  rotating, alternating variant order. Their reports distinguish requested segments,
   Windows `--cpu` placement (also inherited by native children),
   exact managed bitmap/work counts, and the pinned native 16 KiB full-bitmap
   case; other rows leave the native bitmap field null. Source-derived sizes for

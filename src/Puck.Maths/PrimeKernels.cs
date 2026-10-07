@@ -82,6 +82,20 @@ internal static class PrimeKernels {
 
         static WindowSieve() => BasePrimes = CreateBasePrimes();
     }
+    // Random selection extends the shared factor ladder without changing factorization's trial budget.
+    private static class SelectionFilter {
+        internal static readonly (ulong Inverse, ulong Ceiling)[] Factors = CreateFactors();
+
+        private static (ulong Inverse, ulong Ceiling)[] CreateFactors() {
+            ReadOnlySpan<ulong> primes = [61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163];
+            var factors = new (ulong Inverse, ulong Ceiling)[primes.Length];
+
+            for (var i = 0; (i < primes.Length); ++i) {
+                factors[i] = (primes[i].ModularInverse(), (ulong.MaxValue / primes[i]));
+            }
+            return factors;
+        }
+    }
 
     /// <summary>Writes the prime factors of <paramref name="value"/>, with multiplicity and in ascending order, into <paramref name="destination"/>.</summary>
     /// <param name="value">The value to factor.</param>
@@ -237,12 +251,15 @@ internal static class PrimeKernels {
         return true;
     }
     // Selection receives a wheel candidate above uint.MaxValue. Reuse the factorization ladder's
-    // inverse products to reject small factors before paying for the two Baillie–PSW rounds.
+    // inverse products and the selection extension through 163 before paying for Baillie–PSW.
     internal static bool IsPrimeSelectionCandidate(ulong value) {
         var ceilings = SmallFactorCeilings;
 
         for (var index = 2; (index < SmallFactorInverses.Length); ++index) {
             if (unchecked((value * SmallFactorInverses[index])) <= ceilings[index]) { return false; }
+        }
+        foreach (var factor in SelectionFilter.Factors) {
+            if (unchecked((value * factor.Inverse)) <= factor.Ceiling) { return false; }
         }
         return PrimeField64.IsBaillieProbablePrime(value: value);
     }

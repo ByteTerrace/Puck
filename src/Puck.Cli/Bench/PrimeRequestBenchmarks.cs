@@ -35,6 +35,8 @@ public class RandomPrimeRequests {
 
     [Params("Small", "UInt32", "UInt64", "HighWindow")]
     public string Band { get; set; } = "Small";
+    [Params(42UL, 2026UL, 0xD00DFEEDUL)]
+    public ulong Seed { get; set; }
 
     [GlobalSetup]
     public void Setup() {
@@ -46,7 +48,7 @@ public class RandomPrimeRequests {
             _ => throw new InvalidOperationException(),
         };
         for (var method = 0; (method < 3); ++method) {
-            var generator = Pcg32XshRr.Create(state: 42, stream: 54);
+            var generator = Pcg32XshRr.Create(state: Seed, stream: 54);
 
             for (var request = 0; (request < Requests); ++request) {
                 var found = ((method == 2)
@@ -68,7 +70,7 @@ public class RandomPrimeRequests {
     public ulong Select() => Run<SelectionRequest>();
 
     private ulong Run<TRequest>() where TRequest : struct, IRequest {
-        var generator = Pcg32XshRr.Create(state: 42, stream: 54);
+        var generator = Pcg32XshRr.Create(state: Seed, stream: 54);
         var checksum = 0UL;
 
         for (var request = 0; (request < Requests); ++request) {

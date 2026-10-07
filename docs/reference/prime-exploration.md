@@ -42,13 +42,15 @@ so identical starting states and arguments reproduce both the answer and final
 state. The caller supplies randomness; this API adds no entropy.
 
 The selector uses the exact uint test for small candidates. Above uint it
-rejects small factors through 59 using existing reciprocal tables, then uses
+rejects small factors through 163 using reciprocal tables, then uses
 the existing Baillie–PSW implementation. Its completeness over ulong rests on
 the published exhaustive computation below 2^64, not a theorem for arbitrary
 integers ([Baillie, Fiori and Wagstaff](https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf)).
 Unbiased range reduction uses multiply-high with rejection
 ([Lemire](https://arxiv.org/abs/1805.10941)). Warm request benchmarks exclude
 first-use table generation; first-request latency must be considered separately.
+The extra selection filter initializes 21 inverse/ceiling pairs once, retaining
+336 bytes of factor payload. It leaves factorization's existing trial budget unchanged.
 
 ## Coordinates and channels
 
@@ -291,6 +293,12 @@ integer-rejection control can finish the fixed stream. Setup checks that every
 request succeeds and verifies each answer independently. This measures the
 whole selection policy, including sampling and filtering, rather than only the
 primality kernel. The finite benchmark stream is not a distribution proof.
+Three fixed seeds exercise each range. `PrimeFilterDecisions` first screens
+filter cutoffs through 5, 59, 163, 541 and 1021 with Miller–Rabin and Baillie–PSW
+on identical wheel-candidate arrays. Range sampling stays outside that kernel
+measurement; setup reports survivor counts and checks every decision against
+the independent UInt128 reference. A promising kernel result still needs the
+complete-request comparison before changing the selector.
 
 `puck bench primes --upper 100000000 --primesieve <executable> --output <directory>`
 runs a serial survey with all strategies and both layouts, bulk patterns enabled and
