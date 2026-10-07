@@ -58,7 +58,7 @@ internal static partial class Subjects {
                 if ((found != expected) || (value != (expected ? pool[index] : 0UL))) {
                     return $"interval [{low},{high}], rank {index}: expected prime decision {expected} at {pool[index]}, got {found}/{value}";
                 }
-                var expectedDraws = (((high <= 65535) && (pool.Count == 1)) ? 0 : 2);
+                var expectedDraws = ((pool.Count == 1) ? 0 : 2);
 
                 if (generator.Draws != expectedDraws) { return $"rank {index}: expected {expectedDraws} raw draws, got {generator.Draws}"; }
             }
@@ -83,8 +83,8 @@ internal static partial class Subjects {
         }
         var composite = new PrimeSelectionWord(word: ulong.MaxValue);
 
-        if (PrimeExploration.TryRandomPrime(generator: ref composite, high: (65537UL * 65537), low: (65537UL * 65537), maxAttempts: 7, prime: out var compositeResult) || (compositeResult != 0) || (composite.Draws != 14)) {
-            return "composite rejection failed to exhaust exactly seven raw 64-bit draws";
+        if (PrimeExploration.TryRandomPrime(generator: ref composite, high: (65537UL * 65537), low: (65537UL * 65537), maxAttempts: 7, prime: out var compositeResult) || (compositeResult != 0) || (composite.Draws != 0)) {
+            return "singleton composite was not decided without raw draws";
         }
         return (Refuses(() => PrimeExploration.TryRandomPrime(7, 5, ref zeros, out _), typeof(ArgumentOutOfRangeException), "high", "reversed random-prime interval")
             ?? Refuses(() => PrimeExploration.TryRandomPrime(generator: ref zeros, high: 5, low: 2, maxAttempts: 0, prime: out _), typeof(ArgumentOutOfRangeException), "maxAttempts", "empty random-prime budget"));

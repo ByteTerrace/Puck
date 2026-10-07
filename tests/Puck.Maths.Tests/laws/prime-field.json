@@ -492,7 +492,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Each tabulated composite is checked against the independent reference\u0027s leading-prime-base survival count before rejection by the exact machineword decision is demanded. The rows have counts 1, 2, 3, 4, 5, 6, 8 and 11. ENVELOPE: these counts describe the historical first-prime-base criterion, not Sinclair\u0027s seven different machineword witnesses; this law does not pin those seven bases individually",
+        "Subject": "Each tabulated composite is checked against the independent reference's leading-prime-base survival count before rejection by the exact machineword decision is demanded. The rows have counts 1, 2, 3, 4, 5, 6, 8 and 11. ENVELOPE: these counts describe the reference's first-prime-base criterion; production's wide-word decision uses Baillie-PSW, so this law pins its rejection of these composites rather than its witness set.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -690,10 +690,6 @@
       {
         "Type": "Puck.Maths.PrimeField64",
         "Name": "IsStrongLucasProbablePrime"
-      },
-      {
-        "Type": "Puck.Maths.PrimeField64",
-        "Name": "IsPrime"
       }
     ],
     "Legs": [
@@ -722,15 +718,6 @@
         "Against": "",
         "Shared": "",
         "Citation": "",
-        "Absolute": ""
-      },
-      {
-        "Kind": "InTreeIndependent",
-        "Flavor": "None",
-        "Subject": "IsBaillieProbablePrime over the same stream",
-        "Against": "PrimeField64.IsPrime, the exact machineword decision \u2014 a second shipped route to the same answers, and a comparison that would become a TAUTOLOGY if IsPrime were ever re-pointed at this composition \u2014 reading green while testing nothing, because both sides would then be the same decision",
-        "Shared": "",
-        "Citation": "both sides are PrimeField64, so this leg is not independent evidence about the field\u0027s arithmetic; what makes it worth declaring is that the two decisions rest on different theorems. IsPrime is itself anchored classically in prime-field.is-prime-vs-sieve-and-witness-ladder against a sieve of Eratosthenes over 0..20,000 and against Oracles.ExactPrimality on the carrier ladder. If IsPrime is re-pointed, THIS leg goes vacuous and must be deleted \u2014 the classical leg above does not, because its reference is outside Puck.Maths",
         "Absolute": ""
       },
       {
@@ -922,7 +909,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "PrimeField64.IsPrime across eight sampled bands straddling the widening seam, the 2^62 field ceiling and the top of the carrier, plus a dense 4,000-value run at the very top where every reduction rides the wrapping-quotient path, and the carrier's largest prime located by the subject under an explicit 800-step budget",
-        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192, then TWENTY strong-probable-prime rounds evaluated entirely in BigInteger against a different base set from the subject's seven machineword Montgomery witnesses. ENVELOPE: above the trial-division band the criterion is shared and the arithmetic, the base set and the loop are not",
+        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192, then TWENTY strong-probable-prime rounds evaluated entirely in BigInteger. ENVELOPE: production's wide-word Baillie-PSW decision shares the base-two strong criterion, but its Montgomery arithmetic and Lucas criterion are absent from the oracle.",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

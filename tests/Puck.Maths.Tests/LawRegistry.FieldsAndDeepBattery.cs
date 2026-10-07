@@ -200,9 +200,8 @@ internal static partial class LawRegistry {
         // representation (Montgomery form leaking into an answer), the width and carry edges the 2^62 ceiling imposes,
         // and the refusal contracts. The three probable-prime members were WAIVED until this campaign; the rulings that
         // struck those waivers are in the campaign notes, and their replacement statements are C9 through C12 below.
-        // Nothing here re-points IsPrime at the composition, and every primality statement is measured against
-        // Oracles.ExactPrimality — a BigInteger decision outside Puck.Maths entirely — so no tier of this family
-        // becomes a tautology if IsPrime is ever re-pointed at it.
+        // Wide-word IsPrime forwards to Baillie–PSW. Independent primality evidence therefore comes from
+        // Oracles.ExactPrimality and ordinary sieving, never from comparing the forwarding entry points.
         ClaimCase(
             claim: Subjects.PrimeFieldCreateAndRefusals,
             id: "prime-field.create-and-refusals"

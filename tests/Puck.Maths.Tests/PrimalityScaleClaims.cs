@@ -1105,7 +1105,7 @@ internal static class PrimalityScaleClaims {
         }
 
         // Past 10^12 no sieve reaches, so the reference becomes the exact decision: trial division then twenty
-        // BigInteger strong rounds with different bases and arithmetic from the seven machineword witnesses.
+        // BigInteger strong rounds independent of the production Baillie–PSW arithmetic and Lucas criterion.
         int[] bandShifts = [32, 33, 40, 52, 61, 62, 63, 64];
 
         foreach (var shift in bandShifts) {

@@ -722,8 +722,8 @@ internal static partial class Subjects {
             if (PrimeField64.IsPrime(value: ((ulong)value)) != sieve[value]) { return $"IsPrime disagrees with the sieve at {value}"; }
         }
 
-        // The survival counts describe the independent reference's leading prime bases. The shipped machineword set
-        // uses different seven witnesses, so these rows pin composite rejection rather than its individual bases.
+        // The survival counts describe the independent reference's leading prime bases. The shipped wide-word
+        // decision uses Baillie–PSW, so these rows pin composite rejection rather than its individual witnesses.
         foreach (var (value, bases) in PrimeFieldWitnessPseudoprimes) {
             var survived = 0;
 
@@ -738,7 +738,7 @@ internal static partial class Subjects {
 
             if (survived != bases) { return $"{value} survives {survived} leading prime bases, not the tabulated {bases}"; }
             if (Oracles.ExactPrimality(value: value)) { return $"the oracle called the tabulated pseudoprime {value} prime"; }
-            if (PrimeField64.IsPrime(value: value)) { return $"IsPrime accepted the strong pseudoprime {value}, which survives {bases} leading bases; the witness set is short"; }
+            if (PrimeField64.IsPrime(value: value)) { return $"IsPrime accepted the strong pseudoprime {value}, which survives {bases} leading bases"; }
         }
 
         foreach (var value in PrimeFieldPrimalityLadder) {
@@ -924,7 +924,6 @@ internal static partial class Subjects {
 
             if (accepted != (half && lucas)) { return $"IsBaillieProbablePrime({value}) is not the conjunction of its two halves (base-two {half}, Lucas {lucas})"; }
             if (accepted != Oracles.ExactPrimality(value: value)) { return $"Baillie-PSW and the exact BigInteger decision disagree at {value}; below 2^64 that is either a defect or the first known counterexample"; }
-            if (accepted != PrimeField64.IsPrime(value: value)) { return $"Baillie-PSW and the machineword decision disagree at {value}"; }
         }
 
         return null;

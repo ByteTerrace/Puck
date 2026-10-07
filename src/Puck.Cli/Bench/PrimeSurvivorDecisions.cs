@@ -5,7 +5,7 @@ using Puck.Maths;
 
 namespace Puck.Cli.Bench;
 
-// A shared candidate stream and checksum isolate the cost of the existing decision implementations.
+// A shared candidate stream and checksum isolate production Baillie–PSW and the historical Miller–Rabin control.
 // Candidate construction, bounded trial division, and independent result checks stay outside timing.
 [MemoryDiagnoser]
 public class PrimeSurvivorDecisions {
@@ -48,7 +48,7 @@ public class PrimeSurvivorDecisions {
             var expected = PrimeExplorationBenchmarkReference.IsPrimeCandidate(value: value);
 
             if ((Workload == "Primes") && !expected) { continue; }
-            if ((PrimeExploration.IsPrimeCandidate(candidate: candidate) != expected) ||
+            if ((PrimeMillerRabinBaseline.IsPrimeCandidate(value: value) != expected) ||
                 (PrimeField64.IsBaillieProbablePrime(value: value) != expected)) {
                 throw new InvalidOperationException(message: $"Primality alternatives disagree at {value}.");
             }
@@ -70,7 +70,7 @@ public class PrimeSurvivorDecisions {
 
     private readonly struct Montgomery : PrimeBenchmarkLoops.IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool IsPrime(CandidateAddress candidate) => PrimeExploration.IsPrimeCandidate(candidate: candidate);
+        public static bool IsPrime(CandidateAddress candidate) => PrimeMillerRabinBaseline.IsPrimeCandidate(value: candidate.Value);
     }
     private readonly struct Baillie : PrimeBenchmarkLoops.IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -145,7 +145,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "Full-ulong machineword decision, candidate entry point, and field entry point",
-        "Against": "Oracles.PrimeSieve decides every value through 100000 by integer-index crossing-out; Oracles.ExactPrimality supplies trial division through 8191 and twenty BigInteger rounds with a different witness set and arithmetic. ENVELOPE: the high values share the strong-probable-prime criterion, but no implementation, modular substrate, or reference data with the seven machineword bases. The boundary ladder contains both carrier extremes, a known factored near-top square, 341550071728321, 3825123056546413051, and witness-divisor primes 73 and 193.",
+        "Against": "Oracles.PrimeSieve decides every value through 100000 by integer-index crossing-out; Oracles.ExactPrimality supplies trial division through 8191 and twenty BigInteger rounds with a different witness set and arithmetic. ENVELOPE: the high values share a base-two strong-probable-prime criterion, but no implementation, modular substrate, or reference data with the production Baillie–PSW composition. The boundary ladder contains both carrier extremes, a known factored near-top square, 341550071728321, 3825123056546413051, and witness-divisor primes 73 and 193.",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -237,7 +237,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "Enumeration and count with periodic filtering both enabled and disabled against the independent prime list for all marking strategies, layouts and modes; segment sizes 1, 2, 31 and 32768 include population-count word tails; inclusive partial endpoints, prime squares, empty intervals and tiny upper-carrier windows",
-        "Against": "Oracles.PrimeSieve supplies ordinary integer-index crossing-out through 100000 (through 10000 for tiny segments); Oracles.ExactPrimality independently decides high windows. ENVELOPE: only bounded presieving/automatic modes are tested at ulong.MaxValue; complete Eratosthenes beyond uint is tested around 65537 squared, not at the multi-hundred-megabyte maximum base table.",
+        "Against": "Oracles.PrimeSieve supplies ordinary integer-index crossing-out through 100000 (through 10000 for tiny segments); Oracles.ExactPrimality independently decides high windows. ENVELOPE: this case tests bounded presieving/automatic modes at ulong.MaxValue and complete Eratosthenes around 65537 squared; the separate wide-sieve cases cover carried upper-prime buckets and complete sieving at the final ulong window.",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

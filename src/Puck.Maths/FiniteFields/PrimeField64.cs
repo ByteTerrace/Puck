@@ -128,8 +128,8 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>
     /// <remarks>
-    /// Primality uses the shared exact word decision: the uint kernel for smaller values, and Sinclair's seven
-    /// strong-probable-prime witnesses for larger values. Their complete domain is every value below 2⁶⁴, so this
+    /// Primality uses the shared exact word decision: the uint kernel for smaller values, and Baillie–PSW with
+    /// Selfridge Method A for larger values. The verified domain is every value below 2⁶⁴, so this
     /// field's 2⁶² modulus ceiling is covered. Constructing a field costs only the primality test.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is at or above <see cref="MaximumModulus"/>.</exception>
@@ -174,30 +174,27 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             exponent: (Modulus - 2UL)
         );
     }
-    /// <summary>Returns a value indicating whether <paramref name="value"/> passes the Baillie–Pomerance–Selfridge–Wagstaff probable-prime test.</summary>
+    /// <summary>Decides primality over <see cref="ulong"/> with the Baillie–Pomerance–Selfridge–Wagstaff test.</summary>
     /// <param name="value">The value to test.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> passes both rounds; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// <para>
     /// One base-two round of <see cref="IsStrongProbablePrime(ulong, ulong)"/> composed with
-    /// <see cref="IsStrongLucasProbablePrime(ulong)"/>. Both halves are PROBABLE-prime tests, and so is the composition:
-    /// passing is not a proof of primality at any size. What the composition buys is that the two halves fail on
-    /// unrelated composites — one reads the order of a residue in the multiplicative group, the other a recurrence in
-    /// the quadratic extension the value's own Jacobi symbol selects, and the parameter search deliberately picks the
-    /// extension in which the value would be inert if it were prime — so a composite would have to be exceptional in two
-    /// unrelated ways at once. No such composite is known at any size. The cheaper half runs first: it costs one
-    /// exponentiation and rejects all but a vanishing fraction of composites, so the ladder is reached rarely.
+    /// <see cref="IsStrongLucasProbablePrime(ulong)"/>. Each half alone admits composites. Their composition is exact
+    /// throughout this finite carrier, on the published exhaustive-computation basis below; this does not assert
+    /// exactness over arbitrary-width integers. The base-two round runs first, so most composites avoid the Lucas ladder.
     /// </para>
     /// <para>
-    /// Below <c>2^64</c> the test is not merely unrefuted but verified counterexample-free, and that region is exactly
-    /// <see cref="ulong"/>, so nothing here is extrapolated: the complete set of base-two Fermat pseudoprimes below
-    /// <c>2^64</c> was enumerated exhaustively and independently by Feitsma and by Galway — the strong ones are a
-    /// derived subset — and no member of that subset is simultaneously a strong Lucas pseudoprime to these parameters. That guarantee rests on a third-party exhaustive
-    /// computation, as does Sinclair's complete seven-witness set used by the exact word decision.
+    /// Baillie, Fiori and Wagstaff, <see href="https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf">Strengthening the
+    /// Baillie–PSW primality test</see>, section 3, reports that none of the 118,968,378 base-two Fermat pseudoprimes
+    /// below <c>2^64</c> is a Lucas pseudoprime under Method A*. Strong pseudoprimes are subsets of those populations.
+    /// Appendix A, Theorems 3 and 4, proves Method A and A* equivalent for values coprime to ten; a composite multiple
+    /// of five is rejected by Method A's first discriminant, and even composites are rejected before either round.
+    /// This implementation uses Method A's <c>D = 5, -7, 9, ...</c>, <c>P = 1</c>, <c>Q = (1 - D) / 4</c>.
     /// </para>
     /// <para>
-    /// <see cref="IsPrime(ulong)"/> remains the exact decision and the oracle this composition is measured against.
-    /// Whether to re-point it here is a separate decision and has not been taken.
+    /// <see cref="IsPrime(ulong)"/> dispatches here above the uint range. Tests use a separate BigInteger witness
+    /// oracle and ordinary sieving; that forwarding entry point is not an independent oracle for this composition.
     /// </para>
     /// </remarks>
     public static bool IsBaillieProbablePrime(ulong value) =>
@@ -210,8 +207,8 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// Delegates to the same exact word decision as <see cref="PrimeExploration.IsPrime(ulong)"/>.
-    /// The uint kernel handles small words; larger words pass wheel rejection and the seven complete witnesses.
-    /// Every witness chain runs in exact Montgomery arithmetic and shares the candidate's ring.
+    /// The uint kernel handles small words; larger words pass wheel rejection and
+    /// <see cref="IsBaillieProbablePrime(ulong)"/>. Both tests' multiplication chains use exact Montgomery arithmetic.
     /// </remarks>
     public static bool IsPrime(ulong value) => PrimeKernels.IsPrimeWord(value: value);
     /// <summary>Returns a value indicating whether <paramref name="value"/> passes the strong Lucas probable-prime test with Selfridge's Method A parameters.</summary>
@@ -400,8 +397,8 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// A PROBABLE-prime test: a failed round proves compositeness, a passed one proves nothing. Writing
     /// <c>value - 1 = d * 2^s</c> with <c>d</c> odd, the round accepts when <c>witness^d</c> is one or when
     /// <c>witness^(d * 2^r)</c> is minus one for some <c>r</c> below <c>s</c> — the two ways a prime modulus allows the
-    /// square roots of one. This is the round the exact word decision repeats over its seven-base witness set and
-    /// the first half of <see cref="IsBaillieProbablePrime(ulong)"/>, exposed so that either composition's halves can be
+    /// square roots of one. Base two supplies the first half of <see cref="IsBaillieProbablePrime(ulong)"/>,
+    /// exposed so that the composition's halves can be
     /// addressed on their own. The squaring chain runs in one <see cref="ScaledResidueRing64"/>.
     /// </remarks>
     public static bool IsStrongProbablePrime(ulong value, ulong witness) {

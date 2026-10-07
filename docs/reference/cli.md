@@ -2513,7 +2513,7 @@ pristine-input forward/inverse latency, and explicit plan-construction cost:
 | Curvature splines | `CurvatureSplineKernels` | Compiling a spline and evaluating it. |
 | Lattices and noise | `LatticeKernels`, `LayerSequenceQueries` | Field noise (one sample and four octaves), lattice value noise, hex distance, the modular cusp and a sieve window; layer lookup and location in a layer sequence. |
 | Finite fields | `ReedSolomonKernels`, `PrimeFieldBatchInverse` | Reed–Solomon generator construction and syndromes; batch inversion against one inverse at a time. |
-| Prime exploration | `PrimeCandidateScan`, `PrimeChannelMasks`, `PrimePrimality`, `PrimeSieveSegments`, `PrimeSurvivorDecisions`, `PrimeFilterDecisions`, `NthPrimeRequests`, `RandomPrimeRequests` | Shared traversal and checksum/buffer sinks for numeric/algebraic scans and grouped/mixed mask actions; matched Montgomery/UInt128 witness schedules with trial budgets; count and callback operations across sieve strategies/layouts; primality tests and reciprocal-filter depths on identical high streams; complete Nth-prime and uniform random-prime requests. |
+| Prime exploration | `PrimeCandidateScan`, `PrimeChannelMasks`, `PrimePrimality`, `PrimeSieveSegments`, `PrimeSurvivorDecisions`, `PrimeFilterDecisions`, `NthPrimeRequests`, `NthPrime64Requests`, `RandomPrimeRequests` | Shared traversal and checksum/buffer sinks for numeric/algebraic scans and grouped/mixed mask actions; historical Miller–Rabin arithmetic controls and production Baillie–PSW; count and callback operations across sieve strategies/layouts; primality tests and reciprocal-filter depths on identical high streams; complete uint/ulong Nth-prime and uniform random-prime requests. |
 | Signed-distance culling | `SdfFieldCull` | One distance query over one near sphere and 4000 far instances of eight spheres each, where each far instance should cost one bound test. |
 | State kernels | `StateArithmeticKernels`, `StateExpressionKernels`, `StateBulkKernels` | Binary, unary and bit-field expression operations; a compiled expression program across token counts, operand reads and dependency shapes; block clear, copy, scan and sort. |
 | Vector ranking | `VectorNearest` | One `nearest` firing through the effect host over a 256-key, 256-dimension table into a five-match ranking. Its tests hold the firing to zero allocation and one scoring per key; this is where its latency is read. |
@@ -2588,7 +2588,10 @@ unsigned-64-bit interval (defaults zero and 100,000,000). `--mode` selects
 distinct `Automatic`, `Eratosthenes`, or `Presieve` modes to compare in the
 same rounds; the default is `Eratosthenes`. Full sieving includes base-prime
 generation on every call, so a high, narrow interval can spend most of its
-time preparing bases. `Automatic` switches to bounded presieving above `uint.MaxValue`.
+time preparing bases. `Automatic` resolves from interval width, upper-bound square
+root and a conservative 128 MiB active upper-base workspace bound; the policy and
+additional workspace are described in [prime exploration](prime-exploration.md#enumeration-and-storage).
+All strategies stream upper bases through the shared large-prime bucket scheduler.
 `--strategies` selects distinct managed marking strategies, defaulting to all;
 `--layouts` selects distinct layouts, defaulting to both. `--patterns` selects
 `Both` (default), `Enabled`, or `Disabled` periodic patterns. `--batch` repeats
@@ -2639,13 +2642,23 @@ and reported L1 determine the bitmap for the billion-integer band under native
 defaults. Equal bitmap sizes do not imply equal additional workspace.
 See [prime exploration](prime-exploration.md) for API semantics and limitations.
 
-The `PrimeSurvivorDecisions` kernel benchmark compares the existing Montgomery
+The `PrimeSurvivorDecisions` kernel benchmark compares the historical Montgomery
 seven-witness decision, Baillie–PSW, and the ordinary `UInt128` remainder
 reference on identical candidates around 10¹², 10¹⁸ and the top of `ulong`.
 Its `Presieved` workload contains consecutive candidates with no factor at
 most 65,535; `Primes` retains only primes from that stream. Setup checks each
 answer and records candidate identities. These kernel times exclude sieving
-and do not measure an integrated Baillie–PSW enumeration policy.
+and do not measure complete enumeration. Production uses Baillie–PSW for wide
+survivors; the benchmark keeps the seven-witness control explicit so it cannot
+silently become another call to the same decision.
+
+`NthPrime64Requests` exercises complete ulong rank selection at the uint seam,
+the billionth and ten-billionth primes, and the final representable prime.
+The last case benefits from a published rank checkpoint; it does not predict
+the cost of an arbitrary large rank. `NthPrimeRequests` retains the uint cases,
+and `RandomPrimeRequests` measures complete uniform selections on three fixed
+seeds per range. See [selecting one prime](prime-exploration.md#selecting-one-prime)
+for cancellation and practical limits.
 
 ### `puck bench state-evidence`
 

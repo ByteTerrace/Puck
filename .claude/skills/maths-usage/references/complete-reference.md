@@ -161,9 +161,13 @@ nothing. `PrimeField64` is `F_p` for an odd prime below 2⁶², with
 Field products are **exact** — associative, commutative, distributive, with an
 exact inverse for every non-zero element — so unlike a rounded fixed-point
 product they *are* safe to reassociate. `PrimeField64.IsPrime` is this library's
-exact decision for every `ulong`; `IsStrongProbablePrime`,
-`IsStrongLucasProbablePrime` and `IsBaillieProbablePrime` are **probable**-prime
-tests and are contracted as such.
+exact decision for every `ulong`: the uint kernel for narrow inputs and
+`IsBaillieProbablePrime` for wider inputs. Baillie–PSW with Selfridge Method A
+is exact on this finite carrier by published exhaustive computation; the
+[FiniteFields reference](../../../../src/Puck.Maths/FiniteFields/README.md#primality-on-ulong)
+owns the source and algorithm match. `IsStrongProbablePrime` and
+`IsStrongLucasProbablePrime` alone admit pseudoprimes. Never use the forwarding
+`IsPrime` entry point as an independent oracle for the composition.
 
 ### The presented-algebra tier (`Oracle/`)
 

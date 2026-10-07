@@ -54,7 +54,7 @@ public class PrimeFilterDecisions {
 
             if (survives) { ++survivors; }
             if (expected) { ++primeCount; }
-            if (((survives && PrimeExploration.IsPrimeCandidate(candidate: candidate)) != expected) ||
+            if (((survives && PrimeMillerRabinBaseline.IsPrimeCandidate(value: value)) != expected) ||
                 ((survives && PrimeField64.IsBaillieProbablePrime(value: value)) != expected)) {
                 throw new InvalidOperationException(message: $"Filter/decision disagrees at {value}.");
             }
@@ -89,7 +89,7 @@ public class PrimeFilterDecisions {
 
     private readonly struct Miller : PrimeBenchmarkLoops.IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool IsPrime(CandidateAddress candidate) => PrimeExploration.IsPrimeCandidate(candidate: candidate);
+        public static bool IsPrime(CandidateAddress candidate) => PrimeMillerRabinBaseline.IsPrimeCandidate(value: candidate.Value);
     }
     private readonly struct Baillie : PrimeBenchmarkLoops.IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -1,0 +1,20 @@
+[
+  {
+    "Id": "prime-exploration.automatic-policy-boundaries",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "ResolveMode" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "ResolveSegmentBytes" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation, hand-calculated width crossover boundaries at squares 10^12 and 10^14, complete proof boundary 65537 squared, conservative memory refusal for high endpoints including the full ulong interval, empty intervals, fixed bitmap sizes and named invalid options. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.presieve-proof-boundary",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Count and ordered enumeration cross 65537 squared in tiny segments with both layouts and pattern choices; the square must be rejected while proven smaller survivors remain.", "Against": "Oracles.ExactPrimality uses integer trial division and BigInteger witnesses without the sieve, wheel coordinates or Lucas recurrence. ENVELOPE: correctness at the proof boundary is checked; the saved code inspection establishes omission of unnecessary decisions below it.", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.constellation-empty-validation",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeConstellation", "Name": "Enumerate" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "A reversed constellation interval produces no callbacks; invalid options, including a segment beyond Array.MaxLength, are rejected by parameter name even for an empty interval and a pattern whose ordinary wheel mask is zero.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  }
+]

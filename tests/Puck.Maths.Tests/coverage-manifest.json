@@ -17271,6 +17271,7 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.constellation-empty-validation",
         "prime-exploration.constellations-vs-naive"
       ],
       "Id": "Puck.Maths.PrimeConstellation.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode)",
@@ -17285,20 +17286,27 @@
     },
     {
       "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
+        "deep.prime-exploration-wide-native-counts",
         "prime-exploration.enumeration-refusals",
         "prime-exploration.enumeration-vs-sieve",
         "prime-exploration.packets-vs-integer-sieve",
-        "prime-exploration.patterns-vs-integer-sieve"
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.wide-sieve-vs-integer-windows"
       ],
       "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
       "State": "covered"
     },
     {
       "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
         "prime-exploration.enumeration-refusals",
         "prime-exploration.enumeration-vs-sieve",
         "prime-exploration.packets-vs-integer-sieve",
-        "prime-exploration.patterns-vs-integer-sieve"
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.wide-sieve-vs-integer-windows"
       ],
       "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
       "State": "covered"
@@ -17307,7 +17315,8 @@
       "CoveredBy": [
         "deep.prime-exploration-primality-swept",
         "prime-exploration.primality-swept-vs-reference",
-        "prime-exploration.primality-vs-independent"
+        "prime-exploration.primality-vs-independent",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExploration.IsPrime(System.UInt64)",
       "State": "covered"
@@ -17316,9 +17325,24 @@
       "CoveredBy": [
         "deep.prime-exploration-primality-swept",
         "prime-exploration.primality-swept-vs-reference",
-        "prime-exploration.primality-vs-independent"
+        "prime-exploration.primality-vs-independent",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExploration.IsPrimeCandidate(Puck.Maths.CandidateAddress)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.ResolveMode(System.UInt64,System.UInt64,Puck.Maths.PrimeSieveMode)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.ResolveSegmentBytes(System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy)",
       "State": "covered"
     },
     {
@@ -17348,7 +17372,9 @@
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
         "core.prime-extensions-vs-trial-division",
-        "prime-selection.nth-vs-sieve"
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "prime-selection.nth-vs-sieve",
+        "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt32)",
       "State": "covered"
@@ -17356,9 +17382,34 @@
     {
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
-        "core.prime-extensions-vs-trial-division"
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "prime-selection.nth-vs-sieve",
+        "prime-selection.ulong-nth-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.prime-counting-is-dense-against-a-sieve",
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "prime-selection.ulong-count-vs-independent",
+        "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.prime-counting-is-dense-against-a-sieve",
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "prime-selection.ulong-count-vs-independent",
+        "prime-selection.ulong-nth-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17400,7 +17451,8 @@
         "deep.prime-field-baillie-and-populations",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
-        "prime-field.pseudoprime-populations"
+        "prime-field.pseudoprime-populations",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeField64.IsBaillieProbablePrime(System.UInt64)",
       "State": "covered"
@@ -17412,12 +17464,12 @@
         "deep.prime-field-is-prime-exact",
         "prime-exploration.primality-swept-vs-reference",
         "prime-exploration.primality-vs-independent",
-        "prime-field.baillie-composition",
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
         "prime-field.is-prime-vs-witness-oracle",
         "prime-field.montgomery-chains-exhaustive",
-        "prime-field.pseudoprime-populations"
+        "prime-field.pseudoprime-populations",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeField64.IsPrime(System.UInt64)",
       "State": "covered"

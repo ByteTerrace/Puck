@@ -1,0 +1,27 @@
+[
+  {
+    "Id": "prime-selection.ulong-count-vs-independent",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "The ulong prime-count overload on all bounds through 2048, powers of ten through one trillion, and both sides of six published checkpoints across the ulong range", "Against": "Oracles.PrimeSieve independently crosses out integer multiples. Published powers-of-ten counts exercise the widened combinatorial recurrence without a checkpoint lookup. Checkpoint neighborhoods are counted by the independent BigInteger primality oracle, which shares no quotient recurrence or sieve marker.", "Shared": "", "Citation": "https://t5k.org/howmany.html; https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset. ENVELOPE: published checkpoint constants are trusted external computation results, not re-established by this law; long walks between distant checkpoints are not swept.", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "prime-selection.ulong-nth-vs-independent",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "NthPrime" }, { "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "The ulong rank overload across the uint result boundary, the billionth and ten-billionth primes, the last representable prime, and independently located neighbors of six power-of-two checkpoints", "Against": "Published prime-rank values and native primesieve fixtures; neighborhood values are enumerated by Oracles.ExactPrimality using BigInteger witnesses. Exact checkpoint ranks come from the external prime-count table rather than a production counting call.", "Shared": "", "Citation": "https://functions.wolfram.com/13.03.03.0054.01; https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset; native primesieve independently checks the larger named fixtures outside the law. ENVELOPE: checkpoint constants are external evidence, and arbitrary distant upper-domain ranks are not timed or swept.", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "The ulong overload retains zero-based ranks, returns zero beyond the finite prime-count ceiling, and both rank and counting overloads honor an already-canceled token before doing work.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "deep.prime-selection-ulong-checkpoint-chunks",
+    "Tier": "Deep",
+    "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "NthPrime" }, { "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "MIRROR of prime-selection.ulong-count-vs-independent and prime-selection.ulong-nth-vs-independent at strictly stronger operands: intervals of 1048832 integers both above and below 2^48 cross the bounded fallback's chunk boundary; the root-cap square and its successor exercise both sides of the counting storage limit", "Against": "Native primesieve independently counts 31645 upper primes and 31426 lower primes, and prints the last upper prime 281474977759477 and first lower prime 281474975661833. Their absolute ranks add or subtract these independently counted intervals from published pi(2^48). Native sieving also counts 274879 primes between the root-cap square and 2^44, fixing both boundary counts at 597116106853.", "Shared": "", "Citation": "https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset, pi(2^48)=8731188863470 and pi(2^44)=597116381732; native primesieve fixture commands and their outputs are retained with the change's verification evidence. ENVELOPE: checkpoints are externally computed exact constants; native full sieving shares no Puck marker, counting recurrence or primality code.", "Absolute": "" }
+    ]
+  }
+]

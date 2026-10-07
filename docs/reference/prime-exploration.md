@@ -12,17 +12,37 @@ Choose the operation from the requested answer, before choosing a marking strate
 
 | Request | Preferred API | Work performed |
 |---|---|---|
-| The Nth prime | `PrimeExtensions.NthPrime(uint)` | A small-rank lookup or an exact prime count followed by a local search. The index is zero-based: `999U.NthPrime()` returns the thousandth prime, 7919. |
+| The Nth prime | `PrimeExtensions.NthPrime(uint)` or `NthPrime(ulong, CancellationToken)` | A small-rank lookup or an exact prime count followed by a local search. The index is zero-based: `999U.NthPrime()` returns the thousandth prime, 7919. |
+| The number of primes through a bound | `PrimeExtensions.PrimeCountingFunction(uint)` or `PrimeCountingFunction(ulong, CancellationToken)` | Exact combinatorial counting within the working bound; larger bounds use published checkpoints and count the intervening interval. |
 | A uniformly random prime in an interval | `PrimeExploration.TryRandomPrime` | Samples a prime table for small intervals, or samples wheel candidates and rejects composites. |
 | Whether one integer is prime | `PrimeExploration.IsPrime` | An exact decision without constructing a sieve. |
 | Every prime, or their count | `PrimeExploration.Enumerate` or `Count` | A segmented sieve amortizes initialization across many answers. |
 
-`NthPrime` returns uint primes, with indices through 203280220; larger indices
-return zero. The first seventeen entries use existing small-prime constants;
+The `uint` overload returns uint primes, with indices through 203280220; larger
+indices return zero. The first seventeen entries use existing small-prime constants;
 entries through the 6542nd prime reuse the base-prime table through 65535.
 The table is generated once on first use and contains about 26 KiB of prime
-payload. Larger ranks retain the counting-based search. This is not an
-arbitrary-ulong rank selector.
+payload. Larger ranks retain the counting-based search.
+
+The `ulong` overload supports every representable prime, with valid zero-based
+indices below 425656284035217743. Higher indices return zero. For example,
+`203280221UL.NthPrime()` returns 4294967311, the first prime above the uint
+range. Ranks with uint results use the narrow implementation. Larger practical
+ranks align an asymptotic estimate with exact combinatorial counting, then
+sieve the local difference. The estimate chooses where to start; it never
+decides the returned prime or its rank.
+
+`PrimeCountingFunction(ulong)` widens the quotient-counting recurrence for
+bounds whose square root is at most 4194303, renting at most approximately
+52 MiB of array payload. Larger bounds use independently published counts
+at powers of two and bounded-presieve windows between the nearest checkpoint
+and the requested bound. Rank selection uses the same checkpoints when its
+estimate lies outside the combinatorial working range. Short checkpoint
+neighborhoods, including the final ulong ranks, are practical; a value or rank
+far from every checkpoint may take impractical time. Full-domain correctness
+does not imply uniform performance across that domain. Both ulong overloads
+accept a `CancellationToken`, checked before starting and during counting or
+window traversal. Cancellation does not interrupt every individual sieve mark.
 
 `TryRandomPrime(low, high, ref generator, out prime, maxAttempts: 256)` accepts
 an inclusive ulong interval and a caller-owned `IDrawGenerator` value type.
@@ -36,7 +56,8 @@ the answer by its preceding gap.
 The budget counts raw 64-bit draws, each assembled from two 32-bit draws,
 including draws rejected by unbiased range reduction. A failed attempt leaves
 `prime` zero and does not certify that the interval has no primes. Empty
-candidate sets and singleton small-table selections consume no draws. Reversed
+candidate sets consume no draws. Any singleton candidate is decided once
+without consuming draws, including a composite singleton. Reversed
 intervals and nonpositive budgets throw. Generator state is passed by reference,
 so identical starting states and arguments reproduce both the answer and final
 state. The caller supplies randomness; this API adds no entropy.
@@ -117,7 +138,7 @@ active states above `min(segment length, 32768) / 5` within each residue group,
 using a pooled temporary buffer. This adds counting, scattering and copying;
 it does not implement a scheduler that transfers each processed state directly
 into its next phase bucket. Only base primes through 65,535 use packets;
-upper bases keep the eight-stream marker. Each carried state stores a prime quotient,
+upper bases use the shared large-prime bucket scheduler. Each carried state stores a prime quotient,
 relative byte cursor, multiplier position, and multiplicative channel in eight
 payload bytes. State buffers are pooled per call and returned on callback failure.
 Primes activate when their squares enter the marking region; dormant cursors
@@ -137,7 +158,8 @@ and phase list; two buffers swap after the segment. There is no counting-sort
 or copy-back pass. A phase list reserves its residue group's full medium-prime
 capacity, so each buffer can reserve eight times the medium-state payload;
 only occupied entries are scanned. Both buffers return to their pools on
-normal completion and callback failure. Upper bases retain eight-stream marking.
+normal completion and callback failure. Upper bases use the separate scheduler
+described below.
 The bitmap starts at a 64-byte boundary and stays pinned throughout the call;
 up to 63 pooled padding bytes are additional workspace. Requests too large to
 add that padding retain the unaligned path. Packet stores use direct pointers
@@ -184,18 +206,55 @@ Pattern construction is a first-use cost; warm surveys exclude it.
 
 `Count` shares that marking implementation and all endpoint rules. Complete
 sieving counts surviving bits with four-word population-count batches, remaining words and a byte tail,
-independently of bit layout. Presieving still tests every survivor exactly.
+independently of bit layout. Presieving omits individual primality decisions
+below `65537²`: a composite below that boundary has a prime factor less than
+65537, and the shared base-prime table contains every such factor. At or above
+the boundary, each surviving candidate is decided exactly.
 
-`Automatic` completely sieves intervals ending within `uint.MaxValue`. Above
-that bound it presieves with the shared primes through 65,535 and tests every
-survivor exactly. `Presieve` requests that bounded policy explicitly.
-`Eratosthenes` generates and retains every required base prime through
-`floor(sqrt(high))`, using the existing odd-window marker. Base primes fit in
-`uint`; upper bases occupy chunked arrays. For the maximum endpoint, the odd
-base-prime payload alone is about 775.45 MiB. Narrow intervals near the maximum
-therefore normally use `Automatic` or `Presieve`.
-The automatic endpoint threshold is a bounded-cost policy, not an adaptive
-prediction of the fastest algorithm for every interval width.
+`ResolveMode` exposes the automatic policy. Intervals ending below `65537²`
+use complete sieving. Above that bound, `Automatic` chooses complete sieving
+when the inclusive width is at least `ceil(floor(sqrt(high)) / 64)` and its
+conservative active upper-base workspace bound fits 128 MiB. The bound reserves
+48 bytes per possible base prime coprime to thirty, covering live, detached and
+recycled state pages, plus 3 MiB of page slack and upper-base metadata.
+Actual primes are a subset of those
+candidates. Shared tables, the requested bitmap, small-prime states and retained
+pool capacity are additional memory. Other automatic intervals use `Presieve`, which explicitly
+requests the shared bases through 65535 followed by exact survivor decisions.
+Both policies return identical primes; the crossover is a cost heuristic.
+
+`Eratosthenes` streams base primes through `floor(sqrt(high))`. An internal
+`UpperPrimeStream` reuses the uint sieve's periodic filter and bucket marking
+with a 32 KiB bitmap and a 4096-entry buffer of packed quotient/residue coordinates.
+The marker reuses those coordinates without decomposing each prime again.
+It retains no complete upper-base table. The upper primes through 98,304 reuse
+the existing medium-prime packet marker; the larger primes use sparse buckets.
+This cutoff is three times the 32 KiB coarse bucket, matching the reference's
+medium/large split at that bitmap size. `WideSieve` initializes a large prime when its square is at
+or below the current region's upper bound and its first wheel multiple falls
+inside the interval. Each state occupies eight payload bytes: the prime
+quotient, wheel position and offset in a 32 KiB bucket. A sliding bucket array
+schedules the next affected region, so upper primes are not scanned again in
+every segment. The derived 210-wheel omits multiples of seven already removed
+by the small-prime marker. Each bucket holds aligned 8 KiB native pages with
+1022 states and a 16-byte header on a 64-bit process. Direct write cursors avoid
+per-state managed-array access. Completed pages are recycled within the call,
+with no payload growth or copying. A full bucket
+processes one mark per state and drains states that return to the same bucket;
+partial caller segments retain guarded marking and defer their remaining states.
+The full-bucket loop therefore avoids a variable-length marking loop for each prime.
+The bucket array covers the largest possible advance, so later events beyond
+the interval remain pending until disposal without an endpoint check per mark.
+Page-list traversal stays outside the hot event loop, and allocation paths finish
+their own state writes so the ordinary loop need not spill values around them.
+This follows the established scheduling approach in
+[primesieve's large-prime marker](https://github.com/kimwalisch/primesieve/blob/v12.15/src/EratBig.cpp);
+the wheel transitions are generated from the local arithmetic tables.
+Native slabs have additional capacity and bookkeeping and are freed when the call ends;
+the eight-byte figure is occupied payload, not total allocation. Explicit full
+sieving still has endpoint-dependent generation cost and can require substantial
+state storage on wide high intervals. Automatic mode limits admission using
+the bound above.
 
 ```csharp
 PrimeExploration.Enumerate(0, 1_000_000, prime => Console.WriteLine(prime));
@@ -204,8 +263,8 @@ PrimeExploration.Enumerate(ulong.MaxValue - 10_000, ulong.MaxValue,
     prime => Console.WriteLine(prime), mode: PrimeSieveMode.Presieve);
 ```
 
-Compressed base-prime gaps, persistent caches, and demand-driven upper-base
-generation are possible experiments. They are not implemented storage policies.
+Compressed base-prime gaps and persistent caches are possible experiments.
+They are not implemented storage policies.
 Full-domain enumeration remains an enormous workload: a compact address does
 not reduce the number of candidates that must be processed.
 
@@ -213,16 +272,20 @@ not reduce the number of candidates that must be processed.
 
 The ordinary decision dispatches `uint` values to the existing exact
 `PrimeExtensions.IsPrime` kernel. Larger values reject factors 2, 3 and 5,
-then use witnesses `2,325,9375,28178,450775,9780504,1795265022`.
-Their complete unsigned-64-bit range is recorded in the
-[Miller–Rabin computational results](https://miller-rabin.appspot.com/).
-This is a published finite-domain result, not a proof supplied by this library's
-sampled tests. A witness reducing to zero skips only its own round.
+then use Baillie–PSW: a base-two strong round followed by the strong Lucas test
+with Selfridge Method A. Its exactness throughout ulong rests on published
+exhaustive computation and the equivalence of Methods A and A*, as explained
+in the [finite-field reference](../../src/Puck.Maths/FiniteFields/README.md#primality-on-ulong).
+`PrimeField64.IsPrime`, exploration, factorization and random selection share
+this wide-word decision; the random selector adds its small-factor filter first.
 
-`IsPrimeCandidate` skips the wheel filters. The rounds share the existing
-`ScaledResidueRing64`: exact Montgomery multiplication uses wide intermediates
-and avoids division within the squaring chain. The benchmark's ordinary
-`UInt128` remainder implementation provides a separate arithmetic baseline.
+`IsPrimeCandidate` skips the wheel filters and retains the uint fast path.
+Each multiplication chain uses `ScaledResidueRing64`: exact Montgomery products
+use wide intermediates and avoid division inside the chain. Ring initialization
+and other setup still use division. Benchmark-only seven-witness Miller–Rabin
+and ordinary `UInt128` remainder implementations retain the comparison controls.
+Neither a forwarding entry point nor a copied arithmetic control supplies an
+independent oracle; laws use their own sieve and BigInteger implementation.
 The arbitrary-width `BigIntegerFunctions` twelve-base threshold is unchanged.
 
 ## Constellations and statistics
@@ -262,7 +325,7 @@ These two sinks distinguish checksum latency
 from output throughput without subtracting a guessed harness cost.
 
 Primality alternatives share candidate traversal, trial screening, and checksum.
-Both use the same witnesses, exits, and least-significant-bit-first power
+The two Miller–Rabin controls use the same witnesses, exits and least-significant-bit-first power
 schedule, including omission of the final unused square. The division reference
 accepts already-reduced witnesses rather than repeating a general-purpose API's
 validation and reductions. Setup checks its powers against `BigInteger.ModPow`.
@@ -275,7 +338,7 @@ step, permutation, and sink operations inline, and that bounds checks do not
 distort a comparison. `PrimeSieveSegments` measures count-only and callback
 enumeration separately; its callback is allocated once during setup.
 
-`PrimeSurvivorDecisions` compares the current Montgomery seven-witness test,
+`PrimeSurvivorDecisions` compares the historical Montgomery seven-witness test,
 Baillie–PSW, and the `UInt128` remainder reference with the same candidate
 traversal and checksum. Bands begin near 10¹², 10¹⁸ and the top of `ulong`.
 The presieved stream excludes factors through 65,535; the prime-only stream
@@ -283,8 +346,11 @@ isolates the cost of accepting primes. Setup checks every decision outside
 timing and reports the candidate count, prime count and stream identity.
 Sieving and candidate construction are excluded from these kernel times.
 
-`NthPrimeRequests` measures single rank lookups with independently checked
-answers. `RandomPrimeRequests` compares complete single-prime requests against
+`NthPrimeRequests` measures uint rank lookups; `NthPrime64Requests` adds the
+uint boundary, billionth and ten-billionth primes, and the final ulong rank.
+Setup checks their answers against independent constants. Those selected ranks
+do not establish performance for arbitrary ranks far from a checkpoint.
+`RandomPrimeRequests` compares complete single-prime requests against
 uniform integer rejection with Miller–Rabin or Baillie–PSW. All paths share the
 same generator type, seed, request loop and checksum; static value-type wrappers
 allow specialization without interface dispatch. Samples contain 128 requests,
@@ -322,7 +388,8 @@ measurement; subsequent rounds rotate their starting variant and alternate
 direction. `--batch` repeats each managed call within a sample and divides
 elapsed time and calling-thread allocations by that count; every call checks
 its prime count. This reduces timer quantization for narrow intervals.
-Allocations exclude the harness but do not measure retained pools or peak memory.
+Managed allocation counters exclude the harness, native state slabs, retained
+pools and peak memory. They must not be read as total workspace measurements.
 Actual active segment bytes cannot exceed the number of thirty-integer blocks
 intersecting the candidate interval; a request above that band does not measure a full cache
 working set. JSON includes execution order, runtime settings, executable hashes,

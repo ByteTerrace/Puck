@@ -121,7 +121,7 @@ public class RandomPrimeRequests {
     }
     private readonly struct MillerDecision : IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool IsPrime(ulong value) => PrimeExploration.IsPrime(value: value);
+        public static bool IsPrime(ulong value) => PrimeMillerRabinBaseline.IsPrime(value: value);
     }
     private readonly struct BaillieDecision : IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

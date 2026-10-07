@@ -5,7 +5,8 @@ public static partial class PrimeExploration {
     /// <param name="value">The integer to test.</param>
     /// <returns>Whether <paramref name="value"/> is prime; zero and one are not prime.</returns>
     /// <remarks>The existing exact uint decision handles small words. Larger words pass wheel rejection and
-    /// Sinclair's seven-witness Miller–Rabin test, using exact Montgomery products with UInt128 intermediates.</remarks>
+    /// Baillie–PSW with Selfridge Method A, verified counterexample-free throughout this finite domain.
+    /// See <see cref="PrimeField64.IsBaillieProbablePrime(ulong)"/> for the exhaustive-computation basis.</remarks>
     public static bool IsPrime(ulong value) => PrimeKernels.IsPrimeWord(value: value);
     /// <summary>Decides a validated wheel candidate without repeating divisibility tests for two, three and five.</summary>
     /// <param name="candidate">The validated address; its default value encodes the nonprime integer one.</param>

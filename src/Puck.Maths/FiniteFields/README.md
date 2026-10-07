@@ -399,7 +399,7 @@ answers `0` rather than reaching the exponentiation as a non-square.
 conversions a one-shot would pay cost more than the divide they replace.
 Everything that is a chain rather than a single product—`Pow` and everything
 built on it (`Inverse`, `LegendreCharacter`), `TrySqrt`'s descent, and every
-static primality entry point—runs in the ring instead: one ring per call, each
+static primality entry point—runs in the ring instead: one ring per chain, each
 value encoded as it enters, at most one decode where an ordinary residue has to
 come back out, and no hardware division inside any chain. `Pow` is the clean
 case, one value in and one out; `IsPrime` never decodes at all, because its
@@ -754,26 +754,19 @@ follows.
 ## Primality on `ulong`
 
 `PrimeField64.IsPrime` is the exact decision for every 64-bit unsigned value. It
-runs the existing exact `uint` decision for narrow inputs and strong-probable-prime
-rounds against the seven-base witness set
-`2, 325, 9375, 28178, 450775, 9780504, 1795265022` for larger inputs. A **witness** is a base you test
-the candidate against, and a set of them is **complete** below some bound when
-no composite under that bound survives all of them. This set is complete below
-`2⁶⁴`, as recorded in the [Miller–Rabin computational results](https://miller-rabin.appspot.com/),
-so the decision covers the entire `ulong` domain and this field's `2⁶²` ceiling.
-Factors two, three and five are settled before
-the rounds begin, so the survivors are odd and one `ScaledResidueRing64` carries
-every round's squaring chain: the seven rounds share one ring, the chains
-themselves spend no hardware division, and the only division per witness is the
-remainder that reduces it into the field. The ring is a bijective re-encoding of
-the residues, so comparing a power against the ring's own one and minus one
-decides exactly what comparing the ordinary residues against `1` and `value − 1`
-would. A witness that reduces to zero is skipped.
+runs the existing exact `uint` decision for narrow inputs and Baillie–PSW with
+Selfridge Method A for larger inputs, after rejecting factors two, three and
+five. The latter combines a base-two strong probable-prime round with a strong
+Lucas test. Published exhaustive computations establish that no composite below
+`2⁶⁴` passes both, which covers the entire carrier and this field's `2⁶²` ceiling.
+Each multiplication chain runs in `ScaledResidueRing64`, with no hardware
+division inside the chain. The base-two round and Lucas ladder construct their
+own rings; this is not a claim that the whole decision uses no division.
 
-Three **probable**-prime tests sit beside it, named as such and contracted as
-such. A probable-prime test can prove a value composite, but passing it is not a
-proof of primality; a composite that passes one anyway is called a
-**pseudoprime** for that test.
+The individual halves are also available. A **probable-prime** test can prove a
+value composite, but a composite may still pass it; such a value is a
+**pseudoprime** for that test. The composition's exactness here is a finite-domain
+result and does not extend its contract to arbitrary-width integers.
 
 `IsStrongProbablePrime(value, witness)` is one round. Writing
 `value − 1 = d · 2^s` with `d` odd, it accepts when `witness^d` is one, or when
@@ -831,44 +824,26 @@ strength but in the independence of its failures from a Fermat round's.
   split is in fact indistinguishable there, but the widened split states the
   decomposition rather than resting on that coincidence.
 
-`IsBaillieProbablePrime(value)` is one base-two round of the strong
-probable-prime test composed with the strong Lucas test. Both halves are
-probable-prime tests, and so is the composition: passing is not a proof of
-primality at any size. What the composition buys is that the two halves fail on
-unrelated composites. One reads the order of a residue in the multiplicative
-group; the other reads a recurrence in the quadratic extension that the value's
-own Jacobi symbol selects, and the parameter search deliberately picks the
-extension in which the value would be inert if it were prime—that is, the
-extension in which a prime would stay prime. A composite would therefore have to
-be exceptional in two unrelated ways at once, and no such composite is known at
-any size. The cheaper half runs first: it costs one exponentiation and rejects
-all but a vanishing fraction of composites, so the ladder is reached rarely.
+`IsBaillieProbablePrime(value)` runs the base-two round first, so most composites
+never reach the Lucas ladder. Its name identifies the conventional algorithm;
+its contract over `ulong` is exact. In
+[Strengthening the Baillie–PSW primality test](https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf),
+section 3, Baillie, Fiori and Wagstaff report that none of the 118,968,378
+base-two Fermat pseudoprimes below `2⁶⁴` is a Lucas pseudoprime under Method A*.
+Strong pseudoprimes are subsets of those populations. Appendix A proves that
+Methods A and A* give the same Lucas and strong Lucas results for values coprime
+to ten. Even composites are rejected directly; composite multiples of five meet a
+proper factor at the first discriminant. This establishes the match to the
+implemented Method A, including its parameter choice and acceptance conditions.
+The full-domain guarantee relies on that published computation; the repository
+does not repeat a sweep of all `ulong` values.
 
-Below `2⁶⁴` the composition is not merely unrefuted but verified
-counterexample-free, and that region is exactly `ulong`, so nothing is
-extrapolated. The complete set of base-two Fermat pseudoprimes below `2⁶⁴` was
-enumerated exhaustively and independently by Feitsma and by Galway—the strong
-ones are a derived subset of it—and no member of that subset is simultaneously
-a strong Lucas pseudoprime to these parameters. That guarantee rests on a
-third-party exhaustive computation, as does the published seven-witness
-unsigned-64-bit decision used by `IsPrime`. The arbitrary-width twelve-base
-decision separately rests on Sorenson and Webster's computed twelfth
-strong-pseudoprime threshold `318665857834031151167461`. The verification is for Selfridge
-Method A with the strong Lucas test, which is exactly what this implementation
-runs.
-
-`prime-field.baillie-psw-exhaustive` adds one more comparison, and it is careful
-about what that comparison buys. It runs the composition against
-`PrimeExtensions.IsPrime(uint)`—the exhaustive 32-bit decision—at **every**
-32-bit value and finds perfect agreement. Subject and oracle share the base-two
-round, so what the agreement establishes is that the strong Lucas half rejects
-exactly the base-two strong pseudoprimes below `2³²`. That is a real gate on the
-Lucas half; it is not an independent-witness-set comparison, and it is stated as
-the former.
-
-`IsPrime` remains the exact decision, and it is the oracle this composition is
-measured against. Whether to re-point it at the composition is a separate
-decision, and it has not been taken.
+The law suite compares production with independent ordinary sieving and a
+BigInteger multi-witness decision. `prime-field.baillie-psw-exhaustive` checks
+every `uint` value against its own segmented sieve, plus sampled and contiguous
+bands across `ulong`. Its arithmetic and sieve do not call the production prime
+decision. `IsPrime` forwards to this composition for wide values, so comparing
+the two entry points alone supplies no independent primality evidence.
 
 ---
 

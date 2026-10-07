@@ -14,7 +14,7 @@ namespace Puck.Maths;
 /// <see cref="PrimeExtensions.Factorize(uint, Span{uint})"/> and
 /// <see cref="UnsignedNumberFunctions.EnumeratePrimeFactors{T}(T)"/> both reach <see cref="Factorize(ulong, Span{ulong})"/>,
 /// <see cref="PrimeExtensions.NthPrime(uint)"/> strides <see cref="MarkWindow(ReadOnlySpan{uint}, Span{ulong}, ulong, ulong)"/>.
-/// <see cref="PrimeExploration"/> owns thirty-wheel marking and uses that odd-window marker to generate upper base primes.
+/// <see cref="PrimeExploration"/> owns thirty-wheel marking and streams upper base primes through that optimized sieve.
 /// </para>
 /// <para>
 /// The arbitrary-width counterparts live in <see cref="BigIntegerFunctions"/>. That split is real rather than
@@ -35,13 +35,9 @@ internal static class PrimeKernels {
     /// <remarks>
     /// Sorenson and Webster's computed twelfth strong-pseudoprime threshold is what makes the set complete rather than
     /// merely unrefuted. <see cref="BigIntegerFunctions.IsPrime(BigInteger)"/> uses this arbitrary-width table;
-    /// the machine-word decision uses the smaller <see cref="WordWitnessBases"/> set.
+    /// the machine-word decision uses the finite-domain Baillie–PSW result instead.
     /// </remarks>
     internal static ReadOnlySpan<int> WitnessBases => [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
-    /// <summary>Gets Sinclair's seven strong-probable-prime witnesses, complete below 2⁶⁴.</summary>
-    /// <remarks>The finite-domain computation is recorded at https://miller-rabin.appspot.com/ . A base is reduced
-    /// modulo the candidate; zero skips that round, never the remaining witnesses.</remarks>
-    internal static ReadOnlySpan<ulong> WordWitnessBases => [2UL, 325UL, 9375UL, 28178UL, 450775UL, 9780504UL, 1795265022UL];
 
     /// <summary>Gets the divisibility ceilings paired with <see cref="SmallFactorPrimes"/>: a value is divisible by the paired prime exactly when its inverse-product does not exceed the ceiling, and the product is then the exact quotient.</summary>
     private static ReadOnlySpan<ulong> SmallFactorCeilings => new ulong[16] {
@@ -222,7 +218,8 @@ internal static class PrimeKernels {
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// <see cref="PrimeExtensions.IsPrime(uint)"/> settles the 32-bit range on one strong-probable-prime round plus a
-    /// finite correction table. Above that range, wheel rejection precedes the seven-base decision.
+    /// finite correction table. Above that range, wheel rejection precedes Baillie–PSW, whose exactness over this
+    /// finite domain rests on the exhaustive result cited by <see cref="PrimeField64.IsBaillieProbablePrime(ulong)"/>.
     /// Both are exact, so the dispatch is a cost choice and never a correctness one.
     /// </remarks>
     internal static bool IsPrimeWord(ulong value) {
@@ -234,22 +231,10 @@ internal static class PrimeKernels {
     /// <summary>Decides a word already known to be coprime to thirty, including the nonprime value one.</summary>
     /// <param name="value">The wheel candidate.</param>
     /// <returns>Its exact primality.</returns>
-    internal static bool IsPrimeCandidateWord(ulong value) {
-        if (value < 2UL) { return false; }
-
-        var oddPart = (value - 1UL);
-        var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
-
-        oddPart >>= twoExponent;
-
-        var ring = new ScaledResidueRing64(modulus: value);
-
-        foreach (var witness in WordWitnessBases) {
-            if (!PassesWitness(oddPart: oddPart, ring: in ring, twoExponent: twoExponent, witness: witness)) { return false; }
-        }
-
-        return true;
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool IsPrimeCandidateWord(ulong value) => ((value <= uint.MaxValue)
+        ? ((uint)value).IsPrime()
+        : PrimeField64.IsBaillieProbablePrime(value: value));
     // Selection receives a wheel candidate above uint.MaxValue. Reuse the factorization ladder's
     // inverse products and the selection extension through 163 before paying for Baillie–PSW.
     internal static bool IsPrimeSelectionCandidate(ulong value) {
@@ -261,7 +246,7 @@ internal static class PrimeKernels {
         foreach (var factor in SelectionFilter.Factors) {
             if (unchecked((value * factor.Inverse)) <= factor.Ceiling) { return false; }
         }
-        return PrimeField64.IsBaillieProbablePrime(value: value);
+        return IsPrimeCandidateWord(value: value);
     }
     /// <summary>Runs one strong-probable-prime round in an already-created odd residue ring.</summary>
     /// <param name="ring">The ring over an odd candidate greater than one.</param>

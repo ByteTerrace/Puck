@@ -83,50 +83,26 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **Measurement harnesses cover kernels (Maths, SDF and state), the World server
-  tick path, real-process startup, and prime surveys.** `puck bench kernels` is the BenchmarkDotNet microscope for them —
-  disassembly, allocation columns, percentiles — and `puck bench world` is a
-  stopwatch lane over server construction, the idle tick, and a scripted
-  Klondike deal. `puck bench startup` measures console readiness and rendered
-  capture completion in isolated fresh processes without building. `puck bench primes`
-  compares single-thread counting with optional native primesieve and
-  reports callback enumeration separately. `--low`, `--upper`, and `--mode`
-  compare high or narrow intervals with full sieving or bounded presieving.
-  `--layouts` and `--patterns` narrow controls; `--batch` reports per-call time
-  and allocations over repeated managed calls. Full-sieve upper-base generation
-  stays inside each call. Allocations do not measure retained pools or peak memory.
-  Fine-grained marking counts are null outside zero-origin complete uint sieves;
-  bitmap metadata remains available. `PrimeSurvivorDecisions` compares existing
-  primality tests on identical presieved and prime-only candidate streams,
-  with candidate construction excluded from timing.
-  `NthPrimeRequests` and `RandomPrimeRequests` measure complete single-answer
-  operations. Random controls preserve uniform rejection semantics, generator
-  type and shared static traversal; a random-start successor walk is a different
-  distribution. Warm table lookups exclude first-use initialization.
-  `PrimeFilterDecisions` screens reciprocal-filter depth and primality decisions
-  on identical candidate streams, reporting survivor counts. Confirm a winning
-  kernel policy with the three-seed `RandomPrimeRequests` cases before promotion.
-  Prime surveys follow warmup rounds with
-  rotating, alternating variant order. Their reports distinguish requested segments,
-  Windows `--cpu` placement (also inherited by native children),
-  exact managed bitmap/work counts, and the pinned native 16 KiB full-bitmap
-  case; other rows leave the native bitmap field null. Source-derived sizes for
-  other cases must state the pinned configuration and reported L1 assumptions.
-  Prime surveys pair
-  scalar and periodic small-prime filters, recording individual marks separately
-  from logical pattern input bytes and bitmap passes. Packet strategies isolate
-  unrolling, position carry, cache chunks, residue specialization and medium-state
-  phase sorting with shared marking routines; reports count phase-sort candidates,
-  direct bucket transfers, adaptive bucket bitmaps, and small-prime cache chunks,
-  active prime/chunk visits and start initializations separately. Logical
-  exclusions exclude stores to endpoint padding. Kernel alternatives
-  share traversal and sinks, including buffer output and mixed mask order.
-  Confirm specialization and inlining in optimized assembly. These harnesses are documented in
-  [`docs/reference/cli.md`](../../../docs/reference/cli.md),
-  which also carries the measurement hygiene: numbers taken on a busy machine
-  are garbage rather than merely pessimistic, and two runs disagreeing by more
-  than ~10% mean the machine was not quiet. No law gates a timing: the law suite
-  states cost only as a deterministic count, such as an allocation meter reading.
+- Route measurements through the existing harnesses: `puck bench kernels` for
+  BenchmarkDotNet timing, allocation and disassembly; `puck bench world` for
+  server construction and tick workloads; `puck bench startup` for fresh-process
+  readiness; and `puck bench primes` for serial interval surveys and native
+  primesieve comparisons. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
+  owns options, report fields and measurement hygiene.
+- For primes, use `PrimeCandidateScan` and `PrimeChannelMasks` for representation
+  costs, `PrimePrimality` and `PrimeSurvivorDecisions` for decisions,
+  `PrimeSieveSegments` for marking, and `PrimeFilterDecisions` to screen filters.
+  Confirm kernel wins with the complete request they target: `NthPrimeRequests`,
+  `NthPrime64Requests`, `RandomPrimeRequests`, or an interval survey. Checkpoint
+  rank cases do not establish arbitrary-rank performance. Keep historical
+  Miller–Rabin controls explicit when production dispatch changes.
+- Preserve comparable semantics, traversal and sinks; confirm specialization
+  and call boundaries in optimized assembly. Random-start successor searches
+  are not uniform-prime controls. Record first-use work separately from warm
+  tables, and distinguish allocated bytes from retained pools or peak workspace.
+  Use idle, serial runs under the repository's timing authorization rules;
+  sampled timings alone never establish an algorithmic or full-domain claim.
+- No law gates a timing: cost laws state deterministic counts.
   The one managed-allocation meter is `Puck.Abstractions.Counting.AllocationWindow`:
   `Least` takes the least of up to 16 windows of
   `GC.GetAllocatedBytesForCurrentThread` and, when every window allocated,
@@ -135,7 +111,7 @@ outside this contract and takes the references as written.
   least as a count for a ceiling, and `Total` counts one run of a body that
   cannot repeat. Write allocation laws, stages and diagnostics with it rather
   than reading the counter by hand.
-  Outside these harnesses, say which harness you built and why it measures the claim.
+  Outside the existing harnesses, say which harness you built and why it measures the claim.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;

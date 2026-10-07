@@ -14,7 +14,7 @@ public static partial class PrimeExploration {
     /// Small intervals ending below 65,536 sample the shared prime table directly. Other intervals sample the
     /// wheel candidates together with two, three and five, rejecting composites rather than walking to a neighbor.
     /// Range-reduction rejections consume the same finite budget as composite candidates. Empty candidate sets
-    /// consume no draws. A singleton table selection also consumes no draws. The uint primality test handles
+    /// consume no draws. A singleton candidate is decided once without drawing. The uint primality test handles
     /// small words; larger candidates use the existing Baillie–PSW test, exhaustively counterexample-free below
     /// 2^64 as described by <see cref="PrimeField64.IsBaillieProbablePrime(ulong)"/>.
     /// The generator determines reproducibility and random quality; this method supplies no entropy.
@@ -52,6 +52,13 @@ public static partial class PrimeExploration {
         var countCandidates = ((WheelPrefix(high: high) - first) + ((ulong)exceptionalCount));
 
         if (countCandidates == 0) { return false; }
+        if (countCandidates == 1) {
+            var value = ((30 * (first >> 3)) + PrimeWheel30.NumericResidues[((int)(first & 7))]);
+
+            if (!PrimeKernels.IsPrimeWord(value: value)) { return false; }
+            prime = value;
+            return true;
+        }
         var candidates = new BoundedRandomSampling.Range64(exclusiveHigh: countCandidates);
 
         while (candidates.TrySample(attempts: ref maxAttempts, generator: ref generator, value: out var index)) {

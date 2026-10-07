@@ -7,14 +7,14 @@ using System.Runtime.Intrinsics;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides deterministic primality testing and prime enumeration for 32-bit unsigned integers.
+/// Provides deterministic primality testing, prime counting and prime selection for unsigned integers.
 /// </summary>
 /// <remarks>
 /// The primality test is exact across the entire 32-bit range — it never returns a probabilistic answer — and the
 /// supporting routines run their hot loops in Montgomery form or through precomputed reciprocals, so neither performs
 /// hardware division per iteration.
 /// </remarks>
-public static class PrimeExtensions {
+public static partial class PrimeExtensions {
     /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² that survive the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>
     /// <remarks>
     /// Enumerated in-house by sweeping every odd value in <c>[121, 2³²)</c> coprime to <c>105</c> against a sieve:

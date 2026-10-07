@@ -46,14 +46,14 @@ public sealed class PrimeConstellation {
 
     /// <summary>Reports all prime anchors whose complete pattern lies in an inclusive interval, in ascending numerical order.</summary>
     /// <param name="low">The inclusive lower bound for every member.</param>
-    /// <param name="high">The inclusive upper bound for every member.</param>
+    /// <param name="high">The inclusive upper bound for every member; a reversed interval is empty.</param>
     /// <param name="visit">Receives each anchor once; member values are the anchor plus <see cref="Offsets"/>.</param>
     /// <param name="segmentBytes">The segment storage size passed to prime enumeration.</param>
     /// <param name="strategy">The marking strategy passed to prime enumeration.</param>
     /// <param name="layout">The byte layout passed to prime enumeration.</param>
     /// <param name="mode">The enumeration mode passed to prime enumeration.</param>
     /// <exception cref="ArgumentNullException"><paramref name="visit"/> is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="low"/> exceeds <paramref name="high"/>, <paramref name="segmentBytes"/> is not positive, or an enumeration option is undefined.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside <c>[1, Array.MaxLength]</c>, or an enumeration option is undefined. Options are checked even when the interval is empty.</exception>
     /// <remarks>No addition wraps at the top of the unsigned 64-bit domain. Each non-anchor member uses deterministic primality testing.</remarks>
     public void Enumerate(
         ulong low,
@@ -65,17 +65,12 @@ public sealed class PrimeConstellation {
         PrimeSieveMode mode = PrimeSieveMode.Automatic
     ) {
         ArgumentNullException.ThrowIfNull(visit);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(low, high);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(segmentBytes);
-        if (!Enum.IsDefined(value: strategy)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(strategy));
-        }
+        _ = PrimeExploration.ResolveSegmentBytes(high: high, segmentBytes: segmentBytes, strategy: strategy);
+        _ = PrimeExploration.ResolveMode(high: high, low: low, mode: mode);
         if (!Enum.IsDefined(value: layout)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(layout));
         }
-        if (!Enum.IsDefined(value: mode)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(mode));
-        }
+        if (high < low) { return; }
         var maximumOffset = m_offsets[^1];
 
         if (maximumOffset > high) {

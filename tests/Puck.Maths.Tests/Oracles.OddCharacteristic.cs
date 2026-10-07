@@ -41,7 +41,7 @@ internal static partial class Oracles {
     /// already well past the region the exhaustive-sieve statements cover directly.</remarks>
     public static ReadOnlySpan<uint> SmallPrimes => SmallPrimeTable;
     /// <summary>The first twenty prime bases, including the twelve that independently decide the whole ulong range.
-    /// This differs from the shipped seven-base machineword set.</summary>
+    /// The wide-word production decision instead combines base two with a Lucas test.</summary>
     public static ReadOnlySpan<ulong> StrongPrimeWitnessBases => [2UL, 3UL, 5UL, 7UL, 11UL, 13UL, 17UL, 19UL, 23UL, 29UL, 31UL, 37UL, 41UL, 43UL, 47UL, 53UL, 59UL, 61UL, 67UL, 71UL];
 
     /// <summary>The Jacobi symbol of <paramref name="numerator"/> over an odd positive
@@ -160,7 +160,7 @@ internal static partial class Oracles {
     /// </para>
     /// <para>
     /// Deliberately OUTSIDE Puck.Maths rather than borrowing <see cref="PrimeField64.IsPrime(ulong)"/>, so that a
-    /// future re-pointing of that member at the Baillie–PSW composition turns no tier of this family into a tautology.
+    /// forwarding of that member to the Baillie–PSW composition turns no tier of this family into a tautology.
     /// </para>
     /// </remarks>
     public static bool ExactPrimality(ulong value) {

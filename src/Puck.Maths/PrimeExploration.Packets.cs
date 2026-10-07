@@ -9,7 +9,7 @@ public static partial class PrimeExploration {
     private static readonly byte[] PacketLifts = CreatePacketLifts();
     private static readonly byte[] PacketCarries = CreatePacketCarries();
 
-    // Only primes through 65535 carry state; upper bases keep the existing sparse-stream marker.
+    // Packet states cover primes through 98304; larger bases use the sparse bucket scheduler.
     // A relative cursor avoids forming the next full-width multiple near ulong.MaxValue.
     private struct PrimeMarkState {
         // Low word: relative cursor. High word: source phase, prime channel, quotient.
@@ -63,8 +63,8 @@ public static partial class PrimeExploration {
             var residue = (multiplier % 30);
             byte source = 0;
 
-            while ((source < 8) && (residues[source] < residue)) { ++source; }
-            if (source == 8) { multiplier += (31 - residue); source = 0; } else { multiplier += (residues[source] - residue); }
+            while (residues[source] < residue) { ++source; }
+            multiplier += (residues[source] - residue);
             if (multiplier > (high / prime)) { continue; }
             _ = PrimeWheel30.TryChannel(channel: out var primeChannel, residue: ((byte)(prime % 30)));
             // Future squares are at most 65535²/30 bytes away; a currently active prime advances at most p bytes.
@@ -225,7 +225,7 @@ public static partial class PrimeExploration {
         var mask7 = ((TResidue.Residue == 0) ? Unsafe.Add(elementOffset: 7, source: ref clear) : ((byte)(fixedMasks >> 56)));
 
         // Offsets are monotone and below p; the last-byte guard proves all eight stores are in bounds.
-        // The native-sized cursor and offsets stay below Array.MaxLength + 65535, without narrowing sums.
+        // The native-sized cursor and offsets stay below Array.MaxLength + 98304, without narrowing sums.
         var limit = (end - seven);
 
         while (cursor < limit) {

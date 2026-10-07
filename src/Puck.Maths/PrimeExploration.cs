@@ -33,18 +33,15 @@ public enum PrimeByteLayout {
 }
 /// <summary>Selects complete sieving or a bounded sieve followed by exact primality decisions.</summary>
 public enum PrimeSieveMode {
-    /// <summary>Uses complete sieving through the uint domain and bounded presieving above it.</summary>
+    /// <summary>Chooses complete sieving or bounded presieving from interval width and upper-base workspace.</summary>
     Automatic,
-    /// <summary>Generates and retains every base prime through the interval upper bound's square root.</summary>
+    /// <summary>Generates every required base prime and carries useful upper-prime cursors in segment buckets.</summary>
     Eratosthenes,
     /// <summary>Sieves with primes through 65,535 and decides surviving candidates exactly.</summary>
     Presieve,
 }
 /// <summary>Explores primes throughout the unsigned sixty-four-bit domain using thirty-wheel coordinates.</summary>
 public static partial class PrimeExploration {
-    private const int BaseWindowBits = 65536;
-    private const int BaseChunkLength = 16384;
-
     private static readonly byte[] NumericClearMasks = CreateClearMasks(layout: PrimeByteLayout.Numeric);
     private static readonly byte[] AlgebraicClearMasks = CreateClearMasks(layout: PrimeByteLayout.Algebraic);
 
@@ -77,16 +74,18 @@ public static partial class PrimeExploration {
     /// <para>Each segment uses one byte per thirty integers. Two, three, and five are reported separately; partial
     /// first and final bytes are masked, and one is never reported. Scalar marking starts at each prime's square;
     /// periodic filtering restores the small primes themselves before applying the endpoint masks.</para>
-    /// <para>Automatic mode uses the shared base-prime table through 65,535 for intervals ending within the uint
-    /// domain. Above that domain it uses the same bounded table and exact candidate primality decisions. Presieve
-    /// mode always applies those decisions. Neither mode stores a bitmap for the full interval.</para>
-    /// <para>Eratosthenes mode generates all required uint base primes with the existing odd-window marker. Those
-    /// primes are retained in chunks: at the maximum ulong upper bound, the 203,280,220 odd base primes require
-    /// 813,120,880 payload bytes, about 775.45 MiB, plus chunk-array overhead, the shared small table, and the segment.
-    /// Base generation therefore has a cost determined by the upper bound, even for a narrow high interval.</para>
+    /// <para>Automatic mode uses <see cref="ResolveMode(ulong, ulong, PrimeSieveMode)"/> to choose complete
+    /// sieving from the interval width and a conservative upper-base workspace bound. Presieve uses the shared
+    /// primes through 65,535 and decides remaining survivors with the exact word test. Survivors below 65537
+    /// squared are already proven prime and need no further test. Neither policy stores a full-interval bitmap.</para>
+    /// <para>Eratosthenes mode streams all required uint base primes from the optimized thirty-wheel sieve.
+    /// Useful upper primes carry eight-byte cursor states through sparse 32-KiB segment buckets; unused primes
+    /// are discarded. Base generation still has a cost determined by the upper bound, even for a narrow high
+    /// interval. Explicit Eratosthenes bypasses the automatic policy's workspace bound.</para>
     /// <para>Callbacks may stop enumeration by throwing; the segment and base-generation bitmap are returned to
     /// their pools even when a callback throws, as are packet-state buffers. Packet strategies use eight-byte
-    /// state payloads only for base primes through 65,535; higher bases retain eight-stream marking. Independent
+    /// state payloads for base primes through 65,535; upper bases through 98,304 reuse medium packets, and
+    /// larger bases use the sparse bucket scheduler. Native state slabs are freed on exit as well. Independent
     /// calls share immutable small-prime and wheel-mask tables.</para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="onPrime"/> is null.</exception>
@@ -116,7 +115,7 @@ public static partial class PrimeExploration {
     /// <param name="usePreSieve">Uses periodic small-prime patterns through 163 instead of individual marks for those primes.</param>
     /// <returns>The number of primes in the interval.</returns>
     /// <remarks>Shares enumeration's marking, endpoint masks, and base-prime policy. Complete sieving counts
-    /// surviving bits with word population counts; bounded presieving still decides every survivor exactly.</remarks>
+    /// surviving bits with word population counts; bounded presieving decides only survivors not already proven by its base primes.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside
     /// <c>[1, Array.MaxLength]</c>, or an option is not a defined value.</exception>
     public static ulong Count(
@@ -152,18 +151,12 @@ public static partial class PrimeExploration {
         if (high < 7UL) { return count; }
 
         low = Math.Max(val1: low, val2: 7UL);
-        var testSurvivors = ((mode == PrimeSieveMode.Presieve) ||
-            ((mode == PrimeSieveMode.Automatic) && (high > uint.MaxValue)));
+        var testSurvivors = (ResolveMode(high: high, low: low, mode: mode) == PrimeSieveMode.Presieve);
         var baseLimit = high.SquareRoot();
 
-        if (strategy == PrimeSieveStrategy.BucketPackets) {
-            var cacheBytes = Math.Min(val1: segmentBytes, val2: 32768);
-            var adaptiveBytes = Math.Clamp(max: ((ulong)segmentBytes), min: ((ulong)cacheBytes), value: (2UL * baseLimit));
-
-            segmentBytes = ((int)(adaptiveBytes - (adaptiveBytes % ((ulong)cacheBytes))));
-        }
-        var upperBases = ((!testSurvivors && (baseLimit > 65535UL))
-            ? CreateUpperBasePrimes(limit: ((uint)baseLimit))
+        segmentBytes = ResolveSegmentBytes(high: high, segmentBytes: segmentBytes, strategy: strategy);
+        using var wideSieve = ((!testSurvivors && (baseLimit > 65535UL))
+            ? new WideSieve(high: high, layout: layout, limit: ((uint)baseLimit), low: low)
             : null);
         var blockLow = (low / 30UL);
         var lastBlock = (high / 30UL);
@@ -234,17 +227,13 @@ public static partial class PrimeExploration {
                     } else {
                         MarkBases(PrimeKernels.BasePrimes, segment, blockLow, segmentLow, segmentHigh, strategy, layout, usePreSieve);
                     }
-                    if (upperBases is not null) {
-                        foreach (var chunk in upperBases) {
-                            if ((((ulong)chunk[0]) * chunk[0]) > segmentHigh) { break; }
-                            MarkBases(blockLow: blockLow, high: segmentHigh, layout: layout, low: segmentLow, primes: chunk, segment: segment,
-                                strategy: ((stateStorage is null) ? strategy : PrimeSieveStrategy.EightStreams), usePreSieve: usePreSieve);
-                        }
-                    }
+                    wideSieve?.Mark(blockLow: blockLow, high: segmentHigh, segment: segment);
 
-                    count += (((onPrime is null) && !testSurvivors)
+                    var decideSegment = (testSurvivors && (segmentHigh >= ProvenPresieveLimit));
+
+                    count += (((onPrime is null) && !decideSegment)
                         ? CountBits(segment: segment)
-                        : ReportSegment(blockLow: blockLow, layout: layout, onPrime: onPrime, segment: segment, testSurvivors: testSurvivors));
+                        : ReportSegment(blockLow: blockLow, layout: layout, onPrime: onPrime, segment: segment, testSurvivors: decideSegment));
                     if (blockHigh == lastBlock) { break; }
                     blockLow = (blockHigh + 1UL);
                 }
@@ -308,15 +297,14 @@ public static partial class PrimeExploration {
                 var bit = ((layout == PrimeByteLayout.Numeric) ? numeric : channel);
 
                 if ((mask & (1 << bit)) == 0) { continue; }
-                if (testSurvivors) {
-                    // Endpoint masking guarantees that the coordinate is inside the ulong domain.
-                    _ = CandidateAddress.TryFromCoordinates(address: out var candidate, block: block, channel: channel);
-                    if (!IsPrimeCandidate(candidate: candidate)) { continue; }
-                }
+                var value = (blockValue + residues[numeric]);
+
+                // Sieving every prime below 65537 already proves survivors below its square prime.
+                if (testSurvivors && (value >= ProvenPresieveLimit) && !PrimeKernels.IsPrimeCandidateWord(value: value)) { continue; }
                 if (onPrime is null) {
                     ++count;
                 } else {
-                    onPrime((blockValue + residues[numeric]));
+                    onPrime(value);
                 }
             }
         }
@@ -375,13 +363,9 @@ public static partial class PrimeExploration {
         var remainder = (multiplier % 30UL);
         var source = 0;
 
-        while ((source < 8) && (residues[source] < remainder)) { ++source; }
-        if (source == 8) {
-            multiplier += (31UL - remainder);
-            source = 0;
-        } else {
-            multiplier += (((ulong)residues[source]) - remainder);
-        }
+        // Every remainder is at most 29, the final residue, so this search always finds a lane.
+        while (residues[source] < remainder) { ++source; }
+        multiplier += (((ulong)residues[source]) - remainder);
         if (multiplier > maximumMultiplier) { return; }
 
         var multiple = (multiplier * prime);
@@ -403,48 +387,5 @@ public static partial class PrimeExploration {
             multiple += advance;
             source = (source + 1) & 7;
         }
-    }
-    private static List<uint[]> CreateUpperBasePrimes(uint limit) {
-        var chunks = new List<uint[]>();
-        var chunk = new uint[BaseChunkLength];
-        var count = 0;
-        var bitmap = ArrayPool<ulong>.Shared.Rent(minimumLength: (BaseWindowBits / 64));
-        var windowLow = 65537UL;
-
-        try {
-            while (windowLow <= limit) {
-                var bits = Math.Min(val1: ((ulong)BaseWindowBits), val2: (((((ulong)limit) - windowLow) / 2UL) + 1UL));
-
-                PrimeKernels.MarkWindow(basePrimes: PrimeKernels.BasePrimes, bitmap: bitmap, bits: bits, low: windowLow);
-                var words = ((int)((bits + 63UL) >> 6));
-
-                for (var word = 0; (word < words); ++word) {
-                    var candidates = ~bitmap[word];
-
-                    if ((word == (words - 1)) && ((bits & 63UL) != 0UL)) {
-                        candidates &= ((1UL << ((int)(bits & 63UL))) - 1UL);
-                    }
-                    while (candidates != 0UL) {
-                        var bit = ((((ulong)word) * 64UL) + ((ulong)BitOperations.TrailingZeroCount(value: candidates)));
-
-                        chunk[count++] = ((uint)(windowLow + (bit * 2UL)));
-                        candidates &= (candidates - 1UL);
-                        if (count == BaseChunkLength) {
-                            chunks.Add(item: chunk);
-                            chunk = new uint[BaseChunkLength];
-                            count = 0;
-                        }
-                    }
-                }
-                windowLow += (bits * 2UL);
-            }
-        } finally {
-            ArrayPool<ulong>.Shared.Return(bitmap);
-        }
-        if (count != 0) {
-            Array.Resize(array: ref chunk, newSize: count);
-            chunks.Add(item: chunk);
-        }
-        return chunks;
     }
 }

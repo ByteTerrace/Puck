@@ -43,6 +43,8 @@ public sealed class PrimeSurveyLawTests {
             Assert.Equal(expected: JsonValueKind.Null, actual: row.GetProperty(propertyName: "ManagedPrimeMultipleUpdates").ValueKind);
             Assert.True(condition: (row.GetProperty(propertyName: "ManagedAllocatedBytesPerCall").GetDouble() >= 0));
             Assert.InRange(actual: row.GetProperty(propertyName: "ManagedActiveBitmapBytes").GetInt32(), low: 1, high: 6);
+            Assert.Equal(expected: ((row.GetProperty(propertyName: "Mode").GetString() == "Presieve") ? "Presieve" : "Eratosthenes"),
+                actual: row.GetProperty(propertyName: "ResolvedMode").GetString());
         }
     }
     [Fact]
@@ -62,6 +64,7 @@ public sealed class PrimeSurveyLawTests {
         foreach (var row in report.RootElement.GetProperty(propertyName: "Rows").EnumerateArray()) {
             Assert.Equal(expected: 1UL, actual: row.GetProperty(propertyName: "Count").GetUInt64());
             Assert.Equal(expected: 3, actual: row.GetProperty(propertyName: "ManagedActiveBitmapBytes").GetInt32());
+            Assert.Equal(expected: "Presieve", actual: row.GetProperty(propertyName: "ResolvedMode").GetString());
         }
     }
     [InlineData("--low", "10", "--upper", "9")]
