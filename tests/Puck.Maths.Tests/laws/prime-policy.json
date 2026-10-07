@@ -3,7 +3,13 @@
     "Id": "prime-exploration.automatic-policy-boundaries",
     "Tier": "Default",
     "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "ResolveMode" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "ResolveSegmentBytes" }],
-    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation, hand-calculated width crossover boundaries at squares 10^12 and 10^14, complete proof boundary 65537 squared, conservative memory refusal for high endpoints including the full ulong interval, empty intervals, fixed bitmap sizes and named invalid options. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation, hand-calculated width crossover boundaries at squares 10^12 and 10^14, complete proof boundary 65537 squared, prime-state memory admission at 10^16 and refusal at 10^18 and the full ulong interval, empty intervals, fixed bitmap sizes and named invalid options. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.segment-cancellation",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Pre-canceled ordinary and reversed intervals throw before callbacks. Callback cancellation throws before another one-byte segment, including final and exceptional-prime callbacks, both layouts and modes, and intervals requiring upper-base generation. Cancellation preserves its token; a fresh call remains usable. ENVELOPE: cancellation during asynchronous base generation and native resource reclamation are inspected in source, not independently instrumented by this law.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
   },
   {
     "Id": "prime-exploration.presieve-proof-boundary",

@@ -2660,6 +2660,53 @@ and `RandomPrimeRequests` measures complete uniform selections on three fixed
 seeds per range. See [selecting one prime](prime-exploration.md#selecting-one-prime)
 for cancellation and practical limits.
 
+### `puck bench prime-requests`
+
+Measures complete nth-prime, prime-count and uniform random-prime requests
+serially. `--list` prints the case names. Defaults include table and uint
+selection, the billionth and ten-billionth primes, checkpoint neighborhoods,
+the final ulong prime, and four random ranges. Large arbitrary counts and
+ranks are opt-in through `--cases`; `all` includes them. Case names can be
+space or comma separated. `nth-value-1e19` uses the rank π(10¹⁹), whereas
+`nth-rank-1e16` requests ordinal 10¹⁶. Ordinals are one-based in this survey.
+
+```text
+puck bench prime-requests --samples 3 --warmups 1
+puck bench prime-requests --cases count-1e14 nth-value-1e14 --warmups 0 --samples 1 --timeout-seconds 300
+puck bench prime-requests --cases random-small,random-ulong --seeds 42 2026 --batch 128
+```
+
+The first single request is reported separately from warm measured batches.
+It is first use of that case in the process, not a guarantee that no earlier
+case initialized shared tables. `--warmups` accepts zero; `--samples` selects
+1–100 warm measured samples. `--batch` overrides requests per sample; defaults
+are 10,000 for table cases, 128 for random cases and one for other requests.
+Calling-thread allocations are captured around the same timed batch, so a
+large count is not repeated merely to measure allocation. Native memory,
+retained pools and peak workspace are outside that allocation field.
+
+An additional untimed work profile invokes the same production kernels and
+reports algorithmic events; these are not machine-independent cycle counts.
+`--work-profile false` skips that pass. Random controls share the production
+bounds, PCG seeds, stream and a budget of 2,048 raw 64-bit words (at most 4,096
+`NextUInt32` draws). The survey overrides production's default 256-word budget.
+They compare uniform integer rejection using historical Miller–Rabin or
+Baillie–PSW with production table/wheel selection. The `wheel-mr` control uses
+the production sampler and identical filters through 163, substituting only
+the final wide-candidate decision. Its results and draw sequence must match
+the production Baillie–PSW route. A separate pass independently checks sampled primes
+and derives exact draw counts from PCG state distance. Candidate decisions
+are explicitly an upper bound except where the table route proves zero.
+
+`--timeout-seconds` is a cooperative deadline for each case, implementation
+and seed, including all its passes. Completed phases are saved incrementally
+under `--output` (default `artifacts/prime-requests`), with assembly hashes,
+runtime, architecture, logical processor count, environment, timing samples and work profiles.
+A Windows `--cpu` selects one logical CPU and records the active affinity,
+restoring the original affinity afterwards. A timeout retains partial results
+and returns a nonzero exit code; it does not turn completed timings into an
+estimate for the unfinished work.
+
 ### `puck bench state-evidence`
 
 Replays every normalized instruction form in `src/Puck.State/ReferenceSchedule.json`

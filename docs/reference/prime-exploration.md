@@ -13,10 +13,32 @@ Choose the operation from the requested answer, before choosing a marking strate
 | Request | Preferred API | Work performed |
 |---|---|---|
 | The Nth prime | `PrimeExtensions.NthPrime(uint)` or `NthPrime(ulong, CancellationToken)` | A small-rank lookup or an exact prime count followed by a local search. The index is zero-based: `999U.NthPrime()` returns the thousandth prime, 7919. |
-| The number of primes through a bound | `PrimeExtensions.PrimeCountingFunction(uint)` or `PrimeCountingFunction(ulong, CancellationToken)` | Exact combinatorial counting within the working bound; larger bounds use published checkpoints and count the intervening interval. |
+| The number of primes through a bound | `PrimeExtensions.PrimeCountingFunction(uint)` or `PrimeCountingFunction(ulong, CancellationToken)` | Exact combinatorial counting throughout the unsigned domain, with shortcuts near published checkpoints. |
 | A uniformly random prime in an interval | `PrimeExploration.TryRandomPrime` | Samples a prime table for small intervals, or samples wheel candidates and rejects composites. |
 | Whether one integer is prime | `PrimeExploration.IsPrime` | An exact decision without constructing a sieve. |
 | Every prime, or their count | `PrimeExploration.Enumerate` or `Count` | A segmented sieve amortizes initialization across many answers. |
+
+The two single-prime requests have different costs. An Nth-prime request must
+establish how many primes precede its answer. A random-prime request can sample
+a candidate and test it without finding that global rank.
+
+| Request and route | When it applies | Advantage | Cost or limitation |
+|---|---|---|---|
+| Nth prime: direct lookup | First 17 primes, then the shared table through 65535 | No counting or local sieve after the table exists | Table construction is a first-use cost; this route covers only small ranks |
+| Nth prime: uint counting and correction | The answer fits in uint and exceeds the table | Exact count plus a short correction; bounded pooled arrays | Counting work grows with the estimated answer |
+| Nth prime: checkpoint correction | Estimated correction fits a bounded local sieve budget | Skips the global count; tests a few candidates or sieves local windows | Exhausting the budget falls back to exact counting; the last representable prime is a particularly favorable case |
+| Nth prime: widened quotient count | Other ulong ranks whose count estimate is at most 17592177655809 | Exact counting with pooled storage, followed by local selection | Workspace grows with the square root, up to about 52 MiB of pooled payload |
+| Nth prime: Gourdon count and correction | Other larger ulong ranks | Supports arbitrary ranks without sieving all the way from a checkpoint; reuses setup between counts | Global counting can dominate the request; several exact counts may be needed |
+| Random prime: table sampling | The interval ends at or below 65535 | Samples directly from actual primes; no composite-candidate tests | Limited table range and a first-use construction cost |
+| Random prime: wheel sampling and rejection | Other intervals | Samples only the eight coprime residues per 30 integers, plus exceptional small primes; requires no global prime count | Variable numbers of draws and primality decisions; the finite budget may expire |
+| Random prime: integer rejection controls | Benchmark alternatives | Straightforward uniform selection; isolates the effect of candidate filtering and the decision kernel | Spends draws on multiples of 2, 3 and 5; retained as comparison methods, not automatic production routes |
+| Random prime: wheel/filter Miller–Rabin control | Benchmark alternative using the production candidate path | Isolates the final decision kernel while preserving sampling, filters and draws | Seven deterministic witnesses replace Baillie–PSW; speed depends on the candidate population |
+
+For random candidates within uint the decision is the uint kernel. Larger
+candidates use reciprocal filters through 163 and then Baillie–PSW. All random
+routes in the request comparison preserve uniform selection conditional on
+success. Choosing a random integer and returning the next prime would give a
+different distribution, so it is not an interchangeable control.
 
 The `uint` overload returns uint primes, with indices through 203280220; larger
 indices return zero. The first seventeen entries use existing small-prime constants;
@@ -27,22 +49,91 @@ payload. Larger ranks retain the counting-based search.
 The `ulong` overload supports every representable prime, with valid zero-based
 indices below 425656284035217743. Higher indices return zero. For example,
 `203280221UL.NthPrime()` returns 4294967311, the first prime above the uint
-range. Ranks with uint results use the narrow implementation. Larger practical
-ranks align an asymptotic estimate with exact combinatorial counting, then
-sieve the local difference. The estimate chooses where to start; it never
-decides the returned prime or its rank.
+range. Ranks with uint results use the narrow implementation. Larger ranks
+start from an inverse Riemann R estimate, then correct it using exact prime
+counts. Each correction preserves an integer bracket containing the requested
+rank. The estimate chooses where to count; it never decides the returned prime
+or its rank. A local correction receives a cumulative integer budget: the
+integer square root of the bound when Automatic permits complete sieving,
+or one sixty-fourth of that when survivor decisions are required. An integer
+bit-length estimate decides whether to attempt a rank correction. It does not
+assert a prime-gap bound: exhausting the budget carries the exact local count
+into the bracket before another global count. Each window spans at most
+8388608 integers. Complete proven
+segments are skipped using population counts; only the selected segment needs
+individual prime decoding. A local window is marked once. Forward selection
+returns its count when the window is exhausted. Reverse selection retains the
+window's bounded bitmap and selects downward from its surviving bits; each
+candidate needing a primality decision is tested once. Successive exact
+combinatorial counts within one rank search share a request-local workspace.
+The reverse window holds at most 279622 wheel bytes, padded to 279624 for word
+reads; the shared array pool may retain a larger bucket for that request.
 
 `PrimeCountingFunction(ulong)` widens the quotient-counting recurrence for
 bounds whose square root is at most 4194303, renting at most approximately
-52 MiB of array payload. Larger bounds use independently published counts
-at powers of two and bounded-presieve windows between the nearest checkpoint
-and the requested bound. Rank selection uses the same checkpoints when its
-estimate lies outside the combinatorial working range. Short checkpoint
-neighborhoods, including the final ulong ranks, are practical; a value or rank
-far from every checkpoint may take impractical time. Full-domain correctness
-does not imply uniform performance across that domain. Both ulong overloads
-accept a `CancellationToken`, checked before starting and during counting or
-window traversal. Cancellation does not interrupt every individual sieve mark.
+52 MiB of array payload. Larger bounds use a managed Gourdon counter.
+Independently published power-of-two counts remain shortcuts: an exact
+checkpoint returns immediately, and a neighborhood inside the same local
+sieve budget uses one automatic interval count. Distant bounds use combinatorial
+counting, so their work no longer depends on the distance to a checkpoint.
+
+Gourdon partitions the count into ordinary leaves, easy leaves, hard leaves
+and correction terms. The implementation follows
+[primecount's Gourdon decomposition](https://github.com/kimwalisch/primecount/blob/master/src/gourdon/pi_gourdon.cpp),
+including its corrected integer bounds. It chooses `z=y`: the factor cutoff
+also bounds the ordinary leaves, so the existing compact factor table needs
+no maximum-prime-factor field. Its B term and Sigma0 correction share a
+triangular term which cancels exactly, allowing the existing streamed
+semiprime count P2 to supply their difference. The remaining Sigma terms,
+Phi0 ordinary leaves, A+C easy leaves and D hard leaves are evaluated separately.
+
+The cutoff balances factor-table space against the remaining sieve interval.
+It uses [primecount's cubic-logarithm Gourdon tuning](https://github.com/kimwalisch/primecount/blob/master/src/util.cpp),
+with exact integer bounds: above the integer cube root, below the integer
+square root, and at most 134217728. Retained table capacity grows in
+65536-entry steps. Floating-point tuning changes the work, while exact
+integer formulas determine the answer.
+Its compact tables retain only residues coprime to 30. Each such entry combines
+the least prime factor and Möbius sign in sixteen bits, with zero for a repeated
+prime factor. Prime counts use a bitmap and a prefix count per word. These
+three tables need roughly 7/12 of a byte per covered integer, plus the separate
+prime list, rather than the dense tables' nine bytes per integer. A lookup now
+includes a population count, so the smaller memory footprint alone does not
+establish a runtime improvement. Ordinary leaves use a periodic partial sieve
+through 19. Easy leaves use reflected grouping and one persistent sieve
+through the square root, with a 16 KiB bitmap and 8 KiB prefix-count array.
+Hard leaves use 32 KiB wheel segments and incrementally updated population
+counters. Filtering their factor coordinates in batches separates candidate
+selection, quotient division and prefix queries. Signed 128-bit sums preserve
+intermediate cancellation exactly.
+
+The semiprime correction streams primes downward from the square root in
+bounded bitmaps while the existing sieve advances through their increasing
+quotients. Each reverse bitmap retains 1 MiB and shares one sieve initialization
+across thirty-two 32 KiB marking segments. Whole bitmap words supply prefix counts without enumerating every
+prime or keeping a square-root-sized prime table. Resident factor storage
+scales with the chosen cutoff. A rank search retains factor tables and reuses
+leaf buffers between its exact counts. These workspaces hold managed arrays;
+after the request they become eligible for garbage collection. The remaining
+sieve frontier is approximately the bound divided by the cutoff. Near the
+top of ulong the cutoff is about 116 million and the frontier about 159 billion
+integers. The larger factor tables trade memory for much less interval coverage.
+Their compact factor, prime-bit and prefix payload remains approximately
+7/12 of a byte per covered integer, plus four bytes per stored prime. Separate
+leaf buffers, sieve workspaces, array-pool retention and replaced arrays awaiting
+collection add to that payload. Hard-leaf divisions of the input by an active
+prime, and the bounds involving its square, are computed once per count and
+reused across segments. This is a single-thread managed implementation;
+algorithm choice alone does not establish parity with native primecount or a
+runtime guarantee across machines.
+
+Both ulong overloads accept a `CancellationToken`. Counting checks it during
+table construction, leaf processing and sieve traversal. `Count` and `Enumerate`
+also accept an optional token, checked before starting, between segments,
+during upper-base generation and before returning. Cancellation does not
+interrupt every individual sieve mark or callback within a segment.
+For sieve-backed counting and selection, a token canceled before the final
+check causes an exception even when the result has just been computed.
 
 `TryRandomPrime(low, high, ref generator, out prime, maxAttempts: 256)` accepts
 an inclusive ulong interval and a caller-owned `IDrawGenerator` value type.
@@ -72,6 +163,22 @@ Unbiased range reduction uses multiply-high with rejection
 first-use table generation; first-request latency must be considered separately.
 The extra selection filter initializes 21 inverse/ceiling pairs once, retaining
 336 bytes of factor payload. It leaves factorization's existing trial budget unchanged.
+
+`ProfileNthPrime` and `ProfilePrimeCountingFunction` execute the same production
+kernels and return immutable request records. They report exact count dispatches,
+table builds and reuse, cutoff and quotient frontiers, factor coordinates inspected,
+cached divisions, and logical sieve segments and bytes. Short odd-candidate walks
+also report their primality requests. These are algorithmic work units, not CPU
+instructions: they omit the narrow uint kernel's internal work, individual marks,
+base-prime generation and survivor-test internals. Ordinary entry points allocate
+no profiling objects. The [request survey](cli.md#puck-bench-prime-requests) records
+uninstrumented timings separately from these work profiles, and compares random
+selection with uniform integer-rejection controls using matching input ranges,
+draw budgets and generator seeds.
+Its wheel/filter Miller–Rabin control shares the production sampling and
+filtering code through `TryRandomPrime<TGenerator,TDecision>`. A custom
+`IPrimeCandidateDecision` must decide every surviving ulong candidate exactly;
+the caller owns that contract. The default overload continues to use Baillie–PSW.
 
 ## Coordinates and channels
 
@@ -214,12 +321,16 @@ the boundary, each surviving candidate is decided exactly.
 `ResolveMode` exposes the automatic policy. Intervals ending below `65537²`
 use complete sieving. Above that bound, `Automatic` chooses complete sieving
 when the inclusive width is at least `ceil(floor(sqrt(high)) / 64)` and its
-conservative active upper-base workspace bound fits 128 MiB. The bound reserves
-48 bytes per possible base prime coprime to thirty, covering live, detached and
-recycled state pages, plus 3 MiB of page slack and upper-base metadata.
-Actual primes are a subset of those
-candidates. Shared tables, the requested bitmap, small-prime states and retained
-pool capacity are additional memory. Other automatic intervals use `Presieve`, which explicitly
+conservative active upper-base workspace bound fits 128 MiB. The bound starts
+with [Rosser and Schoenfeld's Corollary 1, equation (3.6)](https://doi.org/10.1215/ijm/1255631807),
+`pi(x) < 1.25506*x/ln(x)` for `x > 1`. The implementation replaces the logarithm
+by a rational lower bound and rounds upward using integer arithmetic. It budgets
+eight-byte states, partial pages, detached input, slab growth and both halves of
+the sliding bucket-head window, plus 3 MiB for medium states and the streamed
+base generator. This admits sufficiently wide intervals ending at 10^16 while
+still refusing the full ulong interval. Shared tables, the requested bitmap,
+small-prime states, allocator bookkeeping and retained pool capacity are additional
+memory. Other automatic intervals use `Presieve`, which explicitly
 requests the shared bases through 65535 followed by exact survivor decisions.
 Both policies return identical primes; the crossover is a cost heuristic.
 
@@ -235,7 +346,10 @@ or below the current region's upper bound and its first wheel multiple falls
 inside the interval. Each state occupies eight payload bytes: the prime
 quotient, wheel position and offset in a 32 KiB bucket. A sliding bucket array
 schedules the next affected region, so upper primes are not scanned again in
-every segment. The derived 210-wheel omits multiples of seven already removed
+every segment. Space for two maximum advance horizons holds the bucket heads:
+the current base reference advances once per coarse bucket, and the array
+compacts once per horizon. Relative indexing in the marking loop needs no ring
+arithmetic. The derived 210-wheel omits multiples of seven already removed
 by the small-prime marker. Each bucket holds aligned 8 KiB native pages with
 1022 states and a 16-byte header on a 64-bit process. Direct write cursors avoid
 per-state managed-array access. Completed pages are recycled within the call,

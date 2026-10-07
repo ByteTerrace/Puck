@@ -18,8 +18,10 @@ documentation, and this skill with them when guidance disagrees.
    `[Fact]` that bypasses registration. A declaration without a binding, or a
    binding without a declaration, fails the Default-tier parity gate by name.
 2. Choose the cheapest honest tier and stay within its budget — by measured COST,
-   not by whether the word "exhaustive" fits. `Exhaustive` means every value of a
-   carrier, and its cases take their own basis rather than consuming a `Domain`.
+   not by whether the word "exhaustive" fits. `Exhaustive` holds full-carrier
+   sweeps and the explicitly selected expensive combinatorial-prime checks.
+   Those prime checks state their finite operands and never imply full-carrier
+   proof. Cases in this tier take their own basis rather than consuming a `Domain`.
 3. State the claim, subject, operand domain, and evidence legs explicitly.
 4. Use the existing `Laws.cs` combinators and shared domains rather than
    reimplementing their loops.

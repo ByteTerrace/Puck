@@ -9,4 +9,7 @@
         <PuckLayer>Leaf contracts and data</PuckLayer>
         <RootNamespace>Puck.Maths</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+        <None Update="Puck.Maths.ThirdPartyNotices.txt" Pack="true" PackagePath="/" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

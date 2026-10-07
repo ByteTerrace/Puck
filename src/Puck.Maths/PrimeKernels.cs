@@ -236,8 +236,8 @@ internal static class PrimeKernels {
         ? ((uint)value).IsPrime()
         : PrimeField64.IsBaillieProbablePrime(value: value));
     // Selection receives a wheel candidate above uint.MaxValue. Reuse the factorization ladder's
-    // inverse products and the selection extension through 163 before paying for Baillie–PSW.
-    internal static bool IsPrimeSelectionCandidate(ulong value) {
+    // inverse products and the selection extension through 163 before its supplied exact decision.
+    internal static bool PassesSelectionPrimeFilter(ulong value) {
         var ceilings = SmallFactorCeilings;
 
         for (var index = 2; (index < SmallFactorInverses.Length); ++index) {
@@ -246,7 +246,7 @@ internal static class PrimeKernels {
         foreach (var factor in SelectionFilter.Factors) {
             if (unchecked((value * factor.Inverse)) <= factor.Ceiling) { return false; }
         }
-        return IsPrimeCandidateWord(value: value);
+        return true;
     }
     /// <summary>Runs one strong-probable-prime round in an already-created odd residue ring.</summary>
     /// <param name="ring">The ring over an odd candidate greater than one.</param>

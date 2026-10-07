@@ -105,7 +105,51 @@ internal static partial class Subjects {
         }
         return null;
     }
+    public static string? PrimeSelectionCustomDecisionMapping() {
+        foreach (var (low, high) in PrimeSelectionIntervals) {
+            var ordinary = Pcg32XshRr.Create(state: 42, stream: 54);
+            var custom = ordinary;
 
+            for (var request = 0; (request < 8); ++request) {
+                var found = PrimeExploration.TryRandomPrime(low: low, high: high, generator: ref ordinary, prime: out var prime);
+                var customFound = PrimeExploration.TryRandomPrime<Pcg32XshRr, IndependentSelectionDecision>(
+                    low: low, high: high, generator: ref custom, prime: out var selected);
+
+                if ((found != customFound) || (prime != selected) || (ordinary.State != custom.State)) {
+                    return $"custom decision changed selection or draws in [{low},{high}] at request {request}";
+                }
+                if (found && ((prime < low) || (prime > high) || !Oracles.ExactPrimality(value: prime))) {
+                    return $"custom decision returned {prime} outside the interval or composite";
+                }
+                if (!found && (prime != 0)) { return "custom decision failure lost the zero sentinel"; }
+            }
+        }
+        foreach (var factor in new ulong[] { 7, 59, 61, 163 }) {
+            var composite = (factor * 4_294_967_311UL);
+            var generator = new PrimeSelectionWord(word: ulong.MaxValue);
+
+            if (PrimeExploration.TryRandomPrime<PrimeSelectionWord, IndependentSelectionDecision>(low: composite, high: composite,
+                generator: ref generator, prime: out var selected) || (selected != 0) || (generator.Draws != 0)) {
+                return $"custom decision filter failed for factor {factor}";
+            }
+        }
+        var invalid = new PrimeSelectionWord(word: 0);
+
+        return (Refuses(() => PrimeExploration.TryRandomPrime<PrimeSelectionWord, IndependentSelectionDecision>(7, 5, ref invalid, out _),
+                typeof(ArgumentOutOfRangeException), "high", "custom random-prime reversed interval")
+            ?? Refuses(() => PrimeExploration.TryRandomPrime<PrimeSelectionWord, IndependentSelectionDecision>(generator: ref invalid, high: 5, low: 2, maxAttempts: 0, prime: out _),
+                typeof(ArgumentOutOfRangeException), "maxAttempts", "custom random-prime empty budget"));
+    }
+
+    private readonly struct IndependentSelectionDecision : IPrimeCandidateDecision {
+        public static bool IsPrimeCandidate(ulong value) {
+            if (value <= uint.MaxValue) { throw new InvalidOperationException(message: "A narrow value reached the wide decision."); }
+            for (var divisor = 2UL; (divisor <= 163); ++divisor) {
+                if ((value % divisor) == 0) { throw new InvalidOperationException(message: $"Unfiltered divisor {divisor} reached the wide decision."); }
+            }
+            return Oracles.ExactPrimality(value: value);
+        }
+    }
     private struct PrimeSelectionWord(ulong word) : IDrawGenerator {
         public int Draws { get; private set; }
 

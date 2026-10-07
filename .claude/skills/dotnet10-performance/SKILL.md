@@ -87,7 +87,9 @@ outside this contract and takes the references as written.
   BenchmarkDotNet timing, allocation and disassembly; `puck bench world` for
   server construction and tick workloads; `puck bench startup` for fresh-process
   readiness; and `puck bench primes` for serial interval surveys and native
-  primesieve comparisons. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
+  primesieve comparisons; and `puck bench prime-requests` for serial nth-prime,
+  counting and uniform random-prime comparisons with separate coarse work profiles.
+  The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
   owns options, report fields and measurement hygiene.
 - For primes, use `PrimeCandidateScan` and `PrimeChannelMasks` for representation
   costs, `PrimePrimality` and `PrimeSurvivorDecisions` for decisions,

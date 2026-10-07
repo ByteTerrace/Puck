@@ -444,10 +444,10 @@ public static class NumberTheoryFunctions {
     /// <param name="onPrime">The callback invoked once for each prime in the range, in ascending order.</param>
     /// <remarks>
     /// Delegates to <see cref="PrimeExploration.Enumerate"/> with its automatic thirty-wheel policy: complete sieving
-    /// throughout the uint domain, and bounded presieving followed by exact primality decisions above it. The complete
-    /// ulong domain is supported. Only the shared base-prime table and a bounded segment are retained; the number of
-    /// primes reported does not determine the working set. Use <see cref="PrimeExploration.Enumerate"/> directly to
-    /// choose a segment size, marking strategy, byte layout, or full Eratosthenes base-prime generation.
+    /// throughout the uint domain, then complete sieving or bounded presieving according to interval width and
+    /// upper-base workspace. The complete ulong domain is supported. Working storage depends on the segment and
+    /// retained base-prime states rather than the number of reported primes. Use <see cref="PrimeExploration.Enumerate"/>
+    /// directly to choose a segment size, marking strategy, byte layout, base-prime policy or cancellation token.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="onPrime"/> is <see langword="null"/>.</exception>
     public static void SegmentedPrimeSieve(ulong low, ulong high, Action<ulong> onPrime) =>

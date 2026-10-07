@@ -303,7 +303,7 @@ in a change loop.
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
 | **Default** | *(a plain run — no filter)* | < 30 s | **every change**, unconditionally |
 | Deep | `--explicit on --filter-trait tier=Deep` | minutes | **before you commit**, and before any rounding change lands |
-| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-width sweeps over an entire carrier |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
 narrow it with a `--filter` on the law id when one law is the question. Run it only

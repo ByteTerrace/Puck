@@ -93,18 +93,27 @@ internal static partial class Subjects {
     }
     public static string? Prime64CheckpointWalksMatchNative() {
         // Native primesieve counts 31,645 primes in [2^48+1, 2^48+1,048,832], and 31,426 in
-        // [2^48-1,048,832, 2^48]. Each interval exceeds the production chunk width in a different direction.
+        // [2^48-1,048,832, 2^48]. The adaptive work budget admits both checkpoint intervals.
         var checkpointCount = 8_731_188_863_470UL;
-        var upperCount = (281_474_977_759_488UL).PrimeCountingFunction();
-        var lowerCount = (281_474_975_661_824UL).PrimeCountingFunction();
+        var upperProfile = PrimeExtensions.ProfilePrimeCountingFunction(value: 281_474_977_759_488);
+        var lowerProfile = PrimeExtensions.ProfilePrimeCountingFunction(value: 281_474_975_661_824);
+        var upperCount = upperProfile.Result;
+        var lowerCount = lowerProfile.Result;
 
         if (upperCount != (checkpointCount + 31_645)) { return $"upper chunk walk: expected {(checkpointCount + 31_645)}, got {upperCount}"; }
         if (lowerCount != (checkpointCount - 31_426)) { return $"lower chunk walk: expected {(checkpointCount - 31_426)}, got {lowerCount}"; }
-        var upperPrime = (checkpointCount + 31_644).NthPrime();
-        var lowerPrime = (checkpointCount - 31_426).NthPrime();
+        if ((upperProfile.Counts[0].Route != "CheckpointInterval") || (lowerProfile.Counts[0].Route != "CheckpointInterval")) {
+            return "adaptive checkpoint counts made a distant count dispatch";
+        }
+        var upperSelection = PrimeExtensions.ProfileNthPrime(value: (checkpointCount + 31_644));
+        var lowerSelection = PrimeExtensions.ProfileNthPrime(value: (checkpointCount - 31_426));
+        var upperPrime = upperSelection.Result;
+        var lowerPrime = lowerSelection.Result;
 
         if (upperPrime != 281_474_977_759_477) { return $"forward rank chunks: expected 281474977759477, got {upperPrime}"; }
         if (lowerPrime != 281_474_975_661_833) { return $"backward rank chunks: expected 281474975661833, got {lowerPrime}"; }
+        if ((upperSelection.Route != "CheckpointSelection") || (lowerSelection.Route != "CheckpointSelection") ||
+            (upperSelection.Counts.Count != 0) || (lowerSelection.Counts.Count != 0)) { return "adaptive checkpoint ranks dispatched a full count"; }
         // The root cap is an odd square and its successor is even. Native sieving finds 274,879 primes
         // above that square through 2^44, independently fixing both sides of the counting policy boundary.
         var atCap = (17_592_177_655_809UL).PrimeCountingFunction();
@@ -112,6 +121,38 @@ internal static partial class Subjects {
 
         if ((atCap != 597_116_106_853) || (aboveCap != 597_116_106_853)) {
             return $"counting storage boundary: expected 597116106853 twice, got {atCap}/{aboveCap}";
+        }
+        return null;
+    }
+    public static string? PrimeAdaptiveCheckpointBoundaries() {
+        ReadOnlySpan<(ulong First, string FirstRoute, string MiddleRoute, string LastRoute)> intervals = [
+            (((1UL << 32) + 65_535), "CheckpointInterval", "CheckpointInterval", "Quotient64"),
+            (((1UL << 33) - 92_682), "Quotient64", "CheckpointInterval", "CheckpointInterval"),
+        ];
+        var canceled = new CancellationToken(canceled: true);
+
+        foreach (var (first, firstRoute, middleRoute, lastRoute) in intervals) {
+            string[] routes = [firstRoute, middleRoute, lastRoute];
+            var previous = 0UL;
+
+            for (var offset = 0; (offset < routes.Length); ++offset) {
+                var bound = (first + ((uint)offset));
+                var profile = PrimeExtensions.ProfilePrimeCountingFunction(value: bound);
+
+                if ((profile.Counts.Count != 1) || (profile.Counts[0].Route != routes[offset])) {
+                    return $"adaptive boundary {bound}: expected route {routes[offset]}";
+                }
+                if (offset != 0) {
+                    var expected = (previous + (Oracles.ExactPrimality(value: bound) ? 1UL : 0UL));
+
+                    if (profile.Result != expected) { return $"adaptive boundary {bound}: expected local count {expected}, got {profile.Result}"; }
+                }
+                previous = profile.Result;
+                var refusal = Refuses(() => PrimeExtensions.ProfilePrimeCountingFunction(cancellationToken: canceled, value: bound),
+                    typeof(OperationCanceledException), null, "canceled adaptive boundary");
+
+                if (refusal is not null) { return refusal; }
+            }
         }
         return null;
     }

@@ -10,6 +10,8 @@ public static partial class PrimeExploration {
     private const int WideBucketBytes = (1 << WideBucketBits);
     private const uint WideBucketMask = (WideBucketBytes - 1);
     private const int WidePageBytes = 8192;
+    private const int WideInitialSlabPages = 16;
+    private const int WideMaximumSlabPages = 2048;
     private const int WidePhaseBits = 23;
     private const uint WideMediumLimit = (3 * WideBucketBytes);
 
@@ -89,6 +91,7 @@ public static partial class PrimeExploration {
     // above a byte offset. The 210-wheel skips multiples of seven already removed by the small-prime marker.
     // Absolute bucket positions belong to the scheduler, so even the final ulong block needs no full-width multiple.
     private sealed unsafe class WideSieve : IDisposable {
+        private readonly CancellationToken m_cancellationToken;
         private readonly UpperPrimeStream m_primes;
         private readonly WideMedium? m_medium;
         private readonly ulong m_integerOrigin;
@@ -96,27 +99,29 @@ public static partial class PrimeExploration {
         private readonly ulong m_origin;
         private readonly WideStep[] m_steps;
         private readonly nuint[] m_buckets;
+        private readonly int m_bucketHorizon;
+
         private readonly List<nuint> m_slabs = [];
 
         private WideNativePage* m_freePages;
         private ulong m_currentOrdinal;
-        private int m_nextSlabPages = 16;
+
+        private int m_nextSlabPages = WideInitialSlabPages;
+
+        private int m_bucketIndex;
         private int m_primeIndex;
         private int m_primeCount;
 
-        internal WideSieve(ulong low, ulong high, uint limit, PrimeByteLayout layout) {
+        internal WideSieve(ulong low, ulong high, uint limit, PrimeByteLayout layout, CancellationToken cancellationToken) {
+            m_cancellationToken = cancellationToken;
             m_high = high;
             m_origin = (low / 30);
             m_integerOrigin = (m_origin * 30);
             m_steps = ((layout == PrimeByteLayout.Numeric) ? WideWheelTables.NumericSteps : WideWheelTables.AlgebraicSteps);
-            // A 210-wheel gap is at most ten; its byte advance is at most 10*(p/30)+10.
-            var maximumAdvance = ((10UL * (limit / 30U)) + 10);
-            // Keep the complete advance horizon even for a short interval. Bucket zero is the current
-            // coarse segment; every future hop fits directly, without a per-event ordinal or ring mask.
-            var maximumBuckets = ((int)((maximumAdvance >> WideBucketBits) + 3));
-
-            m_buckets = new nuint[maximumBuckets];
-            m_primes = new UpperPrimeStream(limit: limit);
+            m_bucketHorizon = WideBucketHorizon(limit: limit);
+            // Two horizons let the base reference slide without changing relative hot-loop indexing.
+            m_buckets = new nuint[(2 * m_bucketHorizon)];
+            m_primes = new UpperPrimeStream(cancellationToken: cancellationToken, limit: limit);
             try { m_medium = CreateMedium(high: high, layout: layout); } catch { m_primes.Dispose(); throw; }
         }
 
@@ -126,13 +131,20 @@ public static partial class PrimeExploration {
             var consumed = 0;
 
             while (consumed < segment.Length) {
+                m_cancellationToken.ThrowIfCancellationRequested();
                 var ordinal = (offset >> WideBucketBits);
 
                 if (ordinal != m_currentOrdinal) {
-                    // Calls cover contiguous bytes and each portion stops at a coarse boundary. The
-                    // preceding bucket is drained; shifting once preserves all future relative hops.
-                    m_buckets.AsSpan(start: 1).CopyTo(destination: m_buckets);
-                    m_buckets[^1] = 0;
+                    // Contiguous portions drain the preceding bucket before advancing one position.
+                    // Compact only once per horizon; a hop is at most horizon-2, so the doubled array
+                    // always contains the full future window, including immediately before compaction.
+                    if (++m_bucketIndex == m_bucketHorizon) {
+                        var tail = m_buckets.AsSpan(start: m_bucketHorizon);
+
+                        tail.CopyTo(destination: m_buckets);
+                        tail.Clear();
+                        m_bucketIndex = 0;
+                    }
                     m_currentOrdinal = ordinal;
                 }
                 var bucketOffset = ((int)(offset & WideBucketMask));
@@ -153,7 +165,7 @@ public static partial class PrimeExploration {
                     ++m_primeIndex;
                     AddPrime(coordinate: coordinate, prime: prime);
                 }
-                if (m_buckets[0] != 0) {
+                if (m_buckets[m_bucketIndex] != 0) {
                     var portion = segment.Slice(length: length, start: consumed);
 
                     if ((bucketOffset == 0) && (length == WideBucketBytes)) { MarkFullBucket(segment: portion); } else { MarkPartialBucket(segment: portion, start: bucketOffset); }
@@ -180,7 +192,7 @@ public static partial class PrimeExploration {
             var channel = PrimeWheel30.NumericChannels[((int)(coordinate & 7))];
             var offset = ((multiple / 30) - m_origin);
             var hop = ((int)((offset >> WideBucketBits) - m_currentOrdinal));
-            ref var head = ref Unsafe.Add(source: ref MemoryMarshal.GetArrayDataReference(array: m_buckets), elementOffset: hop);
+            ref var head = ref Unsafe.Add(source: ref MemoryMarshal.GetArrayDataReference(array: m_buckets), elementOffset: (m_bucketIndex + hop));
 
             Append(head: ref head, indices: ((uint)(offset & WideBucketMask)) |
                 (((uint)((channel * 48) + source)) << WidePhaseBits), quotient: (coordinate >> 3));
@@ -188,7 +200,7 @@ public static partial class PrimeExploration {
         private void MarkFullBucket(Span<byte> segment) {
             ref var output = ref MemoryMarshal.GetReference(span: segment);
             ref var steps = ref MemoryMarshal.GetArrayDataReference(array: m_steps);
-            ref var buckets = ref MemoryMarshal.GetArrayDataReference(array: m_buckets);
+            ref var buckets = ref Unsafe.Add(source: ref MemoryMarshal.GetArrayDataReference(array: m_buckets), elementOffset: m_bucketIndex);
 
             // Each event performs exactly one mark. An advance that stays in this bucket joins a fresh
             // output list, which the outer loop drains next. There is no per-prime segment-exit branch.
@@ -229,7 +241,7 @@ public static partial class PrimeExploration {
             var end = ((uint)(start + segment.Length));
             ref var output = ref MemoryMarshal.GetReference(span: segment);
             ref var steps = ref MemoryMarshal.GetArrayDataReference(array: m_steps);
-            ref var buckets = ref MemoryMarshal.GetArrayDataReference(array: m_buckets);
+            ref var buckets = ref Unsafe.Add(source: ref MemoryMarshal.GetArrayDataReference(array: m_buckets), elementOffset: m_bucketIndex);
             var page = PageOf(cursor: ((WideState*)buckets));
 
             page->End = ((WideState*)buckets);
@@ -308,7 +320,7 @@ public static partial class PrimeExploration {
                 page->Next = m_freePages;
                 m_freePages = page;
             }
-            m_nextSlabPages = Math.Min(val1: 2048, val2: (count * 2));
+            m_nextSlabPages = Math.Min(val1: WideMaximumSlabPages, val2: (count * 2));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static WideNativePage* PageOf(WideState* cursor) => ((WideNativePage*)((((nuint)cursor) - 1) & ~((nuint)(WidePageBytes - 1))));
@@ -371,6 +383,8 @@ public static partial class PrimeExploration {
     // Base generation uses the same cache-chunked sieve as the uint fast path. Buffered bit decoding
     // avoids callbacks and eight residue tests per byte, and no complete upper-prime table is retained.
     private sealed class UpperPrimeStream : IDisposable {
+        private readonly CancellationToken m_cancellationToken;
+
         // Each coordinate is (prime / 30) << 3 | numericResidueIndex, an ascending key below 2^31.
         // The generator already owns those byte/bit coordinates, so preserve them until activation.
         internal readonly uint[] Coordinates = new uint[4096];
@@ -393,7 +407,8 @@ public static partial class PrimeExploration {
         private int m_word;
         private int m_words;
 
-        internal UpperPrimeStream(uint limit) {
+        internal UpperPrimeStream(uint limit, CancellationToken cancellationToken) {
+            m_cancellationToken = cancellationToken;
             m_limit = limit;
             m_bitmap = ArrayPool<byte>.Shared.Rent(minimumLength: WideBucketBytes);
             m_states = ArrayPool<PrimeMarkState>.Shared.Rent(minimumLength: PrimeKernels.BasePrimes.Length);
@@ -409,10 +424,12 @@ public static partial class PrimeExploration {
         }
 
         internal int Fill() {
+            m_cancellationToken.ThrowIfCancellationRequested();
             var count = 0;
 
             while (count <= (Coordinates.Length - 64)) {
                 if (m_word == m_words) {
+                    m_cancellationToken.ThrowIfCancellationRequested();
                     if ((m_nextBlock * 30) > m_limit) { break; }
                     var length = ((int)Math.Min(val1: ((ulong)WideBucketBytes), val2: (((m_limit / 30UL) - m_nextBlock) + 1)));
                     var segment = m_bitmap.AsSpan(length: length, start: 0);

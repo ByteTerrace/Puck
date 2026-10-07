@@ -1,5 +1,15 @@
 namespace Puck.Maths;
 
+/// <summary>Supplies the final exact primality decision for filtered unsigned-64-bit selection candidates.</summary>
+/// <remarks>The candidate is greater than <see cref="uint.MaxValue"/> and has no prime factor through 163.
+/// Implementations must return its exact primality. A false positive can return a composite; a false negative
+/// changes the selected distribution. The sampler supplies filtering, uniform candidate mapping and draw budgets.</remarks>
+public interface IPrimeCandidateDecision {
+    /// <summary>Decides primality of a filtered candidate above the unsigned-32-bit domain.</summary>
+    /// <param name="value">The candidate, with no prime divisor through 163.</param>
+    /// <returns>Whether <paramref name="value"/> is prime.</returns>
+    static abstract bool IsPrimeCandidate(ulong value);
+}
 public static partial class PrimeExploration {
     /// <summary>Attempts to select a uniformly distributed prime from an inclusive unsigned-64-bit interval.</summary>
     /// <typeparam name="TGenerator">The caller-owned draw generator, specialized without boxing.</typeparam>
@@ -21,7 +31,23 @@ public static partial class PrimeExploration {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The interval is reversed or the attempt budget is not positive.</exception>
     public static bool TryRandomPrime<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = 256)
-        where TGenerator : struct, IDrawGenerator {
+        where TGenerator : struct, IDrawGenerator =>
+        TryRandomPrime<TGenerator, BaillieSelectionDecision>(generator: ref generator, high: high, low: low, maxAttempts: maxAttempts, prime: out prime);
+    /// <summary>Attempts uniform prime selection with a supplied exact decision for filtered wide candidates.</summary>
+    /// <typeparam name="TGenerator">The caller-owned draw generator, specialized without boxing.</typeparam>
+    /// <typeparam name="TDecision">The exact wide-candidate decision; see <see cref="IPrimeCandidateDecision"/>.</typeparam>
+    /// <param name="low">The inclusive lower bound.</param>
+    /// <param name="high">The inclusive upper bound, at least <paramref name="low"/>.</param>
+    /// <param name="generator">The generator state, advanced by reference.</param>
+    /// <param name="prime">The selected prime on success; zero on failure.</param>
+    /// <param name="maxAttempts">The positive budget of raw 64-bit words, each consuming two 32-bit draws.</param>
+    /// <returns>Whether a prime was selected before exhausting the draw budget.</returns>
+    /// <remarks>Uses exactly the default sampler's table, wheel, range reduction and filters through 163.
+    /// The custom decision runs only above <see cref="uint.MaxValue"/> after those filters; all smaller
+    /// candidates use the narrow production decision. Uniform-prime semantics require an exact supplied decision.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The interval is reversed or the attempt budget is not positive.</exception>
+    public static bool TryRandomPrime<TGenerator, TDecision>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = 256)
+        where TGenerator : struct, IDrawGenerator where TDecision : struct, IPrimeCandidateDecision {
         ArgumentOutOfRangeException.ThrowIfLessThan(high, low);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxAttempts);
         prime = 0;
@@ -55,7 +81,7 @@ public static partial class PrimeExploration {
         if (countCandidates == 1) {
             var value = ((30 * (first >> 3)) + PrimeWheel30.NumericResidues[((int)(first & 7))]);
 
-            if (!PrimeKernels.IsPrimeWord(value: value)) { return false; }
+            if (!DecideSelectionCandidate<TDecision>(value: value)) { return false; }
             prime = value;
             return true;
         }
@@ -71,12 +97,20 @@ public static partial class PrimeExploration {
             var ordinal = ((first + index) - ((ulong)exceptionalCount));
             var value = ((30 * (ordinal >> 3)) + PrimeWheel30.NumericResidues[((int)(ordinal & 7))]);
 
-            if ((value <= uint.MaxValue) ? ((uint)value).IsPrime() : PrimeKernels.IsPrimeSelectionCandidate(value: value)) {
+            if (DecideSelectionCandidate<TDecision>(value: value)) {
                 prime = value;
                 return true;
             }
         }
         return false;
+    }
+
+    private static bool DecideSelectionCandidate<TDecision>(ulong value) where TDecision : struct, IPrimeCandidateDecision =>
+        ((value <= uint.MaxValue) ? ((uint)value).IsPrime()
+            : (PrimeKernels.PassesSelectionPrimeFilter(value: value) && TDecision.IsPrimeCandidate(value: value)));
+
+    private readonly struct BaillieSelectionDecision : IPrimeCandidateDecision {
+        public static bool IsPrimeCandidate(ulong value) => PrimeKernels.IsPrimeCandidateWord(value: value);
     }
 
     private static ulong WheelPrefix(ulong high) {

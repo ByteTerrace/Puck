@@ -70,6 +70,7 @@ public static partial class PrimeExploration {
     /// <param name="layout">The order of residue bits within each byte.</param>
     /// <param name="mode">The complete-sieve or bounded-presieve policy.</param>
     /// <param name="usePreSieve">Uses periodic small-prime patterns through 163 instead of individual marks for those primes.</param>
+    /// <param name="cancellationToken">Cancels before starting, between segments and during upper-base generation.</param>
     /// <remarks>
     /// <para>Each segment uses one byte per thirty integers. Two, three, and five are reported separately; partial
     /// first and final bytes are masked, and one is never reported. Scalar marking starts at each prime's square;
@@ -92,6 +93,7 @@ public static partial class PrimeExploration {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside
     /// <c>[1, Array.MaxLength]</c>, or <paramref name="strategy"/>, <paramref name="layout"/>, or
     /// <paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
     public static void Enumerate(
         ulong low,
         ulong high,
@@ -100,10 +102,11 @@ public static partial class PrimeExploration {
         PrimeSieveStrategy strategy = PrimeSieveStrategy.BucketPackets,
         PrimeByteLayout layout = PrimeByteLayout.Numeric,
         PrimeSieveMode mode = PrimeSieveMode.Automatic,
-        bool usePreSieve = true
+        bool usePreSieve = true,
+        CancellationToken cancellationToken = default
     ) {
         ArgumentNullException.ThrowIfNull(onPrime);
-        _ = Explore(high: high, layout: layout, low: low, mode: mode, onPrime: onPrime, segmentBytes: segmentBytes, strategy: strategy, usePreSieve: usePreSieve);
+        _ = Explore(cancellationToken: cancellationToken, high: high, layout: layout, low: low, mode: mode, onPrime: onPrime, segmentBytes: segmentBytes, strategy: strategy, usePreSieve: usePreSieve);
     }
     /// <summary>Counts primes in a closed interval without delivering individual values.</summary>
     /// <param name="low">The inclusive lower bound.</param>
@@ -113,11 +116,13 @@ public static partial class PrimeExploration {
     /// <param name="layout">The order of residue bits within each byte.</param>
     /// <param name="mode">The complete-sieve or bounded-presieve policy.</param>
     /// <param name="usePreSieve">Uses periodic small-prime patterns through 163 instead of individual marks for those primes.</param>
+    /// <param name="cancellationToken">Cancels before starting, between segments and during upper-base generation.</param>
     /// <returns>The number of primes in the interval.</returns>
     /// <remarks>Shares enumeration's marking, endpoint masks, and base-prime policy. Complete sieving counts
     /// surviving bits with word population counts; bounded presieving decides only survivors not already proven by its base primes.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside
     /// <c>[1, Array.MaxLength]</c>, or an option is not a defined value.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
     public static ulong Count(
         ulong low,
         ulong high,
@@ -125,11 +130,22 @@ public static partial class PrimeExploration {
         PrimeSieveStrategy strategy = PrimeSieveStrategy.BucketPackets,
         PrimeByteLayout layout = PrimeByteLayout.Numeric,
         PrimeSieveMode mode = PrimeSieveMode.Automatic,
-        bool usePreSieve = true
-    ) => Explore(high: high, layout: layout, low: low, mode: mode, onPrime: null, segmentBytes: segmentBytes, strategy: strategy, usePreSieve: usePreSieve);
+        bool usePreSieve = true,
+        CancellationToken cancellationToken = default
+    ) => Explore(cancellationToken: cancellationToken, high: high, layout: layout, low: low, mode: mode, onPrime: null, segmentBytes: segmentBytes, strategy: strategy, usePreSieve: usePreSieve);
+
+    internal static ulong CountWithWork(ulong low, ulong high, CancellationToken cancellationToken, PrimeBitmapWork? work) =>
+        Explore(cancellationToken: cancellationToken, high: high, layout: PrimeByteLayout.Numeric, low: low,
+            mode: PrimeSieveMode.Automatic, onPrime: null, segmentBytes: 32768, strategy: PrimeSieveStrategy.BucketPackets,
+            usePreSieve: true, work: work);
+
+    // A consumer sees endpoint-masked segments and may stop without exceptions. Internal callers use
+    // numeric layout and handle the three exceptional primes before entering this bitmap-only path.
+    private delegate bool SegmentConsumer(ReadOnlySpan<byte> segment, ulong blockLow, ulong segmentHigh, bool testSurvivors);
 
     private static unsafe ulong Explore(ulong low, ulong high, Action<ulong>? onPrime, int segmentBytes,
-        PrimeSieveStrategy strategy, PrimeByteLayout layout, PrimeSieveMode mode, bool usePreSieve) {
+        PrimeSieveStrategy strategy, PrimeByteLayout layout, PrimeSieveMode mode, bool usePreSieve, CancellationToken cancellationToken,
+        SegmentConsumer? onSegment = null, PrimeBitmapWork? work = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(segmentBytes, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(segmentBytes, Array.MaxLength);
         if (((uint)strategy) > ((uint)PrimeSieveStrategy.BucketPackets)) {
@@ -141,13 +157,14 @@ public static partial class PrimeExploration {
         if (((uint)mode) > ((uint)PrimeSieveMode.Presieve)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(mode));
         }
+        cancellationToken.ThrowIfCancellationRequested();
         if (high < low) { return 0; }
 
         var count = 0UL;
 
-        if ((low <= 2UL) && (high >= 2UL)) { ++count; onPrime?.Invoke(2UL); }
-        if ((low <= 3UL) && (high >= 3UL)) { ++count; onPrime?.Invoke(3UL); }
-        if ((low <= 5UL) && (high >= 5UL)) { ++count; onPrime?.Invoke(5UL); }
+        if ((low <= 2UL) && (high >= 2UL)) { ++count; onPrime?.Invoke(2UL); cancellationToken.ThrowIfCancellationRequested(); }
+        if ((low <= 3UL) && (high >= 3UL)) { ++count; onPrime?.Invoke(3UL); cancellationToken.ThrowIfCancellationRequested(); }
+        if ((low <= 5UL) && (high >= 5UL)) { ++count; onPrime?.Invoke(5UL); cancellationToken.ThrowIfCancellationRequested(); }
         if (high < 7UL) { return count; }
 
         low = Math.Max(val1: low, val2: 7UL);
@@ -156,7 +173,7 @@ public static partial class PrimeExploration {
 
         segmentBytes = ResolveSegmentBytes(high: high, segmentBytes: segmentBytes, strategy: strategy);
         using var wideSieve = ((!testSurvivors && (baseLimit > 65535UL))
-            ? new WideSieve(high: high, layout: layout, limit: ((uint)baseLimit), low: low)
+            ? new WideSieve(cancellationToken: cancellationToken, high: high, layout: layout, limit: ((uint)baseLimit), low: low)
             : null);
         var blockLow = (low / 30UL);
         var lastBlock = (high / 30UL);
@@ -197,6 +214,7 @@ public static partial class PrimeExploration {
                     }
                 }
                 while (blockLow <= lastBlock) {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var length = ((int)Math.Min(val1: ((ulong)segmentBytes), val2: ((lastBlock - blockLow) + 1UL)));
                     var blockHigh = ((blockLow + ((ulong)length)) - 1UL);
                     var segmentLow = Math.Max(val1: low, val2: (blockLow * 30UL));
@@ -228,12 +246,17 @@ public static partial class PrimeExploration {
                         MarkBases(PrimeKernels.BasePrimes, segment, blockLow, segmentLow, segmentHigh, strategy, layout, usePreSieve);
                     }
                     wideSieve?.Mark(blockLow: blockLow, high: segmentHigh, segment: segment);
+                    work?.AddSegment(bytes: length);
 
                     var decideSegment = (testSurvivors && (segmentHigh >= ProvenPresieveLimit));
 
-                    count += (((onPrime is null) && !decideSegment)
-                        ? CountBits(segment: segment)
-                        : ReportSegment(blockLow: blockLow, layout: layout, onPrime: onPrime, segment: segment, testSurvivors: decideSegment));
+                    if (onSegment is not null) {
+                        if (!onSegment(segment, blockLow, segmentHigh, decideSegment)) { break; }
+                    } else {
+                        count += (((onPrime is null) && !decideSegment)
+                            ? CountBits(segment: segment)
+                            : ReportSegment(blockLow: blockLow, layout: layout, onPrime: onPrime, segment: segment, testSurvivors: decideSegment));
+                    }
                     if (blockHigh == lastBlock) { break; }
                     blockLow = (blockHigh + 1UL);
                 }
@@ -244,6 +267,7 @@ public static partial class PrimeExploration {
                 ArrayPool<byte>.Shared.Return(storage);
             }
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return count;
     }
     private static ulong CountBits(ReadOnlySpan<byte> segment) {

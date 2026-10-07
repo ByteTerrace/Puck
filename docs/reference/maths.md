@@ -318,7 +318,7 @@ surface, including parameters, return values, and exceptions.
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
 | `LexicographicOrder` | Compare two records by a primary key and break a primary tie by a secondary key: the total order a deterministic sort needs. |
 | `IMeetSemilattice<TSelf>` / `MeetMask64` / `MeetQuantity64` / `MeetProduct<TFirst, TSecond>` | Combine restrictions so the result never grants more than either input, whether the restriction is a bit mask, a quantity, or a pair of both. |
-| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, an add, a multiply and a power that report overflow (`TryAdd`, `TryMultiply`, `TryExponentiate`), a narrowing that refuses an out-of-range value (`TryNarrow`), and exact 32-bit primality and factorization. |
+| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, an add, a multiply and a power that report overflow (`TryAdd`, `TryMultiply`, `TryExponentiate`), a narrowing that refuses an out-of-range value (`TryNarrow`), exact 32-bit primality and factorization, and [unsigned 64-bit prime counting and rank selection](prime-exploration.md#selecting-one-prime). |
 | `SignedByteVectorFunctions` | Quantized signed 8-bit vector arithmetic normalized on radius 127: unit sphere admission, dot product, Q48.16 cosine similarity, unit normalization, and weighted combination. |
 
 The chooser above is the quickest way into these types. The API reference is

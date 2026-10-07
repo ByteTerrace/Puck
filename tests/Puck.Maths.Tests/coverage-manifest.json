@@ -11618,6 +11618,13 @@
     },
     {
       "CoveredBy": [
+        "prime-selection.custom-decision-mapping"
+      ],
+      "Id": "Puck.Maths.IPrimeCandidateDecision.IsPrimeCandidate(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "presented.material-fused-identities"
       ],
       "Id": "Puck.Maths.ISignedMaterial<TValue,TSelf>.Negate(TValue)",
@@ -17286,6 +17293,168 @@
     },
     {
       "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Bound",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CachedQuotientDivisions",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CheckpointBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CheckpointSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Cutoff",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.EasyLeafBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.EasyLeafSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafFrontier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.OrdinaryFactorCoordinates",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Route",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardFrontier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeReverseBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeReverseWindows",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SpecialFactorCoordinates",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.TableBuilt",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.TableCapacity",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.prime-exploration-wide-final-window",
         "deep.prime-exploration-wide-native-counts",
         "prime-exploration.enumeration-refusals",
@@ -17293,9 +17462,10 @@
         "prime-exploration.packets-vs-integer-sieve",
         "prime-exploration.patterns-vs-integer-sieve",
         "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
         "prime-exploration.wide-sieve-vs-integer-windows"
       ],
-      "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
+      "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17306,9 +17476,10 @@
         "prime-exploration.packets-vs-integer-sieve",
         "prime-exploration.patterns-vs-integer-sieve",
         "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
         "prime-exploration.wide-sieve-vs-integer-windows"
       ],
-      "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean)",
+      "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveStrategy,Puck.Maths.PrimeByteLayout,Puck.Maths.PrimeSieveMode,System.Boolean,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17347,6 +17518,7 @@
     },
     {
       "CoveredBy": [
+        "prime-selection.custom-decision-mapping",
         "prime-selection.random-rank-and-budget",
         "prime-selection.random-vs-independent"
       ],
@@ -17372,8 +17544,13 @@
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
         "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-bitmap-directions",
         "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-ranks",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e19",
         "prime-selection.nth-vs-sieve",
+        "prime-selection.profile-selection-results",
         "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt32)",
@@ -17383,8 +17560,13 @@
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
         "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-bitmap-directions",
         "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-ranks",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e19",
         "prime-selection.nth-vs-sieve",
+        "prime-selection.profile-selection-results",
         "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt64,System.Threading.CancellationToken)",
@@ -17395,6 +17577,14 @@
         "core.prime-counting-is-dense-against-a-sieve",
         "core.prime-extensions-vs-trial-division",
         "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-boundaries",
+        "exhaustive.prime-selection-ulong-combinatorial-a-square-high",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e19",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
         "prime-selection.ulong-count-vs-independent",
         "prime-selection.ulong-nth-vs-independent"
       ],
@@ -17406,10 +17596,37 @@
         "core.prime-counting-is-dense-against-a-sieve",
         "core.prime-extensions-vs-trial-division",
         "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-boundaries",
+        "exhaustive.prime-selection-ulong-combinatorial-a-square-high",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e19",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
         "prime-selection.ulong-count-vs-independent",
         "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.ProfileNthPrime(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.ProfilePrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17899,6 +18116,71 @@
         "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.PrimeFieldMaterial.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Counts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.DirectPrimalityRequests",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Result",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Route",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-combinatorial-counts",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionWindows",
       "State": "covered"
     },
     {

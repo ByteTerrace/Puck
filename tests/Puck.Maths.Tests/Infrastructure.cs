@@ -15,10 +15,11 @@ internal enum Tier {
     /// <summary>Exhaustive edge batteries and larger sweeps, in minutes; the pre-commit guardian. Opt in with <c>--explicit on --filter-trait tier=Deep</c>.</summary>
     Deep,
     /// <summary>
-    /// Full-width sweeps — every value of a carrier rather than a sample of one. Opt in with
+    /// Full-carrier sweeps and expensive finite combinatorial-prime checks. Opt in with
     /// <c>--explicit on --filter-trait tier=Exhaustive</c>; expect tens of minutes and run it on demand or nightly, never in a change loop.
     /// </summary>
     /// <remarks>
+    /// A finite prime check names its operands and evidence envelope; its tier does not claim full-carrier proof.
     /// This is the only tier whose statements do NOT come from a <see cref="Domain"/>. A domain hands out an edge
     /// battery, a bounded random batch and a frontier block — a SAMPLE, by construction — which cannot express "every
     /// 32-bit value". Exhaustive cases therefore supply their own basis through <c>Laws.Claim</c>, and that is a

@@ -66,8 +66,14 @@ wildcard includes the runner's appended argument display; an exact bare id selec
 | --- | --- | --- |
 | Default (Smoke + Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` | < 30 s |
 | Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` | < 2 s |
-| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | exhaustive |
-| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long—full-width sweeps over an ENTIRE carrier; on demand or nightly, never in a change loop |
+| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | minutes |
+| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long; full-carrier sweeps and expensive finite combinatorial-prime checks; on demand or nightly |
+
+The high-bound combinatorial-prime checks use Exhaustive to keep expensive
+counts and rank searches out of the ordinary Deep run. Their declarations
+name a finite set of operands: this scheduling choice does not establish a
+whole-domain proof. Run budgets are measured separately through the prime-request
+survey; a selected finite fixture does not bound every request in its tier.
 
 ## The ratchet
 

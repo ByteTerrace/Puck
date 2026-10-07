@@ -11,8 +11,8 @@ namespace Puck.Maths;
 /// </summary>
 /// <remarks>
 /// The primality test is exact across the entire 32-bit range — it never returns a probabilistic answer — and the
-/// supporting routines run their hot loops in Montgomery form or through precomputed reciprocals, so neither performs
-/// hardware division per iteration.
+/// narrow decision kernels use Montgomery form and the quotient counter's summation uses precomputed reciprocals.
+/// The unsigned sixty-four-bit combinatorial counter also uses integer division for its leaf quotients.
 /// </remarks>
 public static partial class PrimeExtensions {
     /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² that survive the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>

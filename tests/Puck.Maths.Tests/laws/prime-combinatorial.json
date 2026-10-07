@@ -1,0 +1,363 @@
+[
+  {
+    "Id": "deep.prime-selection-ulong-combinatorial-counts",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "DirectPrimalityRequests"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Bound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Cutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableCapacity"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableBuilt"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "OrdinaryFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SpecialFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CachedQuotientDivisions"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointBitmapBytes"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-selection.ulong-count-vs-independent at a strictly stronger operand: the profiled non-checkpoint bound 10^14 exercises the production combinatorial counter.",
+        "Against": "Tomas Oliveira e Silva's independently computed pi(10^14)=3204941750802 in Table IV.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: one external count does not establish the full input domain or a runtime bound. This law makes one complete counting call.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The profiled count has one Gourdon dispatch, a newly built table covering its cutoff, positive ordinary/special/cache work, positive hard-leaf and semiprime frontiers/segments/bytes, positive easy-leaf segments/bytes, and no checkpoint or selection work.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: nonzero recording and route isolation only. These inequalities do not independently determine each Gourdon counter's exact value, count individual sieve marks, or establish a performance bound. The published-answer request is reused; this leg adds no full count.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-selection-ulong-combinatorial-ranks",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-selection.ulong-nth-vs-independent at strictly stronger operands: select the last prime at or below 10^14 and the first prime above it, using published ranks far from the power-of-two checkpoints.",
+        "Against": "Published pi(10^14) fixes both zero-based ranks. Oracles.ExactPrimality independently enumerates the adjacent 1024-integer windows; no expected rank comes from a production count.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: two nth-prime requests can each perform several exact counts; their number and cost are not measured here. Floating estimates are not evidence.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-selection-ulong-combinatorial-boundaries",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Count differences agree with independent prime windows around 27001^3, 6700417^2, 8191*65521^2, 1031*262139^2 and 4093^3*8191. Cube offsets -128,-1,0,1,128 cross the integer cube-root cut; other offsets -1,0,1 distinguish the semiprime diagonal, A easy-leaf quotient/square-root boundary, reflected C2 square-root boundary and D/C2 split at x=p^3*q, respectively.",
+        "Against": "Oracles.ExactPrimality enumerates every integer in the small windows and independently checks all square and pair factors, including 1031 and 262139 at the reflected C2 boundary and 4093 and 8191 at the hard/easy boundary. Each production endpoint is counted once.",
+        "Shared": "",
+        "Citation": "ENVELOPE: 17 full counting calls at bounds between 10^13 and 10^15. These are finite local-difference checks, not absolute count or full-domain proofs; a common additive error across a window is invisible. The separate published-count law supplies absolute evidence at its operand. Runtime is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-selection-ulong-bitmap-directions",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-selection.ulong-nth-vs-independent at stronger distances: ranks 17,32,64,128 primes below and above the published 2^40 and 2^63 checkpoints, and below the final ulong endpoint, select in both bitmap directions beyond the direct small-rank walk.",
+        "Against": "Published checkpoint counts fix the ranks; Oracles.ExactPrimality supplies ordered primes in five independent 8192-integer windows. The last window also pins the unsigned endpoint mask.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset. ENVELOPE: 20 nth-prime requests exercise nearby checkpoint selection, not arbitrary-rank counting. Returned values cannot establish a single traversal or force window exhaustion; existing deep.prime-selection-ulong-checkpoint-chunks crosses complete bitmap segments.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-count-1e16",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The combinatorial count through 10^16 agrees with an external published count.",
+        "Against": "Tomas Oliveira e Silva's pi(10^16)=279238341033925 in Table IV.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: an explicitly selected expensive finite qualification, not an exhaustive carrier proof. One full count; cost is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-count-1e19",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The combinatorial count through 10^19, above long.MaxValue, agrees with an external published count.",
+        "Against": "Tomas Oliveira e Silva's pi(10^19)=234057667276344607 in Table IV.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: an explicitly selected expensive finite qualification, not an exhaustive carrier proof. One full count, individually selectable without the high neighborhoods or ranks; cost is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The zero-based rank pi(10^16)-1 selects the last prime at or below 10^16, away from a published power-of-two checkpoint.",
+        "Against": "The independently published rank pi(10^16)=279238341033925 and Oracles.ExactPrimality over the preceding 1024 integers.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: one expensive finite nth-prime qualification, not an exhaustive carrier proof. Profiling records the request's full count dispatches; no runtime claim is made.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The profiled inverse-rank request uses one Gourdon count and at least two bounded local bitmap windows. The first 8388608-integer window is exhausted; its exact count advances selection without a second full count.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: one operand qualifies the work-based selection policy. The assertion concerns dispatches, not CPU cycles; no fixed count is claimed for arbitrary ranks.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-rank-1e19",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The zero-based rank pi(10^19)-1 selects the last prime at or below 10^19, exercising an unsigned result above long.MaxValue.",
+        "Against": "The independently published rank pi(10^19)=234057667276344607 and Oracles.ExactPrimality over the preceding 1024 integers.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: one expensive finite nth-prime qualification, individually selectable, not an exhaustive carrier proof. Inversion can make several full counts; neither their number nor runtime is measured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e16",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Prime-count differences at offsets -128,-1,0,1,128 from 215443^3 agree with the independent local prime window.",
+        "Against": "Integer-index enumeration through Oracles.ExactPrimality; no Gourdon leaves, cutoff heuristic or production sieve participates in the expected increments.",
+        "Shared": "",
+        "Citation": "ENVELOPE: five distinct full counts are reused for four consecutive differences. This expensive finite consistency check is explicitly selected; it is not a full-domain or absolute-count proof, and a shared additive error is invisible. Runtime is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Prime-count differences at offsets -128,-1,0,1,128 from 2154435^3 agree with the independent local prime window above long.MaxValue.",
+        "Against": "Integer-index enumeration through Oracles.ExactPrimality; no Gourdon leaves, cutoff heuristic or production sieve participates in the expected increments.",
+        "Shared": "",
+        "Citation": "ENVELOPE: five distinct full counts are reused for four consecutive differences. This expensive finite consistency check is individually selectable; it is not a full-domain or absolute-count proof, and a shared additive error is invisible. Runtime is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-combinatorial-a-square-high",
+    "Tier": "Exhaustive",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Prime-count differences at offsets -1,0,1 from 1048573*4194301^2 agree with an independent window across an A easy-leaf quotient/square-root boundary, above long.MaxValue.",
+        "Against": "Oracles.ExactPrimality checks the two factors and every integer in the local window independently of the production Gourdon leaves.",
+        "Shared": "",
+        "Citation": "ENVELOPE: three full counts, each computed once, form a finite consistency check. This expensive qualification is individually selectable and is not an exhaustive carrier or absolute-count proof; a shared additive error is invisible. Runtime is unmeasured.",
+        "Absolute": ""
+      }
+    ]
+  }
+]

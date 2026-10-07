@@ -9,7 +9,8 @@ internal static partial class Subjects {
         (999_999_984_377, 1_000_000_000_000, PrimeSieveMode.Presieve),
         (99_999_999_843_751, 100_000_000_000_000, PrimeSieveMode.Eratosthenes),
         (99_999_999_843_752, 100_000_000_000_000, PrimeSieveMode.Presieve),
-        (0, 10_000_000_000_000_000, PrimeSieveMode.Presieve),
+        (0, 10_000_000_000_000_000, PrimeSieveMode.Eratosthenes),
+        (0, 1_000_000_000_000_000_000, PrimeSieveMode.Presieve),
         (0, ulong.MaxValue, PrimeSieveMode.Presieve),
         (ulong.MaxValue, ulong.MaxValue, PrimeSieveMode.Presieve),
         (2, 1, PrimeSieveMode.Eratosthenes),
@@ -19,6 +20,41 @@ internal static partial class Subjects {
         (1_000_000_000_000, 1048576, 1048576), (ulong.MaxValue, 32768, 32768),
     ];
 
+    public static string? PrimeSegmentCancellation() {
+        var canceled = new CancellationToken(canceled: true);
+        var calls = 0;
+
+        foreach (var (low, high) in new[] { (7UL, 1000UL), (2UL, 1UL), (10_000_000_000UL, 10_000_010_000UL) }) {
+            var failure = (Refuses(() => PrimeExploration.Count(low: low, high: high, cancellationToken: canceled), typeof(OperationCanceledException), null, "canceled interval count")
+                ?? Refuses(() => PrimeExploration.Enumerate(low: low, high: high, cancellationToken: canceled, onPrime: _ => ++calls), typeof(OperationCanceledException), null, "canceled interval enumeration"));
+
+            if (failure is not null) { return failure; }
+        }
+        if (calls != 0) { return "pre-canceled enumeration invoked a callback"; }
+        foreach (var layout in new[] { PrimeByteLayout.Numeric, PrimeByteLayout.Algebraic }) {
+            foreach (var mode in new[] { PrimeSieveMode.Eratosthenes, PrimeSieveMode.Presieve }) {
+                foreach (var (low, high) in new[] { (2UL, 2UL), (7UL, 29UL), (7UL, 1000UL), (10_000_000_000UL, 10_000_010_000UL) }) {
+                    using var source = new CancellationTokenSource();
+                    var firstBlock = ulong.MaxValue;
+                    var nextSegmentVisited = false;
+
+                    try {
+                        PrimeExploration.Enumerate(low: low, high: high, segmentBytes: 1, layout: layout, mode: mode,
+                            cancellationToken: source.Token, onPrime: prime => {
+                                if (firstBlock == ulong.MaxValue) { firstBlock = (prime / 30); }
+                                nextSegmentVisited |= ((prime / 30) != firstBlock);
+                                source.Cancel();
+                            });
+                        return "callback cancellation returned normally";
+                    } catch (OperationCanceledException exception) {
+                        if (exception.CancellationToken != source.Token) { return "cancellation lost the caller's token"; }
+                    }
+                    if (nextSegmentVisited) { return "enumeration continued into a segment after cancellation"; }
+                }
+            }
+        }
+        return ((PrimeExploration.Count(low: 7, high: 29) == 7) ? null : "fresh count failed after canceled enumeration");
+    }
     public static string? PrimePolicyBoundaries() {
         foreach (var row in PrimePolicyCases) {
             var actual = PrimeExploration.ResolveMode(low: row.Low, high: row.High);

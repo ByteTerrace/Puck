@@ -47,17 +47,27 @@ public class RandomPrimeRequests {
             "HighWindow" => (1_000_000_000_000_000_000UL, 1_000_000_000_000_999_999UL),
             _ => throw new InvalidOperationException(),
         };
-        for (var method = 0; (method < 3); ++method) {
+        var matchedPrimes = new ulong[Requests];
+        var matchedStates = new ulong[Requests];
+
+        for (var method = 0; (method < 4); ++method) {
             var generator = Pcg32XshRr.Create(state: Seed, stream: 54);
 
             for (var request = 0; (request < Requests); ++request) {
-                var found = ((method == 2)
+                var found = ((method == 3)
                     ? PrimeExploration.TryRandomPrime(generator: ref generator, high: m_high, low: m_low, maxAttempts: DrawBudget, prime: out var prime)
-                    : ((method == 1) ? IntegerRejection<BaillieDecision>(generator: ref generator, high: m_high, low: m_low, prime: out prime)
-                        : IntegerRejection<MillerDecision>(generator: ref generator, high: m_high, low: m_low, prime: out prime)));
+                    : ((method == 2) ? TryWheelMillerRabin(generator: ref generator, high: m_high, low: m_low, prime: out prime)
+                        : ((method == 1) ? IntegerRejection<BaillieDecision, Pcg32XshRr>(generator: ref generator, high: m_high, low: m_low, prime: out prime)
+                            : IntegerRejection<MillerDecision, Pcg32XshRr>(generator: ref generator, high: m_high, low: m_low, prime: out prime))));
 
                 if (!found || (prime < m_low) || (prime > m_high) || !PrimeExplorationBenchmarkReference.IsPrimeCandidate(value: prime)) {
                     throw new InvalidOperationException(message: "Random-prime request failed its independent exact check.");
+                }
+                if (method == 2) {
+                    matchedPrimes[request] = prime;
+                    matchedStates[request] = generator.State;
+                } else if ((method == 3) && ((prime != matchedPrimes[request]) || (generator.State != matchedStates[request]))) {
+                    throw new InvalidOperationException(message: "Matched wheel decisions changed the prime or generator state.");
                 }
             }
         }
@@ -66,6 +76,8 @@ public class RandomPrimeRequests {
     public ulong IntegerMillerRabin() => Run<MillerRequest>();
     [Benchmark(OperationsPerInvoke = Requests)]
     public ulong IntegerBailliePsw() => Run<BaillieRequest>();
+    [Benchmark(OperationsPerInvoke = Requests)]
+    public ulong WheelMillerRabin() => Run<WheelMillerRequest>();
     [Benchmark(OperationsPerInvoke = Requests)]
     public ulong Select() => Run<SelectionRequest>();
 
@@ -81,12 +93,20 @@ public class RandomPrimeRequests {
         }
         return checksum;
     }
-    private static bool IntegerRejection<TDecision>(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime)
-        where TDecision : struct, IDecision {
+
+    internal static bool TryIntegerMillerRabin<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = DrawBudget)
+        where TGenerator : struct, IDrawGenerator => IntegerRejection<MillerDecision, TGenerator>(generator: ref generator, high: high, low: low, maxAttempts: maxAttempts, prime: out prime);
+    internal static bool TryIntegerBailliePsw<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = DrawBudget)
+        where TGenerator : struct, IDrawGenerator => IntegerRejection<BaillieDecision, TGenerator>(generator: ref generator, high: high, low: low, maxAttempts: maxAttempts, prime: out prime);
+    internal static bool TryWheelMillerRabin<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = DrawBudget)
+        where TGenerator : struct, IDrawGenerator => PrimeExploration.TryRandomPrime<TGenerator, WheelMillerDecision>(generator: ref generator, high: high, low: low, maxAttempts: maxAttempts, prime: out prime);
+
+    private static bool IntegerRejection<TDecision, TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = DrawBudget)
+        where TDecision : struct, IDecision where TGenerator : struct, IDrawGenerator {
         var width = ((high - low) + 1);
         var threshold = (unchecked((0UL - width)) % width);
 
-        for (var attempt = 0; (attempt < DrawBudget); ++attempt) {
+        for (var attempt = 0; (attempt < maxAttempts); ++attempt) {
             var word = (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
             var product = (((UInt128)word) * width);
 
@@ -109,15 +129,23 @@ public class RandomPrimeRequests {
     }
     private readonly struct MillerRequest : IRequest {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => IntegerRejection<MillerDecision>(generator: ref generator, high: high, low: low, prime: out prime);
+        public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => IntegerRejection<MillerDecision, Pcg32XshRr>(generator: ref generator, high: high, low: low, prime: out prime);
     }
     private readonly struct BaillieRequest : IRequest {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => IntegerRejection<BaillieDecision>(generator: ref generator, high: high, low: low, prime: out prime);
+        public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => IntegerRejection<BaillieDecision, Pcg32XshRr>(generator: ref generator, high: high, low: low, prime: out prime);
     }
     private readonly struct SelectionRequest : IRequest {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => PrimeExploration.TryRandomPrime(generator: ref generator, high: high, low: low, maxAttempts: DrawBudget, prime: out prime);
+    }
+    private readonly struct WheelMillerRequest : IRequest {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool Try(ulong low, ulong high, ref Pcg32XshRr generator, out ulong prime) => TryWheelMillerRabin(generator: ref generator, high: high, low: low, prime: out prime);
+    }
+    private readonly struct WheelMillerDecision : IPrimeCandidateDecision {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsPrimeCandidate(ulong value) => PrimeMillerRabinBaseline.IsPrimeCandidate(value: value);
     }
     private readonly struct MillerDecision : IDecision {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

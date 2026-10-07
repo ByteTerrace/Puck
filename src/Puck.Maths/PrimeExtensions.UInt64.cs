@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
@@ -7,7 +8,7 @@ public static partial class PrimeExtensions {
     private const ulong PrimeCount64 = 425_656_284_035_217_743;
     private const uint CountingRootLimit = ((1U << 22) - 1U);
     private const ulong CountingValueLimit = (((ulong)CountingRootLimit) * CountingRootLimit);
-    private const ulong SelectionWindow64 = 1_048_576;
+    private const ulong SelectionSpanLimit64 = 8_388_608;
 
     // pi(2^k), k = 32..64, from Tomas Oliveira e Silva's independently computed table:
     // https://sweet.ua.pt/tos/primes.html (the pi(2^k) dataset). The last bound is represented by ulong.MaxValue;
@@ -30,20 +31,28 @@ public static partial class PrimeExtensions {
     /// <returns>The selected prime, or zero when the index is at least 425,656,284,035,217,743,
     /// the number of primes representable by <see cref="ulong"/>.</returns>
     /// <remarks>
-    /// <para>Ranks whose result fits in <see cref="uint"/> use the existing narrow implementation. Larger
-    /// practical ranks start from an asymptotic estimate, align its rank with exact combinatorial counting,
-    /// and sieve the remaining interval. Floating-point estimates affect work only, never the selected prime.</para>
-    /// <para>Combinatorial counting rents at most approximately 52 MiB of array payload. Above its bounded
-    /// working range, selection walks from the nearest published power-of-two prime-count checkpoint with
-    /// bounded presieving. Ranks close to a checkpoint, including the final ranks of the ulong domain, are
-    /// inexpensive; ranks far from every checkpoint may require impractical time. The full domain is exact,
-    /// but this API does not promise fast arbitrary sixty-four-bit rank selection.</para>
+    /// <para>Ranks whose result fits in <see cref="uint"/> use the narrow implementation. Larger ranks use
+    /// an inverse Riemann R estimate, exact combinatorial counts and count-guided corrections before selecting
+    /// from a short interval. Counting setup is reused within the request, and local selection sieves each
+    /// window once. Floating-point estimates affect work only, never the selected prime.</para>
+    /// <para>Published power-of-two counts bound the search and make nearby ranks, including the last ranks,
+    /// inexpensive. Other ranks use the combinatorial counter across the unsigned domain, rather than sieving
+    /// the distance from a checkpoint. Cancellation is observed during counting and between sieve segments.</para>
     /// </remarks>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
-    public static ulong NthPrime(this ulong value, CancellationToken cancellationToken = default) {
+    public static ulong NthPrime(this ulong value, CancellationToken cancellationToken = default) =>
+        NthPrime64(cancellationToken: cancellationToken, profile: null, value: value);
+
+    private static ulong NthPrime64(ulong value, CancellationToken cancellationToken, PrimeRequestWorkBuilder? profile) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (value >= PrimeCount64) { return 0; }
-        if (value <= 203_280_220) { return ((uint)value).NthPrime(); }
+        if (value >= PrimeCount64) {
+            if (profile is not null) { profile.Route = "OutOfRange"; }
+            return 0;
+        }
+        if (value <= 203_280_220) {
+            if (profile is not null) { profile.Route = "Narrow32"; }
+            return ((uint)value).NthPrime();
+        }
 
         var ordinal = (value + 1);
         var checkpoint = NearestRankCheckpoint64(ordinal: ordinal);
@@ -51,21 +60,75 @@ public static partial class PrimeExtensions {
         var distance = ((anchorCount >= ordinal) ? (anchorCount - ordinal) : (ordinal - anchorCount));
         var anchor = CheckpointBound64(index: checkpoint);
 
-        if (distance > 4096) {
-            var logarithm = Math.Log(d: ordinal);
-            var logLogarithm = Math.Log(d: logarithm);
-            var estimate = (ordinal * ((((logarithm + logLogarithm) - 1.0d) + ((logLogarithm - 2.0d) / logarithm))
-                - ((((logLogarithm * logLogarithm) - (6.0d * logLogarithm)) + 11.0d) / ((2.0d * logarithm) * logarithm))));
+        var lowerCheckpoint = ((anchorCount < ordinal) ? checkpoint : (checkpoint - 1));
+        var lower = CheckpointBound64(index: lowerCheckpoint);
+        var lowerCount = PrimeCountPowers64[lowerCheckpoint];
+        var upper = CheckpointBound64(index: (lowerCheckpoint + 1));
+        var checkpointBudget = LocalSieveBudget64(high: anchor);
+        var checkpointRemaining = ((anchorCount < ordinal) ? distance : (distance + 1));
 
-            if (estimate <= CountingValueLimit) {
-                anchor = ((ulong)estimate);
-                anchorCount = anchor.PrimeCountingFunction(cancellationToken: cancellationToken);
+        if (RankProbeFits64(budget: checkpointBudget, remaining: checkpointRemaining, value: anchor)) {
+            if (profile is not null) { profile.Route = "CheckpointSelection"; }
+            var forward = (anchorCount < ordinal);
+            var probe = ProbeRank64(cancellationToken: cancellationToken, forward: forward, integerBudget: checkpointBudget,
+                profile: profile, remaining: checkpointRemaining, start: (forward ? (anchor + 1) : anchor));
+
+            if (probe.Selected != 0) { return probe.Selected; }
+            if (forward) { lower = probe.Boundary; lowerCount = (anchorCount + probe.Count); } else { upper = (probe.Boundary - 1); }
+        }
+        if (profile is not null) { profile.Route = "CountedSelection"; }
+
+        var estimate = Math.Clamp(value: EstimateNthPrime64(ordinal: ordinal), min: (lower + 1), max: (upper - 1));
+        var previousError = ulong.MaxValue;
+        var slowCorrections = 0;
+        var workspace = new CombinatorialCountingWorkspace();
+
+        // The exact invariant is pi(lower) < ordinal <= pi(upper). Estimates propose the next count;
+        // only its integer result moves the bracket or supplies the final one-based interval ordinal.
+        while (true) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var count = CountPrimeBound64(cancellationToken: cancellationToken, profile: profile, value: estimate, workspace: workspace);
+            var below = (count < ordinal);
+            var error = (below ? (ordinal - count) : (count - ordinal));
+
+            if (below) { lower = estimate; lowerCount = count; } else { upper = estimate; }
+            var localBudget = LocalSieveBudget64(high: estimate);
+            var remaining = (below ? error : (error + 1));
+
+            if (RankProbeFits64(budget: localBudget, remaining: remaining, value: estimate)) {
+                var probe = ProbeRank64(cancellationToken: cancellationToken, forward: below, integerBudget: localBudget,
+                    profile: profile, remaining: remaining, start: (below ? (estimate + 1) : estimate));
+
+                if (probe.Selected != 0) { return probe.Selected; }
+                // Exhaustion is an exact local count. Keep it in the bracket instead of counting the
+                // examined interval again, and never extend this probe beyond its cumulative work budget.
+                estimate = (below ? probe.Boundary : (probe.Boundary - 1));
+                count = (below ? (count + probe.Count) : (count - probe.Count));
+                error = (below ? (ordinal - count) : (count - ordinal));
+                if (below) { lower = estimate; lowerCount = count; } else { upper = estimate; }
+            }
+            if ((upper - lower) <= Math.Min(val1: SelectionSpanLimit64, val2: localBudget)) {
+                return PrimeExploration.SelectPrime(cancellationToken: cancellationToken, high: upper, low: (lower + 1), ordinal: (ordinal - lowerCount), profile: profile);
+            }
+
+            // Correct from the exact count, using the local prime density only to choose work. A poor
+            // correction cannot escape the bracket; repeated poor corrections force a halving step.
+            slowCorrections = ((error >= (previousError >> 1)) ? (slowCorrections + 1) : 0);
+            previousError = error;
+            var available = (below ? ((upper - estimate) - 1) : ((estimate - lower) - 1));
+            var desired = Math.Max(val1: 1D, val2: (error * Math.Log(d: estimate)));
+
+            if ((slowCorrections >= 2) || (desired >= available)) {
+                estimate = (lower + ((upper - lower) >> 1));
+                slowCorrections = 0;
+            } else {
+                var correction = ((ulong)desired);
+
+                estimate = (below ? (estimate + correction) : (estimate - correction));
             }
         }
-        return ((anchorCount < ordinal)
-            ? WalkRank64(cancellationToken: cancellationToken, forward: true, remaining: (ordinal - anchorCount), start: (anchor + 1))
-            : WalkRank64(cancellationToken: cancellationToken, forward: false, remaining: ((anchorCount - ordinal) + 1), start: anchor));
     }
+
     /// <summary>Returns the number of primes less than or equal to an unsigned sixty-four-bit bound.</summary>
     /// <param name="value">The inclusive upper bound.</param>
     /// <param name="cancellationToken">Cancels a potentially long exact count.</param>
@@ -73,29 +136,45 @@ public static partial class PrimeExtensions {
     /// <remarks>
     /// Bounds through <see cref="uint.MaxValue"/> retain the narrow combinatorial implementation. Larger
     /// bounds whose square root is at most 4,194,303 use its widened quotient-counting recurrence, with at most
-    /// approximately 52 MiB of pooled array payload. Larger bounds count a difference from the nearest published
-    /// power-of-two checkpoint using bounded presieving; that path has bounded memory but can take impractical
-    /// time far from a checkpoint. Exact checkpoint values and their short neighborhoods avoid a full count.
+    /// approximately 52 MiB of pooled array payload. Larger distant bounds use Gourdon's combinatorial counter.
+    /// Published power-of-two counts admit a local interval budget proportional to the square root of the bound:
+    /// a full square root when complete sieving fits, or one sixty-fourth when survivor decisions are required.
     /// </remarks>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
-    public static ulong PrimeCountingFunction(this ulong value, CancellationToken cancellationToken = default) {
+    public static ulong PrimeCountingFunction(this ulong value, CancellationToken cancellationToken = default) =>
+        CountPrimeBound64(cancellationToken: cancellationToken, value: value, workspace: null);
+
+    private static ulong CountPrimeBound64(ulong value, CancellationToken cancellationToken, CombinatorialCountingWorkspace? workspace, PrimeRequestWorkBuilder? profile = null) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (value <= uint.MaxValue) { return ((uint)value).PrimeCountingFunction(); }
+        var work = profile?.BeginCount(bound: value);
+
+        if (value <= uint.MaxValue) {
+            if (work is not null) { work.Route = "Narrow32"; }
+            return ((uint)value).PrimeCountingFunction();
+        }
 
         var checkpoint = NearestValueCheckpoint64(value: value);
         var anchor = CheckpointBound64(index: checkpoint);
         var distance = ((anchor >= value) ? (anchor - value) : (value - anchor));
 
-        if (distance == 0) { return PrimeCountPowers64[checkpoint]; }
-        if ((value <= CountingValueLimit) && (distance > SelectionWindow64)) {
-            return CountQuotients64(cancellationToken: cancellationToken, value: value);
+        if (distance == 0) {
+            if (work is not null) { work.Route = "Checkpoint"; }
+            return PrimeCountPowers64[checkpoint];
         }
-
-        var delta = CountInterval64(low: (Math.Min(val1: value, val2: anchor) + 1), high: Math.Max(val1: value, val2: anchor), cancellationToken: cancellationToken);
+        if (distance > LocalSieveBudget64(high: Math.Max(val1: value, val2: anchor))) {
+            if (work is not null) { work.Route = ((value <= CountingValueLimit) ? "Quotient64" : "Gourdon"); }
+            return ((value <= CountingValueLimit)
+                ? CountQuotients64(cancellationToken: cancellationToken, value: value)
+                : ((workspace is null)
+                    ? CountCombinatorial64(cancellationToken: cancellationToken, profile: work, value: value)
+                    : workspace.Count(cancellationToken: cancellationToken, profile: work, value: value)));
+        }
+        if (work is not null) { work.Route = "CheckpointInterval"; }
+        var delta = PrimeExploration.CountWithWork(low: (Math.Min(val1: value, val2: anchor) + 1), high: Math.Max(val1: value, val2: anchor),
+            cancellationToken: cancellationToken, work: work?.CheckpointBitmap);
 
         return ((value < anchor) ? (PrimeCountPowers64[checkpoint] - delta) : (PrimeCountPowers64[checkpoint] + delta));
     }
-
     private static ulong CountQuotients64(ulong value, CancellationToken cancellationToken) {
         var squareRoot = ((uint)value.SquareRoot());
         var roughCount = ((squareRoot + 1U) >> 1);
@@ -186,49 +265,67 @@ public static partial class PrimeExtensions {
 
         return (quotient + (((value - (quotient * divisor)) >= divisor) ? 1UL : 0UL));
     }
-    private static ulong CountInterval64(ulong low, ulong high, CancellationToken cancellationToken) {
-        var count = 0UL;
+    private static ulong LocalSieveBudget64(ulong high) {
+        var root = high.SquareRoot();
+        var low = (high - (root - 1));
 
-        while (true) {
-            cancellationToken.ThrowIfCancellationRequested();
-            var end = (low + Math.Min(val1: (high - low), val2: (SelectionWindow64 - 1)));
-
-            count += PrimeExploration.Count(low: low, high: end, mode: PrimeSieveMode.Presieve);
-            if (end == high) { return count; }
-            low = (end + 1);
-        }
+        // One sqrt(x)-wide complete sieve scans O(sqrt(x)/30) bitmap bytes. When the bounded
+        // workspace policy requires survivor decisions, discount that integer budget by 64. These
+        // integer work estimates select an algorithm; they assert neither prime gaps nor cycle costs.
+        return ((PrimeExploration.ResolveMode(low: low, high: high) == PrimeSieveMode.Eratosthenes) ? root : Math.Max(val1: 1UL, val2: (root / 64)));
     }
-    private static ulong WalkRank64(ulong start, ulong remaining, bool forward, CancellationToken cancellationToken) {
+    private static bool RankProbeFits64(ulong remaining, ulong value, ulong budget) =>
+        ((remaining <= 16) || (((((UInt128)remaining) * ((uint)(BitOperations.Log2(value: value) + 3))) + 1024) <= budget));
+    private static (ulong Selected, ulong Boundary, ulong Count) ProbeRank64(ulong start, ulong remaining, bool forward, ulong integerBudget,
+        CancellationToken cancellationToken, PrimeRequestWorkBuilder? profile) {
+        var consumed = 0UL;
+        var boundary = start;
+
         if (remaining <= 16) {
             var candidate = (forward ? start | 1UL : (start - 1UL) | 1UL);
+            var available = (forward ? (ulong.MaxValue - start) : start);
+            var distance = Math.Min(val1: (integerBudget - 1), val2: available);
+            var low = (forward ? start : (start - distance));
+            var high = (forward ? (start + distance) : start);
 
-            while (true) {
+            while ((candidate >= low) && (candidate <= high)) {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (PrimeExploration.IsPrime(value: candidate) && (--remaining == 0)) { return candidate; }
+                if (profile is not null) { ++profile.DirectPrimalityRequests; }
+                if (PrimeExploration.IsPrime(value: candidate)) {
+                    ++consumed;
+                    if (--remaining == 0) {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return (candidate, candidate, consumed);
+                    }
+                }
+                if ((forward ? (high - candidate) : (candidate - low)) < 2) { break; }
                 candidate = (forward ? (candidate + 2) : (candidate - 2));
             }
-        }
-        while (true) {
             cancellationToken.ThrowIfCancellationRequested();
-            var desired = Math.Min(val1: ((double)SelectionWindow64), val2: ((remaining * (Math.Log(d: start) + 2)) + 1024));
-            var span = Math.Max(val1: 4096UL, val2: ((ulong)desired));
-            var low = (forward ? start : (start - Math.Min(val1: start, val2: (span - 1))));
-            var high = (forward ? (start + Math.Min(val1: (ulong.MaxValue - start), val2: (span - 1))) : start);
-            var mode = ((high <= CountingValueLimit) ? PrimeSieveMode.Automatic : PrimeSieveMode.Presieve);
-            var count = PrimeExploration.Count(low: low, high: high, mode: mode);
+            return (0, (forward ? high : low), consumed);
+        }
+        while (integerBudget != 0) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var available = (forward ? (ulong.MaxValue - start) : start);
+            var desired = Math.Min(val1: (Math.Min(val1: SelectionSpanLimit64, val2: integerBudget) - 1), val2: Math.Max(val1: 4095D, val2: ((remaining * (Math.Log(d: start) + 2)) + 1023)));
+            // Clamp the proposed window to the remaining integer domain before narrowing its size.
+            var distance = ((desired >= available) ? available : Math.Min(val1: available, val2: ((ulong)desired)));
+            var low = (forward ? start : (start - distance));
+            var high = (forward ? (start + distance) : start);
 
-            if (count >= remaining) {
-                var skip = (forward ? remaining : ((count - remaining) + 1));
-                var selected = 0UL;
+            var (selected, count) = PrimeExploration.SelectPrimeAndCount(cancellationToken: cancellationToken, forward: forward, high: high,
+                low: low, ordinal: remaining, profile: profile);
 
-                PrimeExploration.Enumerate(low: low, high: high, mode: mode, onPrime: prime => {
-                    if ((skip != 0) && (--skip == 0)) { selected = prime; }
-                });
-                return selected;
-            }
+            consumed += count;
+            if (selected != 0) { return (selected, selected, consumed); }
             remaining -= count;
+            boundary = (forward ? high : low);
+            integerBudget -= (distance + 1);
+            if (distance == available) { break; }
             start = (forward ? (high + 1) : (low - 1));
         }
+        cancellationToken.ThrowIfCancellationRequested();
+        return (0, boundary, consumed);
     }
     private static ulong CheckpointBound64(int index) => ((index == 32) ? ulong.MaxValue : (1UL << (index + 32)));
     private static int NearestValueCheckpoint64(ulong value) {

@@ -17,11 +17,21 @@
     ]
   },
   {
+    "Id": "prime-selection.adaptive-checkpoint-boundaries",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" }, { "Type": "Puck.Maths.PrimeExtensions", "Name": "ProfilePrimeCountingFunction" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "Adjacent count differences straddle the adaptive local-sieve dispatch boundaries above 2^32 and below 2^33.", "Against": "Oracles.ExactPrimality independently supplies each one-integer increment at the six explicit operands, without the production counter or sieve.", "Shared": "", "Citation": "ENVELOPE: local differences can miss a shared additive error; published-count laws separately anchor absolute results. These cases cover both directions of the complete-sieve budget, not the large survivor-decision budget.", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Offsets 65535 and 65536 above 2^32 use CheckpointInterval, while offset 65537 uses Quotient64. Offsets 92680 and 92681 below 2^33 use CheckpointInterval, while offset 92682 uses Quotient64. An already-canceled token refuses each boundary request before dispatch.", "Against": "", "Shared": "", "Citation": "These explicit route fixtures pin a deterministic integer-work policy, not hardware cycle costs or an upper bound on prime gaps.", "Absolute": "" }
+    ]
+  },
+  {
     "Id": "deep.prime-selection-ulong-checkpoint-chunks",
     "Tier": "Deep",
     "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "NthPrime" }, { "Type": "Puck.Maths.PrimeExtensions", "Name": "PrimeCountingFunction" }],
     "Legs": [
-      { "Kind": "Classical", "Flavor": "None", "Subject": "MIRROR of prime-selection.ulong-count-vs-independent and prime-selection.ulong-nth-vs-independent at strictly stronger operands: intervals of 1048832 integers both above and below 2^48 cross the bounded fallback's chunk boundary; the root-cap square and its successor exercise both sides of the counting storage limit", "Against": "Native primesieve independently counts 31645 upper primes and 31426 lower primes, and prints the last upper prime 281474977759477 and first lower prime 281474975661833. Their absolute ranks add or subtract these independently counted intervals from published pi(2^48). Native sieving also counts 274879 primes between the root-cap square and 2^44, fixing both boundary counts at 597116106853.", "Shared": "", "Citation": "https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset, pi(2^48)=8731188863470 and pi(2^44)=597116381732; native primesieve fixture commands and their outputs are retained with the change's verification evidence. ENVELOPE: checkpoints are externally computed exact constants; native full sieving shares no Puck marker, counting recurrence or primality code.", "Absolute": "" }
+      { "Kind": "Classical", "Flavor": "None", "Subject": "MIRROR of prime-selection.ulong-count-vs-independent and prime-selection.ulong-nth-vs-independent at strictly stronger operands: bounds 1048832 integers above and below 2^48 exercise adaptive checkpoint intervals; the root-cap square and its successor exercise both sides of the counting storage limit", "Against": "Native primesieve independently counts 31645 upper primes and 31426 lower primes, and prints the last upper prime 281474977759477 and first lower prime 281474975661833. Their absolute ranks add or subtract these independently counted intervals from published pi(2^48). Native sieving also counts 274879 primes between the root-cap square and 2^44, fixing both boundary counts at 597116106853.", "Shared": "", "Citation": "https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset, pi(2^48)=8731188863470 and pi(2^44)=597116381732; native primesieve fixture commands and their outputs are retained with the change's verification evidence. ENVELOPE: checkpoints are externally computed exact constants; native full sieving shares no Puck marker, counting recurrence or primality code.", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "The two 2^48 interval counts use CheckpointInterval and the corresponding ranks use CheckpointSelection without a full count dispatch.", "Against": "", "Shared": "", "Citation": "The bounded local-sieve policy admits these intervals beyond the former fixed million-integer radius; profile work proves route selection, not speed.", "Absolute": "" }
     ]
   }
 ]

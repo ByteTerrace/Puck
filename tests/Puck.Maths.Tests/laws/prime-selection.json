@@ -15,6 +15,15 @@
     ]
   },
   {
+    "Id": "prime-selection.custom-decision-mapping",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "TryRandomPrime" }, { "Type": "Puck.Maths.IPrimeCandidateDecision", "Name": "IsPrimeCandidate" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "Replacing the wide-candidate decision by independent BigInteger primality preserves success, exact selected values and final generator states in tiny, shifted, uint-boundary, high and final-ulong intervals.", "Against": "Oracles.ExactPrimality supplies the custom decision and verifies each returned value. A guard independently refuses values at or below uint.MaxValue and divisibility by every integer through 163 before that decision.", "Shared": "", "Citation": "ENVELOPE: finite seeded mapping checks; the shared sampler is not independently reimplemented here. Singleton composites with factors 7, 59, 61 and 163 specifically establish that filters precede the custom decision.", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "The supplied exact decision changes no draw mapping or failure sentinel; small and uint candidates bypass it, and invalid arguments are rejected before drawing.", "Against": "", "Shared": "", "Citation": "Uniformity remains conditional on an exact supplied decision and independent uniform generator words; the API cannot establish an arbitrary implementation's correctness.", "Absolute": "" }
+    ]
+  },
+  {
     "Id": "prime-selection.random-vs-independent",
     "Tier": "Default",
     "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "TryRandomPrime" }],

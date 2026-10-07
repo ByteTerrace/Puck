@@ -7,7 +7,7 @@ using BenchmarkDotNet.Running;
 namespace Puck.Cli.Bench;
 
 // The `puck bench` verb: `kernels`, the BenchmarkDotNet microscope over the Maths, SDF and state kernels, beside the
-// `world`, `startup`, `primes` and `state-evidence` lanes, which run outside BenchmarkDotNet entirely.
+// `world`, `startup`, `primes`, `prime-requests` and `state-evidence` lanes, which run outside BenchmarkDotNet entirely.
 //
 // BenchmarkDotNet owns the whole option grammar of `kernels`, so it arrives as one unparsed string[] the switcher reads
 // itself: puck neither validates nor rewrites a token of it.
@@ -51,7 +51,7 @@ internal static class BenchRunner {
         var command = new Command(
             description: "Measure kernels, prime exploration, the server tick path, World startup, and the cost schedule's evidence.",
             name: "bench"
-        ) { kernelsCommand, StartupBenchmarks.Create(), PrimeSurvey.Create(clock: clock), StateEvidenceCommand.Create(clock: clock), worldCommand };
+        ) { kernelsCommand, StartupBenchmarks.Create(), PrimeSurvey.Create(clock: clock), PrimeRequestSurvey.Create(clock: clock), StateEvidenceCommand.Create(clock: clock), worldCommand };
 
         kernelsCommand.Detail(detail: """
             Every argument reaches BenchmarkDotNet's switcher unchanged. Job rigor is chosen there and layered over the
