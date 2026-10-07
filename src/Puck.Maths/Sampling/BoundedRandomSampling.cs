@@ -6,6 +6,34 @@ namespace Puck.Maths;
 /// Provides unbiased bounded integer sampling routines over 32-bit draw generators.
 /// </summary>
 internal static class BoundedRandomSampling {
+    // Lemire reduction at 64 bits. Count raw draws, including biased-window rejections, so a degenerate
+    // caller generator cannot turn a finite prime-selection budget into an unbounded inner loop.
+    internal readonly struct Range64(ulong exclusiveHigh) {
+        private readonly ulong m_exclusiveHigh = exclusiveHigh;
+        private readonly ulong m_threshold = (unchecked((0UL - exclusiveHigh)) % exclusiveHigh);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool TrySample<TGenerator>(ref TGenerator generator, ref int attempts, out ulong value)
+            where TGenerator : struct, IDrawGenerator {
+            while (attempts > 0) {
+                --attempts;
+                var word = (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
+
+                // The halves of word * exclusiveHigh, taken separately: a widened product hands its low half back
+                // through memory. The bound is the left factor, the operand MULX reads implicitly, so the
+                // generator's state never has to make way for it.
+                if (unchecked((word * m_exclusiveHigh)) < m_threshold) { continue; }
+                value = ScaledResidueRing64.MultiplyHigh(
+                    left: m_exclusiveHigh,
+                    right: word
+                );
+                return true;
+            }
+            value = 0;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Computes a nearly-divisionless bounded draw in <c>[0, exclusiveHigh)</c> using Lemire's algorithm,
     /// rejecting the small biased window (<c>threshold = 2^32 mod exclusiveHigh</c>) so every value is

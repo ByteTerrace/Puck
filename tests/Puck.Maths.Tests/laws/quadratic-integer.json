@@ -106,7 +106,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "in the (0, -1) world, TryFactorize(ell, 0) carries a prime of norm exactly ell for every rational prime ell below 10^4",
-        "Against": "the classical sum-of-two-squares law: ell is a sum of two squares exactly when ell = 2 or ell = 1 (mod 4), a fact about rational integers independent of this library, checked over an ell-stream enumerated by a fresh trial-division sieve rather than NumberTheoryFunctions.SegmentedPrimeSieve",
+        "Against": "the classical sum-of-two-squares law: ell is a sum of two squares exactly when ell = 2 or ell = 1 (mod 4), a fact about rational integers independent of this library, checked over an ell-stream enumerated by a fresh trial-division sieve rather than PrimeExploration.Enumerate",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

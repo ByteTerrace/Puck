@@ -1,0 +1,54 @@
+[
+  {
+    "Id": "prime-exploration.wide-sieve-vs-integer-windows",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Full sieving on intervals around the first two upper-base prime squares and the first large-prime square above the medium cutoff, a five-million-integer interval near 1e10 that advances through sparse future buckets, and a million-integer interval near 1e12; partial byte endpoints and segment sizes including one, 31, 32768 and 65537",
+        "Against": "Oracles.PrimeWideIntegerWindow creates its divisor list with the independent integer-index Eratosthenes sieve, then crosses every ordinary integer multiple in a bool array. It uses no shipped wheel tables, packet cursors, sparse buckets, primality predicate or base-prime generator.",
+        "Shared": "",
+        "Citation": "Exact fixed-width oracle envelope: endpoints below 2e12, divisor roots through 1000001, window at most 5000001 integers; every intermediate fits ulong.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-exploration-wide-final-window",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-exploration.wide-sieve-vs-integer-windows at strictly stronger operands: complete Eratosthenes sieving of the final 257 ulong values, requiring every uint base prime through 4294967291; counting with 32-KiB segments and callback enumeration with seven-byte segments",
+        "Against": "Independent BigInteger modular exponentiation on twenty witness bases and integer trial factors decides each ordinary integer in the window. No shipped wheel, base generator, product narrowing or cursor carry is used.",
+        "Shared": "",
+        "Citation": "Oracles.PrimeExplorationPrimes delegates these full-width candidates to Oracles.ExactPrimality, whose first twelve prime bases suffice below ulong.MaxValue.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-exploration-wide-native-counts",
+    "Tier": "Deep",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Legs": [{
+      "Kind": "Classical",
+      "Flavor": "None",
+      "Subject": "Full sieving of 100000000 integers starting at 1e12 and 1e14, under bitmap requests 32768, 65537 and 1048576, which exercise single and multiple coarse buckets per segment",
+      "Against": "Independent native primesieve counts 3618282 and 3102679. Its C++ wheel and bucket implementation shares no managed code, generated tables or state storage with the subject.",
+      "Shared": "",
+      "Citation": "primesieve 12.15: primesieve 1000000000000 1000099999999 --count --threads=1 --no-status; primesieve 100000000000000 100000099999999 --count --threads=1 --no-status. https://github.com/kimwalisch/primesieve/tree/v12.15",
+      "Absolute": ""
+    }]
+  }
+]

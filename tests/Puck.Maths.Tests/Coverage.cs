@@ -263,7 +263,7 @@ internal static class Coverage {
         // UnsignedNumberFunctions.JacobiSymbol is likewise not waived. "No operand domain, subject shape, or oracle in
         // this suite" is false about it three times over: Oracles.JacobiSymbolReciprocity is the oracle, the ulong
         // extension is already reached by PrimeField64.IsStrongLucasProbablePrime's Selfridge search
-        // (PrimeField64.cs:215), and the candidate stream of prime-field.lucas-vs-companion-matrix is the operand
+        // (its residue masks are derived from it, and magnitudes past them call it), and the candidate stream of prime-field.lucas-vs-companion-matrix is the operand
         // domain. Inverting the symbol's returned sign reddens that law. It answers at
         // prime-field.lucas-vs-companion-matrix, whose ENVELOPE names the class the law does NOT reach: a defect that
         // suppresses the −1 outcome makes the unbounded search spin rather than redden. The cross-carrier and
@@ -295,25 +295,18 @@ internal static class Coverage {
         // when the count is checkable, and scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy checks it
         // against the E8 Coxeter-plane decomposition — the reduced residue system of Period splits into exactly
         // PlaneCount conjugate pairs, independently re-derived by a from-scratch Euclidean gcd, so a PlaneCount of
-        // three or five actually reddens the case. The members listed below are gated by NOTHING; the reason they
-        // carry says so and names the two laws owed. Three of them — Ring, RingCount's sibling RingSize, and RayCount
-        // — are additionally named by integer.symmetry-lattice-exact-structure, so their entries are inert rather than
-        // load-bearing; they are left in place because the waiver register is a declaration of intent and thinning it
-        // is a separate review.
+        // three or five actually reddens the case. Dimension, CycleOrder, CycleExponents, NodeCount, RingCount and
+        // RingSize are not waived either: integer.symmetry-lattice-coxeter-data checks them against the cycle's own
+        // eigenvalues and Bourbaki's plate. The members listed below are gated by NOTHING; the reason they carry says
+        // so and names the two laws owed. Two of them — Ring and RayCount — are additionally named by
+        // integer.symmetry-lattice-exact-structure, so their entries are inert rather than load-bearing; they are left
+        // in place because the waiver register is a declaration of intent and thinning it is a separate review.
         (new CoverRef(
             Name: "Antipode",
             Type: typeof(SymmetryLattice)
         ), SymmetryLatticeReason),
         (new CoverRef(
             Name: "CanonicalRay",
-            Type: typeof(SymmetryLattice)
-        ), SymmetryLatticeReason),
-        (new CoverRef(
-            Name: "Dimension",
-            Type: typeof(SymmetryLattice)
-        ), SymmetryLatticeReason),
-        (new CoverRef(
-            Name: "NodeCount",
             Type: typeof(SymmetryLattice)
         ), SymmetryLatticeReason),
         (new CoverRef(
@@ -326,14 +319,6 @@ internal static class Coverage {
         ), SymmetryLatticeReason),
         (new CoverRef(
             Name: "Ring",
-            Type: typeof(SymmetryLattice)
-        ), SymmetryLatticeReason),
-        (new CoverRef(
-            Name: "RingCount",
-            Type: typeof(SymmetryLattice)
-        ), SymmetryLatticeReason),
-        (new CoverRef(
-            Name: "RingSize",
             Type: typeof(SymmetryLattice)
         ), SymmetryLatticeReason),
 

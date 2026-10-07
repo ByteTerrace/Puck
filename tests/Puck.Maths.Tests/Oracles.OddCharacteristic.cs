@@ -19,7 +19,7 @@ internal static partial class Oracles {
     /// <returns>One flag per value from zero through <paramref name="inclusiveMaximum"/>.</returns>
     /// <remarks>The one reference in this module that carries no notion of a witness, a base or an exponent: it
     /// crosses out multiples and reads the survivors. That is what makes it the strongest anchor the primality laws
-    /// have — it shares with <see cref="PrimeField64.IsPrime(ulong)"/> not merely no code but no IDEA.</remarks>
+    /// have — it shares with <see cref="PrimeExtensions.IsPrime(ulong)"/> not merely no code but no IDEA.</remarks>
     public static bool[] PrimeSieve(int inclusiveMaximum) {
         var flags = new bool[(inclusiveMaximum + 1)];
 
@@ -40,8 +40,8 @@ internal static partial class Oracles {
     /// 65536: the screen costs one remainder per entry on every candidate that reaches the rounds, and that band is
     /// already well past the region the exhaustive-sieve statements cover directly.</remarks>
     public static ReadOnlySpan<uint> SmallPrimes => SmallPrimeTable;
-    /// <summary>The first twenty prime bases, a strict SUPERSET of the twelve
-    /// <see cref="PrimeField64.IsPrime(ulong)"/> runs.</summary>
+    /// <summary>The first twenty prime bases, including the twelve that independently decide the whole ulong range.
+    /// The wide-word production decision instead combines base two with a Lucas test.</summary>
     public static ReadOnlySpan<ulong> StrongPrimeWitnessBases => [2UL, 3UL, 5UL, 7UL, 11UL, 13UL, 17UL, 19UL, 23UL, 29UL, 31UL, 37UL, 41UL, 43UL, 47UL, 53UL, 59UL, 61UL, 67UL, 71UL];
 
     /// <summary>The Jacobi symbol of <paramref name="numerator"/> over an odd positive
@@ -159,8 +159,8 @@ internal static partial class Oracles {
     /// proof from first principles. Neither is stronger than the other; do not describe one that way.
     /// </para>
     /// <para>
-    /// Deliberately OUTSIDE Puck.Maths rather than borrowing <see cref="PrimeField64.IsPrime(ulong)"/>, so that a
-    /// future re-pointing of that member at the Baillie–PSW composition turns no tier of this family into a tautology.
+    /// Deliberately OUTSIDE Puck.Maths rather than borrowing <see cref="PrimeExtensions.IsPrime(ulong)"/>, so that a
+    /// forwarding of that member to the Baillie–PSW composition turns no tier of this family into a tautology.
     /// </para>
     /// </remarks>
     public static bool ExactPrimality(ulong value) {
@@ -191,14 +191,14 @@ internal static partial class Oracles {
     /// <remarks>
     /// <para>
     /// Independent of <see cref="PrimeField64.IsStrongLucasProbablePrime(ulong)"/> in three deliberate ways. The
-    /// subject walks the <c>U</c>/<c>V</c> doubling identities most-significant-bit first, HALVING on every
-    /// index-incrementing step, entirely inside a Montgomery ring; this multiplies two-by-two matrices in plain
-    /// residues, halves nothing anywhere, and carries no <c>V</c> recurrence of its own at all — it derives
-    /// <c>V_d</c> from two consecutive <c>U</c> terms through <c>V_n = 2·U_(n+1) − P·U_n</c>. Its Selfridge search
-    /// carries the discriminant's sign EXPLICITLY, where the subject reads the sign off <c>magnitude &amp; 3</c>, and
-    /// takes its symbol from <see cref="JacobiSymbolReciprocity(BigInteger, BigInteger)"/> rather than from any
-    /// shipped Jacobi. A wrong index-incrementing pair, a dropped <c>Q^k</c> squaring, or a halving that leaves the
-    /// carrier shows here and nowhere else.
+    /// subject walks a <c>V</c>-only ladder most-significant-bit first inside a Montgomery ring and reads <c>U_d</c>
+    /// off <c>2·V_(d+1) = P·V_d</c>; this multiplies two-by-two matrices in plain residues, carries no <c>V</c>
+    /// recurrence of its own at all — it derives <c>V_d</c> from two consecutive <c>U</c> terms through
+    /// <c>V_n = 2·U_(n+1) − P·U_n</c> — and reads <c>U_d</c> directly. Its Selfridge search carries the
+    /// discriminant's sign EXPLICITLY, where the subject reads the sign off <c>magnitude &amp; 3</c>, and takes its
+    /// symbol from <see cref="JacobiSymbolReciprocity(BigInteger, BigInteger)"/> of the signed discriminant over the
+    /// value rather than from any shipped Jacobi or reciprocity step. A wrong cross term, a <c>Q</c> power one index
+    /// off, or a <c>U</c> test not equivalent to <c>U_d = 0</c> shows here and nowhere else.
     /// </para>
     /// <para>
     /// It is <c>O(log n)</c>, so a law standing on it reaches the whole carrier rather than the small band an

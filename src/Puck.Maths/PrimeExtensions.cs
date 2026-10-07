@@ -7,14 +7,14 @@ using System.Runtime.Intrinsics;
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides deterministic primality testing and prime enumeration for 32-bit unsigned integers.
+/// Provides deterministic primality testing, prime counting and prime selection for unsigned integers.
 /// </summary>
 /// <remarks>
 /// The primality test is exact across the entire 32-bit range — it never returns a probabilistic answer — and the
-/// supporting routines run their hot loops in Montgomery form or through precomputed reciprocals, so neither performs
-/// hardware division per iteration.
+/// narrow decision kernels use Montgomery form and the quotient counter's summation uses precomputed reciprocals.
+/// The unsigned sixty-four-bit combinatorial counter also uses integer division for its leaf quotients.
 /// </remarks>
-public static class PrimeExtensions {
+public static partial class PrimeExtensions {
     /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² that survive the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>
     /// <remarks>
     /// Enumerated in-house by sweeping every odd value in <c>[121, 2³²)</c> coprime to <c>105</c> against a sieve:
@@ -367,37 +367,63 @@ public static class PrimeExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint Fingerprint(uint value) =>
         ((value * 0x9E3779B1U) >> 16);
-    /// <summary>Computes the negated multiplicative inverse of <paramref name="modulus"/> modulo 2³².</summary>
-    /// <param name="modulus">The odd modulus.</param>
-    /// <returns>The value <c>m′</c> satisfying <c>modulus · m′ ≡ −1 (mod 2³²)</c>, consumed by <see cref="MontgomeryMultiply(uint, uint, uint, uint)"/>.</returns>
+    /// <summary>Runs the base-two strong-probable-prime round for an odd modulus below <c>2^32</c>.</summary>
+    /// <param name="modulus">The odd modulus, above three and below <c>2^32</c>, widened.</param>
+    /// <returns>Whether the modulus is a strong probable prime to base two.</returns>
+    /// <remarks>
+    /// The round runs in Montgomery form with the full radix <c>2^64</c>, reduced lazily by
+    /// <see cref="ScaledResidueRing64.ReduceNarrow(ulong, ulong, ulong, ulong)"/>: every residue stays in
+    /// <c>[1, modulus]</c>, two such factors multiply inside one word, and no product spends a correction step. Two is
+    /// <c>one + one</c> folded once, and the power <c>2^d</c> of <c>modulus - 1 = d * 2^s</c> runs least significant bit
+    /// first from two, since the lowest bit of the odd <c>d</c> is set.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetMontgomeryInverse(uint modulus) =>
-        (0U - modulus.ModularInverse());
-    /// <summary>Doubles a Montgomery-form residue modulo <paramref name="modulus"/> without branching.</summary>
-    /// <param name="modulus">The odd modulus.</param>
-    /// <param name="residue">The residue to double; must be less than <paramref name="modulus"/>.</param>
-    /// <returns>The doubled residue, less than <paramref name="modulus"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint MontgomeryDouble(uint modulus, uint residue) {
-        var adjusted = ((((ulong)residue) << 1) - modulus);
+    private static bool PassesNarrowBaseTwo(ulong modulus) {
+        var inverse = modulus.ModularInverse();
+        var one = ((ulong.MaxValue % modulus) + 1UL);
+        var negativeOne = (modulus - one);
+        var two = (one + one);
+        var oddPart = (modulus - 1UL);
+        var shift = BitOperations.TrailingZeroCount(value: oddPart);
 
-        return ((uint)(adjusted + (((ulong)modulus) & ((ulong)(((long)adjusted) >> 63)))));
-    }
-    /// <summary>Multiplies two Montgomery-form residues modulo <paramref name="modulus"/> using a single REDC reduction.</summary>
-    /// <param name="left">The first residue; must be less than <paramref name="modulus"/>.</param>
-    /// <param name="modulus">The odd modulus.</param>
-    /// <param name="modulusInverse">The negated inverse of <paramref name="modulus"/> obtained from <see cref="GetMontgomeryInverse(uint)"/>.</param>
-    /// <param name="right">The second residue; must be less than <paramref name="modulus"/>.</param>
-    /// <returns>The Montgomery-form product, less than <paramref name="modulus"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint MontgomeryMultiply(uint left, uint modulus, uint modulusInverse, uint right) {
-        var product = (((ulong)left) * right);
-        var factor = (((uint)product) * modulusInverse);
-        var carry = ((((ulong)((uint)product)) + 0xFFFFFFFFUL) >> 32);
-        var reduced = (((product >> 32) + ((((ulong)factor) * modulus) >> 32)) + carry);
-        var adjusted = (reduced - modulus);
+        two -= modulus & unchecked((0UL - (two > modulus).As<ulong>()));
+        oddPart >>>= shift;
 
-        return ((uint)(adjusted + (((ulong)modulus) & ((ulong)(((long)adjusted) >> 63)))));
+        var power = two;
+        var result = two;
+
+        while (0UL != (oddPart >>>= 1)) {
+            power = ScaledResidueRing64.ReduceNarrow(
+                inverse: inverse,
+                left: power,
+                modulus: modulus,
+                right: power
+            );
+
+            if (0UL != (oddPart & 1UL)) {
+                result = ScaledResidueRing64.ReduceNarrow(
+                    inverse: inverse,
+                    left: power,
+                    modulus: modulus,
+                    right: result
+                );
+            }
+        }
+
+        if ((one == result) || (negativeOne == result)) { return true; }
+
+        while (0 != --shift) {
+            result = ScaledResidueRing64.ReduceNarrow(
+                inverse: inverse,
+                left: result,
+                modulus: modulus,
+                right: result
+            );
+
+            if (negativeOne == result) { return true; }
+        }
+
+        return false;
     }
     /// <summary>Subtracts <paramref name="subtrahend"/> from every element of <paramref name="values"/> in place.</summary>
     /// <param name="subtrahend">The amount removed from each element.</param>
@@ -592,10 +618,11 @@ public static class PrimeExtensions {
     /// otherwise — after which every survivor below the square of the next untested prime is itself prime. Larger
     /// values are decided by a single base-2 strong-probable-prime round corrected by
     /// <see cref="StrongPseudoprimesBase2"/>, the complete list of composites that fool the round, making the answer
-    /// exact over the whole 32-bit range. The round runs in Montgomery form, so the inner loop performs no hardware
-    /// division, and the correction consults <see cref="StrongPseudoprimeFilter"/> first, so the binary search almost
+    /// exact over the whole 32-bit range. The round runs in lazily reduced Montgomery form with a 64-bit radix, so the
+    /// inner loop performs no hardware division and no correction step, and the correction consults <see cref="StrongPseudoprimeFilter"/> first, so the binary search almost
     /// never runs.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool IsPrime(this uint value) {
         if (0U == (value & 01U)) { return (02U == value); }
         if (Vector256.IsHardwareAccelerated) {
@@ -610,7 +637,12 @@ public static class PrimeExtensions {
             );
 
             if (Vector256<uint>.Zero != divisible) {
-                return PrimeKernels.SmallFactorPrimes.Contains(value: ((ulong)value));
+                // A multiple of a ladder prime is prime only as that prime, so a value above the last one is settled
+                // without a search.
+                return (
+                    (value <= PrimeKernels.SmallFactorPrimes[^1]) &&
+                    PrimeKernels.SmallFactorPrimes.Contains(value: ((ulong)value))
+                );
             }
             if (3721U > value) { return (1U < value); }
         } else {
@@ -628,55 +660,7 @@ public static class PrimeExtensions {
             if (1681U > value) { return (1U < value); }
         }
 
-        var exponent = (value - 1U);
-        var shift = ((int)uint.TrailingZeroCount(value: exponent));
-        var index = (exponent >> shift);
-        var inverse = GetMontgomeryInverse(modulus: value);
-        var one = ((uint.MaxValue % value) + 1U);
-        var minusOne = (value - one);
-        var witness = MontgomeryDouble(
-            modulus: value,
-            residue: one
-        );
-        var result = one;
-
-        while (true) {
-            if (0U != (index & 1U)) {
-                result = MontgomeryMultiply(
-                    left: result,
-                    modulus: value,
-                    modulusInverse: inverse,
-                    right: witness
-                );
-            }
-
-            index >>= 1;
-
-            if (0U == index) { break; }
-
-            witness = MontgomeryMultiply(
-                left: witness,
-                modulus: value,
-                modulusInverse: inverse,
-                right: witness
-            );
-        }
-
-        if (
-            (one != result) &&
-            (minusOne != result)
-        ) {
-            do {
-                if (0 == --shift) { return false; }
-
-                result = MontgomeryMultiply(
-                    left: result,
-                    modulus: value,
-                    modulusInverse: inverse,
-                    right: result
-                );
-            } while (minusOne != result);
-        }
+        if (!PassesNarrowBaseTwo(modulus: value)) { return false; }
 
         var fingerprint = Fingerprint(value: value);
 
@@ -691,21 +675,18 @@ public static class PrimeExtensions {
     /// the largest index addressable within the 32-bit range, since there are 203,280,221 primes below 2³².
     /// </returns>
     /// <remarks>
-    /// Cipolla's asymptotic expansion of the n-th prime seeds the search; the seed is aligned exactly with
+    /// The first seventeen primes use the small-factor constants; the remaining primes below 65,536
+    /// use the shared base-prime table, built once on first use. Larger ranks use Cipolla's asymptotic expansion
+    /// to seed the search; the seed is aligned exactly with
     /// <see cref="PrimeCountingFunction(uint)"/> and the residual error is walked off in whichever direction the
     /// target lies — with <see cref="IsPrime(uint)"/> when the target is a handful of primes away, and with a
     /// windowed sieve otherwise — so the answer does not depend on the seed erring to one side.
     /// </remarks>
     public static uint NthPrime(this uint value) {
         if (203280220U < value) { return 0U; }
-        if (3U > value) {
-            return ((0U == value)
-                ? 2U
-                : ((1U == value)
-                    ? 3U
-                    : 5U
-            ));
-        }
+        if (value == 0) { return 2; }
+        if (value <= 16) { return ((uint)PrimeKernels.SmallFactorPrimes[(((int)value) - 1)]); }
+        if (value <= 6541) { return PrimeKernels.BasePrimes[(((int)value) - 1)]; }
 
         var count = (value + 1U);
         var logarithm = Math.Log(d: count);
@@ -784,122 +765,122 @@ public static class PrimeExtensions {
             ))));
         }
 
-        var squareRoot = ((uint)Math.Sqrt(d: value));
-        var squareRootHalved = ((squareRoot + 1U) >> 1);
+        return CountQuotients<uint, QuotientCountWord32>(cancellationToken: default, squareRoot: ((uint)Math.Sqrt(d: value)), value: value);
+    }
+
+    // The quotient-counting recurrence, shared by the uint count and the widened ulong count below the
+    // 4194303^2 root cap. TLarge carries pi(value/k) and every quotient of value; smalls hold pi(k) for k<=sqrt.
+    // Requires value>=9 and squareRoot=floor(sqrt(value)).
+    private static TLarge CountQuotients<TLarge, TWidth>(TLarge value, uint squareRoot, CancellationToken cancellationToken)
+        where TLarge : unmanaged, IBinaryInteger<TLarge>, IUnsignedNumber<TLarge>
+        where TWidth : struct, IQuotientCountWidth<TLarge> {
+        var roughCount = ((squareRoot + 1U) >> 1);
         var ignore = ArrayPool<bool>.Shared.Rent(minimumLength: ((int)(squareRoot + 1U)));
-        var larges = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)squareRootHalved));
-        var multipliers = ArrayPool<ulong>.Shared.Rent(minimumLength: ((int)squareRootHalved));
-        var roughs = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)squareRootHalved));
-        var smalls = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)squareRootHalved));
+        var larges = ArrayPool<TLarge>.Shared.Rent(minimumLength: ((int)roughCount));
+        var multipliers = ArrayPool<ulong>.Shared.Rent(minimumLength: ((int)roughCount));
+        var roughs = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)roughCount));
+        var smalls = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)roughCount));
+        var root = TLarge.CreateTruncating(value: squareRoot);
 
         try {
-            for (var index = 0U; (index < squareRootHalved); ++index) {
-                larges[index] = (((value / ((index << 1) + 1U)) - 1U) >> 1);
+            for (var index = 0U; (index < roughCount); ++index) {
+                larges[index] = (((value / TLarge.CreateTruncating(value: ((index << 1) + 1U))) - TLarge.One) >> 1);
                 roughs[index] = ((index << 1) + 1U);
                 smalls[index] = index;
             }
-
+            Array.Clear(array: ignore, index: 0, length: ((int)(squareRoot + 1U)));
             var counter = 0U;
-            var factor = 3U;
 
-            if (factor <= squareRoot) {
-                Array.Clear(
-                    array: ignore,
-                    index: 0,
-                    length: ((int)(squareRoot + 1U))
-                );
+            for (var factor = 3U; (factor <= squareRoot); factor += 2U) {
+                if (ignore[factor]) { continue; }
+                var factorSquared = (((ulong)factor) * factor);
 
-                do {
-                    if (!ignore[factor]) {
-                        var factorSquared = (factor * factor);
+                if ((factorSquared * factorSquared) > ulong.CreateTruncating(value: value)) { break; }
+                cancellationToken.ThrowIfCancellationRequested();
+                ignore[factor] = true;
+                for (var multiple = ((uint)factorSquared); (multiple <= squareRoot); multiple += (factor << 1)) { ignore[multiple] = true; }
+                var nextCount = 0U;
 
-                        if ((((ulong)factorSquared) * factorSquared) > value) { break; }
+                for (var index = 0U; (index < roughCount); ++index) {
+                    var rough = roughs[index];
 
-                        ignore[factor] = true;
+                    if (ignore[rough]) { continue; }
+                    // rough<=sqrt(value) and factor<=value^(1/4), so the product fits TLarge.
+                    var product = (TLarge.CreateTruncating(value: rough) * TLarge.CreateTruncating(value: factor));
+                    var removed = ((product > root)
+                        ? TLarge.CreateTruncating(value: smalls[uint.CreateTruncating(value: (((value / product) - TLarge.One) >> 1))])
+                        : larges[(smalls[uint.CreateTruncating(value: (product >> 1))] - counter)]);
 
-                        var i = factorSquared;
-                        var j = 0U;
-                        var k = 0U;
-
-                        while (i <= squareRoot) {
-                            ignore[i] = true;
-                            i += (factor << 1);
-                        }
-                        while (j < squareRootHalved) {
-                            i = roughs[j];
-
-                            if (!ignore[i]) {
-                                var x = (i * factor);
-                                var y = ((x > squareRoot)
-                                    ? smalls[(((value / x) - 1U) >> 1)]
-                                    : larges[(smalls[(x >> 1)] - counter)]
-                                );
-                                var z = (larges[j] - y);
-
-                                larges[k] = (z + counter);
-                                roughs[k++] = i;
-                            }
-
-                            ++j;
-                        }
-
-                        i = ((squareRoot - 1U) >> 1);
-                        j = ((squareRoot / factor) - 1U) | 1U;
-                        squareRootHalved = k;
-
-                        while (j >= factor) {
-                            var x = (smalls[(j >> 1)] - counter);
-
-                            k = ((j * factor) >> 1);
-
-                            if (k <= i) {
-                                SubtractInPlace(
-                                    subtrahend: x,
-                                    values: smalls.AsSpan(
-                                        length: ((int)((i - k) + 1U)),
-                                        start: ((int)k)
-                                    )
-                                );
-
-                                i = (k - 1U);
-                            }
-
-                            j -= 2U;
-                        }
-
-                        ++counter;
-                    }
-
-                    factor += 2U;
-                } while (factor <= squareRoot);
-            }
-
-            larges[0] += (((squareRootHalved + ((counter - 1U) << 1)) * (squareRootHalved - 1U)) >> 1);
-
-            for (var i = 1U; (i < squareRootHalved); ++i) { larges[0] -= larges[i]; }
-            for (var i = 1U; (i < squareRootHalved); ++i) { multipliers[i] = ((ulong.MaxValue / roughs[i]) + 1UL); }
-            for (var i = 1U; (i < squareRootHalved); ++i) {
-                var x = ((uint)((((UInt128)multipliers[i]) * value) >> 64));
-                var y = (smalls[((((uint)((((UInt128)multipliers[i]) * x) >> 64)) - 1U) >> 1)] - counter);
-
-                if (y < (i + 1U)) { break; }
-
-                var z = 0U;
-
-                for (var j = (i + 1U); (j <= y); ++j) {
-                    z += smalls[((((uint)((((UInt128)multipliers[j]) * x) >> 64)) - 1U) >> 1)];
+                    larges[nextCount] = ((larges[index] - removed) + TLarge.CreateTruncating(value: counter));
+                    roughs[nextCount++] = rough;
                 }
+                roughCount = nextCount;
+                var high = ((squareRoot - 1U) >> 1);
+                var divisor = ((squareRoot / factor) - 1U) | 1U;
 
-                larges[0] += (z - ((y - i) * ((counter + i) - 1U)));
+                while (divisor >= factor) {
+                    var removed = (smalls[(divisor >> 1)] - counter);
+                    var low = ((divisor * factor) >> 1);
+
+                    if (low <= high) {
+                        SubtractInPlace(subtrahend: removed, values: smalls.AsSpan(length: ((int)((high - low) + 1U)), start: ((int)low)));
+                        high = (low - 1U);
+                    }
+                    divisor -= 2U;
+                }
+                ++counter;
             }
 
-            return (larges[0] + 1U);
+            var count = TLarge.CreateTruncating(value: roughCount);
+
+            larges[0] += (((count + (TLarge.CreateTruncating(value: (counter - 1U)) << 1)) * (count - TLarge.One)) >> 1);
+            for (var index = 1U; (index < roughCount); ++index) { larges[0] -= larges[index]; }
+            for (var index = 1U; (index < roughCount); ++index) { multipliers[index] = TWidth.Reciprocal(divisor: roughs[index]); }
+            for (var index = 1U; (index < roughCount); ++index) {
+                var quotient = TWidth.Divide(divisors: roughs, index: index, reciprocals: multipliers, value: value);
+                var bound = (smalls[uint.CreateTruncating(value: ((TWidth.Divide(divisors: roughs, index: index, reciprocals: multipliers, value: quotient) - TLarge.One) >> 1))] - counter);
+
+                if (bound < (index + 1U)) { break; }
+                var sum = TLarge.Zero;
+
+                for (var next = (index + 1U); (next <= bound); ++next) {
+                    sum += TLarge.CreateTruncating(value: smalls[uint.CreateTruncating(value: ((TWidth.Divide(divisors: roughs, index: next, reciprocals: multipliers, value: quotient) - TLarge.One) >> 1))]);
+                }
+                larges[0] += (sum - (TLarge.CreateTruncating(value: (bound - index)) * TLarge.CreateTruncating(value: ((counter + index) - 1U))));
+            }
+            return (larges[0] + TLarge.One);
         } finally {
             ArrayPool<uint>.Shared.Return(array: smalls);
             ArrayPool<uint>.Shared.Return(array: roughs);
             ArrayPool<ulong>.Shared.Return(array: multipliers);
-            ArrayPool<uint>.Shared.Return(array: larges);
+            ArrayPool<TLarge>.Shared.Return(array: larges);
             ArrayPool<bool>.Shared.Return(array: ignore);
+        }
+    }
+
+    // Division of a quotient-counting word by an odd divisor 1<d<=sqrt(value) through a precomputed reciprocal.
+    // Divide reads divisors[index] only when its width needs the divisor itself.
+    private interface IQuotientCountWidth<TLarge> where TLarge : unmanaged, IBinaryInteger<TLarge> {
+        static abstract ulong Reciprocal(uint divisor);
+        static abstract TLarge Divide(TLarge value, uint[] divisors, ulong[] reciprocals, uint index);
+    }
+    private readonly struct QuotientCountWord32 : IQuotientCountWidth<uint> {
+        // ceil(2^64/d): for a 32-bit value the high product is exactly floor(value/d), since the reciprocal's
+        // excess below d times value stays below 2^64.
+        public static ulong Reciprocal(uint divisor) => ((ulong.MaxValue / divisor) + 1UL);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint Divide(uint value, uint[] divisors, ulong[] reciprocals, uint index) => ((uint)((((UInt128)reciprocals[index]) * value) >> 64));
+    }
+    private readonly struct QuotientCountWord64 : IQuotientCountWidth<ulong> {
+        // floor(2^64/d): the high product underestimates the quotient by at most one; the exact remainder
+        // comparison supplies that possible missing unit.
+        public static ulong Reciprocal(uint divisor) => (ulong.MaxValue / divisor);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ulong Divide(ulong value, uint[] divisors, ulong[] reciprocals, uint index) {
+            var divisor = divisors[index];
+            var quotient = ((ulong)((((UInt128)value) * reciprocals[index]) >> 64));
+
+            return (quotient + (((value - (quotient * divisor)) >= divisor) ? 1UL : 0UL));
         }
     }
 }

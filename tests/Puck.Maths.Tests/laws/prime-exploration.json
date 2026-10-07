@@ -1,0 +1,355 @@
+[
+  {
+    "Id": "prime-exploration.group-vs-residue-arithmetic",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Residues"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericResidues"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericChannels"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "TryChannel"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericIndex"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "ChannelAtNumericIndex"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Inverse"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "PermuteMask"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "All 64 group products, eight inverses, 2048 channel mask actions, 7168 rotation/swap actions including negative and extreme int exponents, and explicit algebraic/numeric tables",
+        "Against": "Ordinary integer multiplication modulo 30 followed by independently recorded residue labels; mask expectations push each selected residue separately. No channel-addition, nibble rotation, or shipped wheel lookup appears in the reference.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "All byte representatives are checked for acceptance and failure-output zero; invalid channel/index operands refuse with the documented parameter names.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.primality-vs-independent",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Full-ulong machineword decision, candidate entry point, and field entry point",
+        "Against": "Oracles.PrimeSieve decides every value through 100000 by integer-index crossing-out; Oracles.ExactPrimality supplies trial division through 8191 and twenty BigInteger rounds with a different witness set and arithmetic. ENVELOPE: the high values share a base-two strong-probable-prime criterion, but no implementation, modular substrate, or reference data with the production Baillie–PSW composition. The boundary ladder contains both carrier extremes, a known factored near-top square, 341550071728321, 3825123056546413051, and witness-divisor primes 73 and 193.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The candidate address of one is composite; the complete small band also includes the exceptional primes two, three, and five.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.primality-swept-vs-reference",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Full-width raw and forced-odd domain candidates through both public primality entry points and PrimeExtensions.IsPrime",
+        "Against": "Oracles.ExactPrimality: independent trial-division screen and twenty BigInteger strong rounds. ENVELOPE: large operands share the criterion, with different bases, arithmetic and loop structure; no shipped prime kernel is called.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-exploration-primality-swept",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "IsPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-exploration.primality-swept-vs-reference at strictly stronger Deep operands",
+        "Against": "The same independent trial-division and BigInteger reference over the larger Deep domain stream; no additional independence is claimed.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.enumeration-vs-sieve",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Enumerate"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "Count"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Enumeration and count against the independent prime list under every sieve policy (automatic, complete, presieved and windowed) and through the public automatic overloads; segment sizes 1, 2, 31 and 32768 include population-count word tails; inclusive partial endpoints, prime squares, empty intervals and tiny upper-carrier windows",
+        "Against": "Oracles.PrimeSieve supplies ordinary integer-index crossing-out through 100000 (through 10000 for tiny segments); Oracles.ExactPrimality independently decides high windows. ENVELOPE: this case tests bounded presieving/automatic modes at ulong.MaxValue and complete Eratosthenes around 65537 squared; the separate wide-sieve cases cover carried upper-prime buckets and complete sieving at the final ulong window.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.patterns-vs-integer-sieve",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Periodic small-prime filtering and population count; integer band 0..600000 crosses every pattern period more than once; shifted starts, primes through 163, their boundary, and partial endpoints with 63/64/65/4096/32768-byte segments",
+        "Against": "Oracles.PrimeSieve: independent integer-index crossing-out from each prime square, with no wheel coordinates, grouped tables or shipped primality kernel. The same ordered list pins both enumeration and count. ENVELOPE: the portable tail and hardware-selected vector width run here; disabled-ISA subprocess runs are separate verification evidence.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.packets-vs-integer-sieve",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "Eight-byte quotient states for residue-specialized packets in cache-sized small-prime chunks and direct medium-prime phase-bucket transfers through two million, shifted intervals, the 49..50-million medium-prime band, and the final four million uint values with 32768/1048576-byte requests that exercise three cache chunks per adaptive segment",
+        "Against": "Oracles.PrimeSieve and PrimeExplorationIntegerWindow: independent integer-index crossing-out. Windows cross repeated cache boundaries, prime-square activation, medium buckets and partial chunks; these references have no wheel phase, byte lifting, carried cursor, grouped patterns, or shipped primality decisions.",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.constellations-vs-naive",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "Offsets"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "AdmissibleMask"
+      },
+      {
+        "Type": "Puck.Maths.PrimeConstellation",
+        "Name": "Enumerate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Copied offsets, all admissibility masks, and constellation starts through 1000 and in a top-of-ulong window that the automatic policy presieves",
+        "Against": "The reference applies divisibility by 2/3/5 directly to every shifted residue, and checks prime tuples with BigInteger offset sums and Oracles.ExactPrimality. No lane mask or shipped candidate address feeds the tuple reference. Both endpoints bound every tuple member.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Empty, nonzero-first, duplicate and descending offsets are refused by parameter name. The zero-mask patterns [0,1] and [0,2,4] retain their exceptional anchors two and three; top additions cannot wrap.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.enumeration-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Enumeration validates a null callback through the public and the internal policy overloads; the policy overloads validate segment size and mode before returning an empty reversed interval; the internal PrimeSieveMode ordinals match their explicit dispatch contract.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.wheel-tables-match-their-derivation",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "ChannelCount"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "WordIntegers"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericResidues"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeWheel30's internal derivation (Multiplier, Gap, Lift, Carry, NumericBit, TargetBit, PrefixMask, WordPrefixMask) and every table built from it: PrimeWheel30.Gaps and PrefixMasks, PrimeExploration.ClearMasks and WheelUnitsThrough.Counts, and PrimeExtensions.CombinatorialTables.Steps and PrefixMasks",
+        "Against": "a direct walk of the multiples p·m for p = 30q + r at four quotients q in every channel and the units m coprime to thirty (Oracles.UnitsModulo, with 31 closing the cycle): the byte floor(p·m / 30), its step beyond q times the gap, the residue p·m mod 30 located by Array.IndexOf over the units, and the units at or below each remainder counted bit by bit",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the hand-written wheel data: the gap list 6, 4, 2, 4, 2, 4, 6, 2, the thirty numeric prefix masks, the eight packed packet clear-mask words of PrimeExploration.PacketResidue1 through PacketResidue29, MarkPacketPrime's written distances ((r·m mod 30) + r·g) / 30 and MarkFullPacketRun's written offsets (m − 1)·q + r·m / 30",
+        "Against": "the same walk; the gap list and prefix masks are also compared with written-out copies of their literals, and the distance-reuse classes (phases 4, 5 and 6 for every residue, phase 3 for the squares modulo five 1, 11, 19 and 29, phase 7 for 7, 13, 17 and 23) are recomputed from the carries",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Modulus is SymmetryLattice.CycleOrder, ChannelCount is SymmetryLattice.Dimension and the number of units modulo thirty, NumericResidues is SymmetryLattice.CycleExponents, and WordIntegers is eight bytes of Modulus integers, 240, numerically equal to SymmetryLattice.NodeCount (no correspondence beyond the number is asserted)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-exploration.presieve-jacobsthal-run-bound",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "every byte of every PrimeExploration.SmallPrimePatterns.Periods pattern over its whole period, and the primes SmallPrimeGroups holds",
+        "Against": "trial division of 30·index + unit by the group's primes, and the primes from 7 through PreSievePrimeLimit by trial division (Oracles.PrimesBetween), each held exactly once; so the patterns' intersection is exactly the set of integers coprime to 2·3·5·…·163, and a CRT translate argument makes every run of that set's complement appear in it",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the longest run of non-coprime integers over one full period of 7#, 11#, 13#, 17#, 19# and 23#, measured exhaustively by Oracles.LongestNonCoprimeRun",
+        "Against": "A048670 a(4) through a(9) = 10, 14, 22, 26, 34, 40, each less one, which fixes the reading that a(n) − 1 is the longest run; a(38) = 492 for 163#, the 38th prime, bounds every run of the presieved bitmap by 491",
+        "Shared": "",
+        "Citation": "OEIS A048670 (Jacobsthal function applied to the primorials), b-file entries 4 to 9 and 38; computed by Hajdu and Saradha and by Ziller and Morack. ENVELOPE: the 492 itself is not recomputed; the executable legs check the reading on small primorials and the bound on the real patterns",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeExploration.FilterSmallPrimes over 2^20 blocks at block zero (whose restored small primes only add candidates), at block 33,333,333,333,333 and at the final 2^20 blocks below ulong.MaxValue / 30",
+        "Against": "the cited bound: no run of more than 491 non-candidates, no three consecutive all-zero 64-bit words of 240 integers, and no seventeen consecutive all-zero wheel bytes (510 integers)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the real patterns read at an arbitrary translate, past ulong range, around a run the greedy covering forces",
+        "Against": "a greedy covering of 394 consecutive integers by one residue class per prime through 163 (Oracles.GreedyCovering), placed by the Chinese remainder theorem (Oracles.ChineseRemainder) in BigInteger: the patterns must strike all 394, and the run they leave must stay within 491",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

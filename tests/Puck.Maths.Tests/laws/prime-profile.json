@@ -1,0 +1,96 @@
+[
+  {
+    "Id": "prime-selection.profile-count-results",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "PrimeCountingFunction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Profiled counts match independent small and published counts at 0, 1000, 10^10 and 2^40, plus the independent 64-integer window above 2^40.",
+        "Against": "Exact small counts and Oliveira e Silva's Tables IV/V; Oracles.ExactPrimality supplies the checkpoint delta without production counting or sieve code.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Tables IV/V. ENVELOPE: cheap routes only; no Gourdon work count is inferred from result agreement.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Adding request-local profiling preserves the production result at the count fixtures.",
+        "Against": "The ordinary PrimeCountingFunction result for the same input.",
+        "Shared": "Both call the identical CountPrimeBound64 dispatcher and selected counting kernels; this equality establishes diagnostic transparency only.",
+        "Citation": "The separate classical leg supplies the independent numeric expectations.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CountOnly has one bound/route record and no selection work; non-Gourdon routes leave all Gourdon fields zero. The checkpoint delta [2^40+1,2^40+64] marks one logical 3-byte bitmap because 2^40 has remainder 16 modulo 30, narrow enough to presieve without a windowed upper-base pass.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: zero isolation checks read every Gourdon field but do not establish correctness of nonzero Gourdon counters. Counter units exclude allocations, uint-kernel internals, base generation and individual sieve marks.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.profile-selection-results",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "NthPrime"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Profiled nth-prime selection agrees at a narrow index, an out-of-range index, ranks 32 below/above 2^40 and the last ulong rank.",
+        "Against": "Small prime31, zero for a rank beyond the finite prime count, and Oracles.ExactPrimality over independent local windows; published pi(2^40) and pi(2^64) fix the indices.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table V. ENVELOPE: checkpoint and narrow selections only, not distant count-guided inversion.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Profiling preserves ordinary NthPrime results at the same selected inputs.",
+        "Against": "The ordinary NthPrime entry point.",
+        "Shared": "Both call identical NthPrime64 selection and counting paths.",
+        "Citation": "The separate classical leg fixes the expected prime independently.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Narrow/out-of-range routes have no counted work. Both 32-rank checkpoint directions request exactly one selection window and one marked segment with no count dispatch. Selecting the final prime makes 30 odd-candidate primality requests and no bitmap request.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: these are exact request-level work counts for fixed routes, not instruction counts or timings. The cases do not force window exhaustion or inspect per-mark work.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.profile-snapshot-and-cancellation",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "A second profiled request leaves the first result and frozen count record unchanged. A mutable-list interface, if exposed, rejects replacement. Pre-canceled count and nth requests throw OperationCanceledException before route selection.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: sequential request isolation and public collection immutability; this does not inject cancellation during an expensive count or prove simultaneous-call scheduling.",
+        "Absolute": ""
+      }
+    ]
+  }
+]

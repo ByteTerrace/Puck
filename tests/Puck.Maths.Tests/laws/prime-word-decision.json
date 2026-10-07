@@ -1,0 +1,21 @@
+[
+  {
+    "Id": "prime-field.word-decision-dispatch",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeField64", "Name": "IsBaillieProbablePrime" },
+      { "Type": "Puck.Maths.PrimeExtensions", "Name": "IsPrime" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Each exact word entry point separately: the published leading-base pseudoprime ladder, carrier boundaries, and 1025 consecutive values at the uint dispatch seam, near 10^12, near 10^18, and ending at ulong.MaxValue.",
+        "Against": "Oracles.ExactPrimality uses ordinary trial division and twenty BigInteger strong rounds, and never calls the production decision. ENVELOPE: the base-two strong criterion is shared above the oracle's trial-division band, but neither Montgomery arithmetic, the Lucas criterion, nor any production output supplies expected results. This law tests dispatch and finite samples, not an exhaustive ulong proof.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

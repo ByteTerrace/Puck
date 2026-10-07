@@ -173,7 +173,7 @@ explicit, so plain `dotnet test` runs Smoke + Default.
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
 | Default (Smoke + Default) | a plain run | < 30 s | **every change**, unconditionally |
 | Deep | `--explicit on --filter-trait tier=Deep` | minutes | before you commit, and before any rounding change lands |
-| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-width sweeps over an ENTIRE carrier |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
 
 Explicit cases never fire on a plain `dotnet test`, and without
 `--explicit on` a `tier=Exhaustive` filter selects no test. Select an opt-in
@@ -182,7 +182,12 @@ tier with `--explicit on` and its trait, and narrow it with
 the word "exhaustive."** `Exhaustive` is for sweeping every value of a carrier —
 a 2³² word sweep qualifies; a 240×240 pair sweep is milliseconds and belongs at
 `Default` or `Deep`. Parking a cheap case in an opt-in tier silently costs it its
-everyday coverage. `Exhaustive` is also the one tier whose cases must NOT consume
+everyday coverage. The expensive combinatorial-prime checks also use this tier
+so high-bound counts and rank inversion do not extend the ordinary Deep run.
+Their declarations name the finite operands and explicitly disclaim a
+full-carrier proof; the tier is a scheduling choice, not an evidence upgrade.
+Cases without a measured runtime state their estimated algorithmic work;
+they do not claim a measured budget. `Exhaustive` is also the one tier whose cases must NOT consume
 a `Domain`: a domain hands out a sample by construction, and consuming one would
 advance the frontier counter its Default sibling reads, sliding that sibling's
 operands as a side effect of a sweep having run. Use `Laws.Claim` with its own
@@ -552,7 +557,9 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit
 ```
 
 For a fast single-case loop, filter on the display name — which *is* the law
-id (`--filter-display-name <law-id>`, with `--explicit on` for an opt-in tier). Confirm from the run output
+id (`--filter-display-name '<law-id>*'`, with `--explicit on` for an opt-in tier).
+The wildcard includes the runner's appended argument display; an exact bare id
+selects no row. Confirm from the run output
 what actually executed rather than assuming a filter composed with the tier
 gate the way you expected, and remember that a filtered run regenerates only
 the artifacts of the checks it ran; the run that produces what you commit is

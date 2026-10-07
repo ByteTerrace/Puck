@@ -1,0 +1,140 @@
+[
+  {
+    "Id": "prime-exploration.windowed-sieve-vs-integer-windows",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Explicit windowed sieving on intervals around the first two upper-base prime squares and the first large-prime square above the medium cutoff, a five-million-integer interval near 1e10 and a million-integer interval near 1e12. Segments of one, two, 31, 4096 and 32768 bytes restart the stateless upper-base pass up to hundreds of times, with partial byte endpoints and the bucket-packet small-prime marker.",
+        "Against": "Oracles.PrimeWideIntegerWindow creates its divisor list with the independent integer-index Eratosthenes sieve, then crosses every ordinary integer multiple in a bool array. It uses no shipped wheel tables, streamed base generator, division-started marks, packet cursors or primality predicate.",
+        "Shared": "",
+        "Citation": "Exact fixed-width oracle envelope: endpoints below 2e12, divisor roots through 1000001, window at most 5000001 integers; every intermediate fits ulong.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-exploration-windowed-final-window",
+    "Tier": "Deep",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" },
+      { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of prime-exploration.windowed-sieve-vs-integer-windows at strictly stronger operands: windowed sieving of the final 257 ulong values streams every uint base prime through 4294967291 in each segment; a count in one segment and a callback enumeration across seven-byte segments.",
+        "Against": "Independent BigInteger modular exponentiation on twenty witness bases and integer trial factors decides each ordinary integer in the window. No shipped wheel, base generator, division start or product narrowing is used.",
+        "Shared": "",
+        "Citation": "Oracles.PrimeExplorationPrimes delegates these full-width candidates to Oracles.ExactPrimality, whose first twelve prime bases suffice below ulong.MaxValue.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.ulong-windowed-checkpoint-selection",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "Selecting the 250000th prime above and below the published 2^55 checkpoint, and counting through the upper selection, agree with presieved interval counts and exact primality of both results.",
+        "Against": "PrimeExploration.Count in explicit Presieve mode, which decides every survivor of the shared primes through 65535 with the exact word test instead of marking upper bases, plus Oracles.ExactPrimality on each selected prime. Published pi(2^55)=971269945245201 fixes both ranks.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/primes.html, pi(2^k) dataset. ENVELOPE: the presieved counts share the small-prime filter and packet marker with the subject; prime-exploration.presieve-proof-boundary and prime-exploration.packets-vs-integer-sieve pin those, and the word decision is pinned by the prime-field laws.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Each of the three requests makes no global count: both ranks use CheckpointSelection with exactly one selection window, one segment and one windowed segment, and the count uses CheckpointInterval with one windowed segment. Each walk spans about 9.5 million integers, wider than one sixty-fourth of the checkpoint's square root, so it is windowed rather than presieved and still fits one selection window.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: exact request-level work counts at one checkpoint; they do not establish a timing or the windowed budget at other heights.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.prime-selection-ulong-windowed-rank-1e15",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The zero-based rank 10^15-1 selects the 10^15th prime, far from any power-of-two checkpoint and above the carried-state workspace bound.",
+        "Against": "The published value prime(10^15)=37124508045065437 in OEIS A006988, computed with primecount independently of this implementation.",
+        "Shared": "",
+        "Citation": "https://oeis.org/A006988. ENVELOPE: one finite nth-prime qualification, not an exhaustive carrier proof.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The request makes exactly one global Gourdon count, then selects through one windowed local segment instead of a second count.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: the assertion concerns dispatches, not CPU cycles; no fixed count is claimed for arbitrary ranks.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+    "Tier": "Exhaustive",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of deep.prime-selection-ulong-windowed-rank-1e15 at a strictly stronger operand: the zero-based rank 10^16-1 selects the 10^16th prime, whose local correction spans about 105 million integers.",
+        "Against": "The published value prime(10^16)=394906913903735329 in OEIS A006988, computed with primecount independently of this implementation.",
+        "Shared": "",
+        "Citation": "https://oeis.org/A006988. ENVELOPE: one expensive finite nth-prime qualification, individually selectable, not an exhaustive carrier proof.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The request makes exactly one global Gourdon count, then selects through one windowed local segment instead of a second count.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: the assertion concerns dispatches, not CPU cycles; no fixed count is claimed for arbitrary ranks.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.ulong-local-sieve-budget",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "The internal local sieve budget equals the widest width W with ceil(W/span)*pass + W <= floor at ten bounds: quotient bounds beside 2^32 and 2^33, at 10^12 and on both sides of the counting limit 4194303^2, and Gourdon bounds at 10^15, 10^16, 2^55, near 3.9*10^17 and ulong.MaxValue. The fixtures include budgets of whole windows only and of whole windows plus a partial window.",
+        "Against": "Oracles.PrimeLocalSieveBudget forms the root by exact squaring, the Rosser-Schoenfeld prime bound from the bit length, the pass, the span and the floor in BigInteger, then binary-searches the monotone cost predicate rather than evaluating the subject's closed whole-window form.",
+        "Shared": "Both read the identical PrimeExtensions.ResolveGourdonCutoff value y for Gourdon bounds; the floating-point cutoff tuning itself is not under test, and floor(x/(y+1)) is formed independently from it.",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Hand derivations pin two quotient budgets exactly: 695049 at 2^32+695049 (root 65541, pass 65541+30*7418, floor 30*32771) and 982879 at 2^33 (root 92681, pass 92681+30*10489, floor 30*46341).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: the budget is a cost heuristic in integer units; these laws pin its arithmetic, not timings or the faithfulness of the unit charges.",
+        "Absolute": ""
+      }
+    ]
+  }
+]

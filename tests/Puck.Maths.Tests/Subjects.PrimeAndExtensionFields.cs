@@ -704,7 +704,7 @@ internal static partial class Subjects {
     }
 
     /// <summary>Proves <c>IsPrime</c> against an exhaustive sieve of Eratosthenes over its whole band, pins the
-    /// twelve-base witness set base by base against the published psi_k table, and compares the carrier ladder against
+    /// rejection of the published psi_k composites, and compares the carrier ladder against
     /// the exact BigInteger decision.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? PrimeFieldIsPrimeAgainstSieveAndWitnesses() =>
@@ -719,12 +719,11 @@ internal static partial class Subjects {
         var sieve = Oracles.PrimeSieve(inclusiveMaximum: sieveBound);
 
         for (var value = 0; (value <= sieveBound); ++value) {
-            if (PrimeField64.IsPrime(value: ((ulong)value)) != sieve[value]) { return $"IsPrime disagrees with the sieve at {value}"; }
+            if (PrimeExtensions.IsPrime(value: ((ulong)value)) != sieve[value]) { return $"IsPrime disagrees with the sieve at {value}"; }
         }
 
-        // Each row makes ONE FURTHER BASE load-bearing: truncating the twelve-base set to the row's count would accept
-        // that value as prime. Rows like these are the only thing that catches the truncation: cutting IsPrime from
-        // twelve bases to eleven went undetected by a 164,000-value replay above 10^12.
+        // The survival counts describe the independent reference's leading prime bases. The shipped wide-word
+        // decision uses Baillie–PSW, so these rows pin composite rejection rather than its individual witnesses.
         foreach (var (value, bases) in PrimeFieldWitnessPseudoprimes) {
             var survived = 0;
 
@@ -739,11 +738,11 @@ internal static partial class Subjects {
 
             if (survived != bases) { return $"{value} survives {survived} leading prime bases, not the tabulated {bases}"; }
             if (Oracles.ExactPrimality(value: value)) { return $"the oracle called the tabulated pseudoprime {value} prime"; }
-            if (PrimeField64.IsPrime(value: value)) { return $"IsPrime accepted the strong pseudoprime {value}, which survives {bases} leading bases; the witness set is short"; }
+            if (PrimeExtensions.IsPrime(value: value)) { return $"IsPrime accepted the strong pseudoprime {value}, which survives {bases} leading bases"; }
         }
 
         foreach (var value in PrimeFieldPrimalityLadder) {
-            if (PrimeField64.IsPrime(value: value) != Oracles.ExactPrimality(value: value)) { return $"IsPrime and the oracle disagree at {value}"; }
+            if (PrimeExtensions.IsPrime(value: value) != Oracles.ExactPrimality(value: value)) { return $"IsPrime and the oracle disagree at {value}"; }
         }
 
         return null;
@@ -760,7 +759,7 @@ internal static partial class Subjects {
 
             // The forced-odd image so the sweep meets the arithmetic and not only the even short-circuit.
             foreach (var candidate in ((ReadOnlySpan<ulong>)[drawn, (drawn | 1UL)])) {
-                if (PrimeField64.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) { return $"IsPrime and the oracle disagree at {candidate}"; }
+                if (PrimeExtensions.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) { return $"IsPrime and the oracle disagree at {candidate}"; }
             }
         }
 
@@ -925,7 +924,6 @@ internal static partial class Subjects {
 
             if (accepted != (half && lucas)) { return $"IsBaillieProbablePrime({value}) is not the conjunction of its two halves (base-two {half}, Lucas {lucas})"; }
             if (accepted != Oracles.ExactPrimality(value: value)) { return $"Baillie-PSW and the exact BigInteger decision disagree at {value}; below 2^64 that is either a defect or the first known counterexample"; }
-            if (accepted != PrimeField64.IsPrime(value: value)) { return $"Baillie-PSW and the twelve-base decision disagree at {value}"; }
         }
 
         return null;
@@ -1024,7 +1022,7 @@ internal static partial class Subjects {
             if (PrimeField64.IsStrongLucasProbablePrime(value: value)) { return $"the Lucas half accepted the base-two pseudoprime {value}"; }
             if (
                 PrimeField64.IsBaillieProbablePrime(value: value) ||
-                PrimeField64.IsPrime(value: value)
+                PrimeExtensions.IsPrime(value: value)
             ) { return $"the base-two pseudoprime {value} was accepted as prime"; }
         }
 
@@ -1036,7 +1034,7 @@ internal static partial class Subjects {
             )) { return $"the base-two round accepted the Lucas pseudoprime {value}"; }
             if (
                 PrimeField64.IsBaillieProbablePrime(value: value) ||
-                PrimeField64.IsPrime(value: value)
+                PrimeExtensions.IsPrime(value: value)
             ) { return $"the Lucas pseudoprime {value} was accepted as prime"; }
         }
 
@@ -1045,7 +1043,7 @@ internal static partial class Subjects {
         foreach (var value in PrimeFieldCarmichaelNumbers) {
             if (
                 PrimeField64.IsBaillieProbablePrime(value: value) ||
-                PrimeField64.IsPrime(value: value)
+                PrimeExtensions.IsPrime(value: value)
             ) { return $"the Carmichael number {value} was accepted"; }
         }
 
@@ -1053,7 +1051,7 @@ internal static partial class Subjects {
             if (
                 PrimeField64.IsStrongLucasProbablePrime(value: value) ||
                 PrimeField64.IsBaillieProbablePrime(value: value) ||
-                PrimeField64.IsPrime(value: value)
+                PrimeExtensions.IsPrime(value: value)
             ) { return $"the small composite {value} was accepted"; }
         }
 
@@ -1062,7 +1060,7 @@ internal static partial class Subjects {
             if (
                 !PrimeField64.IsStrongLucasProbablePrime(value: value) ||
                 !PrimeField64.IsBaillieProbablePrime(value: value) ||
-                !PrimeField64.IsPrime(value: value)
+                !PrimeExtensions.IsPrime(value: value)
             ) { return $"the small prime {value} was rejected"; }
         }
 

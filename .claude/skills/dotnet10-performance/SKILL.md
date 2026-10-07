@@ -83,17 +83,17 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **Three measurement harnesses exist: the kernels (Maths, SDF and state), the World server
-  tick path, and real-process startup.** `puck bench kernels` is the BenchmarkDotNet microscope for them —
-  disassembly, allocation columns, percentiles — and `puck bench world` is a
-  stopwatch lane over server construction, the idle tick, and a scripted
-  Klondike deal. `puck bench startup` measures console readiness and rendered
-  capture completion in isolated fresh processes without building. They are documented in
-  [`docs/reference/cli.md`](../../../docs/reference/cli.md),
-  which also carries the measurement hygiene: numbers taken on a busy machine
-  are garbage rather than merely pessimistic, and two runs disagreeing by more
-  than ~10% mean the machine was not quiet. No law gates a timing: the law suite
-  states cost only as a deterministic count, such as an allocation meter reading.
+- Route measurements through the existing harnesses: `puck bench kernels` for
+  BenchmarkDotNet timing, allocation and disassembly; `puck bench world` for
+  server construction and tick workloads; and `puck bench startup` for fresh-process
+  readiness. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
+  owns options, report fields and measurement hygiene.
+- Preserve comparable semantics, traversal and sinks; confirm specialization
+  and call boundaries in optimized assembly. Record first-use work separately from warm
+  tables, and distinguish allocated bytes from retained pools or peak workspace.
+  Use idle, serial runs under the repository's timing authorization rules;
+  sampled timings alone never establish an algorithmic or full-domain claim.
+- No law gates a timing: cost laws state deterministic counts.
   The one managed-allocation meter is `Puck.Abstractions.Counting.AllocationWindow`:
   `Least` takes the least of up to 16 windows of
   `GC.GetAllocatedBytesForCurrentThread` and, when every window allocated,
@@ -102,7 +102,16 @@ outside this contract and takes the references as written.
   least as a count for a ceiling, and `Total` counts one run of a body that
   cannot repeat. Write allocation laws, stages and diagnostics with it rather
   than reading the counter by hand.
-  Outside those three, say which harness you built and why it measures the claim.
+  Outside the existing harnesses, say which harness you built and why it measures the claim.
+- Judge a hot kernel under default tiering as well as in FullOpts disassembly.
+  A method runs its tier-0 code until call counting promotes it, and promotion
+  waits for a spell with no new tier-0 compiles, about a second when the process
+  sees one processor; generic-math helpers stay calls at tier 0. A compute kernel
+  a request or count enters directly takes
+  `[MethodImpl(MethodImplOptions.AggressiveOptimization)]`, while the cheap
+  dispatcher above several kernels stays tiered so first use compiles only the
+  path taken. Check the tiers with `DOTNET_JitDisasmSummary` in a scratch process
+  pinned to one CPU, and record first-call cost beside the steady state.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;

@@ -11,6 +11,7 @@ For an introduction, start with the [engine overview](../overview.md) or the
 | [Device input](input.md) | Device acquisition, controller motion, haptics, lighting, and platform integration. |
 | [Physics kernels](physics.md) | Gravity, motion, contacts, tethers, perception, navigation, and fields. |
 | [Deterministic numerics](maths.md) | Worked examples, primitive selection, and the boundary between reproducible simulation and other numeric work. |
+| [Prime exploration](prime-exploration.md) | The Nth prime, prime counting, uniform random primes, interval enumeration and constellations over the unsigned 64-bit domain. |
 | [Seam abstractions](abstractions.md) | Neutral presentation, windowing, machine, and platform contracts. |
 | [Hosting and simulation](hosting.md) | Host loop, the render root, fixed-step clocks, and capability trees. |
 | [Extensions](extensions.md) | The one extension contract, keyed contributions, discovery and load contexts, and how every host composes and refuses them. |

@@ -1,0 +1,26 @@
+[
+  {
+    "Id": "prime-exploration.automatic-policy-boundaries",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation for all three explicit policies, hand-calculated width crossover boundaries at squares 10^12 and 10^14 and at the ulong maximum (inclusive widths 67108864 windowed and 67108863 presieved, from ceil(4294967295/64)), complete proof boundary 65537 squared, carried prime-state admission at 10^16 and windowed refusal at 10^18 and the full ulong interval, empty intervals, interval bitmap resolution (twice the square root clamped and cache-rounded; automatic windowed requests raised to 16744448 bytes first, explicit windowed requests unchanged) and named invalid options of the internal ResolveMode and ResolveSegmentBytes. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.segment-cancellation",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Pre-canceled ordinary and reversed intervals throw before callbacks. Callback cancellation throws before another one-byte segment, including final and exceptional-prime callbacks under every explicit mode, and intervals requiring carried or windowed upper-base generation. Cancellation preserves its token; a fresh call remains usable. ENVELOPE: cancellation during asynchronous base generation and native resource reclamation are inspected in source, not independently instrumented by this law.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.presieve-proof-boundary",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Count and ordered enumeration cross 65537 squared in tiny presieved segments; the square must be rejected while proven smaller survivors remain.", "Against": "Oracles.ExactPrimality uses integer trial division and BigInteger witnesses without the sieve, wheel coordinates or Lucas recurrence. ENVELOPE: correctness at the proof boundary is checked; the saved code inspection establishes omission of unnecessary decisions below it.", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-exploration.constellation-empty-validation",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeConstellation", "Name": "Enumerate" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "A reversed constellation interval produces no callbacks; a null visitor and a pre-canceled token are refused even for an empty interval and a pattern whose ordinary wheel mask is zero.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  }
+]

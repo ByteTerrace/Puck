@@ -204,9 +204,11 @@ public static partial class UnsignedNumberFunctions {
     /// of <typeparamref name="T"/> is a power of two — true for every built-in integer; a custom width that is not
     /// leaves the top bits of the inverse unrefined.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ModularInverse<T>(this T value) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        var bitCount = int.CreateChecked(value: BinaryIntegerConstants<T>.Size);
-        var x = (T.CreateChecked(value: 3) * value) ^ T.CreateChecked(value: 2);
+        var bitCount = (Unsafe.SizeOf<T>() << 3);
+        var two = (T.One + T.One);
+        var x = ((two + T.One) * value) ^ two;
         var y = (T.One - (value * x));
 
         x *= (y + T.One);

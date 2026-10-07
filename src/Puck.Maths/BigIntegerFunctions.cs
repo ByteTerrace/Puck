@@ -272,7 +272,7 @@ public static class BigIntegerFunctions {
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// <para>
-    /// Below <c>2^64</c> the question is handed to <see cref="PrimeField64.IsPrime(ulong)"/>, which decides it exactly
+    /// Below <c>2^64</c> the question is handed to <see cref="PrimeExtensions.IsPrime(ulong)"/>, which decides it exactly
     /// and without leaving a register. Above it, strong-probable-prime rounds to <see cref="PrimeKernels.WitnessBases"/> — the same
     /// twelve bases, read from the same table — which are a proven complete witness set for every value strictly below
     /// <see cref="PrimeKernels.LeastWitnessFailure"/>, exactly <c>318665857834031151167461</c>.
@@ -292,7 +292,7 @@ public static class BigIntegerFunctions {
     /// </remarks>
     public static bool IsPrime(BigInteger value) {
         if (value < (BigInteger.One + BigInteger.One)) { return false; }
-        if (value <= ulong.MaxValue) { return PrimeField64.IsPrime(value: ((ulong)value)); }
+        if (value <= ulong.MaxValue) { return PrimeExtensions.IsPrime(value: ((ulong)value)); }
 
         var oddPart = (value - BigInteger.One);
         var twoExponent = ExtractTwoAdicValuation(oddPart: ref oddPart);
@@ -495,7 +495,7 @@ public static class BigIntegerFunctions {
     /// <em>composite</em> and every guarantee lapses at once: Euler's criterion no longer decides residuacity, so a
     /// genuine square can be refused and a non-square accepted with a value that does not square back; and the descent
     /// squares a residue until it reaches one, which a residue whose order is not a power of two never does — so the
-    /// call may also fail to return. Establish primality first (<see cref="PrimeField64.IsPrime(ulong)"/> within a
+    /// call may also fail to return. Establish primality first (<see cref="PrimeExtensions.IsPrime(ulong)"/> within a
     /// machine word, a probable-prime test above it) whenever the modulus is not already known prime by construction.
     /// </para>
     /// </remarks>

@@ -12,7 +12,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "NumberTheoreticTransform.Modulus and the declared odd factor 262111 of Modulus - 1, tested for primality",
-        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192 then twenty independent strong-probable-prime rounds, sharing no code and no idea with PrimeField64.IsPrime's twelve-round witness set",
+        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192 then twenty independent strong-probable-prime rounds, sharing no code with PrimeExtensions.IsPrime, whose decision above uint is Baillie–PSW (a base-two strong round and a strong Lucas test)",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -20,7 +20,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "PrimeField64.IsPrime agrees with the independent oracle on both Modulus and the declared factor 262111, and 262111 * 2^44 + 1 equals Modulus exactly (the claimed factorization is re-derived from the two numbers rather than merely asserted)",
+        "Subject": "PrimeExtensions.IsPrime agrees with the independent oracle on both Modulus and the declared factor 262111, and 262111 * 2^44 + 1 equals Modulus exactly (the claimed factorization is re-derived from the two numbers rather than merely asserted)",
         "Against": "",
         "Shared": "",
         "Citation": "",

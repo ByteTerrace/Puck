@@ -41,6 +41,7 @@ agent's.
 | The subject is a graph, a lattice, a language or a finite structure rather than a number — reachability, convolution and inversion, pattern matching, homology, group orbits | [Oracle](../../../../src/Puck.Maths/Oracle/README.md) | One presented-algebra product over swappable materials: `Presentations`, `PresentedAlgebra`, `DivisibilityAlgebra`, `TokenPattern`/`PatternMatcher`, `ExteriorCalculus`/`IntegerHomology`, `ReflectionSystem`/`PresentedGroup` | "Choosing an entry point", then "Contracts every consumer inherits" |
 | An exploratory or open-problem question — continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic means, real-quadratic orders | [Research](../../../../src/Puck.Maths/Research/README.md) | Exact, certificate-bearing, off the hot path; a budget-exhausted search (`SearchLimitReached`) is never conflated with a proof or a counterexample | "At a glance" — and the namespace split stated above it |
 | A frequency- or sequency-domain transform, or a cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | Exact: `NumberTheoreticTransform`/`NumberTheoreticTransformPlan` (over `PrimeField64`), `WalshHadamardTransform` (any binary integer, no plan). Fixed-point, measured bounds: `FixedFourierTransform`/`FixedFourierTransformPlan` (over `FixedComplex`), `FixedCosineTransform`/`FixedCosineTransformPlan` (over `FixedQ4816`). All in place; `Convolve` on both spectral transforms | "At a glance", then the transform's own section |
+| Primes over `ulong` — the Nth prime, a prime count, a uniformly random prime from an interval, every prime of an interval, a prime constellation | root level (owns no wing) | `PrimeExtensions.NthPrime`/`PrimeCountingFunction`, `PrimeExploration.TryRandomPrime`/`Enumerate`/`Count`/`IsPrime`, `PrimeConstellation`, and the wheel coordinates `PrimeWheel30` | [Prime exploration](../../../../docs/reference/prime-exploration.md), "Selecting one prime" |
 | A per-tick state hash, an exact allocation over intervals, bucket routing, a tie-broken sort order, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `LexicographicOrder`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [Root-level types](../../../../docs/reference/maths.md#root-level-types) |
 
 **Depth lives in the wing READMEs**, and this skill never restates their
@@ -142,6 +143,9 @@ for each is at
 | An exact rational, reduced on construction, for authoring and compile-time derivations that round once at the end | `Rational` | root level |
 | An exact real-quadratic value — `RealQuadraticField` names the field `ℚ(√d)`, `RealQuadratic` carries the value with conjugate, norm and trace | `RealQuadratic` | root level |
 | Bit tricks, GCD, integer roots, pairing, factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | root level |
+| The Nth prime or the prime count through a bound | `PrimeExtensions.NthPrime` / `PrimeCountingFunction` (zero-based index; the `ulong` overloads take a `CancellationToken`) — never a sieve walk from zero | [Prime exploration](../../../../docs/reference/prime-exploration.md) |
+| A uniformly random prime from an interval | `PrimeExploration.TryRandomPrime` over the caller's own generator (`Pcg32XshRr` by `ref`), so the draw stream and the result replay — never "a random integer, then the next prime", which weights each prime by its gap | [Prime exploration](../../../../docs/reference/prime-exploration.md) |
+| Every prime of an interval, their count, or a prime constellation | `PrimeExploration.Enumerate` / `Count`, `PrimeConstellation` | [Prime exploration](../../../../docs/reference/prime-exploration.md) |
 | A low mask exact at 0 and the full width, power-of-two alignment, PDEP/PEXT, a 2-D or 3-D Morton code — never a hand-rolled `(1 << n) - 1`, `(x + a - 1) & ~(a - 1)` or `Bmi2` call | `BinaryIntegerFunctions.LowMask`, `AlignUp`/`AlignDown`, `ParallelBitDeposit`/`ParallelBitExtract`, `BitwisePair`/`BitwiseTriple` | [Bit kit](../../../../docs/reference/maths.md#bit-kit) |
 | One relation over several carriers, or a proof two carriers agree | `QuadraticAlgebra<TScalar>` and the structure tier | [Algebra](../../../../src/Puck.Maths/Algebra/README.md) |
 
@@ -160,10 +164,14 @@ nothing. `PrimeField64` is `F_p` for an odd prime below 2⁶², with
 
 Field products are **exact** — associative, commutative, distributive, with an
 exact inverse for every non-zero element — so unlike a rounded fixed-point
-product they *are* safe to reassociate. `PrimeField64.IsPrime` is this library's
-exact decision for every `ulong`; `IsStrongProbablePrime`,
-`IsStrongLucasProbablePrime` and `IsBaillieProbablePrime` are **probable**-prime
-tests and are contracted as such.
+product they *are* safe to reassociate. `PrimeExtensions.IsPrime` is this library's
+exact decision for every `ulong`: the uint kernel for narrow inputs and
+`IsBaillieProbablePrime` for wider inputs. Baillie–PSW with Selfridge Method A
+is exact on this finite carrier by published exhaustive computation; the
+[FiniteFields reference](../../../../src/Puck.Maths/FiniteFields/README.md#primality-on-ulong)
+owns the source and algorithm match. `IsStrongProbablePrime` and
+`IsStrongLucasProbablePrime` alone admit pseudoprimes. Never use the forwarding
+`IsPrime` entry point as an independent oracle for the composition.
 
 ### The presented-algebra tier (`Oracle/`)
 
@@ -204,6 +212,13 @@ stable, and never add a path that reproduces old-wrong behaviour.
   state. Which conversions are seams, and why the `double`-taking direction is
   still deterministic, is the
   [FixedPoint wing's opening](../../../../src/Puck.Maths/FixedPoint/README.md).
+- **A floating-point estimate may propose; integers decide.** Inside an exact
+  integer kernel, a binary64 value may choose work (the Gourdon cutoff, a rank
+  estimate) or propose a candidate that exact integer arithmetic then accepts
+  or corrects (the Gourdon leaf quotients' estimate and one-step remainder
+  correction). That is not floating point in state, provided the result is
+  exact for every input in the stated domain and the error bound that makes
+  it so is written beside the code, with a law at the bound's edges.
 - **Wrap is the default; saturation and refusal are named.** Bare operators are
   unchecked; `checked` forms throw *after* the operation's rounding;
   `AddSaturating`/`SubtractSaturating` clamp. Some saturators have **no** `Try…`
@@ -299,7 +314,7 @@ in a change loop.
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
 | **Default** | *(a plain run — no filter)* | < 30 s | **every change**, unconditionally |
 | Deep | `--explicit on --filter-trait tier=Deep` | minutes | **before you commit**, and before any rounding change lands |
-| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-width sweeps over an entire carrier |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
 narrow it with a `--filter` on the law id when one law is the question. Run it only
@@ -323,6 +338,7 @@ at one of these**:
 | The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
 | `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
 | `PrimeField64` / `QuadraticExtensionField64` | the `prime-field.*` and `extension-field.*` law families |
+| `PrimeExploration` / `PrimeConstellation` / `PrimeWheel30` / `PrimeExtensions` on `ulong` | the `prime-exploration.*` and `prime-selection.*` law families (`laws/prime-*.json`); their Deep and `exhaustive.prime-selection-*` mirrors carry the published 10^15 and 10^16 counts and ranks |
 | Quadratic integer arithmetic | the `quadratic-integer.*` and `algebra.quadratic-*` law families (`laws/quadratic-integer.json`, `laws/doubling-tower.json`) |
 
 **Machine gotcha — `-c Release` must PRECEDE the file path.** In

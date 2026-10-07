@@ -2785,7 +2785,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "ReflectionSystem.Apply on the involution and braid words at every node",
         "Against": "the bond orders in ReflectionSystem.BondMatrix that declare those relations",
-        "Shared": "SymmetryLattice.ReflectRaw via ReflectMap \u2014 Create computes each bond as the composite order of the same reflections Apply iterates (ReflectionSystem.cs:95 and 174)",
+        "Shared": "SymmetryLattice.Baked.ReflectRaw via ReflectMap \u2014 Create computes each bond as the composite order of the same reflections Apply iterates (ReflectionSystem.cs:95 and 174)",
         "Citation": "SymmetryLattice.Reflect is pinned independently by integer.symmetry-lattice-exact-structure, whose mass-spectrum leg is that case\u0027s strongest classical evidence; the composed word itself is owed an exact eight-coordinate reflection recomputed in the test (worklist C9)",
         "Absolute": ""
       },
@@ -2794,7 +2794,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "ReflectionSystem.Apply of the descending eight-mirror word",
         "Against": "SymmetryLattice.Cycle",
-        "Shared": "SymmetryLattice.ReflectRaw \u2014 CycleMap is built by composing ReflectRaw over SeedNodes in descending order (SymmetryLattice.cs:89-100), which is that word over those nodes",
+        "Shared": "SymmetryLattice.Baked.ReflectRaw \u2014 CycleMap is built by composing ReflectRaw over SeedNodes in descending order (the static constructor of SymmetryLattice.Baked), which is that word over those nodes",
         "Citation": "the same integer.symmetry-lattice-exact-structure pin; the composed descending word is owed the exact recomputation of worklist C9",
         "Absolute": ""
       },
@@ -2811,7 +2811,7 @@
         "Kind": "InTreeIndependent",
         "Flavor": "None",
         "Subject": "the measured ray order",
-        "Against": "the total degree of SymmetryLattice.RayCycleFactor \u2014 BinaryPolynomial.FactorOddCycle(15), an independent binary-polynomial factorization (SymmetryLattice.cs:56)",
+        "Against": "the total degree of SymmetryLattice.RayCycleFactor \u2014 BinaryPolynomial.FactorOddCycle(15), an independent binary-polynomial factorization (SymmetryLattice.RayCycleFactorStorage)",
         "Shared": "",
         "Citation": "polynomial.factor-odd-cycle-vs-cyclotomic-cosets, which factors t^15 \u002B 1 \u2014 this leg\u0027s own order \u2014 against the 2-cyclotomic coset degrees and re-multiplies the factors in BigInteger",
         "Absolute": ""
@@ -2821,7 +2821,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "SymmetryLattice.AreOrthogonal on a pair after ReflectionSystem.Apply moves it",
         "Against": "AreOrthogonal on the pair before",
-        "Shared": "SymmetryLattice.ReflectMap \u2014 AreOrthogonal and Apply are two readings of one table (SymmetryLattice.cs:176 and 202)",
+        "Shared": "SymmetryLattice.Baked.ReflectMap \u2014 AreOrthogonal and Apply are two readings of one table (SymmetryLattice.AreOrthogonal and SymmetryLattice.Reflect)",
         "Citation": "integer.symmetry-lattice-exact-structure pins the root system itself; this leg is a tautology by construction and counts as no agreement evidence (worklist O15)",
         "Absolute": ""
       },
@@ -3037,7 +3037,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "the enumerated row of each mirror (Subjects.RowKeyOfMirror, 6755)",
         "Against": "SymmetryLattice.Reflect on the same points",
-        "Shared": "SymmetryLattice.ReflectMap \u2014 TryEnumerateGroup builds every row from ReflectionSystem\u0027s pointImage, itself filled from Reflect (ReflectionSystem.cs:120)",
+        "Shared": "SymmetryLattice.Baked.ReflectMap \u2014 TryEnumerateGroup builds every row from ReflectionSystem\u0027s pointImage, itself filled from Reflect (ReflectionSystem.cs:120)",
         "Citation": "integer.symmetry-lattice-exact-structure pins Reflect itself; leg 4 of this case is the independent witness for the composition",
         "Absolute": ""
       },

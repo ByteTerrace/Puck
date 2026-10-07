@@ -794,7 +794,7 @@ public static class Presentations {
     /// <b>Primality is tested, not assumed.</b> Pairwise coprimality is not enough: <c>{4, 9}</c> is coprime and builds
     /// a perfectly good free commutative monoid, but its normal forms are the <c>{4, 9}</c>-products rather than the
     /// integers they are named for, so <c>μ</c> would report minus one at four and plus one at thirty-six against the
-    /// classical zero. The generators are therefore decided exactly by <see cref="PrimeField64.IsPrime(ulong)"/>, and
+    /// classical zero. The generators are therefore decided exactly by <see cref="PrimeExtensions.IsPrime(ulong)"/>, and
     /// a composite is refused at construction rather than answering arithmetic about a different monoid.
     /// </para>
     /// <para>
@@ -836,7 +836,7 @@ public static class Presentations {
         // Distinct primes are coprime by theorem, so the only way this generating set fails pairwise coprimality is a
         // repeat — and on the sorted array a repeat is adjacent.
         for (var index = 0; (index < descending.Length); ++index) {
-            if (!PrimeField64.IsPrime(value: descending[index])) {
+            if (!PrimeExtensions.IsPrime(value: descending[index])) {
                 throw new ArgumentException(
                     message: "A divisibility generator names a prime, and a composite one would present a monoid whose normal forms are not the integers they are read as.",
                     paramName: nameof(primes)

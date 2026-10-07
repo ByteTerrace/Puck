@@ -1,12 +1,11 @@
-using System.Buffers;
 using System.Numerics;
 
 namespace Puck.Maths;
 
 /// <summary>
-/// Provides exact number-theoretic routines: over arbitrary-width integers, the Jacobi symbol, a segmented prime sieve
-/// over a range, and Hensel lifting of a polynomial root from a prime to a prime power; over machine words, modular
-/// powers and inverses for any modulus and the extended greatest common divisor.
+/// Provides exact number-theoretic routines: over arbitrary-width integers, the Jacobi symbol and Hensel lifting of a
+/// polynomial root from a prime to a prime power; over machine words, the primes of a range as a materialized sequence,
+/// modular powers and inverses for any modulus and the extended greatest common divisor.
 /// </summary>
 /// <remarks>
 /// These are the arbitrary-width companions to the fixed-width prime-field arithmetic in <see cref="PrimeField64"/>:
@@ -15,13 +14,6 @@ namespace Puck.Maths;
 /// enumeration over a window for sampling-net moduli, and exact modular root refinement past <c>2^64</c>.
 /// </remarks>
 public static class NumberTheoryFunctions {
-    private const ulong MaximumSieveBound = uint.MaxValue;
-    /// <summary>The number of odd values one window covers, and therefore the bit count the marker fills.</summary>
-    private const int WindowBits = (1 << 16);
-    /// <summary>The distance in value space from a window's first odd value to its last.</summary>
-    private const ulong WindowSpan = ((2UL * WindowBits) - 2UL);
-    /// <summary>The bitmap words one window occupies.</summary>
-    private const int WindowWords = (WindowBits >> 6);
     /// <summary>The binary-GCD steps one inversion round batches: Pornin's <c>k − 1</c> at <c>k = 32</c>.</summary>
     private const int InversionSteps = 31;
     /// <summary>The inversion rounds, <c>⌈(2·64 − 1) / 31⌉</c>, enough steps for any pair of 64-bit operands.</summary>
@@ -150,22 +142,6 @@ public static class NumberTheoryFunctions {
         return (1UL == b);
     }
 
-    /// <summary>Enumerates the primes in a closed range in ascending order as a materialized sequence.</summary>
-    /// <param name="low">The inclusive lower bound of the range.</param>
-    /// <param name="high">The inclusive upper bound of the range.</param>
-    /// <returns>The primes in <c>[<paramref name="low"/>, <paramref name="high"/>]</c>, ascending.</returns>
-    /// <remarks>A materializing convenience over <see cref="SegmentedPrimeSieve(ulong, ulong, Action{ulong})"/>: the whole range is swept and collected before the first element is observable, so a wide range is paid for in full and in memory up front. The callback form allocates nothing per prime and is preferred on a hot path or over a range whose primes need not all be held at once.</remarks>
-    public static IEnumerable<ulong> EnumeratePrimes(ulong low, ulong high) {
-        var primes = new List<ulong>();
-
-        SegmentedPrimeSieve(
-            high: high,
-            low: low,
-            onPrime: primes.Add
-        );
-
-        return primes;
-    }
     /// <summary>Computes the greatest common divisor of two integers together with the Bézout coefficients that combine
     /// the integers into it.</summary>
     /// <param name="value">The first integer, <c>a</c>; any sign, but not <see cref="long.MinValue"/>.</param>
@@ -445,90 +421,5 @@ public static class NumberTheoryFunctions {
         }
 
         return power;
-    }
-    /// <summary>Enumerates the primes in a closed range in ascending order.</summary>
-    /// <param name="low">The inclusive lower bound of the range.</param>
-    /// <param name="high">The inclusive upper bound of the range.</param>
-    /// <param name="onPrime">The callback invoked once for each prime in the range, in ascending order.</param>
-    /// <remarks>
-    /// A segmented sieve over <see cref="PrimeKernels.MarkWindow(ReadOnlySpan{uint}, Span{ulong}, ulong, ulong)"/> — the
-    /// same window marker <see cref="PrimeExtensions.NthPrime(uint)"/> walks its own sieve with, so the two strides are
-    /// one body rather than two transcriptions of one idea. The base primes are found once, process-wide and lazily,
-    /// then used to strike composites out of fixed-size windows of the range; only that shared table and one rented
-    /// bitmap are held, so the working set depends on the window size rather than on the range's length. The enumeration
-    /// is deterministic. Even values and values below two are never reported.
-    /// The supported upper bound is <see cref="uint.MaxValue"/>; this keeps the complete base-prime table bounded to
-    /// the primes through 65,535 instead of accepting a <see cref="ulong"/> input whose square-root sieve cannot be
-    /// represented by this in-memory implementation.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="onPrime"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="high"/> exceeds <see cref="uint.MaxValue"/>.</exception>
-    public static void SegmentedPrimeSieve(ulong low, ulong high, Action<ulong> onPrime) {
-        ArgumentNullException.ThrowIfNull(argument: onPrime);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: high,
-            other: MaximumSieveBound
-        );
-
-        if (high < low) { return; }
-        if (2UL >= low) {
-            if (high >= 2UL) { onPrime(2UL); }
-
-            low = 3UL;
-        }
-        if (high < low) { return; }
-
-        // The window marker starts striking at each prime's own square, which is only correct from three upward.
-        var windowLow = ((0UL == (low & 1UL))
-            ? (low + 1UL)
-            : low
-        );
-        var basePrimes = PrimeKernels.BasePrimes;
-        var bitmap = ArrayPool<ulong>.Shared.Rent(minimumLength: WindowWords);
-
-        try {
-            while (windowLow <= high) {
-                var windowHigh = Math.Min(
-                    val1: (windowLow + WindowSpan),
-                    val2: high
-                );
-                var bits = (((windowHigh - windowLow) >> 1) + 1UL);
-
-                PrimeKernels.MarkWindow(
-                    basePrimes: basePrimes,
-                    bitmap: bitmap,
-                    bits: bits,
-                    low: windowLow
-                );
-
-                // Report by walking the clear bits of each word rather than testing every bit: the cost is
-                // proportional to the primes found, not to the window.
-                var words = ((int)((bits + 63UL) >> 6));
-
-                for (var word = 0; (word < words); ++word) {
-                    var candidates = (~bitmap[word]);
-
-                    if (
-                        (word == (words - 1)) &&
-                        (0UL != (bits & 63UL))
-                    ) {
-                        candidates &= ((1UL << ((int)(bits & 63UL))) - 1UL);
-                    }
-
-                    while (0UL != candidates) {
-                        var bit = ((((ulong)word) << 6) + ((ulong)BitOperations.TrailingZeroCount(value: candidates)));
-
-                        onPrime((windowLow + (bit << 1)));
-                        candidates &= (candidates - 1UL);
-                    }
-                }
-
-                if (windowHigh == high) { break; }
-
-                windowLow = (windowHigh + 2UL);
-            }
-        } finally {
-            ArrayPool<ulong>.Shared.Return(array: bitmap);
-        }
     }
 }

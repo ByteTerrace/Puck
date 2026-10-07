@@ -133,7 +133,7 @@ public class LatticeKernels {
     public long SieveWindow() {
         var count = 0L;
 
-        NumberTheoryFunctions.SegmentedPrimeSieve(
+        PrimeExploration.Enumerate(
             high: ((1UL << 32) + (1UL << 20)),
             low: (1UL << 32),
             onPrime: _ => ++count

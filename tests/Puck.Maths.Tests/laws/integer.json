@@ -236,7 +236,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "the eight projected ring radii, normalized to the innermost and compared as SQUARED ratios so no square root of the closed form is ever taken",
-        "Against": "the closed-form E8/Ising mass spectrum in cos(pi/30), cos(7pi/30), cos(2pi/15), cos(pi/5) and the golden ratio - each an exact BigInteger bracket, never a double: Oracles.EncloseSinCos (a Machin-series pi and an alternating trigonometric series) for the cosines, and an independent Newton-descent Oracles.IntegerSquareRoot for the golden ratio's sqrt(5), widened by a 1/1024 relative band. The measured deviation tops out near 1.1e-5 relative, from the projection basis's own Q16 baking (SymmetryLattice.cs:47-48) - under a hundredth of the declared band",
+        "Against": "the closed-form E8/Ising mass spectrum in cos(pi/30), cos(7pi/30), cos(2pi/15), cos(pi/5) and the golden ratio - each an exact BigInteger bracket, never a double: Oracles.EncloseSinCos (a Machin-series pi and an alternating trigonometric series) for the cosines, and an independent Newton-descent Oracles.IntegerSquareRoot for the golden ratio's sqrt(5), widened by a 1/1024 relative band. The measured deviation tops out near 1.1e-5 relative, from the projection basis's own Q16 baking (SymmetryLattice.Baked.PlaneBasisX and PlaneBasisY) - under a hundredth of the declared band",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -338,7 +338,7 @@
         "Flavor": "SharedUpstream",
         "Subject": "SymmetryWord.Coxeter - its letters, length, Order, every node's single-step image and its counted power at steps -40..70",
         "Against": "SymmetryLattice.Cycle(node) and Cycle(node, steps), CyclicRotation.Period, SymmetryLattice.RingSize",
-        "Shared": "SymmetryLattice.ReflectMap - the word bakes its permutation by composing SymmetryLattice.Reflect over its letters, and CycleMap is composed in the static constructor from the same ReflectRaw closure over the same seeds in the same descending order; this pins that the word spelling [7,6,5,4,3,2,1,0] IS the lattice's cycle, not that either derivation of the reflection is correct",
+        "Shared": "SymmetryLattice.Baked.ReflectMap - the word bakes its permutation by composing SymmetryLattice.Reflect over its letters, and CycleMap is composed in the static constructor from the same ReflectRaw closure over the same seeds in the same descending order; this pins that the word spelling [7,6,5,4,3,2,1,0] IS the lattice's cycle, not that either derivation of the reflection is correct",
         "Citation": "integer.symmetry-lattice-exact-structure pins Reflect as an involution and Cycle's ring partition over the full carrier",
         "Absolute": ""
       },
@@ -619,6 +619,82 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "the refusal is part of the statement: TryExponentiate<long>(2, -1) throws ArgumentOutOfRangeException naming 'exponent', because a negative integer power is not representable, rather than reporting an overflow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.symmetry-lattice-coxeter-data",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "CycleOrder"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "CycleExponents"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "NodeCount"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "Dimension"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RingCount"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RingSize"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "Period"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "PlaneCount"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SymmetryLattice.CycleExponents, and CyclicRotation.Step(plane, 1) at every plane",
+        "Against": "the integers in [1, CycleOrder) coprime to CycleOrder by a from-scratch Euclidean gcd (Oracles.UnitsModulo), their count equal to Dimension, and their first PlaneCount members as the plane speeds; multiplication by every unit permutes them, the Galois action on the primitive 30th roots of unity",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the cycle's eigenvalues: for every node v and every node w, the sum over k of a_k · InnerProduct(Cycle^k(v), w)",
+        "Against": "zero, where a_k are the coefficients of the 30th cyclotomic polynomial computed by exact BigInteger division of x^30 − 1 by the cyclotomic polynomials of its proper divisors (Oracles.CyclotomicPolynomial), shared with no Puck.Maths code. The nodes span the space, so Φ30 annihilates the cycle; Φ30 is irreducible over the rationals (Gauss) with degree 8 = Dimension, so it is the characteristic polynomial and the exponents are exactly the units modulo 30. ENVELOPE: this reads the cycle through Cycle and InnerProduct, whose own geometry integer.symmetry-lattice-exact-structure and integer.symmetry-word-permutation-order-and-pairing pin",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CycleOrder, Dimension, NodeCount and CycleExponents",
+        "Against": "the published E8 data 30, 8, 240 and 1, 7, 11, 13, 17, 19, 23, 29",
+        "Shared": "",
+        "Citation": "Bourbaki, Lie Groups and Lie Algebras, chapters 4 to 6, Plate VII (E8); chapter VI §1.11 Proposition 33 gives |Φ| = rank × h",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "NodeCount is Dimension × CycleOrder, RingCount is Dimension, RingSize is CycleOrder, CyclicRotation.Period is CycleOrder and twice PlaneCount is Dimension",
         "Against": "",
         "Shared": "",
         "Citation": "",

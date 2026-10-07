@@ -13,7 +13,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "BigIntegerFunctions.IsPrime over every value below 4096 and a twelve-rung edge ladder through ulong.MaxValue, including both 2^31 \u2212 1 and 2^31 \u002B 1, the largest prime below 2^32 and below 2^64, and 2^61 \u2212 1",
-        "Against": "Oracles.ExactPrimality, which shares no line and no table with the subject: a trial-division screen against its own small-prime table, then strong-probable-prime rounds computed from BigInteger.ModPow in the oracle module. The subject over this band is PrimeField64.IsPrime \u2014 twelve rounds in a ScaledResidueRing64 \u2014 reached by delegation, so agreement pins that delegation as well as the decision",
+        "Against": "Oracles.ExactPrimality, which shares no line and no table with the subject: a trial-division screen against its own small-prime table, then strong-probable-prime rounds computed from BigInteger.ModPow in the oracle module. The subject over this band is PrimeExtensions.IsPrime \u2014 twelve rounds in a ScaledResidueRing64 \u2014 reached by delegation, so agreement pins that delegation as well as the decision",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -558,38 +558,21 @@
     "Members": [
       {
         "Type": "Puck.Maths.NumberTheoryFunctions",
-        "Name": "EnumeratePrimes"
-      },
-      {
-        "Type": "Puck.Maths.NumberTheoryFunctions",
         "Name": "HenselLiftRoot"
       },
       {
         "Type": "Puck.Maths.NumberTheoryFunctions",
         "Name": "JacobiSymbol"
-      },
-      {
-        "Type": "Puck.Maths.NumberTheoryFunctions",
-        "Name": "SegmentedPrimeSieve"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "SegmentedPrimeSieve and EnumeratePrimes through 512",
-        "Against": "local integer trial division sharing no sieve code",
+        "Subject": "JacobiSymbol(1001, 9907)",
+        "Against": "Jacobi(1001/9907) = -1",
         "Shared": "",
-        "Citation": "",
-        "Absolute": ""
-      },
-      {
-        "Kind": "Classical",
-        "Flavor": "None",
-        "Subject": "the supported-ceiling singleton/window and JacobiSymbol(1001, 9907)",
-        "Against": "4294967291 is the largest 32-bit prime; Jacobi(1001/9907) = -1",
-        "Shared": "",
-        "Citation": "standard published integer/Jacobi examples, paired with direct range and refusal assertions",
+        "Citation": "a standard published Jacobi example",
         "Absolute": ""
       },
       {

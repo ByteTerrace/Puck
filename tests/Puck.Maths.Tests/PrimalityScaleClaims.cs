@@ -41,9 +41,9 @@ internal static class PrimalityScaleClaims {
         5_459UL, 5_777UL, 10_877UL, 16_109UL, 18_971UL, 22_499UL, 24_569UL,
         25_199UL, 40_309UL, 58_519UL, 75_077UL, 97_439UL,
     ];
-    /// <summary>The four values that make <see cref="PrimeField64.IsPrime(ulong)"/>'s TWELFTH witness base
-    /// load-bearing: each is the least value that is a strong probable prime to every one of the first <c>k</c> prime
-    /// bases, so a witness set truncated to <c>k</c> accepts it. The base count on each row is the number of leading
+    /// <summary>Four published psi_k composites that <see cref="PrimeExtensions.IsPrime(ulong)"/> must reject.
+    /// Each is the least value that is a strong probable prime to every one of the first <c>k</c> prime
+    /// bases. The base count on each row is the number of leading
     /// bases the value actually survives, measured, not the psi index it is tabulated under.</summary>
     private static readonly (ulong Value, int Bases)[] WitnessPseudoprimes = [
         (3_215_031_751UL, 4),
@@ -106,6 +106,38 @@ internal static class PrimalityScaleClaims {
         }
 
         return BailliePopulationSurface();
+    }
+    /// <summary>
+    /// The narrow-word decision's contiguous bands: <see cref="PrimeExtensions.IsPrime(uint)"/> at every value of three
+    /// windows against a segmented sieve of Eratosthenes — the top of the carrier, where two residues' product comes
+    /// closest to filling the word its lazily reduced round multiplies in; a window from zero, holding the
+    /// trial-division ladder's own primes, their multiples and the first values above the ladder's reach; and a
+    /// window inside the range.
+    /// </summary>
+    /// <returns><see langword="null"/> when every value agrees; the first disagreement otherwise.</returns>
+    internal static string? NarrowPrimalitySurface() {
+        const int WindowLength = (1 << 20);
+
+        var trialPrimes = PrimesBelow(exclusiveMaximum: 65_536);
+        ulong[] starts = [((((ulong)uint.MaxValue) + 1UL) - WindowLength), 0UL, 3_000_000_000UL];
+
+        foreach (var start in starts) {
+            var flags = SieveWindow(
+                length: WindowLength,
+                start: start,
+                trialPrimes: trialPrimes
+            );
+
+            for (var offset = 0; (offset < WindowLength); ++offset) {
+                var value = ((uint)(start + ((ulong)offset)));
+
+                if (value.IsPrime() != flags[offset]) {
+                    return $"IsPrime({value}) = {value.IsPrime()}, where the segmented sieve says {flags[offset]}";
+                }
+            }
+        }
+
+        return null;
     }
     /// <summary>
     /// The full-width FACTORIZATION sweep — the coverage
@@ -317,6 +349,7 @@ internal static class PrimalityScaleClaims {
         var trialPrimes = PrimesBelow(exclusiveMaximum: 65_536);
         var compositionFailures = new long[BlockCount];
         var lucasFailures = new long[BlockCount];
+        var narrowFailures = new long[BlockCount];
 
         Array.Fill(
             array: compositionFailures,
@@ -324,6 +357,10 @@ internal static class PrimalityScaleClaims {
         );
         Array.Fill(
             array: lucasFailures,
+            value: -1L
+        );
+        Array.Fill(
+            array: narrowFailures,
             value: -1L
         );
         Parallel.For(
@@ -356,6 +393,13 @@ internal static class PrimalityScaleClaims {
                     ) {
                         lucasFailures[block] = ((long)value);
                     }
+                    // The narrow word decision, whose base-two round and pseudoprime table are a separate route.
+                    if (
+                        (((uint)value).IsPrime() != expected) &&
+                        (0L > narrowFailures[block])
+                    ) {
+                        narrowFailures[block] = ((long)value);
+                    }
                 }
             }
         );
@@ -366,6 +410,9 @@ internal static class PrimalityScaleClaims {
             }
             if (0L <= lucasFailures[block]) {
                 return $"IsStrongLucasProbablePrime rejected the prime {lucasFailures[block]}";
+            }
+            if (0L <= narrowFailures[block]) {
+                return $"IsPrime((uint){narrowFailures[block]}) disagrees with the sieve of Eratosthenes";
             }
         }
 
@@ -502,7 +549,7 @@ internal static class PrimalityScaleClaims {
             if (
                 PrimeField64.IsStrongLucasProbablePrime(value: square) ||
                 PrimeField64.IsBaillieProbablePrime(value: square) ||
-                PrimeField64.IsPrime(value: square)
+                PrimeExtensions.IsPrime(value: square)
             ) {
                 return $"the large perfect square {square} (root {root}) was accepted";
             }
@@ -558,7 +605,7 @@ internal static class PrimalityScaleClaims {
             ) ||
                 PrimeField64.IsStrongLucasProbablePrime(value: candidate) ||
                 PrimeField64.IsBaillieProbablePrime(value: candidate) ||
-                PrimeField64.IsPrime(value: candidate)
+                PrimeExtensions.IsPrime(value: candidate)
             ) {
                 return $"the base-two pseudoprime {candidate} is no longer rejected by the Lucas half alone";
             }
@@ -572,7 +619,7 @@ internal static class PrimalityScaleClaims {
                 witness: 2UL
             ) ||
                 PrimeField64.IsBaillieProbablePrime(value: candidate) ||
-                PrimeField64.IsPrime(value: candidate)
+                PrimeExtensions.IsPrime(value: candidate)
             ) {
                 return $"the strong Lucas pseudoprime {candidate} is no longer rejected by the base-two round alone";
             }
@@ -581,7 +628,7 @@ internal static class PrimalityScaleClaims {
         foreach (var candidate in CarmichaelNumbers) {
             if (
                 PrimeField64.IsBaillieProbablePrime(value: candidate) ||
-                PrimeField64.IsPrime(value: candidate)
+                PrimeExtensions.IsPrime(value: candidate)
             ) {
                 return $"the Carmichael number {candidate} was accepted";
             }
@@ -1070,8 +1117,8 @@ internal static class PrimalityScaleClaims {
         var denseSieve = Oracles.PrimeSieve(inclusiveMaximum: DenseLimit);
 
         for (var value = 0; (value <= DenseLimit); ++value) {
-            if (PrimeField64.IsPrime(value: ((ulong)value)) != denseSieve[value]) {
-                return $"IsPrime({value}) = {PrimeField64.IsPrime(value: ((ulong)value))} where the sieve of Eratosthenes says {denseSieve[value]}";
+            if (PrimeExtensions.IsPrime(value: ((ulong)value)) != denseSieve[value]) {
+                return $"IsPrime({value}) = {PrimeExtensions.IsPrime(value: ((ulong)value))} where the sieve of Eratosthenes says {denseSieve[value]}";
             }
         }
 
@@ -1099,13 +1146,13 @@ internal static class PrimalityScaleClaims {
         for (var offset = 0; (offset < WindowLength); ++offset) {
             var candidate = (WindowStart + ((ulong)offset));
 
-            if (PrimeField64.IsPrime(value: candidate) != window[offset]) {
-                return $"IsPrime({candidate}) = {PrimeField64.IsPrime(value: candidate)} where the segmented sieve says {window[offset]}";
+            if (PrimeExtensions.IsPrime(value: candidate) != window[offset]) {
+                return $"IsPrime({candidate}) = {PrimeExtensions.IsPrime(value: candidate)} where the segmented sieve says {window[offset]}";
             }
         }
 
         // Past 10^12 no sieve reaches, so the reference becomes the exact decision: trial division then twenty
-        // BigInteger strong rounds, a strict superset of the subject's twelve Montgomery ones.
+        // BigInteger strong rounds independent of the production Baillie–PSW arithmetic and Lucas criterion.
         int[] bandShifts = [32, 33, 40, 52, 61, 62, 63, 64];
 
         foreach (var shift in bandShifts) {
@@ -1117,8 +1164,8 @@ internal static class PrimalityScaleClaims {
             for (var trial = 0; (trial < 400); ++trial) {
                 var candidate = (Domains.NextSplitMix64(state: ref state) % span) | 1UL;
 
-                if (PrimeField64.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
-                    return $"IsPrime({candidate}) = {PrimeField64.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
+                if (PrimeExtensions.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
+                    return $"IsPrime({candidate}) = {PrimeExtensions.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
                 }
             }
         }
@@ -1127,8 +1174,8 @@ internal static class PrimalityScaleClaims {
         for (var offset = 0; (offset < 4_000); ++offset) {
             var candidate = (ulong.MaxValue - (((ulong)offset) << 1));
 
-            if (PrimeField64.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
-                return $"IsPrime({candidate}) = {PrimeField64.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
+            if (PrimeExtensions.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
+                return $"IsPrime({candidate}) = {PrimeExtensions.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
             }
         }
 
@@ -1144,15 +1191,15 @@ internal static class PrimalityScaleClaims {
             var left = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
             var right = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
 
-            if (PrimeField64.IsPrime(value: (left * right))) {
+            if (PrimeExtensions.IsPrime(value: (left * right))) {
                 return $"IsPrime accepted the semiprime {left} x {right}";
             }
         }
 
-        // The witness set itself, pinned base by base: truncating the twelve to k accepts psi_k and nothing else here
-        // notices.
+        // Published composites that survive many leading prime bases still have to fail the machineword decision.
+        // Above uint the decision is Baillie–PSW, so their leading-prime counts pin rejection, not a witness set.
         foreach (var (pseudoprime, baseCount) in WitnessPseudoprimes) {
-            if (PrimeField64.IsPrime(value: pseudoprime)) {
+            if (PrimeExtensions.IsPrime(value: pseudoprime)) {
                 return $"IsPrime accepted {pseudoprime}, a strong probable prime to the first {baseCount} bases: the witness set is short";
             }
             if (Oracles.ExactPrimality(value: pseudoprime)) {
@@ -1164,7 +1211,7 @@ internal static class PrimalityScaleClaims {
         var top = (ulong.MaxValue - 2UL);
         var budget = 800;
 
-        while (!PrimeField64.IsPrime(value: top)) {
+        while (!PrimeExtensions.IsPrime(value: top)) {
             if (0 == --budget) {
                 return "the carrier-top prime search exhausted its 800-step budget: IsPrime never returned true below 2^64";
             }

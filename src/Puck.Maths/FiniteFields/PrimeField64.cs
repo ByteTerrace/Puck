@@ -17,7 +17,7 @@ namespace Puck.Maths;
 /// </para>
 /// <para>
 /// Wherever an operation is a CHAIN of multiplications rather than one product — <see cref="Pow(ulong, ulong)"/> and
-/// everything built on it, <see cref="TrySqrt(ulong, out ulong)"/>'s descent, and <see cref="IsPrime(ulong)"/>'s witness
+/// everything built on it, <see cref="TrySqrt(ulong, out ulong)"/>'s descent, and <see cref="PrimeExtensions.IsPrime(ulong)"/>'s witness
 /// rounds — the chain runs in <see cref="ScaledResidueRing64"/> instead, converting in once and out once and spending no
 /// hardware division in between. The single-product surface stays on the divide, because there the two conversions cost
 /// more than they save. The results are identical either way; only the arithmetic differs.
@@ -128,12 +128,9 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>
     /// <remarks>
-    /// Primality is decided exactly by strong-pseudoprime rounds to a fixed set of witness bases. The twelve bases
-    /// <c>2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37</c> are a proven complete witness set for every value strictly
-    /// below <see cref="PrimeKernels.LeastWitnessFailure"/> — exactly <c>318665857834031151167461</c>, about
-    /// <c>3.18 * 10^23</c> — which is past <see cref="ulong"/> and far past this field's <c>2^62</c> ceiling, so the
-    /// decision is deterministic rather than probabilistic. Nothing else is precomputed, so constructing a field costs
-    /// only the primality test.
+    /// Primality uses the shared exact word decision: the uint kernel for smaller values, and Baillie–PSW with
+    /// Selfridge Method A for larger values. The verified domain is every value below 2⁶⁴, so this
+    /// field's 2⁶² modulus ceiling is covered. Constructing a field costs only the primality test.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is at or above <see cref="MaximumModulus"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="modulus"/> is even or composite, so the quotient ring is not a field.</exception>
@@ -152,7 +149,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
                 paramName: nameof(modulus)
             );
         }
-        if (!IsPrime(value: modulus)) {
+        if (!modulus.IsPrime()) {
             throw new ArgumentException(
                 message: "The modulus must be prime; a composite modulus does not yield a field.",
                 paramName: nameof(modulus)
@@ -177,103 +174,37 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             exponent: (Modulus - 2UL)
         );
     }
-    /// <summary>Returns a value indicating whether <paramref name="value"/> passes the Baillie–Pomerance–Selfridge–Wagstaff probable-prime test.</summary>
-    /// <param name="value">The value to test.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> passes both rounds; otherwise <see langword="false"/>.</returns>
-    /// <remarks>
-    /// <para>
-    /// One base-two round of <see cref="IsStrongProbablePrime(ulong, ulong)"/> composed with
-    /// <see cref="IsStrongLucasProbablePrime(ulong)"/>. Both halves are PROBABLE-prime tests, and so is the composition:
-    /// passing is not a proof of primality at any size. What the composition buys is that the two halves fail on
-    /// unrelated composites — one reads the order of a residue in the multiplicative group, the other a recurrence in
-    /// the quadratic extension the value's own Jacobi symbol selects, and the parameter search deliberately picks the
-    /// extension in which the value would be inert if it were prime — so a composite would have to be exceptional in two
-    /// unrelated ways at once. No such composite is known at any size. The cheaper half runs first: it costs one
-    /// exponentiation and rejects all but a vanishing fraction of composites, so the ladder is reached rarely.
-    /// </para>
-    /// <para>
-    /// Below <c>2^64</c> the test is not merely unrefuted but verified counterexample-free, and that region is exactly
-    /// <see cref="ulong"/>, so nothing here is extrapolated: the complete set of base-two Fermat pseudoprimes below
-    /// <c>2^64</c> was enumerated exhaustively and independently by Feitsma and by Galway — the strong ones are a
-    /// derived subset — and no member of that subset is simultaneously a strong Lucas pseudoprime to these parameters. That guarantee rests on a third-party exhaustive
-    /// computation — the same epistemic class as the <see cref="PrimeKernels.LeastWitnessFailure"/> bound
-    /// (exactly <c>318665857834031151167461</c>) <see cref="IsPrime(ulong)"/>'s twelve-base witness set rests on,
-    /// which is Sorenson and Webster's computed value of the twelfth strong-pseudoprime threshold, quoted exactly
-    /// rather than rounded.
-    /// </para>
-    /// <para>
-    /// <see cref="IsPrime(ulong)"/> remains the exact decision and the oracle this composition is measured against.
-    /// Whether to re-point it here is a separate decision and has not been taken.
-    /// </para>
-    /// </remarks>
-    public static bool IsBaillieProbablePrime(ulong value) =>
-        (IsStrongProbablePrime(
-            value: value,
-            witness: 2UL
-        ) && IsStrongLucasProbablePrime(value: value));
-    /// <summary>Returns a value indicating whether <paramref name="value"/> is prime, deciding the question exactly for every <see cref="ulong"/>.</summary>
+    /// <summary>Decides primality over <see cref="ulong"/> with the Baillie–Pomerance–Selfridge–Wagstaff test.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
-    /// Strong-pseudoprime rounds to the twelve-base complete witness set, valid past <see cref="ulong.MaxValue"/>. The
-    /// even candidates are settled before the rounds begin, so the survivors are odd and one <see cref="ScaledResidueRing64"/>
-    /// carries every round's squaring chain: the chains spend no hardware division, and each witness pays exactly one
-    /// remainder at entry to reduce it below the modulus. The ring is a
-    /// bijective re-encoding of the residues, so comparing a power against the ring's own one and minus one decides
-    /// exactly what comparing the ordinary residues against <c>1</c> and <c>value - 1</c> would.
+    /// <para>
+    /// One base-two round of <see cref="IsStrongProbablePrime(ulong, ulong)"/> composed with
+    /// <see cref="IsStrongLucasProbablePrime(ulong)"/>. Each half alone admits composites. Their composition is exact
+    /// throughout this finite carrier, on the published exhaustive-computation basis below; this does not assert
+    /// exactness over arbitrary-width integers. The base-two round runs first, so most composites avoid the Lucas ladder.
+    /// Both rounds share one Montgomery setup — the modulus's inverse and the reduced radix — and the base-two round
+    /// takes two as <c>one + one</c> in Montgomery form, so neither round encodes an operand.
+    /// </para>
+    /// <para>
+    /// Baillie, Fiori and Wagstaff, <see href="https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf">Strengthening the
+    /// Baillie–PSW primality test</see>, section 3, reports that none of the 118,968,378 base-two Fermat pseudoprimes
+    /// below <c>2^64</c> is a Lucas pseudoprime under Method A*. Strong pseudoprimes are subsets of those populations.
+    /// Appendix A, Theorems 3 and 4, proves Method A and A* equivalent for values coprime to ten; a composite multiple
+    /// of five is rejected by Method A's first discriminant, and even composites are rejected before either round.
+    /// This implementation uses Method A's <c>D = 5, -7, 9, ...</c>, <c>P = 1</c>, <c>Q = (1 - D) / 4</c>.
+    /// </para>
+    /// <para>
+    /// <see cref="PrimeExtensions.IsPrime(ulong)"/> dispatches here above the uint range. Tests use a separate BigInteger witness
+    /// oracle and ordinary sieving; that forwarding entry point is not an independent oracle for this composition.
+    /// </para>
     /// </remarks>
-    public static bool IsPrime(ulong value) {
+    public static bool IsBaillieProbablePrime(ulong value) {
         if (2UL > value) { return false; }
         if (2UL == value) { return true; }
         if (0UL == (value & 1UL)) { return false; }
 
-        // A witness set proven complete for every value strictly below PrimeKernels.LeastWitnessFailure =
-        // 318665857834031151167461 (about 3.18 * 10^23), which exceeds ulong.MaxValue. The table is PrimeKernels',
-        // shared with the arbitrary-width decision so the two cannot drift.
-        var witnesses = PrimeKernels.WitnessBases;
-        var oddPart = (value - 1UL);
-        var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
-
-        oddPart >>>= twoExponent;
-
-        var ring = new ScaledResidueRing64(modulus: value);
-        var one = ring.One;
-        var negativeOne = ring.NegativeOne;
-
-        foreach (var witnessBase in witnesses) {
-            var residue = (((ulong)witnessBase) % value);
-
-            if (0UL == residue) { continue; }
-
-            var power = ring.Power(
-                value: ring.Encode(value: residue),
-                exponent: oddPart
-            );
-
-            if (
-                (one == power) ||
-                (negativeOne == power)
-            ) { continue; }
-
-            var composite = true;
-
-            for (var round = 1; (round < twoExponent); ++round) {
-                power = ring.Multiply(
-                    left: power,
-                    right: power
-                );
-
-                if (negativeOne == power) {
-                    composite = false;
-
-                    break;
-                }
-            }
-
-            if (composite) { return false; }
-        }
-
-        return true;
+        return PrimeKernels.IsBaillieOddWord(value: value);
     }
     /// <summary>Returns a value indicating whether <paramref name="value"/> passes the strong Lucas probable-prime test with Selfridge's Method A parameters.</summary>
     /// <param name="value">The value to test.</param>
@@ -287,171 +218,45 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <para>
     /// Method A takes the discriminant <c>D</c> to be the first of <c>5, -7, 9, -11, 13, ...</c> whose Jacobi symbol
     /// over the value is <c>-1</c>, then <c>P = 1</c> and <c>Q = (1 - D) / 4</c>. Every candidate is congruent to one
-    /// modulo four, which is what makes <c>Q</c> an integer and what fixes its sign — <c>Q</c> is positive exactly when
-    /// <c>D</c> is negative — so the sign is read off the candidate's magnitude rather than tracked. The candidates step
-    /// by four within each sign, so they sweep every residue class modulo an odd value, and every non-square has a class
-    /// whose symbol is <c>-1</c>: the search reaches one. A perfect square reaches none — its symbol is never <c>-1</c>
-    /// for any argument at all — but the search still ends there, on the vanishing symbol, because the candidates sweep
-    /// every odd magnitude and so meet a factor the square shares. The integer square root ahead of the search is
-    /// therefore a cost bound rather than a termination guarantee: without it a square costs Jacobi evaluations
-    /// proportional to its least prime factor, which for the square of a large prime is the whole search. It is exact,
-    /// and a square above one is composite anyway. The vanishing symbol ends the search in general: the candidate and
-    /// the value share a factor, which is a proper divisor of the value unless the value divides the candidate outright.
+    /// modulo four, which is what makes <c>Q</c> an integer and, by quadratic reciprocity, makes <c>(D / value)</c> equal
+    /// to <c>(value mod |D| / |D|)</c> in either sign class: the symbol of each small candidate is one bit of a residue
+    /// mask derived once from <see cref="UnsignedNumberFunctions.JacobiSymbol{T}(T, T)"/>, and larger candidates use the
+    /// descent itself. The candidates step by four within each sign, so they sweep every residue class modulo an odd
+    /// value, and every non-square has a class whose symbol is <c>-1</c>: the search reaches one. A perfect square
+    /// reaches none, but the search still ends there, on the vanishing symbol, because the candidates sweep every odd
+    /// magnitude and so meet a factor the square shares. The integer square root taken once the tabulated candidates
+    /// are exhausted is therefore a cost bound rather than a termination guarantee; it is exact, and a square above one
+    /// is composite anyway. The vanishing symbol ends the search in general: the candidate and the value share a factor,
+    /// which is a proper divisor of the value unless the value divides the candidate outright.
     /// </para>
     /// <para>
     /// With <c>value + 1 = d * 2^s</c> and <c>d</c> odd, the test accepts when <c>U_d</c> vanishes modulo the value, or
-    /// when <c>V_(d * 2^r)</c> does for some <c>r</c> below <c>s</c>. The terms come from the doubling ladder —
-    /// <c>U_2k = U_k * V_k</c> and <c>V_2k = V_k^2 - 2 * Q^k</c>, followed where the exponent's bit is set by the
-    /// index-incrementing pair <c>U_(2k+1) = (U_2k + V_2k) / 2</c> and <c>V_(2k+1) = (D * U_2k + V_2k) / 2</c> — walked
-    /// most-significant-bit first over <c>d</c> with <c>Q^k</c> squared alongside it. That is logarithmic in the value,
-    /// where the recurrence's own definition would be linear. Both increment formulas halve, which modulo an odd value
-    /// is a multiplication by <c>(value + 1) / 2</c>.
+    /// when <c>V_(d * 2^r)</c> does for some <c>r</c> below <c>s</c>. The ladder walks <c>d</c> most-significant-bit
+    /// first carrying only <c>V_k</c> and <c>V_(k+1)</c> — <c>V_2k = V_k^2 - 2Q^k</c>,
+    /// <c>V_(2k+1) = V_k V_(k+1) - P Q^k</c> and <c>V_(2k+2) = V_(k+1)^2 - 2Q^(k+1)</c> — with <c>Q^k</c> and
+    /// <c>Q^(k+1)</c> carried alongside, or read off the index's parity when <c>D = 5</c> makes <c>Q = -1</c>. The
+    /// <c>U</c> test follows from <c>D * U_k = 2V_(k+1) - P * V_k</c>: a symbol of <c>-1</c> makes <c>D</c> a unit
+    /// modulo the value, so <c>U_d</c> vanishes exactly when <c>2V_(d+1) = V_d</c>. The predicate is unchanged from the
+    /// U/V formulation, and so is the published verification of the composition below.
     /// </para>
     /// <para>
-    /// The whole ladder runs in one <see cref="ScaledResidueRing64"/>. Its additions, subtractions, and halvings are linear
-    /// in the representation and so apply to Montgomery-form elements unchanged, its products are the ring's own, and
-    /// zero represents zero — so the acceptance tests read exactly as they would on ordinary residues, and the ladder
-    /// spends no hardware division from the first term to the last.
+    /// The whole ladder runs in Montgomery form over <see cref="ScaledResidueRing64"/>'s kernels. Additions and
+    /// subtractions are linear in the representation, products are REDC, and zero represents zero — so the acceptance
+    /// tests read exactly as they would on ordinary residues, and the ladder spends no hardware division from the first
+    /// term to the last.
     /// </para>
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool IsStrongLucasProbablePrime(ulong value) {
         if (2UL > value) { return false; }
         if (2UL == value) { return true; }
         if (0UL == (value & 1UL)) { return false; }
 
-        // A square has no discriminant of symbol -1, so its search would run to the vanishing symbol at its least prime
-        // factor — the whole search, for the square of a large prime. Settling the square first bounds that cost; it is
-        // not what makes the search terminate.
-        var root = value.SquareRoot();
-
-        if (value == (root * root)) { return false; }
-
-        var discriminantMagnitude = 5UL;
-        ulong discriminantResidue;
-
-        while (true) {
-            var magnitudeResidue = (discriminantMagnitude % value);
-
-            // The candidates alternate sign from D = 5 onwards, so the sign is a function of the magnitude alone: it is
-            // negative exactly at magnitudes congruent to three modulo four, which is also what leaves every candidate
-            // congruent to one modulo four.
-            discriminantResidue = (((3UL == (discriminantMagnitude & 3UL)) && (0UL != magnitudeResidue))
-                ? (value - magnitudeResidue)
-                : magnitudeResidue
-            );
-
-            var symbol = discriminantResidue.JacobiSymbol(modulus: value);
-
-            if (-1 == symbol) { break; }
-            // A vanishing symbol means the value shares a factor with the candidate. That factor is a proper divisor —
-            // so the value is composite — unless the value divides the candidate, which leaves the search uninformed.
-            if (
-                (0 == symbol) &&
-                (0UL != magnitudeResidue)
-            ) { return false; }
-
-            discriminantMagnitude += 2UL;
-        }
-
-        var isNegativeDiscriminant = (3UL == (discriminantMagnitude & 3UL));
-        var ring = new ScaledResidueRing64(modulus: value);
-        // Q = (1 - D) / 4: the division is exact in either sign class, and Encode folds an argument that is not yet
-        // reduced, so the magnitude goes in as it stands and the negation happens in the ring.
-        var q = ring.Encode(value: ((isNegativeDiscriminant
-            ? (discriminantMagnitude + 1UL)
-            : (discriminantMagnitude - 1UL)) >>> 2));
-
-        if (!isNegativeDiscriminant) {
-            q = ring.Subtract(
-                left: 0UL,
-                right: q
-            );
-        }
-
-        // The carrier cannot hold value + 1 at its own maximum. The narrow split is in fact indistinguishable there —
-        // the wrapped order is zero, whose trailing-zero count is the full width and whose odd part is zero, so the
-        // ladder is skipped and the exponent lands on 64 either way — but the widened split states the decomposition
-        // instead of resting on that coincidence.
-        var order = (((UInt128)value) + UInt128.One);
-        var twoExponent = ((int)UInt128.TrailingZeroCount(value: order));
-        var oddPart = ((ulong)(order >>> twoExponent));
-        var discriminant = ring.Encode(value: discriminantResidue);
-        var one = ring.One;
-        var qPower = q;
-        var u = one; // U_1
-        var v = one; // V_1 = P
-
-        for (var bit = (BitOperations.Log2(value: oddPart) - 1); (bit >= 0); --bit) {
-            var doubledU = ring.Multiply(
-                left: u,
-                right: v
-            );
-
-            v = ring.Subtract(
-                left: ring.Multiply(
-                    left: v,
-                    right: v
-                ),
-                right: ring.Add(
-                    left: qPower,
-                    right: qPower
-                )
-            );
-            u = doubledU;
-            qPower = ring.Multiply(
-                left: qPower,
-                right: qPower
-            );
-
-            if (0UL != ((oddPart >>> bit) & 1UL)) {
-                var incrementedU = ring.Halve(value: ring.Add(
-                    left: u,
-                    right: v
-                ));
-
-                v = ring.Halve(value: ring.Add(
-                    left: ring.Multiply(
-                        left: discriminant,
-                        right: u
-                    ),
-                    right: v
-                ));
-                u = incrementedU;
-                qPower = ring.Multiply(
-                    left: qPower,
-                    right: q
-                );
-            }
-        }
-
-        if (
-            (0UL == u) ||
-            (0UL == v)
-        ) { return true; }
-
-        // The remaining acceptances are the V terms at the doubled indices d * 2^r; each doubling consumes the current
-        // Q^(d * 2^r) before squaring it for the next.
-        for (var round = 1; (round < twoExponent); ++round) {
-            v = ring.Subtract(
-                left: ring.Multiply(
-                    left: v,
-                    right: v
-                ),
-                right: ring.Add(
-                    left: qPower,
-                    right: qPower
-                )
-            );
-
-            if (0UL == v) { return true; }
-
-            qPower = ring.Multiply(
-                left: qPower,
-                right: qPower
-            );
-        }
-
-        return false;
+        return PrimeKernels.PassesStrongLucas(
+            inverse: value.ModularInverse(),
+            one: ScaledResidueRing64.RadixResidue(modulus: value),
+            value: value
+        );
     }
     /// <summary>Returns a value indicating whether <paramref name="value"/> passes one strong-probable-prime round to <paramref name="witness"/>.</summary>
     /// <param name="value">The value to test.</param>
@@ -461,8 +266,8 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// A PROBABLE-prime test: a failed round proves compositeness, a passed one proves nothing. Writing
     /// <c>value - 1 = d * 2^s</c> with <c>d</c> odd, the round accepts when <c>witness^d</c> is one or when
     /// <c>witness^(d * 2^r)</c> is minus one for some <c>r</c> below <c>s</c> — the two ways a prime modulus allows the
-    /// square roots of one. This is the round <see cref="IsPrime(ulong)"/> repeats over its twelve-base witness set and
-    /// the first half of <see cref="IsBaillieProbablePrime(ulong)"/>, exposed so that either composition's halves can be
+    /// square roots of one. Base two supplies the first half of <see cref="IsBaillieProbablePrime(ulong)"/>,
+    /// exposed so that the composition's halves can be
     /// addressed on their own. The squaring chain runs in one <see cref="ScaledResidueRing64"/>.
     /// </remarks>
     public static bool IsStrongProbablePrime(ulong value, ulong witness) {
@@ -470,37 +275,14 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         if (2UL == value) { return true; }
         if (0UL == (value & 1UL)) { return false; }
 
-        var residue = (witness % value);
-
-        if (0UL == residue) { return true; }
-
         var oddPart = (value - 1UL);
         var twoExponent = BitOperations.TrailingZeroCount(value: oddPart);
 
         oddPart >>>= twoExponent;
 
         var ring = new ScaledResidueRing64(modulus: value);
-        var negativeOne = ring.NegativeOne;
-        var power = ring.Power(
-            value: ring.Encode(value: residue),
-            exponent: oddPart
-        );
 
-        if (
-            (ring.One == power) ||
-            (negativeOne == power)
-        ) { return true; }
-
-        for (var round = 1; (round < twoExponent); ++round) {
-            power = ring.Multiply(
-                left: power,
-                right: power
-            );
-
-            if (negativeOne == power) { return true; }
-        }
-
-        return false;
+        return PrimeKernels.PassesWitness(oddPart: oddPart, ring: in ring, twoExponent: twoExponent, witness: witness);
     }
     /// <summary>Computes the quadratic character of a field element by the exponentiation criterion.</summary>
     /// <param name="value">The reduced element to test.</param>

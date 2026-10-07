@@ -4159,6 +4159,7 @@
     },
     {
       "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data",
         "presented.reflection-action-lattice"
       ],
       "Id": "Puck.Maths.CyclicRotation.Period",
@@ -4166,6 +4167,7 @@
     },
     {
       "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data",
         "scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy"
       ],
       "Id": "Puck.Maths.CyclicRotation.PlaneCount",
@@ -13574,13 +13576,6 @@
     },
     {
       "CoveredBy": [
-        "core.number-theory-contracts"
-      ],
-      "Id": "Puck.Maths.NumberTheoryFunctions.EnumeratePrimes(System.UInt64,System.UInt64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
         "core.word-modular-arithmetic-vs-big-integer"
       ],
       "Id": "Puck.Maths.NumberTheoryFunctions.ExtendedGreatestCommonDivisor(System.Int64,System.Int64)",
@@ -13614,13 +13609,6 @@
         "core.word-modular-arithmetic-vs-big-integer"
       ],
       "Id": "Puck.Maths.NumberTheoryFunctions.ModularPower(System.UInt64,System.UInt64,System.UInt64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "core.number-theory-contracts"
-      ],
-      "Id": "Puck.Maths.NumberTheoryFunctions.SegmentedPrimeSieve(System.UInt64,System.UInt64,System.Action<System.UInt64>)",
       "State": "covered"
     },
     {
@@ -17182,6 +17170,79 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation..ctor(System.ReadOnlySpan<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.AdmissibleMask",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellation-empty-validation",
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.constellations-vs-naive"
+      ],
+      "Id": "Puck.Maths.PrimeConstellation.Offsets",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
+        "deep.prime-exploration-wide-native-counts",
+        "deep.prime-exploration-windowed-final-window",
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
+        "prime-exploration.wide-sieve-vs-integer-windows",
+        "prime-exploration.windowed-sieve-vs-integer-windows"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
+        "deep.prime-exploration-windowed-final-window",
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
+        "prime-exploration.wide-sieve-vs-integer-windows",
+        "prime-exploration.windowed-sieve-vs-integer-windows"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.custom-decision-mapping",
+        "prime-selection.narrow-route-vs-reference",
+        "prime-selection.random-rank-and-budget",
+        "prime-selection.random-vs-independent",
+        "prime-selection.speculative-matches-sequential"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.TryRandomPrime(System.UInt64,System.UInt64,TGenerator&,System.UInt64&,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.factorization-full-width-sweep",
         "core.prime-extensions-vs-trial-division"
       ],
@@ -17190,15 +17251,56 @@
     },
     {
       "CoveredBy": [
-        "core.prime-extensions-vs-trial-division"
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-exploration-primality-swept",
+        "deep.prime-field-baillie-and-populations",
+        "deep.prime-field-is-prime-exact",
+        "prime-exploration.primality-swept-vs-reference",
+        "prime-exploration.primality-vs-independent",
+        "prime-field.baillie-psw-exhaustive",
+        "prime-field.create-and-refusals",
+        "prime-field.is-prime-vs-sieve-and-witness-ladder",
+        "prime-field.is-prime-vs-witness-oracle",
+        "prime-field.montgomery-chains-exhaustive",
+        "prime-field.narrow-primality-bands",
+        "prime-field.pseudoprime-populations",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExtensions.IsPrime(System.UInt32)",
       "State": "covered"
     },
     {
       "CoveredBy": [
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-exploration-primality-swept",
+        "deep.prime-field-baillie-and-populations",
+        "deep.prime-field-is-prime-exact",
+        "prime-exploration.primality-swept-vs-reference",
+        "prime-exploration.primality-vs-independent",
+        "prime-field.baillie-psw-exhaustive",
+        "prime-field.create-and-refusals",
+        "prime-field.is-prime-vs-sieve-and-witness-ladder",
+        "prime-field.is-prime-vs-witness-oracle",
+        "prime-field.montgomery-chains-exhaustive",
+        "prime-field.narrow-primality-bands",
+        "prime-field.pseudoprime-populations",
+        "prime-field.word-decision-dispatch"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.IsPrime(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
-        "core.prime-extensions-vs-trial-division"
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-bitmap-directions",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-ranks",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e19",
+        "prime-selection.nth-vs-sieve",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt32)",
       "State": "covered"
@@ -17206,9 +17308,55 @@
     {
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
-        "core.prime-extensions-vs-trial-division"
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-bitmap-directions",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-ranks",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-rank-1e19",
+        "prime-selection.nth-vs-sieve",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-nth-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.prime-counting-is-dense-against-a-sieve",
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-boundaries",
+        "exhaustive.prime-selection-ulong-combinatorial-a-square-high",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e19",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-count-vs-independent",
+        "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.prime-counting-is-dense-against-a-sieve",
+        "core.prime-extensions-vs-trial-division",
+        "deep.prime-selection-ulong-checkpoint-chunks",
+        "deep.prime-selection-ulong-combinatorial-boundaries",
+        "exhaustive.prime-selection-ulong-combinatorial-a-square-high",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-count-1e19",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e16",
+        "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-count-vs-independent",
+        "prime-selection.ulong-nth-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17250,23 +17398,10 @@
         "deep.prime-field-baillie-and-populations",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
-        "prime-field.pseudoprime-populations"
+        "prime-field.pseudoprime-populations",
+        "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeField64.IsBaillieProbablePrime(System.UInt64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "deep.prime-field-baillie-and-populations",
-        "deep.prime-field-is-prime-exact",
-        "prime-field.baillie-composition",
-        "prime-field.create-and-refusals",
-        "prime-field.is-prime-vs-sieve-and-witness-ladder",
-        "prime-field.is-prime-vs-witness-oracle",
-        "prime-field.montgomery-chains-exhaustive",
-        "prime-field.pseudoprime-populations"
-      ],
-      "Id": "Puck.Maths.PrimeField64.IsPrime(System.UInt64)",
       "State": "covered"
     },
     {
@@ -17276,7 +17411,8 @@
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
         "prime-field.lucas-vs-companion-matrix",
-        "prime-field.pseudoprime-populations"
+        "prime-field.pseudoprime-populations",
+        "prime-field.selfridge-symbols-vs-reciprocity"
       ],
       "Id": "Puck.Maths.PrimeField64.IsStrongLucasProbablePrime(System.UInt64)",
       "State": "covered"
@@ -17694,6 +17830,105 @@
         "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.PrimeFieldMaterial.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.ChannelAtNumericIndex(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.ChannelCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Inverse(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Modulus",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Multiply(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericChannels",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericIndex(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic",
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericResidues",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PermuteMask(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PermuteMask(System.Byte,System.Int32,System.Boolean)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Residue(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Residues",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.group-vs-residue-arithmetic"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.TryChannel(System.Byte,System.Byte&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.WordIntegers",
       "State": "covered"
     },
     {
@@ -22519,9 +22754,25 @@
       "State": "covered"
     },
     {
+      "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data"
+      ],
+      "Id": "Puck.Maths.SymmetryLattice.CycleExponents",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data"
+      ],
+      "Id": "Puck.Maths.SymmetryLattice.CycleOrder",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data"
+      ],
       "Id": "Puck.Maths.SymmetryLattice.Dimension",
-      "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.",
-      "State": "waived"
+      "State": "covered"
     },
     {
       "CoveredBy": [
@@ -22531,9 +22782,11 @@
       "State": "covered"
     },
     {
+      "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data"
+      ],
       "Id": "Puck.Maths.SymmetryLattice.NodeCount",
-      "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.",
-      "State": "waived"
+      "State": "covered"
     },
     {
       "CoveredBy": [
@@ -22589,9 +22842,11 @@
       "State": "covered"
     },
     {
+      "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data"
+      ],
       "Id": "Puck.Maths.SymmetryLattice.RingCount",
-      "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.",
-      "State": "waived"
+      "State": "covered"
     },
     {
       "CoveredBy": [
@@ -22602,6 +22857,7 @@
     },
     {
       "CoveredBy": [
+        "integer.symmetry-lattice-coxeter-data",
         "integer.symmetry-lattice-exact-structure"
       ],
       "Id": "Puck.Maths.SymmetryLattice.RingSize",

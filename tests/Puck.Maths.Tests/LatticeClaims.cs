@@ -15,7 +15,7 @@ namespace Puck.Maths.Tests;
 /// (<see cref="Oracles.Pi"/>, <see cref="Oracles.EncloseSinCos"/>) for the transcendental parts, and an independent
 /// Newton-descent integer square root (<see cref="Oracles.IntegerSquareRoot"/>) for the golden ratio and for
 /// concentricity's radii — never a <see langword="double"/>. <see cref="SymmetryLattice.Project(int)"/> itself has no
-/// floating point to begin with: its basis vectors are FIXED baked Q16 constants (<c>SymmetryLattice.cs:47-48</c>),
+/// floating point to begin with: its basis vectors are FIXED baked Q16 constants (<c>SymmetryLattice.Baked.PlaneBasisX</c> and <c>PlaneBasisY</c>),
 /// so every output is already an exact integer function of them; what these claims add is an equally exact statement
 /// of what those outputs are SUPPOSED to be. <see cref="HexagonalCoordinate.Round(FixedQ4816, FixedQ4816)"/>'s
 /// nearest-cell statement is exact too — Euclidean distance over the hex lattice collapses algebraically to the exact
@@ -593,7 +593,7 @@ internal static class LatticeClaims {
             expected: 15
         );
 
-        // The ray-cycle factors are the STORED result of one BinaryPolynomial.FactorOddCycle(15) call (SymmetryLattice.cs:56);
+        // The ray-cycle factors are the STORED result of one BinaryPolynomial.FactorOddCycle(15) call (SymmetryLattice.RayCycleFactorStorage);
         // re-multiplying it here is a WIRING check (did SymmetryLattice thread the right order through and keep the
         // right field), not independent algorithm evidence — FactorOddCycle's own multiply-back property is pinned at
         // polynomial.factor-odd-cycle-vs-cyclotomic-cosets and its Deep mirror.
@@ -840,7 +840,7 @@ internal static class LatticeClaims {
 
         // ---- exact projection geometry: the E8/Ising mass spectrum, the golden-ratio pairing, the twelve-degree
         // turn, and ring concentricity — all four derived as EXACT BigInteger brackets, never `double` geometry.
-        // Project's basis vectors are FIXED baked constants (SymmetryLattice.cs:47-48), so every
+        // Project's basis vectors are FIXED baked constants (SymmetryLattice.Baked.PlaneBasisX and PlaneBasisY), so every
         // Project output is itself an exact integer function of them; nothing here rounds at runtime.
         var turn = Oracles.EncloseSinCos(
             raw: PiFractionRaw(

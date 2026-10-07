@@ -45,7 +45,7 @@ internal static class QuadraticIntegerClaims {
                 step: step
             )
         );
-    // Trial division over a small ceiling, independent of NumberTheoryFunctions.SegmentedPrimeSieve/EnumeratePrimes.
+    // Trial division over a small ceiling, independent of PrimeExploration.Enumerate.
     private static IReadOnlyList<int> EnumerateSmallPrimesUpTo(int ceiling) {
         var primes = new List<int>();
 

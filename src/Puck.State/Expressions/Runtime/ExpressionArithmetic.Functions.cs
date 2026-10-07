@@ -724,7 +724,7 @@ public static partial class ExpressionArithmetic {
                 case ExpressionOp.IsPrime:
                     value = (((arguments[0] >= 0L) && (((arguments[0] <= uint.MaxValue)
                         ? ((uint)arguments[0]).IsPrime()
-                        : PrimeField64.IsPrime(value: ((ulong)arguments[0])))))
+                        : PrimeExtensions.IsPrime(value: ((ulong)arguments[0])))))
                         ? 1L
                         : 0L
                     );

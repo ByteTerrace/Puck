@@ -293,33 +293,6 @@ internal static class CoreSurfaceClaims {
         return null;
     }
     public static string? NumberTheorySurface() {
-        var callbackPrimes = new List<ulong>();
-
-        NumberTheoryFunctions.SegmentedPrimeSieve(high: 512, low: 0, onPrime: callbackPrimes.Add);
-        var expected = Enumerable.Range(count: 513, start: 0)
-            .Where(predicate: IsPrimeByTrialDivision)
-            .Select(selector: value => ((ulong)value))
-            .ToArray();
-
-        Assert.Equal(actual: callbackPrimes, expected: expected);
-        Assert.Equal(expected: expected, actual: NumberTheoryFunctions.EnumeratePrimes(high: 512, low: 0));
-
-        var ceilingPrime = new List<ulong>();
-
-        NumberTheoryFunctions.SegmentedPrimeSieve(
-            high: uint.MaxValue,
-            low: 4_294_967_291UL,
-            onPrime: ceilingPrime.Add
-        );
-        Assert.Equal(actual: ceilingPrime, expected: [4_294_967_291UL]);
-        _ = Assert.Throws<ArgumentOutOfRangeException>(
-            testCode: () => NumberTheoryFunctions.SegmentedPrimeSieve(
-                high: ulong.MaxValue,
-                low: ulong.MaxValue,
-                onPrime: static _ => { }
-            )
-        );
-
         Assert.Equal(expected: -1, actual: NumberTheoryFunctions.JacobiSymbol(denominator: 9907, numerator: 1001));
 
         BigInteger[] nonUnit = [0, 2];
@@ -947,7 +920,7 @@ internal static class CoreSurfaceClaims {
             3UL, 5UL, 7UL, 11UL, 13UL, 17UL, 97UL, 257UL, 65537UL,
             1000000009UL, 998244353UL, 2305843009213693951UL,
         }) {
-            Assert.True(condition: PrimeField64.IsPrime(value: modulus));
+            Assert.True(condition: PrimeExtensions.IsPrime(value: modulus));
 
             var field = PrimeField64.Create(modulus: modulus);
             var bigModulus = new BigInteger(value: modulus);

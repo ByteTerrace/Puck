@@ -2298,7 +2298,7 @@
     "Tier": "Deep",
     "Members": [
       {
-        "Type": "Puck.Maths.PrimeField64",
+        "Type": "Puck.Maths.PrimeExtensions",
         "Name": "IsPrime"
       }
     ],
@@ -2306,7 +2306,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "PrimeField64.IsPrime at EVERY value through 1,000,000",
+        "Subject": "PrimeExtensions.IsPrime at EVERY value through 1,000,000",
         "Against": "Oracles.PrimeSieve. MIRROR of prime-field.is-prime-vs-sieve-and-witness-ladder with its exhaustive band grown FIFTYFOLD \u2014 and that is what makes the sieve leg this family\u0027s real anchor, because a sieve shares no idea with the subject and this band is total rather than sampled",
         "Shared": "",
         "Citation": "",
@@ -2315,7 +2315,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the twelve-base witness set, base by base",
+        "Subject": "rejection of every tabulated strong pseudoprime to the leading prime bases; above uint the decision is Baillie–PSW (a base-two strong round and a strong Lucas test), so the rows pin rejection, not a witness set",
         "Against": "Subjects.PrimeFieldWitnessPseudoprimes",
         "Shared": "",
         "Citation": "the published psi_k table, exactly as prime-field.is-prime-vs-sieve-and-witness-ladder states it. MIRROR of that case: the rows are a fixed ladder, so Deep adds nothing here and the sieve leg above is what this row rides with",
@@ -2418,7 +2418,7 @@
         "Name": "IsStrongLucasProbablePrime"
       },
       {
-        "Type": "Puck.Maths.PrimeField64",
+        "Type": "Puck.Maths.PrimeExtensions",
         "Name": "IsPrime"
       }
     ],

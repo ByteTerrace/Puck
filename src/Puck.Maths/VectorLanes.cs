@@ -49,6 +49,12 @@ internal interface IByteVectorLanes<TBytes> where TBytes : struct {
     /// <param name="matrix">The bit matrix, one qword per eight-byte group.</param>
     /// <returns>The transformed bytes.</returns>
     static abstract TBytes GaloisFieldAffineTransform(TBytes value, TBytes matrix);
+    /// <summary>Compares sixteen-bit lanes as signed integers and gathers one bit per lane.</summary>
+    /// <param name="left">The first vector, viewed as signed sixteen-bit lanes.</param>
+    /// <param name="right">The second vector, viewed as signed sixteen-bit lanes.</param>
+    /// <returns>A mask whose bit <c>i</c> is set exactly when lane <c>i</c> of <paramref name="left"/> exceeds that of
+    /// <paramref name="right"/>; lane zero is the lowest element in memory.</returns>
+    static abstract uint GreaterThanInt16Mask(TBytes left, TBytes right);
     /// <summary>Loads one vector of bytes.</summary>
     /// <param name="source">The first byte of the region.</param>
     /// <param name="elementOffset">The byte offset of the vector.</param>
@@ -186,6 +192,10 @@ internal readonly struct VectorLanes128 : IByteVectorLanes<Vector128<byte>>, ISi
         );
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint GreaterThanInt16Mask(Vector128<byte> left, Vector128<byte> right) =>
+        Vector128.GreaterThan(left: left.AsInt16(), right: right.AsInt16()).ExtractMostSignificantBits();
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector128<byte> Load(ref readonly byte source, nuint elementOffset) =>
         Vector128.LoadUnsafe(
             elementOffset: elementOffset,
@@ -310,6 +320,10 @@ internal readonly struct VectorLanes256 : IByteVectorLanes<Vector256<byte>>, ISi
             b: 0,
             x: value
         );
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint GreaterThanInt16Mask(Vector256<byte> left, Vector256<byte> right) =>
+        Vector256.GreaterThan(left: left.AsInt16(), right: right.AsInt16()).ExtractMostSignificantBits();
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector256<byte> Load(ref readonly byte source, nuint elementOffset) =>
@@ -445,6 +459,10 @@ internal readonly struct VectorLanes512 : IByteVectorLanes<Vector512<byte>>, ISi
             b: 0,
             x: value
         );
+    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint GreaterThanInt16Mask(Vector512<byte> left, Vector512<byte> right) =>
+        ((uint)Vector512.GreaterThan(left: left.AsInt16(), right: right.AsInt16()).ExtractMostSignificantBits());
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector512<byte> Load(ref readonly byte source, nuint elementOffset) =>

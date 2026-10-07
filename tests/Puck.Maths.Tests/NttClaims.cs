@@ -446,16 +446,16 @@ internal static class NttClaims {
         var modulus = NumberTheoreticTransform.Modulus;
         var wideModulus = new BigInteger(value: modulus);
 
-        if (!PrimeField64.IsPrime(value: modulus)) {
-            return $"NumberTheoreticTransform.Modulus ({modulus}) is not prime by PrimeField64.IsPrime";
+        if (!PrimeExtensions.IsPrime(value: modulus)) {
+            return $"NumberTheoreticTransform.Modulus ({modulus}) is not prime by PrimeExtensions.IsPrime";
         }
 
         if (!Oracles.ExactPrimality(value: modulus)) {
             return $"NumberTheoreticTransform.Modulus ({modulus}) is not prime by the independent trial-division/strong-round sieve";
         }
 
-        if (!PrimeField64.IsPrime(value: PrimeFactor)) {
-            return $"the declared odd factor {PrimeFactor} of Modulus - 1 is not prime by PrimeField64.IsPrime";
+        if (!PrimeExtensions.IsPrime(value: PrimeFactor)) {
+            return $"the declared odd factor {PrimeFactor} of Modulus - 1 is not prime by PrimeExtensions.IsPrime";
         }
 
         if (!Oracles.ExactPrimality(value: PrimeFactor)) {

@@ -176,9 +176,9 @@ Every build, a Codex brief's included, passes `-nodeReuse:false`
 
 ## Select models and route findings
 
-Codex (Astra and Sol) and Claude (Sonnet, Opus, and Fable when genuinely needed)
-both implement. Choose per lane by fit: subtle or correctness-heavy work goes to
-Astra or Opus; well-specified work goes to Sol or Sonnet. Keep every Codex slot
+Codex and Claude both implement, and no model in either family is restricted or
+reserved. Choose the model and effort per lane by fit: put the strongest available
+model on subtle or correctness-heavy work. Keep every Codex slot
 implementing; a review takes a slot only under the narrow rule in
 [`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review).
 

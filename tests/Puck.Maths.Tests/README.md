@@ -59,14 +59,21 @@ Tier selection is fully declarative; no environment variable selects a tier. Eve
 `tier` trait, and Deep and Exhaustive cases are explicit, so a plain `dotnet test` runs **Smoke + Default** only. A run
 opts into the explicit cases with `--explicit on` and selects one tier with `--filter-trait tier=<tier>`; without
 `--explicit on`, a Deep or Exhaustive filter selects no test. To run one law, filter on its id, which is the case's
-display name: `--explicit on --filter-display-name <law-id>`.
+display name: `--explicit on --filter-display-name '<law-id>*'`. The trailing
+wildcard includes the runner's appended argument display; an exact bare id selects no row.
 
 | Tier | Command | Budget |
 | --- | --- | --- |
 | Default (Smoke + Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` | < 30 s |
 | Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` | < 2 s |
-| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | exhaustive |
-| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long—full-width sweeps over an ENTIRE carrier; on demand or nightly, never in a change loop |
+| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | minutes |
+| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long; full-carrier sweeps and expensive finite combinatorial-prime checks; on demand or nightly |
+
+The high-bound combinatorial-prime checks use Exhaustive to keep expensive
+counts and rank searches out of the ordinary Deep run. Their declarations
+name a finite set of operands: this scheduling choice does not establish a
+whole-domain proof. Run budgets are measured separately through the prime-request
+survey; a selected finite fixture does not bound every request in its tier.
 
 ## The ratchet
 
