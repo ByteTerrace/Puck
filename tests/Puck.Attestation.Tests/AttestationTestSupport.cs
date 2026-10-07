@@ -73,11 +73,12 @@ public static class AttestationTestSupport {
     /// else about it is malformed, so at (32, 1) it decodes and only the field under test can refuse it.
     /// The signature is a placeholder; this never reaches a signature check.
     /// </summary>
-    internal static byte[] BuildHandWrittenAttestation(int domainWidth = 32, ulong payloadKind = ((ulong)AttestationPayloadKind.Opaque)) {
+    internal static byte[] BuildHandWrittenAttestation(int domainWidth = 32, ulong payloadKind = ((ulong)AttestationPayloadKind.Opaque), string? shape = null) {
         var signedPortionWriter = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-        signedPortionWriter.WriteStartArray(definiteLength: 11);
+        signedPortionWriter.WriteStartArray(definiteLength: 12);
         signedPortionWriter.WriteUInt64(value: CborAttestationCodec.FormatVersion);
+        signedPortionWriter.WriteTextString(value: (shape ?? Puck.Testing.FormatLedgerShapes.Of(id: "CborAttestationCodec.FormatVersion")));
         signedPortionWriter.WriteByteString(value: new byte[domainWidth]);
         signedPortionWriter.WriteTextString(value: "user:width");
         signedPortionWriter.WriteTextString(value: AttestationAlgorithms.EcdsaP256Sha256);

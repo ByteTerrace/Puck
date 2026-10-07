@@ -83,8 +83,8 @@ hand-edited:
 | File | Mirrors |
 |---|---|
 | `abi_generated.rs` | The host's closed wire sets (`OutCellKind`, `InCellKind`, `ChannelKind`, `SubjectKind`, `Verdict`—plus a generated `Verdict::is_allowed`), the capability mask constants, the request/observation verb ordinals and pinned answer part counts, and every `AddonAbi` layout constant: cell and descriptor sizes, budgets, and each cell's per-field byte offsets. |
-| `fixed_generated.rs` | The Rust port of `atan2`/`sin`/`cos`/`exp2`/`log2`/`pow` plus their tables and polynomial coefficients, read from the live `FixedQ4816` type. |
-| `fixed_vectors.rs` | 12,000 known-answer `cargo test` vectors for those six functions, computed by calling the real `FixedQ4816` at generation time. |
+| `fixed_generated.rs` | The Rust port of `atan2`/`sin`/`cos`/`exp2`/`log2`/`pow`/`smoothstep` plus their tables and polynomial coefficients, read from the live `FixedQ4816` type. |
+| `fixed_vectors.rs` | 16,478 known-answer `cargo test` vectors for those seven functions, computed by calling the real `FixedQ4816` at generation time. |
 
 Regenerate all three with:
 
@@ -98,7 +98,7 @@ header lines either—those belong to the emitter. Everything else in `puck-stdl
 offsets, sizes, and discriminants through `abi_generated`, so nothing hand-written in this workspace
 can silently drift from the host.
 
-### Spec-pinned vs algorithm-pinned: why only six functions are generated
+### Spec-pinned vs algorithm-pinned: why only seven functions are generated
 
 `puck-stdlib::fixed`'s surface is split by **what pins the correct answer**, and that split is the
 thing to understand before you touch anything under `puck-stdlib/src`:
@@ -121,7 +121,9 @@ thing to understand before you touch anything under `puck-stdlib/src`:
   disagree by roughly a ULP, so there is no way to hand-port one and validate it by reasoning the
   way you can for `div`/`sqrt`; you would need the host's exact tables and coefficients, copied
   perfectly, forever in sync. That is exactly what `fixed_generated.rs` carries, and why these six
-  are generated. `fixed.rs` re-exports them under the same names, so call sites read no differently
+  are generated. `smoothstep` is generated with them: it is the correct rounding of its curve except
+  within a sliver of a rounding midpoint, where the bit is decided by its Q62 ratio, so it too is
+  pinned by its algorithm. `fixed.rs` re-exports them under the same names, so call sites read no differently
   than `add`/`mul`/`div`. `atan2` takes `(y, x)`, matching the host method and C's `atan2`—not
   `(x, y)`.
 
@@ -186,7 +188,7 @@ cargo test --target <your-host-triple>
 
 run from `wasm/`, exercises `puck-stdlib`'s test suite: `fixed_tests.rs`'s hand-written
 known-answer vectors for `add`/`sub`/`neg`/`cmp`/`clamp`/`mul`/`div`/`sqrt`, and
-`fixed_vectors.rs`'s 12,000 generated known-answer vectors for the six transcendentals.
+`fixed_vectors.rs`'s 16,478 generated known-answer vectors for the seven generated functions.
 
 Plain `cargo test` (no `--target`) tries to run the test binary *as wasm*—because of the pinned
 default target—and fails with something like `%1 is not a valid Win32 application` /
@@ -213,7 +215,7 @@ wasm-tools print target/wasm32-unknown-unknown/release/puck_addon_default.wasm |
 ```
 
 The import list must be empty. The export list must cover the full required surface—`memory`,
-`puck_abi_version`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
+`puck_abi_version`, `puck_abi_shape`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
 `puck_channels_ptr`, `puck_channels_count`, `puck_on_tick`, and optionally `puck_init`. Signatures
 and semantics are in
 [the ABI contract](../docs/reference/scripting.md#guest-exports).

@@ -386,7 +386,7 @@ public sealed partial class PortalInputLawTests {
         public WorldInstanceHost Host { get; }
         public WorldInstance Row { get; }
         // The session B's glass holds, or null while it holds none.
-        public WorldScreenSession? Session => Host.ScreenSession(
+        public WorldObservationSession? Session => Host.ScreenSession(
             instanceName: OwnerName,
             screenIndex: Glass.ScreenIndex
         );

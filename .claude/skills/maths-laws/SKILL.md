@@ -32,14 +32,17 @@ documentation, and this skill with them when guidance disagrees.
    only to the build output and never changes the checkout.
 8. Prove the new law bites by applying a plausible mutation, observing the
    intended failure, restoring the implementation, and observing the pass.
+   A law that lands with a fix is proven against that fix with
+   `puck laws prove <law> --fix <commit>`, or `--file-list` for an
+   uncommitted fix; it never hand-reverts files in a shared tree.
 
 ## Run a tier
 
 A plain `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`
-runs Smoke + Default. Deep, Exhaustive and Smoke alone run only when selected
-with `--settings tests/Puck.Maths.Tests/<tier>.runsettings`; a `--filter` on the
-`tier` trait cannot select them, because it is combined with the default's
-filter.
+runs Smoke + Default. Deep and Exhaustive cases are explicit: select one with
+`--explicit on --filter-trait tier=<tier>`, and Smoke alone with
+`--filter-trait tier=Smoke`. Without `--explicit on`, a Deep or Exhaustive
+filter selects no test.
 
 ## Load the full reference selectively
 
@@ -56,3 +59,4 @@ rules, mutation procedure, or deliberate-correction rules.
 | [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names, or textual patterns across the suite. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers, or rename and deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
+| [`verification`](../verification/SKILL.md) | The gates beyond the law suite, the CLI copy, and what a finished lane proves. |

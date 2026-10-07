@@ -36,7 +36,7 @@ public static class WorldSourceSave {
                 reason = ("source cannot be saved because it does not compile to one world: " + original.Diagnostics.FormatReport());
                 return false;
             }
-            if (!WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: original.Json.ToJsonString()), authored: out var baseline, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog)) {
+            if (!WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: original.Json.ToJsonString()), authored: out var baseline, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog, sourceCompilation: WorldCompiledSource.From(compilation: original))) {
                 return false;
             }
             var canonical = JsonNode.Parse(utf8Json: WorldDefinitionSerialization.SerializeBeside(definition: baseline, path: path))!.AsObject();
@@ -58,7 +58,7 @@ public static class WorldSourceSave {
             reason = ("rewritten source does not compile: " + compilation.Diagnostics.FormatReport());
             return false;
         }
-        if (!WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compilation.Json.ToJsonString()), authored: out var proof, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog)) {
+        if (!WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: compilation.Json.ToJsonString()), authored: out var proof, reason: out reason, catalogFingerprint: catalogFingerprint, catalog: catalog, sourceCompilation: WorldCompiledSource.From(compilation: compilation))) {
             return false;
         }
         // Producer settings retain authored JSON member order; equality is the lowered document's value.

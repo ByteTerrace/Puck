@@ -1,0 +1,1105 @@
+{
+  "backends": [
+    {
+      "backend": "vulkan",
+      "ceilings": {
+        "main": {
+          "": {
+            "shared": [44,6],
+            "values": {
+              "gpu.barriers.buffer": 3,
+              "gpu.barriers.memory": 5,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 544,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "main$view$1": {
+            "shared": [40,6],
+            "values": {
+              "gpu.barriers.image": 1
+            }
+          },
+          "main$view$2": {
+            "shared": [41,6],
+            "values": {
+              "gpu.barriers.image": 2
+            }
+          },
+          "main$view$3": {
+            "shared": [42,6],
+            "values": {
+              "gpu.barriers.image": 2
+            }
+          },
+          "main$view$4": {
+            "shared": [43,6],
+            "values": {
+              "gpu.barriers.image": 1,
+              "gpu.barriers.memory": 1
+            }
+          }
+        },
+        "sdf:world": {
+          "": {
+            "shared": [1,6],
+            "values": {
+              "gpu.command-buffers": 1,
+              "gpu.descriptor-writes": 3
+            }
+          },
+          "bricks": {
+            "device": [23,10],
+            "shared": [63,11]
+          },
+          "environment": {
+            "shared": [64,6]
+          },
+          "fillers": {
+            "shared": [62,6]
+          },
+          "upload": {
+            "device": [0,10],
+            "shared": [0,11],
+            "values": {
+              "gpu.uploads.host-visible": 8
+            }
+          }
+        },
+        "world": {
+          "": {
+            "shared": [39,6],
+            "values": {
+              "gpu.barriers.buffer": 3,
+              "gpu.barriers.image": 1,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 7208,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "sdf.world$ambient": {
+            "shared": [72,6]
+          },
+          "sdf.world$beam": {
+            "shared": [66,6]
+          },
+          "sdf.world$composite": {
+            "details": {
+              "air": {
+                "shared": [34,6]
+              },
+              "atmosphere": {
+                "device": [13,14],
+                "shared": [31,7],
+                "values": {
+                  "gpu.sky.evaluations": 1043111,
+                  "gpu.sky.texture-loads": 4172444
+                }
+              },
+              "clouds": {
+                "shared": [37,6]
+              },
+              "indirect": {
+                "shared": [32,6]
+              },
+              "indirect-near": {
+                "shared": [33,6]
+              },
+              "plain": {
+                "device": [10,16],
+                "shared": [27,1],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.barriers.image": 6,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 9,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 2073600
+                }
+              },
+              "run0": {
+                "device": [11,15],
+                "shared": [28,5],
+                "values": {
+                  "gpu.sky.texture-loads": 4151564
+                }
+              },
+              "run1": {
+                "device": [12,15],
+                "shared": [29,5],
+                "values": {
+                  "gpu.sky.texture-loads": 8303128
+                }
+              },
+              "run2": {
+                "shared": [30,6]
+              },
+              "stars": {
+                "device": [15,13],
+                "shared": [36,9],
+                "values": {
+                  "gpu.sky.evaluations": 516480,
+                  "gpu.sky.hashes": 576110
+                }
+              },
+              "sun": {
+                "device": [14,12],
+                "shared": [35,8],
+                "values": {
+                  "gpu.sky.evaluations": 1037891
+                }
+              }
+            },
+            "device": [16,19],
+            "shared": [38,0],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.barriers.image": 6,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 9,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 2597482,
+              "gpu.sky.hashes": 576110,
+              "gpu.sky.texture-loads": 16627136,
+              "gpu.texels.written": 2073600
+            }
+          },
+          "sdf.world$cull-args": {
+            "shared": [68,6]
+          },
+          "sdf.world$mask": {
+            "shared": [65,6]
+          },
+          "sdf.world$mesh": {
+            "shared": [69,6]
+          },
+          "sdf.world$primary": {
+            "shared": [70,6]
+          },
+          "sdf.world$resolve": {
+            "device": [3,16],
+            "shared": [14,1],
+            "values": {
+              "gpu.barriers.buffer": 2,
+              "gpu.barriers.image": 2,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 1,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 2073600
+            }
+          },
+          "sdf.world$shadow": {
+            "details": {
+              "interleaved": {
+                "shared": [75,6]
+              },
+              "light-motion": {
+                "shared": [77,6]
+              },
+              "occluder-motion": {
+                "shared": [78,6]
+              },
+              "ownership": {
+                "shared": [76,6]
+              },
+              "plain": {
+                "shared": [74,6]
+              },
+              "receiver": {
+                "shared": [79,6]
+              },
+              "reprojected": {
+                "shared": [80,6]
+              }
+            },
+            "shared": [73,6]
+          },
+          "sdf.world$sky": {
+            "details": {
+              "air": {
+                "device": [7,12],
+                "shared": [22,8],
+                "values": {
+                  "gpu.sky.evaluations": 584828
+                }
+              },
+              "atmosphere": {
+                "shared": [19,6]
+              },
+              "clouds": {
+                "device": [8,13],
+                "shared": [25,9],
+                "values": {
+                  "gpu.sky.evaluations": 289440,
+                  "gpu.sky.hashes": 6946560
+                }
+              },
+              "indirect": {
+                "shared": [20,6]
+              },
+              "indirect-near": {
+                "shared": [21,6]
+              },
+              "plain": {
+                "device": [4,16],
+                "shared": [15,1],
+                "values": {
+                  "gpu.barriers.image": 4,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 9,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 581572
+                }
+              },
+              "run0": {
+                "device": [5,16],
+                "shared": [16,1],
+                "values": {
+                  "gpu.texels.written": 584828
+                }
+              },
+              "run1": {
+                "device": [6,16],
+                "shared": [17,1],
+                "values": {
+                  "gpu.texels.written": 1169656
+                }
+              },
+              "run2": {
+                "shared": [18,6]
+              },
+              "stars": {
+                "shared": [24,6]
+              },
+              "sun": {
+                "shared": [23,6]
+              }
+            },
+            "device": [9,18],
+            "shared": [26,4],
+            "values": {
+              "gpu.barriers.image": 4,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 9,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 874268,
+              "gpu.sky.hashes": 6946560,
+              "gpu.texels.written": 2336056
+            }
+          },
+          "sdf.world$surface": {
+            "shared": [71,6]
+          },
+          "sdf.world$tape": {
+            "shared": [67,6]
+          },
+          "sdf.world$views": {
+            "details": {
+              "air": {
+                "shared": [9,6]
+              },
+              "atmosphere": {
+                "shared": [6,6]
+              },
+              "clouds": {
+                "shared": [12,6]
+              },
+              "indirect": {
+                "shared": [7,6]
+              },
+              "indirect-near": {
+                "shared": [8,6]
+              },
+              "plain": {
+                "device": [1,20],
+                "shared": [2,2],
+                "values": {
+                  "gpu.barriers.buffer": 4,
+                  "gpu.barriers.image": 1,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.dispatches.indirect": 1,
+                  "gpu.sky.evaluations": 585618,
+                  "gpu.sky.texture-loads": 2342472,
+                  "gpu.texels.written": 820800
+                }
+              },
+              "run0": {
+                "shared": [3,6]
+              },
+              "run1": {
+                "shared": [4,6]
+              },
+              "run2": {
+                "shared": [5,6]
+              },
+              "stars": {
+                "shared": [11,6]
+              },
+              "sun": {
+                "shared": [10,6]
+              }
+            },
+            "device": [2,20],
+            "shared": [13,2],
+            "values": {
+              "gpu.barriers.buffer": 4,
+              "gpu.barriers.image": 1,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.dispatches.indirect": 1,
+              "gpu.sky.evaluations": 585618,
+              "gpu.sky.texture-loads": 2342472,
+              "gpu.texels.written": 820800
+            }
+          }
+        },
+        "world$environment": {
+          "": {
+            "shared": [61,6],
+            "values": {
+              "gpu.barriers.buffer": 4,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 2176,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "sdf.environment$coefficients": {
+            "device": [20,16],
+            "shared": [57,1],
+            "values": {
+              "gpu.barriers.buffer": 2,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 9,
+              "gpu.uploads.host-visible": 16
+            }
+          },
+          "sdf.environment$map": {
+            "details": {
+              "air": {
+                "device": [18,12],
+                "shared": [52,8],
+                "values": {
+                  "gpu.sky.evaluations": 4096
+                }
+              },
+              "atmosphere": {
+                "shared": [49,6]
+              },
+              "clouds": {
+                "shared": [55,6]
+              },
+              "indirect": {
+                "shared": [50,6]
+              },
+              "indirect-near": {
+                "shared": [51,6]
+              },
+              "plain": {
+                "device": [17,16],
+                "shared": [45,1],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.binds.descriptor-set": 2,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 42,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 8192,
+                  "gpu.uploads.host-visible": 16
+                }
+              },
+              "run0": {
+                "shared": [46,6]
+              },
+              "run1": {
+                "shared": [47,6]
+              },
+              "run2": {
+                "shared": [48,6]
+              },
+              "stars": {
+                "shared": [54,6]
+              },
+              "sun": {
+                "shared": [53,6]
+              }
+            },
+            "device": [19,17],
+            "shared": [56,3],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 4096,
+              "gpu.texels.written": 8192,
+              "gpu.uploads.host-visible": 16
+            }
+          },
+          "sdf.environment$screens": {
+            "details": {
+              "plain": {
+                "shared": [58,6],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.binds.descriptor-set": 2,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 42,
+                  "gpu.dispatches": 1,
+                  "gpu.uploads.host-visible": 20
+                }
+              },
+              "screen-images": {
+                "device": [21,16],
+                "shared": [59,1],
+                "values": {
+                  "gpu.texels.written": 544
+                }
+              }
+            },
+            "device": [22,16],
+            "shared": [60,1],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 544,
+              "gpu.uploads.host-visible": 20
+            }
+          }
+        }
+      },
+      "devices": [
+        {
+          "ceilings": {},
+          "device": {
+            "adapter": "NVIDIA GeForce RTX 4070",
+            "api": "1.4.341",
+            "backend": "vulkan",
+            "conformance": "1.4.3.3",
+            "device": 10118,
+            "driver": "610.74",
+            "driver.id": 4,
+            "driver.name": "NVIDIA",
+            "driver.raw": 2559737856,
+            "pipeline-cache.uuid": "9d207089f2b68ca53ab13b93c4f52111",
+            "vendor": 4318
+          }
+        }
+      ]
+    },
+    {
+      "backend": "directx",
+      "ceilings": {
+        "main": {
+          "": {
+            "shared": [44,6],
+            "values": {
+              "gpu.barriers.buffer": 3,
+              "gpu.barriers.memory": 5,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 544,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "main$view$1": {
+            "shared": [40,6],
+            "values": {
+              "gpu.barriers.image": 1
+            }
+          },
+          "main$view$2": {
+            "shared": [41,6],
+            "values": {
+              "gpu.barriers.image": 2
+            }
+          },
+          "main$view$3": {
+            "shared": [42,6],
+            "values": {
+              "gpu.barriers.image": 2
+            }
+          },
+          "main$view$4": {
+            "shared": [43,6],
+            "values": {
+              "gpu.barriers.image": 1,
+              "gpu.barriers.memory": 1
+            }
+          }
+        },
+        "sdf:world": {
+          "": {
+            "shared": [1,6],
+            "values": {
+              "gpu.command-buffers": 1,
+              "gpu.descriptor-writes": 3
+            }
+          },
+          "bricks": {
+            "device": [23,10],
+            "shared": [63,11]
+          },
+          "environment": {
+            "shared": [64,6]
+          },
+          "fillers": {
+            "shared": [62,6]
+          },
+          "upload": {
+            "device": [0,10],
+            "shared": [0,11],
+            "values": {
+              "gpu.uploads.host-visible": 8
+            }
+          }
+        },
+        "world": {
+          "": {
+            "shared": [39,6],
+            "values": {
+              "gpu.barriers.buffer": 3,
+              "gpu.barriers.image": 1,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 7208,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "sdf.world$ambient": {
+            "shared": [72,6]
+          },
+          "sdf.world$beam": {
+            "shared": [66,6]
+          },
+          "sdf.world$composite": {
+            "details": {
+              "air": {
+                "shared": [34,6]
+              },
+              "atmosphere": {
+                "device": [13,14],
+                "shared": [31,7],
+                "values": {
+                  "gpu.sky.evaluations": 1043111,
+                  "gpu.sky.texture-loads": 4172444
+                }
+              },
+              "clouds": {
+                "shared": [37,6]
+              },
+              "indirect": {
+                "shared": [32,6]
+              },
+              "indirect-near": {
+                "shared": [33,6]
+              },
+              "plain": {
+                "device": [10,16],
+                "shared": [27,1],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.barriers.image": 6,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 9,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 2073600
+                }
+              },
+              "run0": {
+                "device": [11,15],
+                "shared": [28,5],
+                "values": {
+                  "gpu.sky.texture-loads": 4151564
+                }
+              },
+              "run1": {
+                "device": [12,15],
+                "shared": [29,5],
+                "values": {
+                  "gpu.sky.texture-loads": 8303128
+                }
+              },
+              "run2": {
+                "shared": [30,6]
+              },
+              "stars": {
+                "device": [15,13],
+                "shared": [36,9],
+                "values": {
+                  "gpu.sky.evaluations": 516480,
+                  "gpu.sky.hashes": 576110
+                }
+              },
+              "sun": {
+                "device": [14,12],
+                "shared": [35,8],
+                "values": {
+                  "gpu.sky.evaluations": 1037891
+                }
+              }
+            },
+            "device": [16,19],
+            "shared": [38,0],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.barriers.image": 6,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 9,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 2597482,
+              "gpu.sky.hashes": 576110,
+              "gpu.sky.texture-loads": 16627136,
+              "gpu.texels.written": 2073600
+            }
+          },
+          "sdf.world$cull-args": {
+            "shared": [68,6]
+          },
+          "sdf.world$mask": {
+            "shared": [65,6]
+          },
+          "sdf.world$mesh": {
+            "shared": [69,6]
+          },
+          "sdf.world$primary": {
+            "shared": [70,6]
+          },
+          "sdf.world$resolve": {
+            "device": [3,16],
+            "shared": [14,1],
+            "values": {
+              "gpu.barriers.buffer": 2,
+              "gpu.barriers.image": 2,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 1,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 2073600
+            }
+          },
+          "sdf.world$shadow": {
+            "details": {
+              "interleaved": {
+                "shared": [75,6]
+              },
+              "light-motion": {
+                "shared": [77,6]
+              },
+              "occluder-motion": {
+                "shared": [78,6]
+              },
+              "ownership": {
+                "shared": [76,6]
+              },
+              "plain": {
+                "shared": [74,6]
+              },
+              "receiver": {
+                "shared": [79,6]
+              },
+              "reprojected": {
+                "shared": [80,6]
+              }
+            },
+            "shared": [73,6]
+          },
+          "sdf.world$sky": {
+            "details": {
+              "air": {
+                "device": [7,12],
+                "shared": [22,8],
+                "values": {
+                  "gpu.sky.evaluations": 584828
+                }
+              },
+              "atmosphere": {
+                "shared": [19,6]
+              },
+              "clouds": {
+                "device": [8,13],
+                "shared": [25,9],
+                "values": {
+                  "gpu.sky.evaluations": 289440,
+                  "gpu.sky.hashes": 6946560
+                }
+              },
+              "indirect": {
+                "shared": [20,6]
+              },
+              "indirect-near": {
+                "shared": [21,6]
+              },
+              "plain": {
+                "device": [4,16],
+                "shared": [15,1],
+                "values": {
+                  "gpu.barriers.image": 4,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 9,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 581572
+                }
+              },
+              "run0": {
+                "device": [5,16],
+                "shared": [16,1],
+                "values": {
+                  "gpu.texels.written": 584828
+                }
+              },
+              "run1": {
+                "device": [6,16],
+                "shared": [17,1],
+                "values": {
+                  "gpu.texels.written": 1169656
+                }
+              },
+              "run2": {
+                "shared": [18,6]
+              },
+              "stars": {
+                "shared": [24,6]
+              },
+              "sun": {
+                "shared": [23,6]
+              }
+            },
+            "device": [9,18],
+            "shared": [26,4],
+            "values": {
+              "gpu.barriers.image": 4,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 9,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 874268,
+              "gpu.sky.hashes": 6946560,
+              "gpu.texels.written": 2336056
+            }
+          },
+          "sdf.world$surface": {
+            "shared": [71,6]
+          },
+          "sdf.world$tape": {
+            "shared": [67,6]
+          },
+          "sdf.world$views": {
+            "details": {
+              "air": {
+                "shared": [9,6]
+              },
+              "atmosphere": {
+                "shared": [6,6]
+              },
+              "clouds": {
+                "shared": [12,6]
+              },
+              "indirect": {
+                "shared": [7,6]
+              },
+              "indirect-near": {
+                "shared": [8,6]
+              },
+              "plain": {
+                "device": [1,20],
+                "shared": [2,2],
+                "values": {
+                  "gpu.barriers.buffer": 4,
+                  "gpu.barriers.image": 1,
+                  "gpu.binds.descriptor-set": 3,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.dispatches.indirect": 1,
+                  "gpu.sky.evaluations": 585618,
+                  "gpu.sky.texture-loads": 2342472,
+                  "gpu.texels.written": 820800
+                }
+              },
+              "run0": {
+                "shared": [3,6]
+              },
+              "run1": {
+                "shared": [4,6]
+              },
+              "run2": {
+                "shared": [5,6]
+              },
+              "stars": {
+                "shared": [11,6]
+              },
+              "sun": {
+                "shared": [10,6]
+              }
+            },
+            "device": [2,20],
+            "shared": [13,2],
+            "values": {
+              "gpu.barriers.buffer": 4,
+              "gpu.barriers.image": 1,
+              "gpu.binds.descriptor-set": 3,
+              "gpu.binds.pipeline": 1,
+              "gpu.dispatches.indirect": 1,
+              "gpu.sky.evaluations": 585618,
+              "gpu.sky.texture-loads": 2342472,
+              "gpu.texels.written": 820800
+            }
+          }
+        },
+        "world$environment": {
+          "": {
+            "shared": [61,6],
+            "values": {
+              "gpu.barriers.buffer": 4,
+              "gpu.clears": 1,
+              "gpu.command-buffers": 1,
+              "gpu.copies": 1,
+              "gpu.copies.buffer-bytes": 2176,
+              "gpu.uploads.host-visible": 256
+            }
+          },
+          "sdf.environment$coefficients": {
+            "device": [20,16],
+            "shared": [57,1],
+            "values": {
+              "gpu.barriers.buffer": 2,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 9,
+              "gpu.uploads.host-visible": 16
+            }
+          },
+          "sdf.environment$map": {
+            "details": {
+              "air": {
+                "device": [18,12],
+                "shared": [52,8],
+                "values": {
+                  "gpu.sky.evaluations": 4096
+                }
+              },
+              "atmosphere": {
+                "shared": [49,6]
+              },
+              "clouds": {
+                "shared": [55,6]
+              },
+              "indirect": {
+                "shared": [50,6]
+              },
+              "indirect-near": {
+                "shared": [51,6]
+              },
+              "plain": {
+                "device": [17,16],
+                "shared": [45,1],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.binds.descriptor-set": 2,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 42,
+                  "gpu.dispatches": 1,
+                  "gpu.texels.written": 8192,
+                  "gpu.uploads.host-visible": 16
+                }
+              },
+              "run0": {
+                "shared": [46,6]
+              },
+              "run1": {
+                "shared": [47,6]
+              },
+              "run2": {
+                "shared": [48,6]
+              },
+              "stars": {
+                "shared": [54,6]
+              },
+              "sun": {
+                "shared": [53,6]
+              }
+            },
+            "device": [19,17],
+            "shared": [56,3],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.sky.evaluations": 4096,
+              "gpu.texels.written": 8192,
+              "gpu.uploads.host-visible": 16
+            }
+          },
+          "sdf.environment$screens": {
+            "details": {
+              "plain": {
+                "shared": [58,6],
+                "values": {
+                  "gpu.barriers.buffer": 1,
+                  "gpu.binds.descriptor-set": 2,
+                  "gpu.binds.pipeline": 1,
+                  "gpu.descriptor-writes": 42,
+                  "gpu.dispatches": 1,
+                  "gpu.uploads.host-visible": 20
+                }
+              },
+              "screen-images": {
+                "device": [21,16],
+                "shared": [59,1],
+                "values": {
+                  "gpu.texels.written": 544
+                }
+              }
+            },
+            "device": [22,16],
+            "shared": [60,1],
+            "values": {
+              "gpu.barriers.buffer": 1,
+              "gpu.binds.descriptor-set": 2,
+              "gpu.binds.pipeline": 1,
+              "gpu.descriptor-writes": 42,
+              "gpu.dispatches": 1,
+              "gpu.texels.written": 544,
+              "gpu.uploads.host-visible": 20
+            }
+          }
+        }
+      },
+      "devices": [
+        {
+          "ceilings": {},
+          "device": {
+            "adapter": "NVIDIA GeForce RTX 4070",
+            "api": "12_2",
+            "backend": "directx",
+            "conformance": "",
+            "device": 10118,
+            "driver": "32.0.16.1074",
+            "driver.id": 0,
+            "driver.name": "",
+            "driver.raw": 9007199255790642,
+            "pipeline-cache.uuid": "",
+            "vendor": 4318
+          }
+        }
+      ]
+    }
+  ],
+  "height": 1080,
+  "layouts": [
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.copies.buffer-bytes","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.copies.buffer-bytes","gpu.sky.evaluations","gpu.sky.hashes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.copies.buffer-bytes","gpu.sky.hashes","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.copies.buffer-bytes","gpu.sky.hashes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.copies.buffer-bytes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.texels.written","gpu.copies.buffer-bytes","gpu.sky.evaluations","gpu.sky.hashes","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.texels.written","gpu.copies.buffer-bytes","gpu.sky.evaluations","gpu.sky.hashes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.texels.written","gpu.copies.buffer-bytes","gpu.sky.hashes","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.texels.written","gpu.copies.buffer-bytes","gpu.sky.hashes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.march.steps","gpu.texels.written","gpu.copies.buffer-bytes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "classes": {
+        "gpu.barriers.buffer": "per-backend-deterministic",
+        "gpu.barriers.image": "per-backend-deterministic",
+        "gpu.barriers.memory": "per-backend-deterministic",
+        "gpu.binds.descriptor-set": "per-backend-deterministic",
+        "gpu.binds.pipeline": "per-backend-deterministic",
+        "gpu.clears": "per-backend-deterministic",
+        "gpu.command-buffers": "per-backend-deterministic",
+        "gpu.copies": "per-backend-deterministic",
+        "gpu.copies.buffer-bytes": "per-backend-deterministic",
+        "gpu.descriptor-writes": "per-backend-deterministic",
+        "gpu.dispatches": "per-backend-deterministic",
+        "gpu.dispatches.indirect": "per-backend-deterministic",
+        "gpu.draws": "per-backend-deterministic",
+        "gpu.environment.projection-texels": "per-backend-deterministic",
+        "gpu.environment.projections": "per-backend-deterministic",
+        "gpu.environment.skipped": "per-backend-deterministic",
+        "gpu.push-constants": "per-backend-deterministic",
+        "gpu.render-passes": "per-backend-deterministic",
+        "gpu.uploads.host-visible": "per-backend-deterministic"
+      },
+      "kinds": ["gpu.dispatches","gpu.dispatches.indirect","gpu.draws","gpu.render-passes","gpu.command-buffers","gpu.barriers.image","gpu.barriers.memory","gpu.barriers.buffer","gpu.binds.pipeline","gpu.binds.descriptor-set","gpu.push-constants","gpu.descriptor-writes","gpu.uploads.host-visible","gpu.clears","gpu.copies","gpu.copies.buffer-bytes","gpu.environment.projections","gpu.environment.projection-texels","gpu.environment.skipped"]
+    },
+    {
+      "kinds": ["gpu.march.steps","gpu.texels.written","gpu.sky.evaluations","gpu.sky.hashes","gpu.sky.texture-loads","gpu.shadow.slot0.steps","gpu.shadow.slot1.steps","gpu.shadow.slot2.steps","gpu.shadow.slot3.steps","gpu.shadow.slot4.steps","gpu.shadow.slot5.steps","gpu.shadow.pixels","gpu.indirect.hits","gpu.indirect.samples","gpu.indirect.unresolved","gpu.shapes.evaluated","gpu.shapes.gradients"]
+    },
+    {
+      "kinds": ["gpu.sky.evaluations"]
+    },
+    {
+      "kinds": ["gpu.sky.evaluations","gpu.sky.hashes"]
+    },
+    {
+      "kinds": ["gpu.sky.evaluations","gpu.sky.texture-loads"]
+    },
+    {
+      "kinds": ["gpu.sky.texture-loads"]
+    },
+    {
+      "kinds": ["gpu.texels.written"]
+    },
+    {
+      "kinds": ["gpu.texels.written","gpu.sky.evaluations"]
+    },
+    {
+      "kinds": ["gpu.texels.written","gpu.sky.evaluations","gpu.sky.hashes"]
+    },
+    {
+      "kinds": ["gpu.texels.written","gpu.sky.evaluations","gpu.sky.hashes","gpu.sky.texture-loads"]
+    },
+    {
+      "kinds": ["gpu.texels.written","gpu.sky.evaluations","gpu.sky.texture-loads"]
+    }
+  ],
+  "schema": "puck.counters.ceilings.v1",
+  "script": "tests/Puck.Counters/sky-defaults/low-drift-full.script.txt",
+  "width": 1920,
+  "workload": "tests/Puck.Counters/sky-defaults/fixture.puck"
+}

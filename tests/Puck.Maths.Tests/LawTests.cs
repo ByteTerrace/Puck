@@ -4,8 +4,8 @@ namespace Puck.Maths.Tests;
 
 /// <summary>
 /// Runs every declared law case as a theory row, one test per case, named by its id and tagged with its tier trait.
-/// Tier selection is declarative: the project's default runsettings exclude Deep and Exhaustive, and each tier has a
-/// committed <c>*.runsettings</c> whose <c>TestCaseFilter</c> selects it (<c>dotnet test --settings …</c>).
+/// Tier selection is declarative: Deep and Exhaustive rows are explicit, so a plain run leaves them out, and the tier
+/// trait selects one tier (<c>--filter-trait tier=Smoke</c>, or <c>--explicit on --filter-trait tier=Deep</c>).
 /// This is also where a law failure is RAISED for the frontier's green gate (see
 /// <see cref="Frontier.AdvanceAndPersist"/>): every law-side failure mode passes through this one frame, and no
 /// narrower one sees them all.
@@ -20,6 +20,7 @@ public sealed class LawTests {
             name: "tier",
             value: lawCase.Tier.ToString()
         )
+                .WithExplicit(@explicit: (lawCase.Tier is Tier.Deep or Tier.Exhaustive))
                 .WithTestDisplayName(testDisplayName: lawCase.Id));
     [MemberData(nameof(Cases))]
     [Theory]

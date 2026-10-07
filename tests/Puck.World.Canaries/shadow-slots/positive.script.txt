@@ -1,0 +1,17 @@
+# Fixed framing, native scale and no temporal reconstruction isolate the slot counts.
+world.cadence off
+world.quality high
+world.wait ready 45
+world.wait 30
+world.screenshot {run}/high.png
+world.wait captures 15
+world.counters gpu
+world.quality medium
+world.wait 30
+world.screenshot {run}/medium.png
+world.wait captures 15
+world.counters gpu
+world.shadows off
+world.wait 30
+world.screenshot {run}/unshadowed.png
+world.wait captures 15

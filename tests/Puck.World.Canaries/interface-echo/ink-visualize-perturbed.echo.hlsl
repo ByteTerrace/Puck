@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'ink-visualize-perturbed' (sha256/98287bd8b2a7139a1c0e31f2fdf2eabee14223200f1c19d48c0ecf7ec5dcfb01), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'ink-visualize-perturbed' (sha256/696ae99fcacddfa6abd2a5ee965ff3c080e6b57cfe8bd04d32eba3e8526314e1), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "ink-visualize-perturbed.interface.hlsli"
 
@@ -19,6 +19,7 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(9, 0)] = ((asuint(frameGroup.cameraFov) == 0x400100A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(10, 0)] = ((asuint(frameGroup.cameraTarget.x) == 0x400110A5u) && (asuint(frameGroup.cameraTarget.y) == 0x400120A5u) && (asuint(frameGroup.cameraTarget.z) == 0x400130A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(11, 0)] = ((asuint(frameGroup.cameraUp.x) == 0x400150A5u) && (asuint(frameGroup.cameraUp.y) == 0x400160A5u) && (asuint(frameGroup.cameraUp.z) == 0x400170A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(12, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(13, 0)] = ((asuint(passGroup.exposure) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(12, 0)] = ((asuint(frameGroup.placedExtent.x) == 0x400190A5u) && (asuint(frameGroup.placedExtent.y) == 0x4001A0A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(13, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(14, 0)] = ((asuint(passGroup.exposure) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

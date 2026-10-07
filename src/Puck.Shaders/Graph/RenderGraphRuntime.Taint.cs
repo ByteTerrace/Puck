@@ -37,9 +37,31 @@ public sealed partial class RenderGraphRuntime {
             m_taintedReads[index] = producer;
         }
     }
+    private void NotePackageTaint(int index) {
+        if (HasPackageTaint(index: index)) {
+            NoteTaint(index: index, producer: $"{m_set.Instances[index].Name}'s retained package state", tainted: true);
+        }
+    }
+    // Before rendering, retained taint guards capture forwarding. Only the successfully submitted package state
+    // joins the new output's taint: a clean render may replace the previous tainted history in this same frame.
+    private bool HasPackageTaint(int index) {
+        if (m_graphs[index] is not { } graph) { return false; }
+        var name = m_set.Instances[index].Name;
+        var passes = graph.Pipeline.Plan.Passes;
+
+        for (var position = 0; (position < passes.Count); position++) {
+            var pass = passes[position];
+
+            if ((pass.Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory) && factory.TaintedOf(instance: name)) {
+                return true;
+            }
+        }
+        return false;
+    }
     // Why a capture of an instance waits on taint, or null when it does not. Outside a capture frame a tainted instance is
     // expected; the capture frame renders it again, so only a taint that frame could not clear keeps a capture waiting.
-    private string? TaintReasonOf(int index, string name) => ((m_capturing && (m_taintedReads[index] is { } tainting))
+    private string? TaintReasonOf(int index, string name) => ((m_capturing &&
+        ((m_taintedReads[index] ?? (HasPackageTaint(index: index) ? $"{name}'s retained package state" : null)) is { } tainting))
         ? $"the instance '{name}' has rendered only over external content from '{tainting}' that the capture gate did not fill"
         : null
     );
@@ -64,16 +86,34 @@ public sealed partial class RenderGraphRuntime {
 
         return -1;
     }
-    // The frame the scheduler reads: on a capture frame, the frame naming every tainted instance the captured instance
-    // reads, itself included, to render again; any other frame as given. A source is never named: its consumers resolve
-    // its image through the capture gate as they bind it.
+    // The frame the scheduler reads: the frame naming every instance whose latest output stands for another's image to
+    // render again (RenderGraphRuntime.Standing.cs), and, on a capture frame, every tainted instance the captured instance
+    // reads, itself included; any other frame as given. A source is never named: its consumers resolve its image through
+    // the capture gate as they bind it.
     private RenderGraphFrame WithRerenders(in RenderGraphFrame frame) {
         var captured = CapturedInstance();
+        var standing = CollectStanding();
 
         m_capturing = (captured >= 0);
 
-        if (!m_capturing) {
+        if (!m_capturing && !standing) {
             return frame;
+        }
+
+        m_rerender.Clear();
+
+        if (frame.Rerender is { } declared) {
+            m_rerender.AddRange(collection: declared);
+        }
+        foreach (var name in m_standing) {
+            if (!m_rerender.Contains(item: name)) {
+                m_rerender.Add(item: name);
+            }
+        }
+        if (!m_capturing) {
+            return (frame with {
+                Rerender = m_rerender,
+            });
         }
 
         var count = m_set.Instances.Count;
@@ -82,12 +122,6 @@ public sealed partial class RenderGraphRuntime {
             m_visited = new bool[count];
         } else {
             Array.Clear(array: m_visited);
-        }
-
-        m_rerender.Clear();
-
-        if (frame.Rerender is { } declared) {
-            m_rerender.AddRange(collection: declared);
         }
 
         m_unvisited.Clear();

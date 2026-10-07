@@ -13,12 +13,13 @@ public sealed partial class RenderGraphRuntime {
     /// one of the old set (and, for an external instance, the same package and settings) keeps its node or producer, and
     /// with it its installed graph, history, captures and latest output; every other instance of the new set starts as
     /// <see cref="TryCreate"/> starts one, and every old instance absent from it is disposed once the device has finished
-    /// every submission that may sample its output. An instance a kept consumer's installed graph still reads, which it
-    /// keeps presenting while its replacement builds, is disposed only once that consumer can no longer sample it
-    /// (<see cref="ShaderPipelineRenderNode.HoldBinding(string, GpuImageLease)"/>, <see cref="RetiredProducers"/>): a
-    /// graph instance's output as the consumer bound it, and an external producer's latest output, acquired once more and
-    /// bound for every frame until then. Scheduling history restarts, so the next frame renders everything it
-    /// shows.</summary>
+    /// every submission that may sample its output. What a kept consumer's installed graph still reads, which it keeps
+    /// presenting while its replacement builds, stays alive until that consumer can no longer sample it
+    /// (<see cref="ShaderPipelineRenderNode.HoldBinding(string, ShaderPipelineExternalImage, GpuImageLease)"/>): the image
+    /// it bound of a graph instance, under a lease from whichever node owns that image, which outlives the retired
+    /// instances; a graph instance's buffer and an external producer's latest output, acquired once more and bound for
+    /// every frame, by holding the retired instance itself (<see cref="RetiredProducers"/>). Scheduling history restarts,
+    /// so the next frame renders everything it shows.</summary>
     /// <param name="set">The new instances.</param>
     /// <param name="graphs">Each new instance's graph, parallel to <see cref="RenderGraphInstanceSet.Instances"/>:
     /// <see langword="null"/> for an external instance, for a new graph instance whose graph is not compiled yet, and for
@@ -109,12 +110,11 @@ public sealed partial class RenderGraphRuntime {
                     instance: set.Instances[index],
                     packages: m_packages
                 )) {
-                    effective[index] = ((kept[index] >= 0)
-                        ? m_graphs[kept[index]]
-                        : PackageGraphOf(
-                            fault: out _,
+                    effective[index] = PackageGraphFor(
+                            instance: set.Instances[index].Name,
+                            packages: m_packages,
                             package: set.Instances[index].ExternalPackage!
-                        ));
+                        );
 
                     continue;
                 }
@@ -127,6 +127,7 @@ public sealed partial class RenderGraphRuntime {
                             pipelines: m_pipelines,
                             deviceContext: m_device,
                             hostsOnDirectX: m_hostsOnDirectX,
+                            images: m_images,
                             inFlightFrames: m_inFlightFrames,
                             instance: set.Instances[index],
                             packages: m_packages
@@ -205,6 +206,7 @@ public sealed partial class RenderGraphRuntime {
                     : CreateNode(
                         deviceContext: m_device,
                         hostsOnDirectX: m_hostsOnDirectX,
+                        images: m_images,
                         inFlightFrames: m_inFlightFrames,
                         name: set.Instances[index].Name,
                         packages: m_packages,
@@ -248,20 +250,42 @@ public sealed partial class RenderGraphRuntime {
         var current = new Output[count];
         var previous = new Output[count];
         var producerTainted = new bool[count];
+        var unreadFrames = new long[count];
+        // Each old instance's index in the new set, or -1 when it retires.
+        var renumbered = new int[m_set.Instances.Count];
 
+        Array.Fill(
+            array: renumbered,
+            value: -1
+        );
+
+        for (var index = 0; (index < count); index++) {
+            if (kept[index] >= 0) {
+                renumbered[kept[index]] = index;
+            }
+        }
         for (var index = 0; (index < count); index++) {
             var old = kept[index];
 
             current[index] = ((old >= 0)
-                ? m_current[old]
+                ? Renumbered(
+                    output: in m_current[old],
+                    renumbered: renumbered
+                )
                 : Output.None);
             previous[index] = ((old >= 0)
-                ? m_previous[old]
+                ? Renumbered(
+                    output: in m_previous[old],
+                    renumbered: renumbered
+                )
                 : Output.None);
             producerTainted[index] = (
                 (old >= 0) &&
                 m_producerTainted[old]
             );
+            unreadFrames[index] = ((old >= 0)
+                ? m_unreadFrames[old]
+                : 0L);
 
             // A new uploaded source's node takes its conversion graph at its descriptor's extent; a kept one keeps it.
             if (sources[index] is { } source) {
@@ -285,6 +309,7 @@ public sealed partial class RenderGraphRuntime {
 
         var oldNodes = m_nodes;
         var oldProducers = m_producers;
+        var oldSet = m_set;
         var oldSources = m_sources;
         var captured = m_set.Instances[m_captureInstance].Name;
         var captureStillArmed = (m_capture.PendingPath is not null);
@@ -300,10 +325,13 @@ public sealed partial class RenderGraphRuntime {
 
         m_current = current;
         m_graphs = effective;
-        m_history = RenderGraphHistory.Empty(set: set);
+        // A kept instance keeps its history: a reconfiguration that leaves it alone neither renders it again nor resets its
+        // cadence.
+        m_history = RenderGraphHistory.Carried(kept: kept, previous: m_history, set: set);
         m_inputs = inputs;
         m_latest = null;
         m_nodes = nodes;
+        ResetOwedReadbacks();
         m_previous = previous;
         m_producers = producers;
         m_producerTainted = producerTainted;
@@ -317,7 +345,9 @@ public sealed partial class RenderGraphRuntime {
         m_set = set;
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];
+        ResetStale(count: count);
         m_unproduced = 0;
+        m_unreadFrames = unreadFrames;
         refusal = null;
 
         // The pending request follows this composition's indices and dependency closure. A changed composition
@@ -334,7 +364,8 @@ public sealed partial class RenderGraphRuntime {
             nodes: oldNodes,
             producers: oldProducers,
             retired: retired,
-            retiring: retiring
+            retiring: retiring,
+            set: oldSet
         );
 
         // An upload holds no device object; its region is its node's, which the retirement above holds.
@@ -476,9 +507,10 @@ public sealed partial class RenderGraphRuntime {
         : null);
     // Plans the holds a reconfiguration's retired instances need, without changing anything of the running set. A kept
     // consumer keeps presenting its installed graph while a replacement builds, and that graph samples what the consumer
-    // last bound, so each retired instance a kept consumer has bound is held (HoldBinding) until every consumer holding
-    // it releases it: on installing a graph that no longer reads it, on a newer binding, or at the consumer's release. A
-    // consumer that never bound the name (one that has not rendered) samples nothing of it and holds nothing. A retired
+    // last bound, so what a kept consumer has bound of a retired instance is held (HoldBinding) until the consumer releases
+    // it: on installing a graph that no longer reads it, on a newer binding, or at the consumer's release. An image is held
+    // by a lease on the image itself, a buffer by holding its retired instance until every consumer holding it releases
+    // it. A consumer that never bound the name (one that has not rendered) samples nothing of it and holds nothing. A retired
     // external producer's binding was leased for one frame, so the consumer is handed its latest output once more, bound
     // for every frame until the hold releases, and the hold retires that acquisition first; a producer with no output
     // leaves the consumer on a stand-in, as a frame binding it would, and holds nothing.
@@ -541,9 +573,33 @@ public sealed partial class RenderGraphRuntime {
                         name: binding.Version,
                         producer: hold
                     ));
+                } else if (binding.Kind != ShaderPipelineResourceKind.Buffer) {
+                    // A graph instance's image binding holds the image itself, leased from whichever node owns it: the
+                    // retired producer's own, or the image its output stood for, however many retired instances that
+                    // chain runs through. The producers themselves retire at once, and the image outlives them until
+                    // the hold releases. A binding to a stand-in holds nothing.
+                    if (
+                        node.TryGetBoundImage(
+                            image: out var bound,
+                            name: binding.Version
+                        ) &&
+                        m_images.TryLease(
+                            imageHandle: bound.ImageHandle,
+                            lease: out var lease
+                        )
+                    ) {
+                        holds.Add(item: new PlannedHold(
+                            acquired: lease,
+                            consumer: node,
+                            image: bound,
+                            name: binding.Version,
+                            producer: null
+                        ));
+                    }
                 } else if (m_nodes[binding.Producer] is { } producer) {
+                    var instance = m_set.Instances[binding.Producer].Name;
                     var hold = (retiring[binding.Producer] ??= new RetiredProducer(
-                        dispose: producer.DisposeRetired,
+                        dispose: () => DisposeHeld(instance: instance, node: producer),
                         lost: null,
                         release: m_retiredProducers
                     ));
@@ -564,7 +620,7 @@ public sealed partial class RenderGraphRuntime {
     // hold, and the rest are disposed after the device has finished every submission that may sample their outputs,
     // since a kept consumer's frame in flight may still read them. Every disposal is attempted, and the failures are
     // thrown together after the last.
-    private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring) {
+    private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring, RenderGraphInstanceSet set) {
         if (!retired.Contains(value: true)) {
             return;
         }
@@ -580,11 +636,18 @@ public sealed partial class RenderGraphRuntime {
             if (retiring[old] is { Holds: > 0 } hold) {
                 m_retiredProducers.Add(item: hold);
 
+                if (nodes[old] is { } held) {
+                    RetireNode(held: true, instance: set.Instances[old].Name, node: held);
+                }
+
                 continue;
             }
 
             try {
-                nodes[old]?.Dispose();
+                if (nodes[old] is { } node) {
+                    RetireNode(held: false, instance: set.Instances[old].Name, node: node);
+                }
+
                 producers[old]?.Dispose();
             } catch (Exception error) {
                 (failures ??= []).Add(item: error);
@@ -625,7 +688,7 @@ public sealed partial class RenderGraphRuntime {
                             held.Release(token: token);
                         }
                     )
-                    : default),
+                    : acquired),
                 name: name
             );
         }

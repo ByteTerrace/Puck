@@ -3,7 +3,7 @@
   "world": "games/wordspy.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

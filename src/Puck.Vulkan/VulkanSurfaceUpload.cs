@@ -179,7 +179,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
                     ImageHandle: m_imageHandle,
                     LevelCount: levels
                 )
-            ).ThrowIfFailed(operation: "vkCreateImageView");
+            ).ThrowIfFailed(device: device.Commands, operation: "vkCreateImageView");
             m_imageViewHandle = imageViewHandle;
 
             m_commandResources = m_commandResourcesFactory.Create(
@@ -203,7 +203,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
                         Device: device.Commands,
                         StartSignaled: false
                     )
-                ).ThrowIfFailed(operation: "vkCreateFence");
+                ).ThrowIfFailed(device: device.Commands, operation: "vkCreateFence");
             }
         } catch {
             DisposeResources();
@@ -238,14 +238,15 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_uploadPending = false;
 
         if (waitResult == Bindings.VkResult.ErrorDeviceLost) {
+            Console.Error.WriteLine(value: m_device.Commands.Fault.ReadAfterDeviceLoss());
             return;
         }
 
-        waitResult.ThrowIfFailed(operation: "vkWaitForFences");
+        waitResult.ThrowIfFailed(device: m_device.Commands, operation: "vkWaitForFences");
         m_frameSynchronizationApi.ResetFence(
             device: m_device.Commands,
             fenceHandle: m_fence
-        ).ThrowIfFailed(operation: "vkResetFences");
+        ).ThrowIfFailed(device: m_device.Commands, operation: "vkResetFences");
     }
 
     /// <summary>Waits for device idle, then frees the staging buffer, image, view, and command resources. Safe to call more than once.</summary>
@@ -312,7 +313,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_commandBufferRecordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
             device: device.Commands
-        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        ).ThrowIfFailed(device: device.Commands, operation: "vkBeginCommandBuffer");
         // The Undefined transition DISCARDS the prior contents (each upload rewrites the whole image), but its source
         // scope must still ORDER after the previous frame's samplers — with a pipelining host the prior frame may
         // still be reading this image on the queue when this copy is recorded (an execution-only dependency; no
@@ -379,7 +380,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_commandBufferRecordingApi.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
             device: device.Commands
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+        ).ThrowIfFailed(device: device.Commands, operation: "vkEndCommandBuffer");
 
         Span<nint> commandBuffers = [commandBufferHandle];
 

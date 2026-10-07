@@ -1,7 +1,6 @@
 using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
-using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -204,10 +203,9 @@ public sealed partial class WorldInstanceHost {
                 m_resolver.AbortGeneration(instanceName: abortedName);
             }
 
-            NoteResolvedTransferOutcome(
+            NoteTransferOutcome(
                 transfer: in transfer,
                 sourceName: transfer.SourceInstance,
-                targetName: string.Empty,
                 outcome: $"refused-destination:{destinationReason}"
             );
             CloseAdjacencyAfterRefusal(
@@ -292,12 +290,14 @@ public sealed partial class WorldInstanceHost {
             var sourceSlot = members[reservationIndex];
             var traveler = source.Server.ExecuteAuthorityOperation(operation: () => {
                 var body = source.Server.Population.EntryBody(index: sourceSlot);
-                var mobility = source.Server.Population.EnsureMobility(
+                // Read, never minted: a reservation is no recorded authority step, so it may change nothing the
+                // authoritative hash folds. The detach mints this same credential (EnsureMobility).
+                var mobility = source.Server.Population.ReadMobility(
                     index: sourceSlot,
                     authority: source.Server.AuthorityIdentity
                 );
 
-                return (Identity: body?.Profile, Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
+                return (Identity: body?.Profile?.Project(), Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
 
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
@@ -359,10 +359,10 @@ public sealed partial class WorldInstanceHost {
                 ReapIfEmpty(name: targetName);
             }
 
-            NoteResolvedTransferOutcome(
+            NoteTransferOutcome(
                 transfer: in transfer,
                 sourceName: transfer.SourceInstance,
-                targetName: targetName,
+                target: targetAuthority,
                 outcome: $"refused-reservation:{reserveReason}"
             );
 
@@ -407,10 +407,10 @@ public sealed partial class WorldInstanceHost {
                 );
             }
             if (spawned) { ReapIfEmpty(name: targetName); }
-            NoteResolvedTransferOutcome(
+            NoteTransferOutcome(
                 transfer: in transfer,
                 sourceName: transfer.SourceInstance,
-                targetName: targetName,
+                target: targetAuthority,
                 outcome: $"refused-reservation:{malformedReason}"
             );
             CloseAdjacencyAfterRefusal(
@@ -462,10 +462,10 @@ public sealed partial class WorldInstanceHost {
                     ReapIfEmpty(name: targetName);
                 }
 
-                NoteResolvedTransferOutcome(
+                NoteTransferOutcome(
                     transfer: in transfer,
                     sourceName: transfer.SourceInstance,
-                    targetName: targetName,
+                    target: targetAuthority,
                     outcome: $"refused-source-standing:{standingPrincipal.Describe()}"
                 );
                 CloseAdjacencyAfterRefusal(
@@ -538,11 +538,17 @@ public sealed partial class WorldInstanceHost {
                 slot: sourceSlot
             );
 
+            // Read before the detach, which hands the slot back: the turn the traveler has accumulated so far.
+            var departureTurn = source.Server.Population.TravelTurn(index: sourceSlot);
+
             if (!TryDetachAndCaptureMember(
                 source: source,
+                transferId: transfer.TransferId,
                 sourceSlot: sourceSlot,
                 sourceName: transfer.SourceInstance,
                 actingPrincipal: memberPrincipal,
+                reservedMobility: reservationMembers[index].Mobility!.Value,
+                mobility: out var mobility,
                 profile: out var profile,
                 bodyColor: out var bodyColor,
                 position: out var position,
@@ -570,7 +576,7 @@ public sealed partial class WorldInstanceHost {
                 AdmissionGrants: admissionGrants,
                 SourceGrants: sourceGrants,
                 SourcePrincipal: memberPrincipal,
-                Mobility: reservationMembers[index].Mobility!.Value,
+                Mobility: mobility,
                 FollowedSeatMask: CaptureFollowedSeats(
                     sourceInstance: transfer.SourceInstance,
                     sourceSlot: sourceSlot
@@ -584,6 +590,7 @@ public sealed partial class WorldInstanceHost {
             var arrivalYaw = yaw;
             var arrivalPlanarVelocity = dynamicState.PlanarVelocity;
             var arrivalVerticalVelocity = dynamicState.VerticalVelocity;
+            var arrivalTurn = departureTurn;
             WorldContinuumTrajectory? continuum = null;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
@@ -608,6 +615,11 @@ public sealed partial class WorldInstanceHost {
                 arrivalYaw = mapped.YawRadians;
                 arrivalPlanarVelocity = mapped.PlanarVelocity;
                 arrivalVerticalVelocity = mapped.VerticalVelocity;
+                arrivalTurn = WorldFrameIsometry.AccumulateTurn(
+                    arrivalYaw: mapped.YawRadians,
+                    departureYaw: yaw,
+                    travelTurn: departureTurn
+                );
 
                 // An adjacency is not a teleport: this source step has already evaluated input, actions, authored
                 // motion, gravity, and timers. The destination receives only the remaining geometric image from its
@@ -638,7 +650,7 @@ public sealed partial class WorldInstanceHost {
             }
 
             commitMembers.Add(item: new WorldTransferCommitMember(
-                Profile: profile,
+                Profile: profile?.Project(),
                 HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped),
                 BodyMotionProgramName: dynamicState.BodyMotionProgramName,
                 Position: arrivalPosition,
@@ -646,7 +658,8 @@ public sealed partial class WorldInstanceHost {
                 PlanarVelocity: arrivalPlanarVelocity,
                 VerticalVelocity: arrivalVerticalVelocity,
                 ActionContinuity: actionContinuity,
-                Continuum: continuum
+                Continuum: continuum,
+                TravelTurn: arrivalTurn
             ));
         }
 
@@ -657,20 +670,33 @@ public sealed partial class WorldInstanceHost {
             abortReason = $"TEST-ONLY forced refusal before escrow commit at member {forcedOrdinal} (world.transfer ... forcejoinrefusal:<n>)";
         }
 
+        var departed = false;
+
+        if (abortReason is null) {
+            if (TryRecordDeparture(
+                departure: new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length),
+                reason: out var departureReason
+            )) {
+                departed = true;
+            } else {
+                abortReason = $"'{sourceInstanceName}' could not make its departure durable ({departureReason})";
+            }
+        }
+
         if (abortReason is null) {
             var step = targetAuthority.Commit(
                 sourceAuthority: sourceAuthority,
                 transferId: transfer.TransferId,
                 members: commitMembers,
-                accepted: out var committed,
+                status: out var verdict,
                 reason: out var commitReason
             );
 
-            if (step != WorldTransferStep.Answered) {
+            if ((step != WorldTransferStep.Answered) || (verdict == WorldTransferStatus.Uncertain)) {
                 // Preserve every source recovery record and the exact commit payload. Subsequent fixed-point drains
                 // query the destination's idempotent status and either publish the committed route, retry the live
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
-                // still-in-flight or failed transport whether the destination applied the commit.
+                // failed transport or an uncertain arrival record whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
                     Transfer: transfer with { FrozenCohortSlots = [.. members] },
                     TargetAuthority: targetAuthority,
@@ -685,13 +711,13 @@ public sealed partial class WorldInstanceHost {
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
-                        text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]"
+                        text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' {((step == WorldTransferStep.Answered) ? "answered uncertain" : "commit acknowledgement was lost")}: {commitReason}) — recovery state retained for status reconciliation]"
                     );
                 }
                 return;
             }
 
-            if (!committed) {
+            if (verdict != WorldTransferStatus.Committed) {
                 abortReason = $"'{targetName}' refused reserved commit ({commitReason})";
             }
         }
@@ -705,23 +731,23 @@ public sealed partial class WorldInstanceHost {
             } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
                 // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
             }
-            if (!RestoreDetachedMembers(
+            var rollback = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true);
+
+            // A departure already made durable is settled home before the cohort returns, so a restart redoes the
+            // return instead of asking the destination again.
+            if (
+                (departed && !TrySettle(
+                arrived: false,
+                pending: rollback
+            )) ||
+                !RestoreDetachedMembers(
                 commits: commitMembers,
                 members: landed,
-                source: source
-            )) {
-                m_inDoubtTransfers.Add(item: new(
-                    transfer with { FrozenCohortSlots = [.. members] },
-                    targetAuthority,
-                    sourceAuthority,
-                    targetName,
-                    spawned,
-                    reservationRequest.DeadlineSourceTick,
-                    landed,
-                    commitMembers,
-                    members.Length,
-                    RollbackOnly: true
-                ));
+                source: source,
+                transferId: transfer.TransferId
+            )
+            ) {
+                m_inDoubtTransfers.Add(item: rollback);
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
@@ -742,10 +768,10 @@ public sealed partial class WorldInstanceHost {
                 ReapIfEmpty(name: targetName);
             }
 
-            NoteResolvedTransferOutcome(
+            NoteTransferOutcome(
                 transfer: in transfer,
                 sourceName: transfer.SourceInstance,
-                targetName: targetName,
+                target: targetAuthority,
                 outcome: $"aborted:{abortReason}"
             );
             // The abort above already restored every member to its exact source pose — the party-atomicity contract.
@@ -797,7 +823,7 @@ public sealed partial class WorldInstanceHost {
 
         return cohort;
     }
-    private void EnqueueAdjacencyTransfer(WorldInstance instance, in AdjacencyEdgeHit hit) {
+    private void EnqueueAdjacencyTransfer(WorldInstance instance, in WorldAdjacencyFaceHit hit) {
         var definition = instance.Server.Definition;
         var label = $"{instance.Name}/{hit.Adjacency.Name}";
 
@@ -1103,302 +1129,6 @@ public sealed partial class WorldInstanceHost {
             );
         }
     }
-    private void PublishCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed) {
-        // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
-        // deferred formatter.
-        var transferId = transfer.TransferId;
-
-        _ = m_instances.TryGetValue(
-            key: transfer.SourceInstance,
-            value: out var sourceInstance
-        );
-
-        // A traveler set down on a door's own threshold reads as a fresh entry edge on the destination's
-        // next scan and is bounced straight back, so every face an arriving body already stands inside is
-        // latched rather than discovered as a crossing. Seeded here, for the whole cohort at once, rather
-        // than per member as each lands — the landing loop can still abort, and the unwind above restores
-        // bodies, not latches, so a per-member seed would outlive its own member. Commit-time seeding needs
-        // no inverse operation to keep in sync with rollback.
-        for (var memberOrdinal = 0; (memberOrdinal < landed.Count); memberOrdinal++) {
-            var member = landed[memberOrdinal];
-            // A live peer's control follows its body to whichever authority now owns it. The colocated arm is
-            // registered on the same rule as the socket arm: without it, an in-process onward crossing leaves the
-            // client's intents and submissions naming a body this source no longer has.
-            if (
-                (member.Peer is { Source.IsLive: true }) &&
-                (sourceInstance is not null)
-            ) {
-                IWorldForwardedAuthority? onward = null;
-                var onwardSlot = member.TargetSlot;
-
-                if (targetAuthority.Remote is { } forwardedAuthority) {
-                    // Recovery opens a fresh remote link, with no reservation cache. The confirmed commit's
-                    // retained member is the credential's authority: a slot-keyed cache could also name a later
-                    // occupant by the time an ambiguous handoff is resolved.
-                    var credential = new WorldRemoteRouteCredential(
-                        BodyIndex: member.TargetSlot,
-                        SourceAuthority: sourceInstance.Server.AuthorityIdentity,
-                        Mobility: member.Mobility.Advance()
-                    );
-
-                    onward = new WorldRemoteForwardedAuthority(
-                        authority: forwardedAuthority,
-                        credential: credential
-                    );
-                    onwardSlot = credential.BodyIndex;
-                } else if (targetAuthority.Local is { } localTarget) {
-                    onward = new WorldLocalForwardedAuthority(
-                        server: localTarget.Server,
-                        endpoint: (localTarget.Server.Definition.Host.Authority ?? EndpointFor(instance: localTarget).Identity),
-                        sourceAuthority: sourceInstance.Server.AuthorityIdentity,
-                        mobility: member.Mobility.Advance()
-                    );
-                }
-
-                if (onward is not null) {
-                    var key = (sourceInstance.Server, member.Mobility.Incarnation);
-
-                    if (m_forwardedBodies.TryGetValue(
-                        key: key,
-                        value: out var superseded
-                    )) {
-                        (superseded.Authority as IDisposable)?.Dispose();
-                    }
-
-                    m_forwardedBodies[key] = new ForwardedBody(
-                        Authority: new WorldDeferredForwardedAuthority(
-                            destination: onward.DescribeForCheckpoint(),
-                            initial: onward
-                        ),
-                        BodyIndex: onwardSlot
-                    );
-                }
-            }
-
-            if (targetAuthority.Local is { } target) {
-                SeedArrivalOccupancy(
-                    instance: target,
-                    seat: member.TargetSlot
-                );
-            }
-        }
-
-        // COMMIT: the whole cohort's join is certain, so the CLIENT-side state that mirrors and ROUTES a seat catches
-        // up here — and only here, after every member's outcome is known, so an aborted member is never seen to have
-        // left at all (see LandedMember's own remarks). The transfer's authoritative body work is already complete;
-        // this route decides where subsequent presentation and input submissions follow it.
-        foreach (var member in landed) {
-            // Any local roster slot whose authority claim currently names
-            // (transfer.SourceInstance, member.SourceSlot) moves WITH this member — unconditional across
-            // boot<->anywhere and anywhere<->anywhere, the ONE new write this stage adds. At most one roster slot
-            // ever matches (a followed seat's own location is exactly its own presenting body), but the walk costs
-            // O(4) regardless of which instance is source or destination.
-            // A previous attempt may already have published one or more routes. Such a participant still follows
-            // this member even though its endpoint no longer names the source; never vacate its roster on retry.
-            var followed = (member.FollowedSeatMask != 0);
-
-            for (var followedSlot = 0; (followedSlot < m_seats.SeatCount); followedSlot++) {
-                // The seat ceiling is the host's, not the world's: a world declaring fewer local seats never
-                // publishes a route for the ones it did not declare, and asking such a slot for its entity is a
-                // refusal rather than an absence. The endpoint answers null for an unrouted slot, so it is what
-                // decides whether this slot has anything to follow.
-                var locationEndpoint = m_seats.RoutedEndpoint(slot: followedSlot);
-
-                if (
-                    ((member.FollowedSeatMask & (1 << followedSlot)) == 0) ||
-                    (locationEndpoint is null) ||
-                    !string.Equals(
-                    a: locationEndpoint.Identity,
-                    b: transfer.SourceInstance,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    continue;
-                }
-
-                var locationEntity = m_seats.RoutedEntity(slot: followedSlot);
-
-                if (locationEntity.Index != member.SourceSlot) {
-                    continue;
-                }
-
-                WorldAuthorityEndpoint endpoint;
-                WorldAuthorityRouteDescription? initialRoute = null;
-
-                if (targetAuthority.Remote is { } remoteTarget) {
-                    var routeCredential = new WorldRemoteRouteCredential(
-                        BodyIndex: member.TargetSlot,
-                        SourceAuthority: sourceInstance!.Server.AuthorityIdentity,
-                        Mobility: member.Mobility.Advance()
-                    );
-
-                    try {
-                        if (remoteTarget.TryDescribeRoute(
-                            credential: in routeCredential,
-                            reason: out var routeReason,
-                            route: out var describedRoute
-                        )) {
-                            initialRoute = describedRoute;
-                        } else {
-                            if (m_narration.HasNarrationSink) {
-                                m_narration.Narrate(
-                                    channel: "world.continuum",
-                                    text: $"[world.continuum: committed transfer={transferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]"
-                                );
-                            }
-                        }
-                    } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-                        if (m_narration.HasNarrationSink) {
-                            m_narration.Narrate(
-                                channel: "world.continuum",
-                                text: $"[world.continuum: committed transfer={transferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]"
-                            );
-                        }
-                    }
-
-                    var trackedSlot = followedSlot;
-                    // One route wrapper per local traveler, not per crossing. Its stable mobility credential follows
-                    // the committed onward route recursively, so replacing the wrapper here would tear down a live
-                    // intent stream between ownership epochs and manufacture an unavailable/release window. Keying
-                    // this cache by transfer id leaked one route, pump and observer for every A↔B seam crossing.
-                    var routeName = $"$traveler/{m_machineId:N}/{trackedSlot}";
-
-                    if (!m_remoteAuthorities.TryGetValue(
-                        key: routeName,
-                        value: out var routeAuthority
-                    )) {
-                        WorldAuthorityEndpoint? publishedEndpoint = null;
-
-                        routeAuthority = new WorldRemoteAuthority(
-                            endpoint: remoteTarget.Endpoint,
-                            placeholder: remoteTarget.Definition,
-                            security: sourceInstance!.Federation.Authenticator,
-                            observerAuthority: sourceInstance.Federation.Subject,
-                            submissionAuthority: remoteTarget,
-                            submissionCredential: routeCredential,
-                            initialRoute: initialRoute,
-                            applicationStopping: m_applicationStopping,
-                            narrationHub: m_narration,
-                            routeChanged: route => {
-                                if (
-                                    (publishedEndpoint is not null) &&
-                                    (m_seats.RoutedEndpoint(slot: trackedSlot) is { } expectedEndpoint) &&
-                                    ReferenceEquals(
-                                    objA: expectedEndpoint,
-                                    objB: publishedEndpoint
-                                )
-                                ) {
-                                    publishedEndpoint.SeedRoute(route: in route);
-                                    _ = m_seats.TryUpdateRoutedEntity(
-                                        slot: trackedSlot,
-                                        expectedEndpoint: expectedEndpoint,
-                                        replacement: route.Entity
-                                    );
-                                }
-                            }
-                        );
-                        m_remoteAuthorities[routeName] = routeAuthority;
-                        publishedEndpoint = EndpointFor(
-                            authority: routeAuthority,
-                            identity: routeName,
-                            seed: initialRoute
-                        );
-                    }
-                    endpoint = EndpointFor(
-                        identity: routeName,
-                        authority: routeAuthority
-                    );
-                } else if (targetAuthority.Local is { } localEndpointTarget) {
-                    endpoint = EndpointFor(instance: localEndpointTarget);
-                    // Parity with the federated arm above: the endpoint carries the arrival pose before the route
-                    // naming it is published, so no frame observes the route without an anchor.
-                    var localRoute = localEndpointTarget.Server.ExecuteAuthorityOperation(operation: () =>
-                        WorldLocalForwardedAuthority.DescribeRoute(
-                        server: localEndpointTarget.Server,
-                        endpoint: endpoint.Identity,
-                        bodyIndex: member.TargetSlot
-                    ));
-
-                    endpoint.SeedRoute(route: in localRoute);
-                    initialRoute = localRoute;
-                } else {
-                    throw new InvalidOperationException(message: "committed transfer has no target authority");
-                }
-                var routedEntity = (initialRoute?.Entity ?? new WorldEntityAddress(
-                    Authority: (targetAuthority.Local?.Server.AuthorityIdentity ?? endpoint.Authority),
-                    Index: member.TargetSlot,
-                    Generation: (targetAuthority.Local?.Server.Population.Generation(index: member.TargetSlot) ?? 0)
-                ));
-
-                m_seats.PublishRoute(
-                    endpoint: endpoint,
-                    entity: routedEntity,
-                    slot: followedSlot
-                );
-            }
-
-            // Scoped to the BOOT instance on each side independently, because that is the only instance a
-            // local client mirrors — a transfer between two non-boot instances touches neither, and an
-            // unscoped write would clear or fill a boot seat belonging to somebody who never moved. A
-            // followed seat's local participant does not vacate when it departs boot — it relocates (the
-            // router publish above already records exactly where), so the roster's own occupied/device-bound
-            // state stays as it was through the whole trip, and WorldClient.SubmitAuthorityIntents keeps
-            // reading a live seat rather than a vacated one. A followed seat returning to boot symmetrically
-            // skips OccupySeat below: the slot was never vacated, so it is already occupied under the same
-            // participant that left.
-            if (
-                !followed &&
-                (member.SourceSlot < sourceInstance!.Server.Population.LocalSeatCount) &&
-                string.Equals(
-                a: transfer.SourceInstance,
-                b: BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                // The roster's own seat-vacated fact — the SAME one player.leave emits, from a second producer.
-                _ = m_seats.VacateSeat(slot: member.SourceSlot);
-            }
-
-            // The mirror fact, for a traveler landing in the instance the client mirrors.
-            if (
-                !followed &&
-                (member.TargetSlot < targetAuthority.Definition.Population.LocalSeats) &&
-                string.Equals(
-                a: targetName,
-                b: BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                _ = m_seats.OccupySeat(
-                    slot: member.TargetSlot,
-                    profile: member.Profile
-                );
-            }
-
-            // The accepted transfer echoes its full decision on STDOUT — departed source seat, arrived target seat,
-            // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere.Index is the
-            // 0-based body index, identical to TargetSlot) — so a caller reads the outcome here rather than
-            // inferring it from a later world.instance.seats.
-            var arrival = ((targetAuthority.Local is { } localTarget)
-                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: member.TargetSlot))
-                : new QueryAnswer(Text: $"remote authority {targetAuthority.Remote!.Endpoint} body:{member.TargetSlot}")
-            );
-
-            var arrivedTransferId = transfer.TransferId;
-            var arrivedSource = transfer.SourceInstance;
-
-            if (m_narration.HasNarrationSink) {
-                m_narration.Narrate(
-                    stream: WorldNarrationStream.Output,
-                    channel: "world.transfer",
-                    text: $"[world.transfer: transfer={arrivedTransferId} '{arrivedSource}' {TravellerName(index: member.SourceSlot, localSeatCount: sourceInstance!.Server.Population.LocalSeatCount)} departed -> '{targetName}' {TravellerName(index: member.TargetSlot, localSeatCount: targetAuthority.Definition.Population.LocalSeats)} arrived{((member.Profile is not null)
-                    ? $" as {member.Profile.Id}"
-                    : " (anonymous)")} — {arrival.Text}]"
-                );
-            }
-        }
-
-    }
     // Only after all route/roster publication returned successfully may recovery and the destination's exact-retry
     // receipt be retired. No external publication callback runs during retirement.
     private void CompleteCommittedTransfer(InDoubtTransfer pending) {
@@ -1438,28 +1168,18 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.
-        ReapIfEmpty(name: transfer.SourceInstance);
-
-        // Only when boot is the SOURCE does the tape need to know which slots actually left — see
-        // NoteResolvedTransferOutcome's own remarks; a boot-as-destination arrival is structurally unreplayable, so
-        // it carries nothing here regardless of how many members landed.
-        var departedBootSlots = (string.Equals(
-            a: transfer.SourceInstance,
-            b: BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )
-            ? landed.ConvertAll(converter: static member => member.SourceSlot)
-            : []
-        );
-
-        NoteResolvedTransferOutcome(
+        // The source's tape re-applies exactly these departures, closing before an emptied source is reaped; the
+        // destination's tape carries the arrival itself.
+        NoteTransferOutcome(
             transfer: in transfer,
             sourceName: transfer.SourceInstance,
-            targetName: targetName,
             outcome: $"committed:{landed.Count}/{memberCount}",
-            departedBootSlots: departedBootSlots
+            departedSlots: landed.ConvertAll(converter: static member => member.SourceSlot),
+            target: targetAuthority
         );
+
+        // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.
+        ReapIfEmpty(name: transfer.SourceInstance);
     }
     // Every seat of `instance` that already has a transfer queued or in flight, mapped to that transfer's id.
     // WorldAdjacencyRegion.Sweep answers Crossed for a body ALREADY beyond the ownership threshold (parameter
@@ -1579,51 +1299,6 @@ public sealed partial class WorldInstanceHost {
 
         return transferId;
     }
-    // Records a resolver-driven transfer's decided outcome onto the source and destination rows' own replay tapes —
-    // a no-op for a non-resolver transfer (console world.transfer's raw ephemeral/persisted/existing forms carry no
-    // destination row/scope key/generation id to report) and a no-op on a row whose own Tape is null (every row but
-    // an armed one today). `departedBootSlots` defaults empty — every call site but the committed one passes
-    // nothing, correctly: a refusal or an abort leaves the source row's own population untouched by definition.
-    private void NoteResolvedTransferOutcome(in PendingTransfer transfer, string sourceName, string targetName, string outcome, IReadOnlyList<int>? departedBootSlots = null) {
-        if (
-            ((transfer.RecoveryDestinationName ?? transfer.ResolvedDestinationRow?.Name.Value) is not { } destinationName) ||
-            (transfer.FrozenScopeKey is not { } scopeKey) ||
-            (transfer.FrozenGenerationId is not { } generationId)
-        ) {
-            return;
-        }
-
-        var transferId = transfer.TransferId;
-
-        void Note(WorldReplayTape? tape) => tape?.NoteTransfer(
-            departedBootSlots: (departedBootSlots ?? []),
-            destinationName: destinationName,
-            generationId: generationId,
-            outcome: outcome,
-            scopeKey: scopeKey,
-            transferId: transferId
-        );
-
-        if (m_instances.TryGetValue(
-            key: sourceName,
-            value: out var sourceRow
-        )) {
-            Note(tape: sourceRow.Tape);
-        }
-        if (
-            !string.Equals(
-            a: sourceName,
-            b: targetName,
-            comparisonType: StringComparison.Ordinal
-        ) &&
-            m_instances.TryGetValue(
-            key: targetName,
-            value: out var targetRow
-        )
-        ) {
-            Note(tape: targetRow.Tape);
-        }
-    }
     private static WorldSubmissionPayload RebindForwardedPayload(WorldSubmissionPayload payload, int bodyIndex) => payload switch {
         WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: command.Value with { EntityIndex = bodyIndex }),
         WorldSubmissionPayload.Designation designation => new WorldSubmissionPayload.Designation(Value: designation.Value with { EntityIndex = bodyIndex }),
@@ -1638,65 +1313,15 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member) {
-        return source.Server.ExecuteAuthorityOperation(operation: () => {
-            var restored = ((member.Peer is { } peer)
-                ? source.Server.Population.RestoreDetachedPeer(
-                    peer: in peer,
-                    grantTemplates: member.AdmissionGrants,
-                    profile: member.Profile,
-                    position: member.Position,
-                    yawRadians: member.Yaw,
-                    dynamicState: member.DynamicState,
-                    designations: member.Designations
-                )
-                : source.Server.Population.RestoreDetachedSeat(
-                    slot: member.SourceSlot,
-                    profile: member.Profile,
-                    position: member.Position,
-                    yawRadians: member.Yaw,
-                    dynamicState: member.DynamicState,
-                    designations: member.Designations
-                )
-            );
-
-            if (restored) {
-                // A slot reused during recovery has a new local generation, not the returning individual's
-                // durable identity. Reinstall the captured mobility credential before releasing its memory hold.
-                source.Server.Population.SetMobility(
-                    index: member.SourceSlot,
-                    mobility: member.Mobility
-                );
-                source.Server.Population.SetBodyColor(
-                    slot: member.SourceSlot,
-                    color: member.BodyColor
-                );
-
-                // The restored WorldBody instance postdates the last Install/construction-time resync — the same
-                // reason every other admission door in WorldServer.Admission.cs catches a freshly minted body up
-                // from bodies.scaleRow before it starts stepping at the constructed default (Scale == One).
-                source.Server.Population.SyncBodyScale(definition: source.Server.Definition);
-
-                // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
-                // restored principal provably holds none of them at this moment and cannot administer its own
-                // restoration. The server administers it, exactly as it administers an admission mint.
-                foreach (var grant in member.SourceGrants) {
-                    source.Server.Grant(
-                        grant: grant,
-                        actor: Principal.Console
-                    );
-                }
-            }
-            return restored;
-        });
-    }
     // Remove successful restores from BOTH lists so checkpoint profile ordinals still match. Failed restores keep
     // their recovery record; no retry may overwrite an occupied source slot.
-    private static bool RestoreDetachedMembers(WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+    private static bool RestoreDetachedMembers(WorldInstance source, ulong transferId, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
         for (var index = 0; (index < members.Count);) {
             if (!RestoreDetachedMember(
-                source,
-                members[index]
+                commit: commits[index],
+                member: members[index],
+                source: source,
+                transferId: transferId
             )) { index++; continue; }
             members.RemoveAt(index: index);
             commits.RemoveAt(index: index);
@@ -1826,7 +1451,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1834,19 +1459,23 @@ public sealed partial class WorldInstanceHost {
                 bodyColor: out var capturedBodyColor,
                 designations: out var capturedDesignations,
                 dynamicState: out var capturedState,
+                mobility: out var capturedMobility,
                 peer: out var capturedPeer,
                 position: out var capturedPosition,
                 profile: out var capturedProfile,
+                reservedMobility: reservedMobility,
                 source: source,
                 sourceGrants: out var capturedSourceGrants,
                 sourceName: sourceName,
                 sourceSlot: sourceSlot,
+                transferId: transferId,
                 yaw: out var capturedYaw
             );
 
-            return (Success: success, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants);
+            return (Success: success, Mobility: capturedMobility, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants);
         });
 
+        mobility = captured.Mobility;
         profile = captured.Profile;
         bodyColor = captured.BodyColor;
         position = captured.Position;
@@ -1858,7 +1487,8 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+        mobility = default;
         profile = null;
         bodyColor = default;
         position = default;
@@ -1888,6 +1518,19 @@ public sealed partial class WorldInstanceHost {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
                     text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} is not active in '{sourceName}')]"
+                );
+            }
+
+            return false;
+        }
+
+        // The reservation released this gate for the peer call. Compare the complete credential, including this
+        // slot's generation, while holding the gate through detach so a replacement can never inherit its crossing.
+        if (source.Server.Population.ReadMobility(index: sourceSlot, authority: source.Server.AuthorityIdentity) != reservedMobility) {
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} in '{sourceName}' — the reserved traveler is no longer live at this authority)]"
                 );
             }
 
@@ -1939,30 +1582,10 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        // Captured before the detach — TryDetachSeatForTransfer discards pose, dynamic state, and
-        // designations entirely (it only ever preserves the seat's Profile), so this is the one moment the
-        // body's exact position/yaw, its perceivable dynamic state (velocity, dash overlay, in-flight timed
-        // presses — see WorldBody.CaptureTransferState), and the seat's own designation register (an
-        // Entry-level fact outside WorldBody's own reach — see WorldPopulation.CaptureDesignations) are all
-        // still readable.
-        position = body.FixedPosition;
-        bodyColor = source.Server.Population.BodyColor(index: sourceSlot);
-        yaw = body.FixedYaw;
-        dynamicState = body.CaptureTransferState();
-        designations = source.Server.Population.CaptureDesignations(slot: sourceSlot);
-        if (source.Server.Population.TryCaptureTransferredEntity(
-            index: sourceSlot,
-            peer: out var capturedPeer
-        )) {
-            peer = capturedPeer;
-            admissionGrants = [.. source.Server.Population.PeerAdmissionInstalledGrantTemplates(bodyIndex: sourceSlot)];
-            sourceGrants = [.. source.Server.GrantRows(principal: capturedPeer.Identity)];
-        }
-
-        if (!source.Server.Population.TryDetachSeatForTransfer(
-            profile: out profile,
-            slot: sourceSlot
-        )) {
+        if (source.Server.DetachForTransfer(
+            slot: sourceSlot,
+            transferId: transferId
+        ) is not { } detached) {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
@@ -1973,17 +1596,16 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        // Dissolving a departing member's rows is administration, symmetric with the admission mint and the
-        // rollback re-grant below: the rows may belong to a peer principal while the member travels under a
-        // different one (an autonomous body travels as World), so the departing principal cannot be assumed to
-        // hold them. The transfer itself was already authorized against the acting principal (AllowsLeave).
-        foreach (var grant in sourceGrants) {
-            source.Server.Revoke(
-                grant: grant,
-                actor: Principal.Console
-            );
-        }
-
+        profile = detached.Profile;
+        mobility = detached.Mobility;
+        bodyColor = detached.BodyColor;
+        position = detached.Position;
+        yaw = detached.Yaw;
+        dynamicState = detached.DynamicState;
+        designations = detached.Designations;
+        peer = detached.Peer;
+        admissionGrants = detached.AdmissionGrants;
+        sourceGrants = detached.SourceGrants;
         return true;
     }
 
@@ -2350,5 +1972,8 @@ public sealed partial class WorldInstanceHost {
         bool CommitConfirmed = false
     ) {
         public bool PublicationFailureReported { get; set; }
+        // The settlement this source wrote ahead of acknowledging or restoring the cohort.
+        public bool SettlementRecorded { get; set; }
+        public bool SettlementFailureReported { get; set; }
     }
 }

@@ -7,6 +7,7 @@ using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
+using Puck.Text;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -18,7 +19,10 @@ namespace Puck.World.Client;
 /// into one <see cref="SdfFrame"/> framed through the destination's chosen camera — the
 /// <see cref="ISdfSceneEmitter"/>/<see cref="ISdfFrameDresser"/> split <c>WorldFramePresenter</c> and
 /// <c>WorldSceneEmitter</c> already establish, collapsed into one type here because a session
-/// projection has exactly one content source and needs no second host to own presentation separately.
+/// projection has exactly one content source and needs no second host to own presentation separately. The destination's
+/// text screens draw their lines through the destination's own font catalog, resolved beside its own document
+/// (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>), and every camera of the destination a screen shows is filmed
+/// into the frame after the session's own view (<see cref="Film"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,13 +30,12 @@ namespace Puck.World.Client;
 /// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — a <see cref="WorldStampPool"/>
 /// of its own, rooted on the destination through <see cref="WorldSessionStampSource"/> with its census kept by a
 /// <see cref="WorldBodyStampCensus"/>, and <see cref="WorldRigCatalog"/> directly for avatars, rather than a second
-/// implementation of any of them. No screens,
-/// no editor overlay: a session mirror does not process the destination's own <c>screens</c> section at all, which is
-/// what closes recursion structurally (a destination naming its own session screen has no path this type ever walks
-/// into) — <c>WorldScreenBinder</c> still narrates the depth-1 policy by name when it detects that shape, so
-/// the refusal is observable even though nothing here could recurse regardless. A body that renders its creation
-/// through the pool (an inhabitant, or a crowd body wearing a creation look) parks its catalog avatar, as the local
-/// scene's does.
+/// implementation of any of them. The destination's own screens are drawn too, its declared rows and its creations'
+/// derived faces, as <c>WorldSceneEmitter</c> draws the boot world's (<c>WorldStaticSceneEmit</c>): what each one
+/// shows is bound per view by whoever renders the frame (<c>WorldScreenBinder</c>'s nested screens), so a portal inside
+/// the destination shows its own destination to the presentation's nesting depth. No editor overlay. A body that
+/// renders its creation through the pool (an inhabitant, or a crowd body wearing a creation look) parks its catalog
+/// avatar, as the local scene's does.
 /// </para>
 /// <para>
 /// <b>The interpolation timebase.</b> A session's view calls <c>ISdfFrameSource.CaptureFrame</c> with its own
@@ -49,7 +52,17 @@ namespace Puck.World.Client;
 /// view — which is handed no simulation clock at all — can ever do.
 /// </para>
 /// </remarks>
-public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser {
+public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser, IDisposable {
+    /// <summary>Releases the environment's delivered-tick subscription.</summary>
+    public void Dispose() {
+        m_shadowObservation.Dispose();
+        m_environment.Dispose();
+    }
+    /// <summary>Reads the last presented slot census of this session.</summary>
+    /// <param name="definition">The queried authority's definition.</param>
+    /// <returns>The census, or null before a matching frame.</returns>
+    public string? DescribeShadowSlots(WorldDefinition definition) => m_environment.DescribeShadowSlots(definition: definition);
+
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
     // type's own construction site in WorldScreenBinder.ResolveSession, which is where the "unknown camera refuses at
@@ -60,7 +73,17 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The color each avatar is painted with: the mirror's, unless the host paints some bodies its own way.
     private readonly Func<int, Vector3> m_bodyColor;
 
-    private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[1];
+    // The frame's views: the session's own, then the destination's cameras Film adds.
+    private readonly List<SdfViewSnapshot> m_views = [];
+    // The destination's own font catalog and its text screens' decals, followed from its delivered definition (FollowText):
+    // the rows, its screens then its seated faces, a text screen's lines are read from.
+    private readonly WorldTextCatalog m_text = new();
+
+    private readonly WorldScreenDecals m_decals;
+
+    private WorldDefinition? m_textDefinition;
+
+    private IReadOnlyList<WorldScreen> m_textRows = [];
 
     /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips soft shadows, ambient
     /// occlusion and the far bound, whose cost buys little in a small screen-space result.</summary>
@@ -75,6 +98,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private int m_bodyColorRevision;
 
     private readonly bool m_castsAvatarShadows;
+    // The prototypes a far scene holds (see the constructor), or null for a scene of the whole world.
+    private readonly IReadOnlySet<string>? m_onlyPrototypes;
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
@@ -120,7 +145,17 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldRenderCycleTrack m_cycle = new();
+    private readonly WorldValueDomainGuard m_domains;
+    private readonly WorldEnvironmentResolve m_environment;
+    private readonly Func<WorldShadowSettings>? m_shadowSettings;
+
+    /// <summary>The presentation's session-only layer audition.</summary>
+    public WorldSkyAudition? SkyLayers { get; set; }
+
+    private readonly WorldShadowSelection m_deliveredShadows = new();
+
+    private readonly WorldSessionMirror.DeliveredStateObservation m_shadowObservation;
+
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -142,19 +177,109 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
+    /// <param name="shadowSettings">The routed view's live policy, or its own boot policy when absent.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    /// <param name="onlyPrototypes">The prototypes the scene holds, or <see langword="null"/> for the whole world: far
+    /// geometry (<c>Puck.SdfVm.Views.InfinityViewKind.Far</c>) emits the placements of these prototypes alone, with no
+    /// screen, no avatar and no body stamp, so its cost scales with what it shows.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
+        ArgumentNullException.ThrowIfNull(argument: domains);
+
+        m_domains = domains;
+        m_environment = new WorldEnvironmentResolve(domains: domains);
 
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
         m_castsAvatarShadows = castsAvatarShadows;
+        m_onlyPrototypes = onlyPrototypes;
+        m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
         m_source = new WorldSessionStampSource(mirror: mirror);
+        m_deliveredShadows.SetSettings(settings: (shadowSettings?.Invoke() ?? WorldShadowSettings.From(render: mirror.Definition.Render)));
+        m_shadowObservation = mirror.ObserveDeliveredState(observer: (definition, revision, state) => {
+            if (m_shadowSettings is null) { m_deliveredShadows.SetSettings(settings: WorldShadowSettings.From(render: definition.Render)); }
+            m_deliveredShadows.Advance(definition: definition, mirror: state, revision: revision);
+        });
+        m_decals = new WorldScreenDecals(
+            catalog: TextCatalog,
+            colors: new WorldBakedColors(mirror: mirror.FollowState()),
+            textAt: TextAt
+        );
     }
 
+    /// <summary>Gets or sets what films the destination's cameras into each dressed frame: handed the frame's views, the
+    /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
+    /// records. <see langword="null"/>, the default, films none.</summary>
+    public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives the
+    /// destination's resolved sky and the frame dimensions after its cameras have been dressed.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
+    /// <inheritdoc/>
+    /// <remarks>The destination's own font atlas, resolved beside its own document.</remarks>
+    public SdfGlyphAtlas? GlyphAtlas {
+        get {
+            FollowText();
+
+            return ((TextFault is null) ? m_text.GlyphAtlas : null);
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>The destination's text screens', drawn through its own font catalog.</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
+    /// <summary>Gets why the destination's font catalog does not resolve, which leaves its text screens blank: a
+    /// document that names no directory its fonts resolve beside (a world delivered from a remote authority), a font
+    /// asset that fails its pin, or text its fonts cannot draw; <see langword="null"/> while it resolves or the
+    /// destination declares no text.</summary>
+    public string? TextFault { get; private set; }
+
+    // The destination's font catalog, followed from its delivered definition.
+    private PackedFontAtlasCatalog? TextCatalog() {
+        FollowText();
+
+        return ((TextFault is null) ? m_text.Catalog : null);
+    }
+    // The text a screen of the destination shows, or null.
+    private WorldScreenSource.Text? TextAt(int screen) {
+        FollowText();
+
+        for (var index = 0; (index < m_textRows.Count); index++) {
+            if (m_textRows[index].Index == screen) {
+                return (m_textRows[index].Source as WorldScreenSource.Text);
+            }
+        }
+
+        return null;
+    }
+    // Follows the destination's delivered definition: its text rows and its font catalog, which every decal rebakes
+    // against. A catalog that does not resolve leaves the text blank and says why (TextFault), never stopping the frame.
+    private void FollowText() {
+        var definition = m_mirror.Definition;
+
+        if (ReferenceEquals(
+            objA: definition,
+            objB: m_textDefinition
+        )) {
+            return;
+        }
+
+        m_textDefinition = definition;
+        m_textRows = [
+            .. definition.Screens,
+            .. WorldPrototypeFacets.Seated(definition: definition),
+        ];
+        m_decals.Invalidate();
+
+        try {
+            m_text.Reconcile(definition: definition);
+            TextFault = null;
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or IOException or KeyNotFoundException or UnauthorizedAccessException or NotSupportedException or OverflowException)) {
+            TextFault = exception.Message.ReplaceLineEndings(replacementText: " ");
+        }
+    }
     // Registers the avatar palette and emits the hybrid catalog range — the probe branch (largest detailed rigs plus
     // the full coarse band at unit scale) and the live branch (only mirrored-active avatars, each sourcing its look's pinned rig and uniform
     // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
@@ -185,7 +310,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         WorldRigCatalog.Emit(
             builder: builder,
-            isActive: m_mirror.IsActive,
+            isActive: HoldsAvatar,
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             probeWorstCase: probeWorstCase,
@@ -196,40 +321,74 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             scaleFor: (probeWorstCase
             ? null
             : index => m_emittedScales[index]),
-            picks: (probeWorstCase ? null : m_picks)
+            picks: (probeWorstCase ? null : m_picks),
+            indirectFor: (probeWorstCase ? null : index => WorldIndirectParticipation.ForPlacement(definition: m_mirror.Definition, placementId: m_mirror.PlacementId(index: index)))
         );
     }
-    // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
-    // reads the destination's own authored transform (real data, no pose mirror needed); Entity/EntityPart/Group
-    // anchors have no live body pose to read this wave (see WorldSessionMirror's own staged-boundary remarks) and
-    // resolve to the world origin rather than reaching into state that was never mirrored.
-    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldDefinition definition, WorldAnchor? anchor) {
-        if (anchor is WorldAnchor.Placement placement) {
-            return (WorldAnchorGeometry.StaticPlacementPosition(
-                definition: definition,
-                placementId: placement.PlacementId,
-                shapeId: placement.ShapeId
-            ), Quaternion.Identity);
-        }
+    // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
+    // own authored transform, and an Entity anchor its mirrored body's interpolated pose while the body is active. Any
+    // other anchor (a body part, a group, a seat) resolves to the world origin: the mirror carries no part poses, and the
+    // presentation seats no one in the destination.
+    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldSessionMirror mirror, WorldDefinition definition, WorldAnchor? anchor) {
+        switch (anchor) {
+            case WorldAnchor.Placement placement:
+                return (WorldAnchorGeometry.StaticPlacementPosition(
+                    definition: definition,
+                    placementId: placement.PlacementId,
+                    shapeId: placement.ShapeId
+                ), Quaternion.Identity);
+            case WorldAnchor.Entity entity when (
+                (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+                mirror.IsActive(index: entity.Index)
+            ):
+                var alpha = mirror.InterpolationAlpha;
 
-        return (Vector3.Zero, Quaternion.Identity);
+                return (Vector3.Lerp(
+                    amount: alpha,
+                    value1: mirror.PreviousPosition(index: entity.Index),
+                    value2: mirror.CurrentPosition(index: entity.Index)
+                ), Quaternion.Lerp(
+                    amount: alpha,
+                    quaternion1: mirror.PreviousOrientation(index: entity.Index),
+                    quaternion2: mirror.CurrentOrientation(index: entity.Index)
+                ));
+            default:
+                return (Vector3.Zero, Quaternion.Identity);
+        }
     }
-    // Resolves this frame's camera: the bind-time-effective named camera if it still exists, else the destination's
-    // first declared camera, else a fixed overview derived from its spawn points.
-    // Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
-    // live pose/aim/lens edit on the destination's own camera row is visible without rebinding the session face.
-    private CameraSnapshot ResolveCamera(uint width, uint height) {
-        var definition = m_mirror.Definition;
-        var row = ResolveCameraRow(definition: definition);
+
+    /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
+    /// camera if the destination still declares it, else the destination's first declared camera, else a fixed overview
+    /// over its spawn points. It is resolved from the live mirrored definition every time, so a live edit of the
+    /// destination's camera row shows at once.</summary>
+    /// <param name="mirror">The destination's mirror.</param>
+    /// <param name="cameraName">The camera the session names, or <see langword="null"/> for the destination's
+    /// default projection.</param>
+    /// <param name="width">The view's width, in pixels.</param>
+    /// <param name="height">The view's height, in pixels.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound camera operand and reports its transitions.</param>
+    /// <returns>The camera, in the destination's space.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height, WorldValueDomainGuard domains) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        var definition = mirror.Definition;
+        var row = ResolveCameraRow(
+            definition: definition,
+            name: cameraName
+        );
 
         if (row is { } cameraRow) {
             var (position, orientation) = ResolveAnchorPose(
+                anchor: cameraRow.Anchor,
                 definition: definition,
-                anchor: cameraRow.Anchor
+                mirror: mirror
             );
             var rig = WorldCameraRigCompiler.Compile(
                 definition: definition,
-                mirror: m_mirror.FollowState(),
+                domains: domains,
+                mirror: mirror.FollowState(),
                 program: cameraRow.Rig
             );
             var anchor = new SdfAnchor(
@@ -238,7 +397,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
             var clock = new SdfCameraClock(
                 PresentationSeconds: 0f,
-                AuthoritativeTick: m_mirror.Tick
+                AuthoritativeTick: mirror.Tick
             );
 
             var (eye, target, fieldOfView) = rig.Resolve(
@@ -267,8 +426,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             width: width
         );
     }
-    private WorldCamera? ResolveCameraRow(WorldDefinition definition) {
-        if (m_effectiveCameraName is { } name) {
+
+    private static WorldCamera? ResolveCameraRow(WorldDefinition definition, string? name) {
+        if (name is not null) {
             foreach (var camera in definition.Cameras) {
                 if (string.Equals(
                     a: camera.Name,
@@ -354,18 +514,35 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
         var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
+            cameraName: m_effectiveCameraName,
+            domains: m_domains,
             height: height,
+            mirror: m_mirror,
             width: width
         ));
 
         m_dressedCamera = camera;
         m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
-        m_views[0] = new SdfViewSnapshot(
+        m_views.Clear();
+        m_views.Add(item: new SdfViewSnapshot(
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
-        };
+        });
+        Film?.Invoke(obj: m_views);
+
+        // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
+        var environment = m_environment.Resolve(
+            definition: m_mirror.Definition,
+            mirror: m_mirror.FollowState(),
+            revision: m_mirror.DefinitionRevision,
+            shadows: m_shadowSettings?.Invoke(),
+            layers: SkyLayers,
+            shadowSelection: m_deliveredShadows
+        );
+
+        FitSkyViews?.Invoke(m_views, environment.Sky, width, height);
 
         return new SdfFrame(
             Program: program,
@@ -380,12 +557,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's own sky and lighting, along its render.cycle when it authors one.
-            Environment = m_cycle.Resolve(
-                definition: m_mirror.Definition,
-                mirror: m_mirror.FollowState(),
-                revision: m_mirror.DefinitionRevision
-            ),
+            IndirectBodies = (m_mirror.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default),
+            IndirectSources = environment.Indirect.Gains.Sources,
+            IndirectGains = environment.Indirect.Gains,
+            IndirectBounces = environment.Indirect.Bounces,
+            IndirectApply = environment.Indirect.Apply,
+            Lights = environment.Lights,
+            ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_mirror.Definition.Render),
+            Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
@@ -397,7 +576,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
     /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
-        var definition = m_mirror.Definition;
+        var definition = Scoped(definition: m_mirror.Definition);
 
         if (context.Probe) {
             WorldSessionRenderEnvelope.EmitProbe(
@@ -416,15 +595,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             var colors = BakedColors();
 
             colors.Begin();
-            // A remote session mirror carries its document but no font asset origin/bytes. Its creation text stays
-            // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
+            // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
+            // (ScreenDecals).
             var meshDraws = new List<SdfMeshDraw>();
 
             // The pool reconciles first on every rebuild: animated placements root statically, attached ones on
             // their target body, and the census's bodies on their live poses, as the local scene's pool does.
             m_census.Refresh(source: m_source);
             m_pool.Reconcile(
-                bodyStamps: m_census.Stamps,
+                bodyStamps: ((m_onlyPrototypes is null) ? m_census.Stamps : []),
                 creations: definition.Creations,
                 dynamics: definition.Dynamics,
                 placements: definition.Placements
@@ -440,6 +619,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
+
+            // The destination's screens: its rows, then the faces its creations seat at the reserved band, within what
+            // the probe reserves (WorldSessionRenderEnvelope). The band's unseated placeholders are left out, so a world
+            // with no screen keeps a program that may stand unchanged between frames.
+            WorldStaticSceneEmit.Emit(
+                builder: builder,
+                derivedFaces: WorldPrototypeFacets.Seated(definition: definition),
+                screens: definition.Screens
+            );
             m_pool.Emit(
                 builder: builder,
                 colors: colors,
@@ -456,10 +644,22 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             slotBase: context.SlotBase
         );
     }
+
+    // Whether the scene draws a body's avatar: the mirror's active bodies, none in far geometry.
+    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && m_mirror.IsActive(index: index));
+    // The definition the scene emits: the whole of it, or, for far geometry, its placements of the named prototypes alone and
+    // none of its screens.
+    private WorldDefinition Scoped(WorldDefinition definition) => ((m_onlyPrototypes is null)
+        ? definition
+        : (definition with {
+            PlacementRowsRaw = [.. definition.Placements.Where(predicate: placement => m_onlyPrototypes.Contains(item: placement.PrototypeId))],
+            ScreensRaw = null,
+        }));
+
     /// <summary>Measures a proposed destination definition against this view's frozen render envelope.</summary>
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
         WorldSessionRenderEnvelope.MeasureCandidate(
-            candidate: candidate,
+            candidate: Scoped(definition: candidate),
             bodyColor: m_bodyColor,
             colors: BakedColors(),
             pool: m_pool
@@ -472,7 +672,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!m_mirror.IsActive(index: index)) {
+            if (!HoldsAvatar(index: index)) {
                 m_avatarPoseSeeded[index] = false;
 
                 if (m_avatarOwners.Vacate(
@@ -507,6 +707,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
             if (!m_avatarOwners.Wake(
                 castsSoftShadow: m_castsAvatarShadows,
+                deltaSeconds: 1f,
                 discontinuity: (
                 !m_avatarPoseSeeded[index] ||
                 (m_avatarMotionAddresses[index] != address)

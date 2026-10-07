@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;

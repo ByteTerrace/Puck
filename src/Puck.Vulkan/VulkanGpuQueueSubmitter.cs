@@ -146,7 +146,7 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
                 Device: device,
                 StartSignaled: false
             )
-        ).ThrowIfFailed(operation: "vkCreateFence");
+        ).ThrowIfFailed(device: m_device, operation: "vkCreateFence");
     }
 
     /// <inheritdoc/>
@@ -166,7 +166,7 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
                 return false;
             }
 
-            status.ThrowIfFailed(operation: "vkGetFenceStatus");
+            status.ThrowIfFailed(device: m_device, operation: "vkGetFenceStatus");
 
             return true;
         }
@@ -207,11 +207,11 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
             device: m_device,
             fenceHandle: m_fenceHandle,
             timeout: ulong.MaxValue
-        ).ThrowIfFailed(operation: "vkWaitForFences");
+        ).ThrowIfFailed(device: m_device, operation: "vkWaitForFences");
         m_frameSynchronizationApi.ResetFence(
             device: m_device,
             fenceHandle: m_fenceHandle
-        ).ThrowIfFailed(operation: "vkResetFences");
+        ).ThrowIfFailed(device: m_device, operation: "vkResetFences");
         m_pending = false;
     }
 }

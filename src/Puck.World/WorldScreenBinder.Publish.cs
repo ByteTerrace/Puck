@@ -6,23 +6,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    /// <summary>Configures the views the world renders beside its own — called once by the render factory after the frame
-    /// source has probed the render envelope (the worst-case program, instance and transform capacities every view's
-    /// residency must fit). Registers one camera view per camera a screen names and one session view per session screen,
-    /// each an <c>sdf.world</c> instance the render graph runs (<see cref="TryResolveView"/>).</summary>
-    /// <param name="pipelines">The composition's pipeline catalog every view's residency leases its pipelines from.</param>
-    /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 (selects the kernel bytecode).</param>
-    /// <param name="programWordCapacity">The world's probed program-word floor.</param>
-    /// <param name="instanceCapacity">The world's probed instance floor.</param>
-    /// <param name="dynamicTransformCapacity">The world's dynamic-transform slot count.</param>
-    /// <param name="host">The world's frame source, whose glyph atlas, screen decals and moving screens a camera view
-    /// shares.</param>
-    /// <param name="displayWidth">The display's width, in pixels, which a view's declared extent is a fraction of.</param>
-    /// <param name="displayHeight">The display's height, in pixels.</param>
-    /// <param name="viewports">The seats' views for each frame just dressed, whose primary render camera a window session fits
-    /// its eye to.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/>, <paramref name="host"/> or <paramref name="viewports"/> is
-    /// <see langword="null"/>.</exception>
+    /// <inheritdoc/>
     public void ConfigureViews(SdfWorldPipelineCatalog pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight, WorldSeatViewports viewports) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
         ArgumentNullException.ThrowIfNull(argument: host);
@@ -50,10 +34,12 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        // Every session-sourced slot resolved (headless-safe, at boot or a live reconcile) but not yet registered completes
-        // its view now that the render envelope is known.
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is { FrameSource: null } feed) {
+        // Every session feed resolved (headless-safe, at boot or a live reconcile) but not yet registered completes its
+        // view now that the render envelope is known, at every level.
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if (feed.FrameSource is null) {
                 RegisterSessionView(feed: feed);
             }
         }
@@ -92,8 +78,6 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        // A view whose registration or session is gone gives back its residency.
-        ReconcileViewResidencies();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 
@@ -123,10 +107,15 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
+        ReconcileInfinityRoots();
+        ReconcileNesting();
         SettleWindowRoutes();
+        // Reconciliation may have closed a view or routed it into a shared residency this frame.
+        ReconcileViewResidencies();
         m_frameContext = context;
         m_hasFrameContext = true;
         Mappings.Publish(images: this);
+        PublishNestedMappings();
     }
     /// <summary>Sets the deterministic refresh divisor of every camera view and every session view but a window's. One
     /// renders every produced frame; larger values keep the last image between refreshes.</summary>

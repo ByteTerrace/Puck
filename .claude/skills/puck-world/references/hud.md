@@ -28,7 +28,7 @@ a world-level kill switch plus the drawn pointer cursor's per-world policy —
 units, ring radius in px, the bare cursor's `WorldHudCursorRole` hue token, an
 optional visibility predicate; null draws no cursor at all, since the engine
 has none of its own and the standard policy is authored in
-`Assets/worlds/standard.world.json`; whole-row replace semantics on
+`Assets/worlds/standard.puck`; whole-row replace semantics on
 `SetHudDefaults`, so a defaults row authored without it clears the cursor). Validated by `hud.CursorInvalid`;
 echoed RESOLVED by `world.hud`; the live pointer state (position, visibility
 verdict, hover target) echoes through `world.view.pointer`
@@ -73,7 +73,10 @@ carrying an `Identity` section (an owned world's boot load, a sync pull, and
 `identity.hud`'s own candidate check below), never hand-rolled per door.
 
 **Bindings are a CLOSED vocabulary** (`HudBindingVocabulary`): `world.tick`,
-`world.fps`, `population.active`, `seat.<n>.position.{x,y,z}` with `<n>`
+`world.fps`, `population.active`, `history.cursor` (the in-session history's
+cursor tick, its gauge the cursor's place in the window), `history.window` (the
+window's ends, its gauge the bytes held against the budget; both read `off`
+with no window), `seat.<n>.position.{x,y,z}` with `<n>`
 1-based in 1..4, `state.<row>` (a `state`-section row's own SLOT cell), and
 `state.<row>.<key>` (one named cell in ANY row shape — see
 [documents.md](documents.md)'s `state` section). The split on the FIRST dot
@@ -128,7 +131,10 @@ the mirror of the world that seat is routed to
 bindings with the rest of its reads (`WorldPresentationManifest.SeatBindings`),
 so a crossed seat's panel shows the world it is in, like its bar, pages,
 wheels and contexts; `HudWriter` passes the panel's seat to
-`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. A cell carrying a
+`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. Its text is a
+borrowed character span, consumed before the next resolve. History bindings
+format into a reused buffer, and `HudWriter` copies a composed template into
+reused character storage, so a steady history line allocates nothing. A cell carrying a
 `dynamics` trait presents its eased follower, interpolated at the frame's fraction, unless the
 token carries the `.$target` facet above, in which case it presents stored truth
 exactly like a cell with no trait always does. The text shows the value read at
@@ -255,9 +261,10 @@ a template with no document row behind it at all.
 
 ## The overlay reservation — what refuses at construction
 
-`OverlayChannel` has SEVEN members, value = draw priority for the first four:
+`OverlayChannel` has EIGHT members, value = draw priority for the first four:
 `Console = 0`, `BindingBar = 1`, `Markers = 2`, `Toast = 3`, `Hud = 4`,
-`Cursor = 5`, `Wheel = 6`. The FOUR first-party writers are
+`Cursor = 5`, `Wheel = 6`, `Editor = 7` (the inspector, drawn after the seat
+panels and just before the wheel and cursor). The FOUR first-party writers are
 `ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
 (`FirstPartyChannelCount = 4`); `HudWriter`
 is the fifth channel, banded, not one of the four; `WheelWriter` and
@@ -309,8 +316,8 @@ beside the others.
 (snapshot the structure once) → UNDER band (its own
 `BeginChannel(Hud)` scope) → BASE slot → OVER band. The base slot is: if any
 live panel declares `Replace`, the replace panels draw IN DOCUMENT ORDER
-INSTEAD OF the five first-party writers — exactly those five, nothing else;
-otherwise the five run in enum order. `HasReplace` recomputes from the
+INSTEAD OF the four first-party writers — exactly those four, nothing else;
+otherwise the four run in enum order. `HasReplace` recomputes from the
 fresh snapshot every frame, so removing the last replace panel restores the
 writers the next produced frame. The stdin/stdout control plane is
 untouched by `Replace` — the console MIRROR merely stops being drawn.

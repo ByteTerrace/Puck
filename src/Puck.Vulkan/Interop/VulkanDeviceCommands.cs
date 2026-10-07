@@ -204,7 +204,8 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="memory">The device-local memory counts every allocation made through this table joins, or
     /// <see langword="null"/> to count none.</param>
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null) {
+    /// <param name="deviceFaultEnabled">Whether the device was created with deviceFault enabled.</param>
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         VulkanArgument.RequireHandle(
@@ -214,6 +215,7 @@ public sealed unsafe class VulkanDeviceCommands {
         );
 
         Handle = deviceHandle;
+        Fault = new VulkanDeviceFault(device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
         Timestamps = new VulkanTimestampCommands(deviceHandle: deviceHandle, procedures: procedures);
         Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
@@ -576,6 +578,8 @@ public sealed unsafe class VulkanDeviceCommands {
 
     /// <summary>Gets the native <c>VkDevice</c> handle whose entry points the table holds.</summary>
     public nint Handle { get; }
+    /// <summary>Gets the diagnostics queried only after this device is lost.</summary>
+    public VulkanDeviceFault Fault { get; }
     /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
     /// when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }

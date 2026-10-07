@@ -34,14 +34,15 @@ namespace Puck.World.Server;
 /// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
 /// planetoid, an inverted ceiling, or the inside of a sphere are all walkable). Contact resolution receives the
 /// body's already-resolved ambient up separately, so authored gravity may still define another walkability axis.</para>
-/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across every
-/// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
-/// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c>, so a replaced instance needs no
-/// disposal.</para>
+/// <para>Per-revision: it holds no per-body state, so one instance is shared by reference across the bodies and
+/// installing a rebuild is a single reference swap on <see cref="WorldServer"/>. A bounded <see cref="SdfBoundsCache"/>
+/// reuses identical sweep boxes over the immutable program. The lattice remains outside that cache and is read
+/// afresh; replacing the field also replaces its cache. Neither needs disposal.</para>
 /// <para>The "which op can be solid" ceiling is <see cref="SdfFieldEvaluator"/>'s warp-free excluded-op set:
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
 /// reason, so <see cref="WorldServer"/> turns an unsupported solid into a loud apply-time rejection instead of a
-/// constructor throw at install time.</para>
+/// constructor throw at install time. Every moving body's step is proved clear of the solids by a certified sweep over
+/// the evaluator's bounds before the contact solve runs.</para>
 /// </remarks>
 public sealed class WorldSolidField : IContactField {
     // The same float-safety margin the client stamper adds around a placement's render reach, in world units.
@@ -106,13 +107,21 @@ public sealed class WorldSolidField : IContactField {
             program: program
         ),
         });
-        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
-        // still march the authored program alone.
-        m_contactField = ((lattice is null)
+        // A field lattice's height columns union with the authored solids for contact and for the certified sweep
+        // that proves how far a body moves; ray casts and line of sight still march the authored program alone. The
+        // sweep proves clearance of the exact program, never the grid's corner bound, so it stops a body at geometry
+        // rather than at the grid's slack.
+        var latticeSolid = ((lattice is null)
+            ? null
+            : new FieldLatticeSolid(lattice: lattice)
+        );
+        var sweepBounds = (evaluator.HasShape ? new SdfBoundsCache(field: evaluator) : null);
+
+        m_contactField = ((latticeSolid is null)
             ? m_field
             : new UnionField(
                 a: m_field,
-                b: new FieldLatticeSolid(lattice: lattice)
+                b: latticeSolid
             )
         );
         m_solver = new FixedFieldContactSolver(
@@ -122,7 +131,19 @@ public sealed class WorldSolidField : IContactField {
             gradientUp: tuning.GradientUp,
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
-            query: m_query
+            query: m_query,
+            sweep: (sweepBounds, latticeSolid) switch {
+                ( { } bounds, null) => new CertifiedFieldSweep(field: bounds),
+                ( { } bounds, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
+                    a: bounds,
+                    b: solid
+                )),
+                (null, { } solid) => new CertifiedFieldSweep(field: solid),
+                // No geometry for a body to cross: the endpoint solve finds nothing either.
+                (null, null) => null,
+            },
+            sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
+            sweepWork: FixedContactSweepWork.Process
         );
     }
 

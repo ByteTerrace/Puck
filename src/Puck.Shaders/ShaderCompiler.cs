@@ -10,7 +10,10 @@ namespace Puck.Shaders;
 /// Compiles HLSL stages with DXC, producing SPIR-V and DXIL candidates for both graphics and compute.
 /// </summary>
 public sealed partial class ShaderCompiler {
-    private const string CompilerVersion = "puck-shader-compiler-4";
+    // A content-identified note, not a header: this name is hashed into every compile identity, so a package built by another
+    // compiler is a different identity and is rebuilt, never read. The ledger records the compiler's shape for review; no
+    // fingerprint rides in the identity, because that would re-key every committed shader pin on each compiler edit.
+    private const string CompilerVersion = "puck-shader-compiler-1";
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> m_gates = new(comparer: StringComparer.Ordinal);
     private readonly string m_cacheDirectory;
@@ -23,8 +26,8 @@ public sealed partial class ShaderCompiler {
         new ShaderProcessRunner(),
         toolchainDirectory
     ) { }
-
-    internal ShaderCompiler(string cacheDirectory, IShaderProcessRunner processRunner, string? toolchainDirectory = null) {
+    /// <summary>Creates a compiler over a supplied tool runner and cache directory.</summary>
+    public ShaderCompiler(string cacheDirectory, IShaderProcessRunner processRunner, string? toolchainDirectory = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
         ArgumentNullException.ThrowIfNull(processRunner);
         m_cacheDirectory = Path.GetFullPath(path: cacheDirectory);

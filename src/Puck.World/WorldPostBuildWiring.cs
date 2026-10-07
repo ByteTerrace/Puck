@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <summary>
 /// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
-/// attachment, the outstanding-capture drain (see the end of <see cref="Install"/>), and the server's
+/// attachment, the schedule drain, and the server's
 /// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
 /// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>/
 /// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
@@ -30,7 +30,7 @@ namespace Puck.World;
 public static class WorldPostBuildWiring {
     /// <summary>Installs the affordance vocabulary, re-validates the boot document's binding vocabulary now that the
     /// vocabulary is real (see the remarks below), attaches the session-lever sink, wires the server's echo/cue taps,
-    /// and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call exactly
+    /// and registers the schedule's shutdown drain. Safe to call exactly
     /// once, after the container has built but before the host starts.</summary>
     /// <remarks>
     /// The loader validates before the DI container exists. At that point the command half of
@@ -232,20 +232,40 @@ public static class WorldPostBuildWiring {
 
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
 
-        services.GetRequiredService<WorldSourceWatch>().Report = (message, refused) => {
+        Action<string, bool> report = (message, refused) => {
             toasts?.Publish(isError: refused, message: message);
             consoleSessions.RecordAdministrativeEcho(message: message, refused: refused);
         };
+
+        services.GetRequiredService<WorldSourceWatch>().Report = report;
         var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
 
-        services.GetRequiredService<WorldCompareCapture>().Report = result => {
+        // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's
+        // diagnostic, and stderr, where a piped script reads it.
+        var valueDomains = services.GetRequiredService<WorldValueDomainGuard>();
+
+        valueDomains.Report = message => {
+            report(arg1: message, arg2: true);
+            consoleOutput.WriteErrorLine(value: message);
+        };
+        // A restored timeline is a state the held values of its world do not describe: that world's bindings start
+        // fresh, through the state mirror the boot instance's presentation reads. Another world's are untouched.
+        var restoredState = services.GetRequiredService<WorldClient>().StateMirror;
+
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => valueDomains.Restart(mirror: restoredState);
+
+        void ReportPresentationResult(CommandResult result) {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.
             if (result.IsError) { consoleRegistry.NoteDeferredRejection(); }
             toasts?.Publish(isError: result.IsError, message: result.Output);
             consoleSessions.RecordAdministrativeEcho(message: result.Output, refused: result.IsError);
             if (string.IsNullOrEmpty(value: result.Output)) { return; }
             if (result.IsError) { consoleOutput.WriteErrorLine(value: result.Output); } else { consoleOutput.WriteLine(value: result.Output); }
-        };
+        }
+        services.GetRequiredService<WorldCompareCapture>().Report = ReportPresentationResult;
+        foreach (var inspection in services.GetServices<ICommandModule>().OfType<WorldInspectionCommandModule>()) {
+            inspection.Report = ReportPresentationResult;
+        }
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
         var sourceWatch = services.GetRequiredService<WorldSourceWatch>();
@@ -289,11 +309,12 @@ public static class WorldPostBuildWiring {
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
             // at submit time, when the rebuild might still be refused. world.reset never reaches here with a
-            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched.
+            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched, and
+            // only a file origin is a path the console can save to or re-read.
             if (
                 !echo.Rejected &&
                 (echo.Kind == WorldEditEchoKind.Rebuild) &&
-                (echo.RebuildOrigin is { } origin)
+                (echo.RebuildOrigin is WorldRebuildOrigin.File { Path: var origin })
             ) {
                 definitionSource.SourcePath = origin;
                 editorSeats.Reconcile(world: WorldInstanceHost.BootInstanceName, placements: server.Definition.Placements);
@@ -462,26 +483,12 @@ public static class WorldPostBuildWiring {
             audioDirector.SubmitEmbellishment(patchId: patchId);
         };
 
-        // THE CAPTURE-REQUEST DRAIN: world.screenshot arms a readback of the NEXT composed frame, so a run that ends
-        // before that frame writes nothing at all. Left alone, the caller's only evidence is the arming echo, which
-        // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
-        // been bitten by. Say it out loud instead, at ApplicationStopped (every hosted service has stopped, so the
-        // render loop is provably finished and an outstanding request provably never will be served). The scheduled
-        // `captures` rows are not drained here: the host loop settles them (IFixedStepSimulation.SettleOwedFrames,
-        // WorldCaptureScheduler.Drain) before it disposes the render root, while the chain that would have served
-        // them is still alive. Presentation-only: a headless boot has no render probe and world.screenshot refuses
-        // there anyway.
+        // A capture still owed a frame as the run ends, a scheduled row's or a world.screenshot's, is refused by name by
+        // the host loop (IFixedStepSimulation.SettleOwedFrames, WorldCaptureScheduler.Drain) before it disposes the
+        // render root, while the chain that would have served it is still alive.
         // THE SCHEDULE DRAIN, every boot shape: a run that ended before its export tick must leave a manifest
         // saying where it got to rather than an empty directory a reader cannot tell from a crash.
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
-
-        if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
-            services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
-                if (renderProbe.Root?.PendingCapturePath is { } pending) {
-                    Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
-                }
-            });
-        }
 
         // THE RENDER-CAPACITY PRE-FLIGHT. The composed scene's construction-time probe is the first and only point
         // where the WHOLE worst case exists — the boot document's own rows, the avatar catalog, and one reservation

@@ -279,7 +279,7 @@ holds the value they write, and neither judged tick moves the arena.
 `tests/Puck.World.Browser.Tests/BrowserParityRecordingTests.cs` runs two fixed
 scripted sequences (write a scalar row then judge tick 1; judge tick 1 then
 tick 2 with no write) over `games/tictactoe.puck` composed under
-`standard.world.json`, and compares the resulting hash against
+`standard.puck`, and compares the resulting hash against
 `Fixtures/browser-parity/expected.json`; `puck baselines browser-parity`
 re-records that baseline from a fresh run. `src/Puck.Dashboard/src/portal/tests/engine-wasm.test.cjs` runs
 the identical two sequences through the wasm build under Node and asserts the
@@ -288,7 +288,7 @@ self-check: both runs matched on the AppBundle this README's own numbers came
 from.
 
 Only `games/tictactoe.puck` composes standalone under
-`standard.world.json` among the sampled fragments (`bowling`,
+`standard.puck` among the sampled fragments (`bowling`,
 `billiards`, `poker`, `dominoes`, `freecell`, `hexlines`, `klondike`, and
 `mancala` all refuse—each names a host register, a look, or a body motion
 program that only the island's own body supplies, never the bare basis
@@ -321,9 +321,9 @@ so machine admission appears in the deferred collection; its assembly initialize
 cannot change another host's machine catalog.
 
 **Verified consequence**: `Parse()` on the composed flagship
-island (`puck.world.json` over `standard.world.json`) succeeds, its `deferred[]`
+island (`puck.world.json` over `standard.puck`) succeeds, its `deferred[]`
 naming every one of the three real GamingBrick console screens
-`modules/arcade.world.json` (one of the island's fifteen imports) authors—
+`modules/arcade.puck` (one of the island's fifteen imports) authors—
 `machines[0] (arcade$cgb-screen).configuration: validation is deferred because
 no machine catalog was supplied for 'gaming-brick'.` (and two more, for
 `advanced-gaming-brick` and a second `gaming-brick` screen), beside three
@@ -335,7 +335,7 @@ row (most of the catalog) parses and compiles cleanly with no deferral at all.
 `BrowserSession`'s effect host (`Engine/BrowserRuleReader.cs`) is a
 `Puck.State.Rules.ArenaEffectHost` over the session's `StateArena`, widened to
 `IWorldFacts` (`Puck.World.Schema/IWorldFacts.cs`)—the world's
-seventeen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
+eighteen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
 `ArgBodyOperand`, …) plus the two body-reference resolutions and the two
 host-owned row reads `Puck.World.Server.WorldServer` answers from real bodies,
 machines, a clock, and adjacencies. This engine ships none of those, so `BrowserRuleReader`
@@ -347,7 +347,7 @@ here for "there is no host at all": population `0`, physics vacuously
 quiescent, no region occupants, no machine byte, no argmax/argmin/nearest
 body (`-1`), the engine's largest representable distance between two bodies
 that do not exist, no line of sight, never parked, perfectly upright, a link
-never established, a zero channel, and no navigation state.
+never established, a zero channel, no navigation state, and no board cell under a body (`-1`).
 `PlacementInfluenceOperand` alone reads `RuleFact.Absent`—an unrepresented
 influence provider is unknowable, never a falsely safe zero, exactly as
 `WorldRuleHost.Influence.cs` already answers it for the one real case that
@@ -410,7 +410,7 @@ the switch and 327,445 bytes without it (+30%, +96 KiB).
 
 `src/Puck.Dashboard/src/portal/tests/engine-timing.test.cjs` times every call
 an editing loop makes against this AppBundle under Node, over the shipped
-island (`puck.world.json` + `standard.world.json` + its imports,
+island (`puck.world.json` + `standard.puck` + its imports,
 `~2.4 MB` of source JSON, composing to a `~428 KB` standalone document); the
 native columns are a recorded measurement of the identical calls under the JIT,
 for comparison. Medians of three runs each, one machine. No test re-measures

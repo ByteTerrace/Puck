@@ -1,13 +1,13 @@
 {
   "id": "jump-trophy",
   "title": "The jump district's trophy region writes jump.reached for the body that touches it",
-  "binding": "Both legs boot a minimal host that imports modules/jump.world.json under alias 'jump' and spawns the local seat on jump-arrival with the vaulter kit. The positive leg flies the seat on a straight diagonal clear of every platform's solid geometry into the trophy's region and reads jump$reached, which the jumpTrophyReached rule (an Edge-mode compareState over the reserved $region:jump$jumpTrophy occupancy read) sets to 1 the tick the region's occupancy crosses zero. The discriminating leg drives the identical heading for a third of the flight time, well short of the trophy's 1.2-unit region, and reads jump$reached again — proving the flag is written on actual contact rather than echoed unconditionally.",
+  "binding": "Both legs boot a minimal host that imports modules/jump.puck under alias 'jump' and spawns the local seat on jump-arrival with the vaulter kit. The positive leg flies the seat on a straight diagonal clear of every platform's solid geometry into the trophy's region and reads jump$reached, which the jumpTrophyReached rule (an Edge-mode compareState over the reserved $region:jump$jumpTrophy occupancy read) sets to 1 the tick the region's occupancy crosses zero. The discriminating leg drives the identical heading for a third of the flight time, well short of the trophy's 1.2-unit region, and reads jump$reached again — proving the flag is written on actual contact rather than echoed unconditionally.",
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/jump-trophy/host.world.json",
+    "world": "tests/Puck.World.Canaries/jump-trophy/host.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -21,7 +21,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/jump-trophy/host.world.json",
+    "world": "tests/Puck.World.Canaries/jump-trophy/host.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

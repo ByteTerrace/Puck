@@ -68,6 +68,11 @@ public static class CanonicalBinaryWriterExtensions {
         value.CopyTo(destination: destination);
         writer.Advance(count: value.Length);
     }
+    /// <summary>Writes a shape fingerprint as its ASCII digits, with no length prefix.</summary>
+    /// <param name="writer">The destination.</param>
+    /// <param name="shape">The fingerprint the writing codec's <c>FormatShapes</c> constant holds.</param>
+    public static void WriteShape(this IBufferWriter<byte> writer, string shape) =>
+        writer.WriteBytes(value: System.Text.Encoding.ASCII.GetBytes(s: shape));
     /// <summary>Writes text as a variable-width UTF-8 byte count followed by the UTF-8 bytes.</summary>
     /// <param name="writer">The destination.</param>
     /// <param name="value">The text to write.</param>

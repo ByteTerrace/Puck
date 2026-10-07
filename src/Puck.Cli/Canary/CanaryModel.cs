@@ -53,9 +53,19 @@ internal sealed record CanaryManifest(
     // The wall-clock ceiling one boot of a leg may take before the runner kills it. Not the leg's length: every leg
     // ends when its script ends, because the runner closes the script with wire.errors and quit.
     int TimeoutSeconds,
-    string Title
+    string Title,
+    // Whether every leg runs alone on the machine, with no other leg beside it: the manifest's own declaration that
+    // its observation depends on how busy the machine is (for instance several processes whose independent wall
+    // clocks must line up), never a property derived from its boot shape or requirements.
+    bool Exclusive = false
 ) {
     public bool IsAutomatic => ((BootShape == CanaryBootShape.Headless) && (Requirements.Count == 0));
+    /// <summary>Whether every leg holds one of the run's GPU slots: it boots a real graphics device, windowed or
+    /// offscreen, or declares the <c>gpu</c> requirement.</summary>
+    public bool UsesGpu => ((BootShape is CanaryBootShape.Windowed or CanaryBootShape.Offscreen) || Requirements.Contains(
+        comparer: StringComparer.Ordinal,
+        value: "gpu"
+    ));
 }
 internal sealed record CanaryLeg(
     IReadOnlyList<CanaryAssertion> Assertions,
@@ -87,10 +97,10 @@ internal sealed record CanaryLeg(
 // the copy; before a leg's first boot it copies the package to <run>/<OutputName>. Alter, a logical path inside the
 // package, then has a line appended in the leg's copy, so its pin no longer holds.
 internal sealed record CanaryPackage(string SourcePath, string OutputName, string? Alter);
-// A second boot of a leg: the World relaunches on a document the first boot wrote into the leg's run directory, under
-// the same state directory, and runs its own script. Assertions read both boots' streams in order; each boot's
-// commands are accounted against its own process.
-internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string WorldFileName);
+// A second boot uses a saved document from the leg's run directory, a repository fixture, or the leg's own world when
+// neither is named. It shares the state directory and runs its own script. Assertions read both boots' streams in order;
+// each boot's commands are accounted against its own process.
+internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string? WorldFileName, string? WorldSourcePath = null);
 // One listener in a federated mesh leg: its own world document, its own driving script, addressed by Id everywhere
 // a manifest assertion or a peer's admission row needs to name it. Deliberately silent about HOW it is hosted — see
 // CANARY-SHAPE.md item 7 — so a future non-Process launch strategy (a Silo grain standing in for one entry) is an
@@ -174,10 +184,30 @@ internal sealed record CanaryImageRegionAssertion(
     double Top,
     int Width
 ) : CanaryAssertion(Name: Name);
+/// <summary>One capture held to a reference capture over a normalized region: the reference, whose extent is a whole
+/// multiple of the capture's on both axes, is box-filtered down to the capture's extent, each region pixel's difference
+/// is the mean of its absolute RGB differences in 8-bit codes, and their mean must not exceed <c>MaximumMeanCodes</c>.
+/// <c>Holds</c> false requires the bound to fail — never a missing capture, a wrong extent, or a reference that is no
+/// whole multiple of it, which fail either way.</summary>
+internal sealed record CanaryImageDifferenceAssertion(
+    double Bottom,
+    string Capture,
+    int Height,
+    bool Holds,
+    double Left,
+    double MaximumMeanCodes,
+    string Name,
+    string Reference,
+    double Right,
+    double Top,
+    int Width
+) : CanaryAssertion(Name: Name);
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
 // Line, when set, reads the field from the first continuation line of the selected response that starts with it
-// (after the transcript's indent) instead of from the response's own first line.
-internal sealed record CanaryValueExtraction(string Field, int? Component, string Name, string? Line = null);
+// (after the transcript's indent) instead of from the response's own first line. After, when set, starts that search
+// past the first continuation line that starts with it, so one of several lines alike is read by the line heading it.
+// A Line naming a whole counter kind reads that "<kind> <value>" line's value under the kind as the Field.
+internal sealed record CanaryValueExtraction(string Field, int? Component, string Name, string? Line = null, string? After = null);
 // Minus, when set, names a second extracted value subtracted from ValueName's: the operand is then the numeric
 // difference, so a relation can hold the change between two reads of one counter against another's.
 internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral, string? Minus = null);

@@ -2,6 +2,7 @@ using System.Globalization;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -11,14 +12,20 @@ namespace Puck.World;
 /// <summary>
 /// The render levers: engine-wide render options any presentation shape honors — shadows and their crowd radius,
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
-/// scale, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
+/// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
-/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
-/// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
+/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view
+/// and operator-owned indirect comparison/freeze/reset, which affect only live presentation settings or objects.
+/// Nothing here needs a window or a
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+/// <param name="population">The authority's population supplying adaptive-quality demand.</param>
+/// <param name="settings">The presentation settings receiving admitted render levers.</param>
+/// <param name="server">The authority whose live definition and grants the commands inspect.</param>
+/// <param name="link">The existing submission path for authoritative session levers.</param>
+/// <param name="renderProbe">The presentation owner's live renderer and indirect residency inventory.</param>
+public sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
         var (configured, isFast) = mode switch {
@@ -42,8 +49,23 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
+            : "off")} temporal={(settings.Temporal
+            ? "on"
+            : "off")} shadow-amortize={(settings.ShadowAmortize
+            ? "on"
+            : "off")} dynamic-resolution={(settings.DynamicResolution
+            ? "on"
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()}]";
     }
+    // A sky tier's spelling, as the document and world.sky-quality spell it.
+    private static string SkyQualityName(WorldSkyTier tier) => tier switch {
+        WorldSkyTier.Low => "low",
+        WorldSkyTier.Medium => "medium",
+        _ => "high",
+    };
+    // The world.sky-quality echo.
+    private static string SkyQualityEcho(WorldRenderSettings settings) =>
+        $"[world.sky-quality: {SkyQualityName(tier: settings.SkyQuality)}]";
     private string DescribeShadowMarch() =>
         DescribeAdaptiveQuality(
             mode: ((int)settings.ShadowMarch),
@@ -61,13 +83,30 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")}]";
     }
-    // The world.far-field echo.
+    private string RenderScaleEcho(string view) {
+        view = ((view == "*") ? WorldViewGraphs.WorldInstance : view);
+        var state = settings.Resolution(view: view);
+        var controller = state.Controller;
+        var ceiling = settings.Ceiling(view: view);
+        var enabled = settings.Enabled(view: view);
+        var mode = (!enabled ? "off" : ((state.Pin > 0f) ? $"pin {RenderScaleName(scale: state.Pin)}" : "auto"));
+        var grid = ((enabled && (controller.Grid > 0d)) ? controller.Grid : WorldDynamicResolution.GridOf(ceiling: ceiling, scale: ceiling));
+        var signal = (enabled ? controller.Signal : WorldDynamicResolutionSignal.Off);
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} budget={controller.StepBudget} signal={signal.ToString().ToLowerInvariant()}]");
+    }
+    // The world.temporal echo.
+    private static string TemporalEcho(WorldRenderSettings settings) =>
+        $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
+    // The world.bakes echo.
     private static string BakesEcho(WorldRenderSettings settings) =>
         $"[world.bakes: {settings.Bakes switch {
             true => "on",
             false => "off",
             null => "default: a world's bakes draw when it ships them",
         }}]";
+    // The world.far-field echo.
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
@@ -189,40 +228,6 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         mode = default;
 
         return false;
-    }
-    private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
-        if (WorldRenderScaleTiers.TryParse(
-            name: text.ToString(),
-            tier: out var tier
-        )) {
-            scale = WorldRenderScaleTiers.Scale(tier: tier);
-
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!CommandArgs.TryParseFloat(
-            text: token,
-            value: out scale
-        )) {
-            return false;
-        }
-
-        if (percent) {
-            scale /= 100f;
-        }
-
-        return (
-            float.IsFinite(f: scale) &&
-            (scale >= 0.125f) &&
-            (scale <= 1f)
-        );
     }
     private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
         if (text.Equals(
@@ -360,6 +365,24 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.sky-layer",
+            description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
+                if (args.Count == 0) { return Echo(); }
+                var solo = args.Is(index: 0, value: "solo");
+                var index = -1;
+                var off = (solo && (args.Count == 2) && args.Is(index: 1, value: "off"));
+                var mute = ((args.Count == 3) ? ParseOnOff(token: args[2]) : null);
+
+                if ((!solo && !args.Is(index: 0, value: "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
+                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0))))) {
+                    return CommandResult.Usage(form: "solo <index>|solo off|mute <index> on|off", verb: "world.sky-layer");
+                }
+                return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
+            });
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadows",
             description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
             handler: (context, args) => {
@@ -436,7 +459,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.bakes",
-            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). Ships off.",
+            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). By default, ready bakes draw when the loaded world ships them; fields draw otherwise.",
             handler: (context, args) => {
                 if (
                     (args.Count == 0) ||
@@ -525,6 +548,80 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.indirect",
+            description: "Selects the residency's indirect cache: world.indirect [off|medium|high]. No argument reads the selected tier; world.lighting reads its live host inventory and world.budget its allocation.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.indirect: {settings.IndirectTier.ToString().ToLowerInvariant()}]");
+                if (args.Count == 0) { return Echo(); }
+                var tier = ((args.Count != 1) ? ((SdfIndirectTier?)null) : args[0] switch {
+                    "off" => SdfIndirectTier.Off,
+                    "medium" => SdfIndirectTier.Medium,
+                    "high" => SdfIndirectTier.High,
+                    _ => ((SdfIndirectTier?)null),
+                });
+
+                if (tier is not { } selected) {
+                    return CommandResult.Error(output: "[world.indirect: expected off|medium|high]");
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Indirect,
+                    a: ((int)selected), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-method",
+            description: "Selects the live per-view indirect comparison: world.indirect-method [cache|screen|cone]. Cache is the default; this operator presentation override changes no authoritative state or cache tier.",
+            handler: (_, args) => {
+                CommandResult Echo() => new(Output: $"[world.indirect-method: {settings.IndirectMethod.ToString().ToLowerInvariant()}]");
+                if (args.Count == 0) { return Echo(); }
+                var method = ((args.Count != 1) ? ((SdfIndirectMethod?)null) : args[0] switch {
+                    "cache" => SdfIndirectMethod.Cache,
+                    "screen" => SdfIndirectMethod.Screen,
+                    "cone" => SdfIndirectMethod.Cone,
+                    _ => ((SdfIndirectMethod?)null),
+                });
+
+                if (method is not { } selected) { return CommandResult.Usage(form: "cache|screen|cone", verb: "world.indirect-method"); }
+                settings.IndirectMethod = selected;
+                return Echo();
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-freeze",
+            description: "Pauses new update admission in every active residency: world.indirect-freeze [on|off]. Reads keep the retained cache; an already admitted frame may finish. Operator presentation control, not authoritative state.",
+            handler: (_, args) => {
+                if (args.Count > 1) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
+                var freeze = ((args.Count == 1) ? ParseOnOff(token: args[0]) : null);
+
+                if ((args.Count == 1) && (freeze is null)) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
+                if (renderProbe.IndirectResidencies.Count == 0) {
+                    return CommandResult.Error(output: "[world.indirect-freeze: no active indirect residency — select medium or high and wait for the renderer]");
+                }
+                if (freeze is { } selected) {
+                    foreach (var residency in renderProbe.IndirectResidencies) { residency.IndirectFrozen = selected; }
+                }
+                return new CommandResult(Output: $"[world.indirect-freeze: {WorldIndirectDiagnosticText.Describe(renderProbe)}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-reset",
+            description: "Queues every active residency's presentation cache reset at its next renderable frame. Frozen caches withdraw their old publication and admit no replacement work. Takes no argument; changes no authoritative state.",
+            handler: (_, args) => {
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.indirect-reset") is { } refusal) { return refusal; }
+                if (renderProbe.IndirectResidencies.Count == 0) {
+                    return CommandResult.Error(output: "[world.indirect-reset: no active indirect residency — select medium or high and wait for the renderer]");
+                }
+                foreach (var residency in renderProbe.IndirectResidencies) { residency.RequestIndirectReset(); }
+                return new CommandResult(Output: $"[world.indirect-reset: {WorldIndirectDiagnosticText.Describe(renderProbe)}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.debug-view",
             description: $"Selects the live SDF diagnostic output for every World camera: world.debug-view [{string.Join(
                 separator: '|',
@@ -560,7 +657,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadow-mask",
-            description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses the exact per-tile grid gather (one shadow candidate mask per 8x8 workgroup, bit-identical to the flat march) below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
+            description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses the exact per-tile grid gather (one shadow candidate mask per 8x8 workgroup, equal to the flat march to the bit by construction, though no automated check compares them) below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeShadowMask());
@@ -648,39 +745,35 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.render-scale",
-            description: "Sets internal SDF resolution live (no rebuild): world.render-scale [native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%]. Every player view renders at that fraction and the compositor reconstructs it to output resolution using world.upscale-sharpness; native is the bit-exact copy path. Numeric values make fine-grained 120 FPS sweeps possible.",
+            description: "Controls view resolution: world.render-scale [view] [<tier|fraction|percent>|floor <tier>|pin <scale>|auto [on|off]]. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
             handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: settings.RenderScale)} | named: {WorldRenderScaleTiers.ValidNames} | numeric: 12.5%..100%]");
+                settings.ReadQuality(definition: server.Definition);
+                if (!WorldRenderScaleCommand.TryParse(args: in args, command: out var command, refusal: out var refusal)) {
+                    return CommandResult.Error(output: $"[{refusal}]");
                 }
-
-                if (!TryParseRenderScale(
-                    text: args[0],
-                    scale: out var scale
-                )) {
-                    return CommandResult.Error(output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
+                if (!settings.HasView(view: command.View)) {
+                    return CommandResult.Error(output: $"[world.render-scale: unknown view '{command.View}']");
                 }
+                if (command.Operation == WorldRenderScaleOperation.Echo) {
+                    return new CommandResult(Output: RenderScaleEcho(view: command.View));
+                }
+                if ((command.Operation == WorldRenderScaleOperation.Pin) && !settings.CanPin(command.View, command.Scale, out refusal)) {
+                    return CommandResult.Error(output: $"[{refusal}]");
+                }
+                var section = (((command.View == "*") && (command.Operation != WorldRenderScaleOperation.Floor))
+                    ? WorldSection.Render : WorldSection.Views);
 
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.RenderScale,
-                    a: scale,
-                    formatEcho: () => {
-                        var liveScale = settings.RenderScale;
-                        var pixelPercent = ((int)Math.Round(a: ((liveScale * liveScale) * 100f)));
-
-                        return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: liveScale)} — ~{pixelPercent}% of native internal pixels; measure GPU work with world.counters gpu]");
-                    }
-                );
+                link.SubmitSessionLever(lever: new WorldSessionLever(section, WorldSessionLevers.RenderScale,
+                    command.Scale, ((double)command.Operation), View: ((command.View == "*") ? null : command.View)), principal: context.Principal);
+                return new CommandResult(Output: RenderScaleEcho(view: command.View));
             }
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.upscale-sharpness",
-            description: "Sets reduced-resolution reconstruction continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. Zero is the four-tap bilinear fast path; any positive value enables clamped Catmull-Rom and blends toward it; native render scale ignores this setting.",
+            description: "Sets reconstruction sharpness continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. A reduced view's spatial resolve is the four-tap bilinear fast path at zero, and any positive value blends toward clamped Catmull-Rom; a temporally resolved view (world.temporal) gets a contrast-adaptive sharpen of that strength where place shows it at its own extent. A native view that does not reconstruct ignores this setting.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]");
@@ -704,15 +797,98 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.temporal",
+            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. Camera and session views never reconstruct.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: TemporalEcho(settings: settings));
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.temporal: unknown state '{args[0]}' — on|off]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (on ? 1.0 : 0.0),
+                    formatEcho: () => new CommandResult(Output: TemporalEcho(settings: settings))
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.shadow-amortize",
+            description: "Reuses secondary shadow history with temporal reconstruction: world.shadow-amortize [on|off]. Slot zero and fading slots march fully. Other slots march one quarter-grid selected by the jitter index, rejecting history on light ownership, light motion, occluder motion, or receiver identity and depth changes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.shadow-amortize: {(settings.ShadowAmortize ? "on" : "off")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.shadow-amortize: unknown state '{args[0]}' — on|off]");
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (on ? 1.0 : 0.0), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.sky-quality",
+            description: "Sets the sky's quality tier, live: world.sky-quality [low|medium|high] — no argument echoes the current tier. A sky layer whose tier lies above it writes no entry and counts no work; below high each kind draws its reduced form (clouds take one thickness tap and three octaves at low, shaded flat, and three octaves at medium; stars stop twinkling at low; an aurora and a noise field take fewer octaves). The world's quality presets set it through their sky row.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: SkyQualityEcho(settings: settings));
+                }
+
+                WorldSkyTier? tier = args[0].ToString() switch {
+                    "low" => WorldSkyTier.Low,
+                    "medium" => WorldSkyTier.Medium,
+                    "high" => WorldSkyTier.High,
+                    _ => null,
+                };
+
+                if (tier is not { } chosen) {
+                    return CommandResult.Error(output: $"[world.sky-quality: unknown tier '{args[0]}' — low|medium|high]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.SkyQuality,
+                    a: ((double)chosen),
+                    formatEcho: () => new CommandResult(Output: SkyQualityEcho(settings: settings))
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.sky-field-scale",
+            description: "Sets the sky field grid independently of the scene grid: world.sky-field-scale [1|0.5]. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.sky-field-scale: {settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}]");
+                if (args.Count == 0) { return Echo(); }
+                float? scale = ((args.Count == 1) ? args[0].ToString() switch {
+                    "1" => 1f,
+                    "0.5" => .5f,
+                    _ => null,
+                } : null);
+
+                if (scale is not { } chosen) { return CommandResult.Usage(form: "1|0.5", verb: "world.sky-field-scale"); }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.SkyFieldScale,
+                    a: chosen, formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale, sky-quality, sky-field-scale and indirect-tier levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its three levers into the live
+                // preset table applies immediately: look the named tier up and write its levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -737,14 +913,48 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     ? 1.0
                     : 0.0)
                 );
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (preset.Temporal
+                    ? 1.0
+                    : 0.0)
+                );
+                SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (preset.ShadowAmortize ? 1.0 : 0.0));
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.RenderScale,
+                    b: ((double)(preset.DynamicResolution ? WorldRenderScaleOperation.Auto : WorldRenderScaleOperation.Off)),
+                    a: 0.0
+                );
 
-                // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
+                link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.SkyQuality,
+                    a: ((double)preset.Sky)
+                );
+                SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
+                SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
+                    QualityTier.Low => SdfIndirectTier.Off,
+                    QualityTier.Medium => SdfIndirectTier.Medium,
+                    _ => SdfIndirectTier.High,
+                }))));
+                SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
+                    WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
+                    section: WorldSection.Views);
+                // The echo formats inside the last lever's completion — every setting has applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.RenderScale,
-                    a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
+                    a: preset.RenderScale,
+                    b: ((double)WorldRenderScaleOperation.Ceiling),
                     formatEcho: () => new CommandResult(Output: DescribeQuality())
                 );
             }

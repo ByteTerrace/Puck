@@ -5,6 +5,11 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
 
+/// <summary>One name-shaped member of the document model that carries no module-scoped name, with the reason.</summary>
+/// <param name="Owner">The type declaring the member.</param>
+/// <param name="Member">The member's C# name.</param>
+/// <param name="Reason">Why the member is outside every <see cref="WorldNameKind"/>.</param>
+public sealed record WorldNameExclusion(Type Owner, string Member, string Reason);
 /// <summary>One JSON path a registered member reaches in a <c>puck.world.definition.v1</c> document.</summary>
 /// <param name="Path">The path from the root: <c>rules[].effects[setState].state</c>, where <c>[]</c> is a list
 /// element and <c>[name]</c> a <c>$type</c> arm.</param>
@@ -128,10 +133,19 @@ public static partial class WorldNameRegistry {
             }
         );
 
+    // A light's and a sky layer's name, which a render section key addresses it by: each kind's own member, since
+    // every kind declares it.
+    private static WorldNameExclusion[] SectionKeyNames => [
+        .. new[] { typeof(WorldRenderLight.Directional), typeof(WorldRenderLight.Rim), typeof(WorldRenderLight.Point), typeof(WorldRenderLight.Occluder) }
+            .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a light name a section key addresses")),
+        .. new[] { typeof(WorldRenderSkyLayer.Gradient), typeof(WorldRenderSkyLayer.SunDisc), typeof(WorldRenderSkyLayer.Stars), typeof(WorldRenderSkyLayer.Clouds), typeof(WorldRenderSkyLayer.Aurora), typeof(WorldRenderSkyLayer.Noise), typeof(WorldRenderSkyLayer.Pattern), typeof(WorldRenderSkyLayer.Panorama), typeof(WorldRenderSkyLayer.Panel), typeof(WorldRenderSkyLayer.View), typeof(WorldRenderSkyLayer.Far) }
+            .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a sky layer name a section key addresses")),
+    ];
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>> RowMembers = new();
 
     /// <summary>Finds the registration for a member, or the implicit one its type carries: a
-    /// <see cref="BindableScalar"/>, <see cref="BindableColor"/> or <c>IDocumentStateValue</c> member — a creation's
+    /// <see cref="BindableScalar"/>, <see cref="BindableColor"/>, <see cref="BindableAngle"/> or <c>IDocumentStateValue</c> member — a creation's
     /// spatial value or identifier a state cell may stand in for — is a state binding wherever it sits.</summary>
     /// <param name="declaringType">The type the member was found on.</param>
     /// <param name="member">The member's C# name.</param>
@@ -153,6 +167,7 @@ public static partial class WorldNameRegistry {
         if (
             (leaf == typeof(BindableScalar)) ||
             (leaf == typeof(BindableColor)) ||
+            (leaf == typeof(BindableAngle)) ||
             typeof(Puck.Assets.Documents.IDocumentStateValue).IsAssignableFrom(c: leaf)
         ) {
             field = new WorldNameField(
@@ -191,6 +206,7 @@ public static partial class WorldNameRegistry {
             (leaf == typeof(StateChannelRef)) ||
             (leaf == typeof(BindableScalar)) ||
             (leaf == typeof(BindableColor)) ||
+            (leaf == typeof(BindableAngle)) ||
             (leaf == typeof(WorldLatticeScalar))
         ) {
             return true;
@@ -221,12 +237,10 @@ public static partial class WorldNameRegistry {
 
     private sealed class Walk {
         private readonly IReadOnlyList<WorldNameField> m_fields;
-
         private readonly List<Type> m_stack = [];
-        private readonly JsonSerializerOptions m_options = WorldJsonContext.Default.Options;
 
-        public List<WorldNameSite> Sites { get; } = [];
         public List<(string Path, Type Owner, string Member, string Reason)> Excluded { get; } = [];
+        public List<WorldNameSite> Sites { get; } = [];
         public List<string> Uncovered { get; } = [];
 
         private Walk(IReadOnlyList<WorldNameField> fields) => m_fields = fields;
@@ -250,7 +264,8 @@ public static partial class WorldNameRegistry {
 
             if (
                 (leaf == typeof(BindableScalar)) ||
-                (leaf == typeof(BindableColor))
+                (leaf == typeof(BindableColor)) ||
+            (leaf == typeof(BindableAngle))
             ) {
                 Sites.Add(item: new WorldNameSite(
                     Path: path,
@@ -354,13 +369,9 @@ public static partial class WorldNameRegistry {
                 return;
             }
 
-            JsonTypeInfo typeInfo;
+            var typeInfo = WorldModelShape.Of(type: type);
 
-            try {
-                typeInfo = m_options.GetTypeInfo(type: type);
-            } catch (Exception exception) when ((exception is NotSupportedException or InvalidOperationException)) {
-                return;
-            }
+            if (typeInfo is not { Described: true }) { return; }
 
             if (m_stack.Contains(item: type)) {
                 Sites.Add(item: new WorldNameSite(
@@ -401,16 +412,14 @@ public static partial class WorldNameRegistry {
 
             switch (typeInfo.Kind) {
                 case JsonTypeInfoKind.Object:
-                    foreach (var property in typeInfo.Properties) {
+                    foreach (var property in typeInfo.Members) {
                         if (
-                            property.IsExtensionData ||
-                            (property.Get is null) ||
-                            (property.Set is null)
+                            (property.Access & (WorldModelAccess.Read | WorldModelAccess.Write | WorldModelAccess.ExtensionData)) != (WorldModelAccess.Read | WorldModelAccess.Write)
                         ) {
                             continue;
                         }
 
-                        var (declaringType, member) = ResolveMember(property: property);
+                        var (declaringType, member) = (property.DeclaringType, property.Member);
                         var childPath = ((path.Length == 0)
                             ? property.Name
                             : $"{path}.{property.Name}"
@@ -420,21 +429,19 @@ public static partial class WorldNameRegistry {
                             path: childPath,
                             declaringType: declaringType,
                             member: member,
-                            propertyType: property.PropertyType
+                            propertyType: property.Type
                         );
                         VisitType(
-                            type: property.PropertyType,
+                            type: property.Type,
                             path: childPath
                         );
                     }
 
-                    if (typeInfo.PolymorphismOptions is { } polymorphism) {
-                        foreach (var derived in polymorphism.DerivedTypes) {
-                            VisitType(
-                                type: derived.DerivedType,
-                                path: $"{path}[{derived.TypeDiscriminator}]"
-                            );
-                        }
+                    foreach (var derived in typeInfo.Arms) {
+                        VisitType(
+                            type: derived.Type,
+                            path: $"{path}[{derived.Discriminator}]"
+                        );
                     }
 
                     break;

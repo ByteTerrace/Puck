@@ -404,6 +404,7 @@ public static class WorldRigCatalog {
     /// <param name="scaleFor">Each avatar's uniform render scale, or <see langword="null"/> for 1.</param>
     /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many bodies. Null reserves every material-span entry.</param>
     /// <param name="picks">The optional presentation identity table populated for emitted bodies.</param>
+    /// <param name="indirectFor">Each body's placement override, or null to follow its frame's body policy.</param>
     public static void Emit(
         SdfProgramBuilder builder,
         Func<int, bool> isActive,
@@ -414,7 +415,8 @@ public static class WorldRigCatalog {
         Func<int, int>? rigFor = null,
         Func<int, float>? scaleFor = null,
         int? probeAvatarLimit = null,
-        WorldPickMapBuilder? picks = null
+        WorldPickMapBuilder? picks = null,
+        Func<int, SdfIndirectParticipation>? indirectFor = null
     ) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(isActive);
@@ -442,6 +444,7 @@ public static class WorldRigCatalog {
 
             var firstInstance = builder.InstanceCount;
             var firstSlot = BodySlotBase(avatar: avatar);
+            var indirect = (probeWorstCase ? SdfIndirectParticipation.Default : (indirectFor?.Invoke(avatar) ?? SdfIndirectParticipation.Default));
             var scale = (probeWorstCase
                 ? 1f
                 : ScaleFor(
@@ -460,7 +463,8 @@ public static class WorldRigCatalog {
                     // The dynamic instance offset is not orientation-relative. Centering the bound above the root
                     // would therefore fail for a pitched airborne/aquatic body; a root-centered sphere encloses the
                     // translated segment through every orientation.
-                    boundRadius: ((CoarseSegmentHeight + (2f * CoarseRadius)) * scale)
+                    boundRadius: ((CoarseSegmentHeight + (2f * CoarseRadius)) * scale),
+                    indirect: indirect
                 );
                 _ = builder
                     .ResetPoint()
@@ -511,7 +515,8 @@ public static class WorldRigCatalog {
                 builder.BeginInstanceDynamic(
                     slot: packedSlot,
                     boundOffset: Vector3.Zero,
-                    boundRadius: ((PrimitiveReach(shape: leaf.Shape) * leafScale) + leaf.AuthoredOffset.Length())
+                    boundRadius: ((PrimitiveReach(shape: leaf.Shape) * leafScale) + leaf.AuthoredOffset.Length()),
+                    indirect: indirect
                 );
                 var chain = builder
                     .ResetPoint()

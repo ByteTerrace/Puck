@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -9,15 +10,10 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+        <ProjectReference Include="../../src/Puck.Networking/Puck.Networking.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
 </Project>

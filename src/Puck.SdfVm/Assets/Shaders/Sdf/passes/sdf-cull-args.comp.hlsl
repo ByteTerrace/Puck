@@ -1,9 +1,9 @@
 // GPU-driven cull args: a single-WORKGROUP parallel reduction over the beam prepass's per-tile cull buffer. It computes
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
-// margins (e.g. the sky above the scene) are never dispatched, and the sky pre-pass alone has written every
-// remaining empty tile. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
-// the beam proved about its tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// margins (e.g. the sky above the scene) are never dispatched, and every pixel outside the box reads as uncovered to
+// the sky and composite passes. Mesh draws and the probe debug view cover the whole grid instead: meshes and probe
+// spheres can occupy tiles the beam proved empty. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 //
@@ -28,6 +28,34 @@ groupshared uint maxTileY;
 
 [numthreads(SDF_CULL_ARGS_THREADS, 1, 1)]
 void CSMain(uint threadIndex : SV_GroupIndex) {
+    uint tileCount, argumentCount, boundsCount, stride;
+    tiles.GetDimensions(tileCount, stride);
+    viewsArgsRW.GetDimensions(argumentCount, stride);
+    cullBoundsRW.GetDimensions(boundsCount, stride);
+    if (argumentCount < 3u) { return; }
+    if (boundsCount < 4u) {
+        if (threadIndex == 0u) { viewsArgsRW[0] = 0u; viewsArgsRW[1] = 0u; viewsArgsRW[2] = 0u; }
+        return;
+    }
+    uint groupsPerTile = WorldTileSize / SDF_VISIBILITY_BOX_EDGE;
+    uint3 slice = sdfIndirectLightSlice(passGroup.lightSlice);
+    uint2 tileGrid = passGroup.imageExtent / WorldTileSize + uint2(passGroup.imageExtent % WorldTileSize != 0u);
+    bool valid = all(tileGrid > 0u) && all(tileGrid <= SDF_MAX_DISPATCH_GROUPS / groupsPerTile) &&
+        all(passGroup.tileGrid == tileGrid) && (passGroup.lightSlice == 0u || slice.x != 0u);
+    uint total = 0u;
+    uint v = worldViewOf(0u);
+    if (valid) {
+        total = tileGrid.x * tileGrid.y;
+        valid = v < tileCount / total;
+    }
+    // A malformed block cannot leave a prior frame's executable arguments standing.
+    if (!valid) {
+        if (threadIndex == 0u) {
+            viewsArgsRW[0] = 0u; viewsArgsRW[1] = 0u; viewsArgsRW[2] = 0u;
+            cullBoundsRW[0] = 0u; cullBoundsRW[1] = 0u; cullBoundsRW[2] = 0u; cullBoundsRW[3] = 0u;
+        }
+        return;
+    }
     if (0u == threadIndex) {
         minTileX = 0xFFFFFFFFu;
         minTileY = 0xFFFFFFFFu;
@@ -39,15 +67,12 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
 
     // Every tile cull entry of the view this dispatch set renders, flattened: entry = ((ty * tileGrid.x) + tx). The
     // strided walk visits the SAME entry set as a serial double loop, and runs once per view per frame.
-    uint v = worldViewOf(0u);
-    uint total = (passGroup.tileGrid.x * passGroup.tileGrid.y);
-
     for (uint entry = threadIndex; (entry < total); entry += SDF_CULL_ARGS_THREADS) {
-        uint ty = (entry / passGroup.tileGrid.x);
-        uint tx = (entry - (ty * passGroup.tileGrid.x));
+        uint ty = (entry / tileGrid.x);
+        uint tx = (entry - (ty * tileGrid.x));
 
         // Surviving tiles hold a non-negative march-start; empty tiles hold TileEmpty (-1.0).
-        if (tiles[worldTileIndex(v, uint2(tx, ty), passGroup.tileGrid)] >= 0.0) {
+        if (tiles[v * total + entry] >= 0.0) {
             InterlockedMin(minTileX, tx);
             InterlockedMin(minTileY, ty);
             InterlockedMax(maxTileX, tx);
@@ -59,42 +84,35 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
 
     // The reduction walks no field and writes no texel, so its row stays zero.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 
     if (0u != threadIndex) {
         return;
     }
 
-    uint boxMinX = minTileX;
-    uint boxMinY = minTileY;
-    uint boxMaxX = maxTileX;
-    uint boxMaxY = maxTileY;
-
-    if (passGroup.meshDraws != 0u) {
-        // A mesh draws this frame: a mesh pixel reaches the hit passes whatever the beam proved about its tile, so the box
-        // is the whole tile grid and every record of the view is current.
-        boxMinX = 0u;
-        boxMinY = 0u;
-        boxMaxX = (passGroup.tileGrid.x - 1u);
-        boxMaxY = (passGroup.tileGrid.y - 1u);
-    } else if (0xFFFFFFFFu == boxMinX) {
-        // No surviving tiles (every ray clears the field): dispatch one degenerate tile; the compositor flattens all.
-        boxMinX = 0u;
-        boxMinY = 0u;
-        boxMaxX = 0u;
-        boxMaxY = 0u;
+    // Empty beam tiles retain TileEmpty, so primary skips their field march while the debug view can draw probes there.
+    uint4 box = sdfViewDispatchBox(uint4(minTileX, minTileY, maxTileX, maxTileY), tileGrid,
+        passGroup.meshDraws, (int)passGroup.debugMode);
+    uint2 firstGroup = box.xy * groupsPerTile;
+    uint2 endGroup = (box.zw + 1u) * groupsPerTile;
+    if (slice.x != 0u) {
+        uint2 columns = sdfIndirectLightColumns(passGroup.lightSlice);
+        firstGroup.x = max(firstGroup.x, columns.x);
+        endGroup.x = min(endGroup.x, columns.x + columns.y);
+        firstGroup.y = max(firstGroup.y, slice.y);
+        endGroup.y = min(endGroup.y, slice.y + slice.z);
     }
+    if (any(endGroup <= firstGroup)) { firstGroup = 0u; endGroup = 0u; }
 
     // A tile is WorldTileSize px, (WorldTileSize / SDF_VISIBILITY_BOX_EDGE) groups of the hit passes' workgroup on each
     // axis. The dispatch is origin-anchored (0,0); the hit passes add cullBounds as their pixel-group origin to land on
     // the bbox. The box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record
     // is current (SDF_VISIBILITY_CURRENT).
-    uint groupsPerTile = (WorldTileSize / SDF_VISIBILITY_BOX_EDGE);
-
-    cullBoundsRW[0] = (boxMinX * groupsPerTile);
-    cullBoundsRW[1] = (boxMinY * groupsPerTile);
-    cullBoundsRW[2] = ((boxMaxX + 1u) * groupsPerTile);
-    cullBoundsRW[3] = ((boxMaxY + 1u) * groupsPerTile);
-    viewsArgsRW[0] = (((boxMaxX - boxMinX) + 1u) * groupsPerTile);
-    viewsArgsRW[1] = (((boxMaxY - boxMinY) + 1u) * groupsPerTile);
-    viewsArgsRW[2] = 1u;
+    cullBoundsRW[0] = firstGroup.x;
+    cullBoundsRW[1] = firstGroup.y;
+    cullBoundsRW[2] = endGroup.x;
+    cullBoundsRW[3] = endGroup.y;
+    viewsArgsRW[0] = endGroup.x - firstGroup.x;
+    viewsArgsRW[1] = endGroup.y - firstGroup.y;
+    viewsArgsRW[2] = all(endGroup > firstGroup) ? 1u : 0u;
 }

@@ -35,8 +35,8 @@ public readonly record struct WorldMachineCartridge(string Path, string SourceHa
 /// <summary>
 /// The seam <see cref="WorldServer"/> — and every replay/instance-host caller that boots a shadow world of its own —
 /// pumps every declared screen's machine through, mirroring <see cref="IWorldAddonHost"/>'s own shape for the WASM
-/// guest seam. <c>Puck.World.Addons.Machines.WorldMachineHost</c> is the one implementation; it is constructed from
-/// the composition root (where the concrete emulator/instrument engines are known) and handed to
+/// guest seam. <c>Puck.World.Machines.WorldMachineHost</c> is the one implementation; it is constructed from
+/// the composition root (where the host-selected engines are known) and handed to
 /// <see cref="WorldServer"/> as a peer singleton, never built by this project directly — the whole reason this
 /// interface exists is that <c>Puck.World.Server</c> must stay free of the emulator cores and the renderer's
 /// projects (a machine is a mounted guest, like a WASM addon), so a browser or silo build of Server needs neither.
@@ -51,7 +51,8 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Reads execution and generation state by instance identity.</summary>
     /// <param name="name">The authored instance name.</param>
     WorldMachineInstanceState? InstanceState(string name);
-    /// <summary>Resolves one named instance's video output without creating or advancing it.</summary>
+    /// <summary>Resolves one running named instance's video output without creating or advancing it; a stopped instance
+    /// has no output for the tick.</summary>
     /// <param name="instance">The authored instance name.</param>
     /// <param name="output">The provider's output name.</param>
     IMachineVideoOutput? VideoOutput(string instance, string output);
@@ -224,17 +225,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="value">The byte read, or 0 on failure.</param>
     /// <returns>A success flag and, on failure, a message.</returns>
     (bool Ok, string Message) TryPeekMessage(int index, int address, out byte value);
-    /// <summary>Forces one memory byte into a screen's machine — a <c>screens[].memory</c> write binding's poke
-    /// (<c>WorldServer.MachineMemory.cs</c>), through the same host poll <see cref="TryPeekMessage"/> uses rather
-    /// than a direct machine reference. A value outside the machine's writable space, or an unassigned machine, is
-    /// a silent no-op at the machine's own <see cref="IMachineMemoryPeek.PokeByte"/> — this seam reports success only
-    /// when a machine is present to receive the write, never whether the byte actually landed inside that machine's
-    /// own writable range.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="address">A machine-defined memory address.</param>
-    /// <param name="value">The byte to store.</param>
-    /// <returns>A success flag and, on failure, a message.</returns>
-    (bool Ok, string Message) TryPokeMessage(int index, int address, byte value);
     /// <summary>Reads a live link's member screens by name.</summary>
     /// <param name="name">The link name.</param>
     /// <param name="members">The member screen indices in cable order, on success.</param>

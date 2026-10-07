@@ -27,7 +27,7 @@ public readonly record struct SdfBakeWork(long MeshEvaluations, long TextureEval
 public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> Textures, SdfBakedImpostor Impostor, SdfBakeWork Work);
 /// <summary>
 /// Bakes a signed-distance program into presentation assets, reading the field only through
-/// <see cref="SdfFieldEvaluator"/>, the fixed-point interpreter contact and queries read. The mesh is extracted by dual
+/// <see cref="SdfFieldEvaluator"/>, the fixed-point interpreter contact and queries read. The mesh is extracted by manifold dual
 /// contouring over a lattice around the program's reach; the surface textures and the impostor sample the same
 /// field.
 /// <para>A bake is the same bytes on every machine. Everything it reads from the field is fixed point, and every float
@@ -40,10 +40,6 @@ public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> T
 /// simulation state.</para>
 /// </summary>
 public static class SdfBaker {
-    /// <summary>The baker's version. It moves whenever a change to the baker changes the bytes a bake produces, and it is
-    /// part of every bake's key and the version of the compiled-world chunk that names bakes.</summary>
-    public const uint Version = 7;
-
     /// <summary>Bakes <paramref name="program"/> at <paramref name="tier"/>.</summary>
     /// <param name="program">The program.</param>
     /// <param name="materials">The materials the program's material ids index, in id order; each id bakes to its
@@ -51,12 +47,14 @@ public static class SdfBaker {
     /// <param name="center">The center of a sphere holding every surface of the program, in world units.</param>
     /// <param name="reach">The sphere's radius, in world units.</param>
     /// <param name="tier">The resolution.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next field evaluation.</param>
     /// <returns>The bake.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The fixed-point interpreter refuses an instruction of the program, the
     /// program has no shape that reaches the field, or <paramref name="reach"/> is not a positive finite value.</exception>
-    public static SdfBake Bake(SdfProgram program, IReadOnlyList<SdfMaterial> materials, Vector3 center, float reach, SdfBakeTier tier) {
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public static SdfBake Bake(SdfProgram program, IReadOnlyList<SdfMaterial> materials, Vector3 center, float reach, SdfBakeTier tier, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
@@ -70,7 +68,7 @@ public static class SdfBaker {
             throw new ArgumentException(message: "The program has no shape that reaches the field, so it has no surface to bake.", paramName: nameof(program));
         }
 
-        var field = new SdfBakeField(evaluator: evaluator);
+        var field = new SdfBakeField(cancellationToken: cancellationToken, evaluator: evaluator);
         var grid = SdfBakeGrid.Create(
             cells: tier.Cells,
             center: SdfSurfaceTextures.Fixed(x: center.X, y: center.Y, z: center.Z),

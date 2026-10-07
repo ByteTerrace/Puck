@@ -30,7 +30,7 @@ public sealed class GeneratedNameLawTests {
                 behavior { faces [{ name: "portal", shapeId: 0 }] }
             } }]
             placements { rows [{
-                id: "arch1", prototypeId: "arch", position [0, 0, 0], yawDegrees: 0, scale: 1,
+                id: "arch1", prototypeId: arch, position [0, 0, 0], yawDegrees: 0, scale: 1,
                 faceSources [{ face: "portal", source { "$type": "none" } }]
             }] }
             ground floor { size [12m, 8m] }
@@ -253,7 +253,7 @@ public sealed class GeneratedNameLawTests {
         new(Label: "rule", Source: static name => $"{WorldSources.Header}state {{\n    world {{\n        slot flag = 0\n    }}\n}}\n\nrule {PuckStrings.Write(value: name)} {{\n    flag = 1\n}}\n"),
         new(Label: "stabilize member", Source: static name => $"{WorldSources.Header}state {{\n    world {{\n        slot flag = 0\n    }}\n}}\n\nstabilize settle maxPasses(4) {{\n    rule {PuckStrings.Write(value: name)} {{\n        flag = 0\n    }}\n}}\n"),
         new(Label: "set", Source: static name => $"{WorldSources.Header}state {{\n    world {{\n        table probe {{\n            a = 1\n        }}\n    }}\n}}\n\nset {PuckStrings.Write(value: name)}: board(probe, 0..1)\n"),
-        new(Label: "placement id", Source: static name => $"{WorldSources.Header}placements {{\n    rows [\n        {{\n            id: {PuckStrings.Write(value: name)}\n            prototypeId: \"p\"\n        }}\n    ]\n}}\n"),
+        new(Label: "placement id", Source: static name => $"{WorldSources.Header}placements {{\n    rows [\n        {{\n            id: {PuckStrings.Write(value: name)}\n            prototypeId: p\n        }}\n    ]\n}}\n"),
         new(Label: "destination name", Source: static name => $"{WorldSources.Header}destinations [\n    {{\n        name: {PuckStrings.Write(value: name)}\n        reference: \"r\"\n        durability: \"persisted\"\n    }}\n]\n"),
         new(Label: "reference name", Source: static name => $"{WorldSources.Header}references [\n    {{\n        name: {PuckStrings.Write(value: name)}\n        document: \"d\"\n    }}\n]\n"),
         new(Label: "prototype id", Source: static name => $"{WorldSources.Header}prototypes [\n    {{\n        id: {PuckStrings.Write(value: name)}\n    }}\n]\n"),

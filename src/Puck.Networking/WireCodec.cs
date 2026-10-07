@@ -76,6 +76,7 @@ public delegate T WireReadItem<T>(ref WireReader reader);
 /// <summary>A bounded, forward-only reader over one already-framed payload. Every read is checked against the
 /// remaining span; the first underflow latches a refusal and every later read is inert, so a leaf decoder reads its
 /// whole shape and asks once — at <see cref="TryFinish"/> — whether the bytes were honest.</summary>
+[FormatLeaf]
 public ref struct WireReader {
     private readonly ReadOnlySpan<byte> m_bytes;
 
@@ -574,6 +575,7 @@ public static class WireLimits {
 /// <see cref="WireReader"/>; an encoder and its decoder are read side by side. The written bytes are reachable two
 /// ways: <see cref="ToArray"/> copies them out for anything stored or queued, and <see cref="WrittenMemory"/> /
 /// <see cref="WrittenSpan"/> alias the writer's own buffer for immediate consumption.</summary>
+[FormatLeaf]
 public sealed class WireWriter {
     private byte[] m_buffer;
     private int m_length;
@@ -627,6 +629,9 @@ public sealed class WireWriter {
         return span;
     }
 
+    /// <summary>Discards the written bytes and keeps the buffer, so a writer its owner reuses encodes again without
+    /// growing a fresh one.</summary>
+    public void Reset() => m_length = 0;
     /// <summary>Copies the written bytes into a new array — the form to keep when the leaf is stored or queued
     /// beyond the writer's next write; <see cref="WrittenMemory"/> serves an immediate consumer without the copy.</summary>
     /// <returns>The canonical leaf.</returns>
@@ -642,15 +647,20 @@ public sealed class WireWriter {
         ArgumentNullException.ThrowIfNull(argument: items);
         ArgumentNullException.ThrowIfNull(argument: writeItem);
 
-        WriteInt32(value: items.Count);
+        WriteArrayCount(count: items.Count);
 
-        foreach (var item in items) {
+        // Indexed, never enumerated: an interface enumerator over an array or a list allocates on every call.
+        for (var index = 0; (index < items.Count); index++) {
             writeItem(
                 this,
-                item
+                items[index]
             );
         }
     }
+    /// <summary>Writes a declared-count array's count alone, for a caller that then writes exactly that many items
+    /// itself in the form <see cref="WriteArray"/> would.</summary>
+    /// <param name="count">The item count.</param>
+    public void WriteArrayCount(int count) => WriteInt32(value: count);
     /// <summary>Writes a length-prefixed byte block.</summary>
     /// <param name="value">The block.</param>
     public void WriteBlock(ReadOnlySpan<byte> value) {

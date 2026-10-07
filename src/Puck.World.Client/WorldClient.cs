@@ -64,6 +64,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private readonly WorldStateMirror m_stateMirror;
     private readonly WorldDocumentStateView m_stateView;
 
+    private bool m_pendingStateInstall;
+
     /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
     /// census (drives the fleet-tier auto quality levers).</summary>
     public int ActivePeerCount => m_activePeerCount;
@@ -89,6 +91,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>Gets the state mirror every presentation binding of this client reads through, refreshed at each
     /// state delivery and each tick, and resolved to row ordinals at each definition delivery.</summary>
     public WorldStateMirror StateMirror => m_stateMirror;
+
+    /// <summary>Publishes the client's coherent definition, structural revision and delivered samples after each
+    /// mirror delivery. The callback borrows the mirror synchronously on the boot client's presentation thread.</summary>
+    public event Action<WorldDefinition, int, WorldStateMirror>? DeliveredState;
+
+    private void PublishDeliveredState() => DeliveredState?.Invoke(m_definition, m_definitionRevision, m_stateMirror);
 
     /// <summary>Returns the state mirror presentation reads an authority's rows through: this client's own
     /// <see cref="StateMirror"/> for the authority this client observes, and the authority's own followed mirror
@@ -171,6 +179,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_levers = null;
         m_stateView = new WorldDocumentStateView(definition: () => m_definition);
         m_stateMirror = new WorldStateMirror(view: m_stateView);
+        m_stateMirror.Delivered += PublishDeliveredState;
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -785,13 +794,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
-        m_documentVersion = version;
+        BeginVersion(version: version);
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
             channelCount: m_channels.ChannelCount
         );
         m_definitionRevision++;
+        m_pendingStateInstall = true;
         m_stateMirror.Install(
             engineTick: m_engineTick,
             tick: m_tick
@@ -813,7 +823,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             moved: m_movedFields
         );
 
-        if (movedFields > 0) {
+        if ((movedFields > 0) && !m_pendingStateInstall) {
             m_stateMirror.RefreshRows(ordinals: m_movedFields.AsSpan(
                 length: movedFields,
                 start: 0
@@ -916,11 +926,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_tick = snapshot.Tick;
         m_engineTick = snapshot.EngineTick;
         m_authority = snapshot.Authority;
-        // A tick no state delivery refreshed still moves every bound cell whose value-over-time trait has not rested.
-        m_stateMirror.Advance(
-            engineTick: m_engineTick,
-            tick: m_tick
-        );
+        if (m_pendingStateInstall) {
+            m_pendingStateInstall = false;
+            m_stateMirror.Install(completingDelivery: true, engineTick: m_engineTick, tick: m_tick);
+        } else {
+            // A tick no state delivery refreshed still moves every bound cell whose value-over-time trait has not rested.
+            m_stateMirror.Advance(engineTick: m_engineTick, tick: m_tick);
+        }
     }
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
@@ -930,9 +942,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_definition = definition;
-        m_documentVersion = version;
-        m_stateMirror.Refresh(stamp: in stamp);
+        BeginVersion(version: version);
+        m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);
     }
+
+    // Records the version a document was delivered at. A different activation is a different world: the state mirror
+    // begins a new lifetime, so what a presentation kept about the previous world's values does not carry over.
+    private void BeginVersion(WorldDocumentVersion version) {
+        if (version.Activation != m_documentVersion.Activation) {
+            m_stateMirror.BeginLifetime();
+        }
+
+        m_documentVersion = version;
+    }
+
     /// <summary>The complete durable address of the active occupant in a local slot.</summary>
     public WorldEntityAddress EntityAddress(int index) => new(
         Authority: m_authority,

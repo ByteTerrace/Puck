@@ -24,27 +24,29 @@ internal static partial class CanaryCommand {
         var backendOption = new Option<string?>(name: "--backend") { Description = "Run every backend-declaring proof on this backend only: vulkan or directx. Both run when omitted, and the verdict names the backends that ran." };
         var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>." };
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
-        var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list every manifest without building or running." };
+        var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list the named manifests, or every manifest when no id is given, without building or running." };
         var mergeOption = new Option<bool>(name: "--merge") { Description = "Run what a merge needs: the automatic set plus every proof requiring gpu." };
         var jobsOption = new Option<int>(name: "--jobs") {
             DefaultValueFactory = static _ => DefaultJobs,
-            Description = "Maximum World processes to run at once. A federated leg holds one per process, and a windowed, offscreen, or requirement-declaring leg holds all of them. Output remains in authored order.",
+            Description = "Maximum World processes to run at once (default: the logical processor count). A federated leg holds one per process. Proof reports remain in authored order.",
         };
+        var gpuJobsOption = GpuJobs();
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
-        var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
+        var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
+        var keepTranscriptsOption = new Option<bool>(name: "--keep-transcripts") { Description = "Keep every leg's run directory whatever its verdict, for a caller that reads the transcripts afterwards and owns their removal; by default a held proof's legs are deleted and a failed proof's are kept." };
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
-        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, jobsOption, listOption, mergeOption, planOption, worldArtifactOption };
+        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, gpuJobsOption, jobsOption, keepTranscriptsOption, listOption, mergeOption, planOption, worldArtifactOption };
 
         backendOption.AcceptOnlyFromAmong(values: [.. WorldOffscreenLeg.Backends]);
 
-        command.Detail(detail: """
+        command.Detail(detail: $"""
               no selection           run the automatic set: headless shape and no environmental requirements
               <id> ...               run the named proofs explicitly, regardless of requirements
               --all                  explicitly run every proof; does not promote any proof into the automatic set
-              --list                 strictly load and list every manifest without building or running
+              --list [id ...]        strictly load and list named manifests, or all when unnamed, without building or running
               --capability <class>   filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<name>
               --merge                run the merge gate: the automatic set plus every proof requiring gpu
               --backend <name>       run every backend-declaring proof on vulkan or directx only
@@ -52,13 +54,20 @@ internal static partial class CanaryCommand {
                                      backend's validation layer, and fail a leg on any validation message
                                      or an unloaded layer
               --plan                 print the selection's counts and ceiling without building or running
+              --keep-transcripts     keep every leg's run directory whatever its verdict
+              --jobs <n>             run at most n World processes at once (default: logical processors)
+              --gpu-jobs <n>         run at most n legs on the GPU at once (default {DefaultGpuJobs})
 
             The five selection forms are mutually exclusive. Every execution refuses an empty selection,
             and a gate selection (the automatic set or --merge) whose planned World boots or summed leg
-            budget exceed its ceiling in CanaryCeilings.cs. It builds Puck.World once (or takes
-            --world-artifact as given), then runs every positive and discriminating leg from fresh state,
-            up to --jobs World processes at once; a windowed, offscreen, or requirement-declaring leg runs
-            alone. A leg ends when its script does: the runner closes each script with wire.errors and
+            budget exceed the cost recorded in CanaryCeilings.json (`puck canary-ceilings`). It builds Puck.World once (or takes
+            --world-artifact as given), then runs every positive and discriminating leg from fresh state
+            in its own run directory, state directory and loopback endpoints: up to --jobs World processes
+            at once, of which at most --gpu-jobs legs boot a windowed or offscreen World or require gpu.
+            A proof whose manifest declares exclusive runs each leg alone, before every other leg. Each
+            leg prints one line with its wall time as it ends; each proof's report prints whole, in
+            authored order, and the closing FAIL line lists failed proofs in authored order.
+            A leg ends when its script does: the runner closes each script with wire.errors and
             quit, and kills a leg only at its manifest's timeoutSeconds. An offscreen
             proof runs every leg once per backend, Vulkan then Direct3D 12, and holds only when both did.
             --backend runs those legs on the one backend it names, and the plan, the selection line and
@@ -82,7 +91,7 @@ internal static partial class CanaryCommand {
                 ? 1
                 : 0) + ((capability is null)
                 ? 0
-                : 1)) + ((ids.Length == 0)
+                : 1)) + (((ids.Length == 0) || result.GetValue(option: listOption))
                 ? 0
                 : 1)) + (result.GetValue(option: listOption)
                 ? 1
@@ -91,7 +100,7 @@ internal static partial class CanaryCommand {
                 : 0));
 
             if (forms > 1) {
-                result.AddError(errorMessage: "ids, --all, --list, --merge, and --capability <class> are mutually exclusive selection forms.");
+                result.AddError(errorMessage: "ids, --all, --list [id ...], --merge, and --capability <class> are mutually exclusive selection forms.");
 
                 return;
             }
@@ -148,7 +157,11 @@ internal static partial class CanaryCommand {
                 ? WorldOffscreenLeg.Backends
                 : []),
             ids: (parseResult.GetValue(argument: idsArgument) ?? []),
-            jobs: parseResult.GetValue(option: jobsOption),
+            capacity: new CanaryCapacity(
+                GpuLegs: parseResult.GetValue(option: gpuJobsOption),
+                Processes: parseResult.GetValue(option: jobsOption)
+            ),
+            keepTranscripts: parseResult.GetValue(option: keepTranscriptsOption),
             list: parseResult.GetValue(option: listOption),
             merge: parseResult.GetValue(option: mergeOption),
             plan: parseResult.GetValue(option: planOption),
@@ -171,22 +184,53 @@ internal static partial class CanaryCommand {
             capability: null,
             debugLayers: debugLayers,
             ids: [.. ids],
-            jobs: DefaultJobs,
+            capacity: CanaryCapacity.Default,
+            keepTranscripts: false,
             list: false,
             merge: false,
             plan: false,
             worldArtifact: worldArtifact
         );
 
-    // Half the processors, at most eight: every World process runs a pump, a stdin reader and its own worker threads,
-    // and the federated legs keep live sockets whose peers must stay responsive.
-    private static int DefaultJobs => Math.Min(
-        val1: 8,
-        val2: Math.Max(
-            val1: 1,
-            val2: (Environment.ProcessorCount / 2)
-        )
+    // One World process per logical processor: a headless leg is a paced simulation that spends most of its life
+    // waiting on its tick, so the machine's threads, not a fixed fraction of them, bound how many share it.
+    private static int DefaultJobs => Math.Max(
+        val1: 1,
+        val2: Environment.ProcessorCount
     );
+
+    /// <summary>The legs a run keeps on the GPU at once unless <c>--gpu-jobs</c> says otherwise.</summary>
+    internal const int DefaultGpuJobs = 4;
+
+    /// <summary>Creates <c>--gpu-jobs</c>, the most canary legs on the GPU at once; <c>puck canary</c>,
+    /// <c>puck affected</c> and <c>puck gate</c> share it.</summary>
+    /// <returns>The option.</returns>
+    internal static Option<int> GpuJobs() {
+        var option = new Option<int>(name: "--gpu-jobs") {
+            DefaultValueFactory = static _ => DefaultGpuJobs,
+            Description = $"Maximum canary legs on the GPU at once: a windowed or offscreen World, or a leg requiring gpu (default {DefaultGpuJobs}). Each still holds its World processes of --jobs.",
+        };
+
+        option.Validators.Add(item: static result => {
+            if (result.GetValueOrDefault<int>() < 1) {
+                result.AddError(errorMessage: "--gpu-jobs must be at least 1.");
+            }
+        });
+
+        return option;
+    }
+
+    /// <summary>The most a run holds at once: World processes (<c>--jobs</c>) and legs on the GPU
+    /// (<c>--gpu-jobs</c>).</summary>
+    /// <param name="Processes">The World processes running at once, across every leg.</param>
+    /// <param name="GpuLegs">The legs holding the GPU at once.</param>
+    internal readonly record struct CanaryCapacity(int Processes, int GpuLegs) {
+        /// <summary>The capacity a run takes when no flag names one.</summary>
+        public static CanaryCapacity Default => new(
+            GpuLegs: DefaultGpuJobs,
+            Processes: DefaultJobs
+        );
+    }
 
     // The selection the landing gate runs: no ids, no filter, no --all — the automatic set alone.
     internal static int RunAutomatic() =>
@@ -196,7 +240,8 @@ internal static partial class CanaryCommand {
             capability: null,
             debugLayers: [],
             ids: [],
-            jobs: DefaultJobs,
+            capacity: CanaryCapacity.Default,
+            keepTranscripts: false,
             list: false,
             merge: false,
             plan: false,
@@ -210,7 +255,7 @@ internal static partial class CanaryCommand {
         value: "input:"
     ) && (capability.Length > 6))
     );
-    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool list, bool merge, bool plan, string? worldArtifact) {
+    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, CanaryCapacity capacity, bool keepTranscripts, bool list, bool merge, bool plan, string? worldArtifact) {
         var selection = ToSelection(
             all: all,
             capability: capability,
@@ -231,6 +276,7 @@ internal static partial class CanaryCommand {
             manifests: out var manifests,
             refused: out var refusedManifests,
             repositoryRoot: repositoryRoot,
+            only: ((strict && (ids.Length > 0)) ? ids.ToHashSet(comparer: StringComparer.Ordinal) : null),
             strict: strict
         )) {
             Console.Error.WriteLine(value: $"ERROR: {manifestError}");
@@ -267,8 +313,25 @@ internal static partial class CanaryCommand {
             manifests: selected,
             namedWorldArtifact: (worldArtifact is not null)
         );
-        var ceiling = CeilingOf(selection: selection);
         var ceilingName = CeilingName(selection: selection);
+        CanaryCeiling? ceiling = null;
+
+        if (ceilingName is not null) {
+            if (!CanaryCeilingsLedger.TryRead(
+                error: out var ledgerError,
+                ledger: out var ledger,
+                repositoryRoot: repositoryRoot,
+                text: out _
+            )) {
+                Console.Error.WriteLine(value: $"ERROR: {CanaryCeilingsLedger.FileName}: {ledgerError}");
+
+                return CliExit.Refused;
+            }
+
+            ceiling = ((ceilingName == "merge")
+                ? ledger!.Merge
+                : ledger!.Automatic);
+        }
 
         if (plan) {
             PrintPlan(
@@ -283,7 +346,7 @@ internal static partial class CanaryCommand {
             (ceiling is not null) &&
             (CeilingRefusal(
                 ceiling: ceiling,
-                name: ceilingName,
+                name: ceilingName!,
                 plan: costs
             ) is { } overCeiling)
         ) {
@@ -300,7 +363,8 @@ internal static partial class CanaryCommand {
                 : RunSelected(
                     debugLayers: debugLayers,
                     explicitAll: (selection.Kind == CanarySelectionKind.All),
-                    jobs: jobs,
+                    capacity: capacity,
+                    keepTranscripts: keepTranscripts,
                     manifests: selected,
                     plan: costs,
                     repositoryRoot: repositoryRoot,
@@ -331,8 +395,11 @@ internal static partial class CanaryCommand {
         : runExit
     );
 
-    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, int jobs, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
+    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, CanaryCapacity capacity, bool keepTranscripts, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
+        RunDirectory.Sweep(
+            age: RunDirectory.StaleAge,
+            prefix: ScratchPrefix
+        );
 
         var buildClock = Stopwatch.StartNew();
         IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
@@ -347,12 +414,16 @@ internal static partial class CanaryCommand {
             Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s){scoped}.");
         }
 
+        // The builds' directories hold their logs and the stub's output; a run whose proofs all held deletes them.
+        var worldBuildDirectory = BuildRunDirectory(id: "world");
+        string? stubBuildDirectory = null;
+
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
         // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
         if (!WorldArtifactBuild.TryResolveNamed(
-            build: out var build,
             error: out var buildError,
             lease: out var world,
+            logDirectory: worldBuildDirectory,
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
@@ -363,10 +434,6 @@ internal static partial class CanaryCommand {
             verb: "canary"
         )) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
-
-            if (build is not null) {
-                PrintCaptured(result: build);
-            }
 
             return CliExit.Refused;
         }
@@ -380,45 +447,33 @@ internal static partial class CanaryCommand {
         string? stubArtifact = null;
 
         if (manifests.Any(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Stub))) {
-            var stubProject = Path.Combine(
-                path1: repositoryRoot,
-                path2: "src",
-                path3: "Puck.Launcher.Stub",
-                path4: "Puck.Launcher.Stub.csproj"
-            );
+            const string StubProject = "src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj";
+            var stubDirectory = BuildRunDirectory(id: "stub");
 
-            stubArtifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.Launcher.Stub", "bin", "Release", "net10.0", "Puck.Launcher.Stub.exe"]);
+            stubBuildDirectory = stubDirectory;
+            var stubOutput = Path.Combine(path1: stubDirectory, path2: "output");
+
+            stubArtifact = Path.Combine(path1: stubOutput, path2: "Puck.Launcher.Stub.exe");
 
             Console.Error.WriteLine(value: "canary: building Puck.Launcher.Stub once (Release).");
 
-            var stubBuild = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", "--disable-build-servers", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
-                input: string.Empty,
-                workingDirectory: repositoryRoot,
+            if (!CliProjectBuild.TryBuild(
+                artifactName: Path.GetFileName(path: stubArtifact),
+                build: out _,
+                error: out var stubError,
+                project: StubProject,
+                repositoryRoot: repositoryRoot,
+                outputDirectory: stubOutput,
+                logDirectory: stubDirectory,
                 timeout: CliProcess.RemainingBudget(
                     budget: BuildBudget,
                     clock: buildClock
                 )
-            );
-
-            if (
-                stubBuild.TimedOut ||
-                (stubBuild.ExitCode != 0)
-            ) {
-                Console.Error.WriteLine(value: (stubBuild.TimedOut
-                    ? $"ERROR: the one Puck.Launcher.Stub build exceeded the {BuildBudget.TotalSeconds:0}-second build budget."
-                    : $"ERROR: the one Puck.Launcher.Stub build exited {stubBuild.ExitCode}."));
-                PrintCaptured(result: stubBuild);
+            )) {
+                Console.Error.WriteLine(value: $"ERROR: {stubError}");
 
                 return CliExit.Refused;
             }
-            if (!File.Exists(path: stubArtifact)) {
-                Console.Error.WriteLine(value: $"ERROR: the Puck.Launcher.Stub build exited 0 but did not produce the exact artifact {stubArtifact}.");
-
-                return CliExit.Refused;
-            }
-
             Console.Error.WriteLine(value: $"canary: built artifact {stubArtifact}");
         }
 
@@ -446,7 +501,7 @@ internal static partial class CanaryCommand {
             Total: TimeSpan.FromSeconds(value: plan.BudgetSeconds)
         );
 
-        Console.WriteLine(value: $"canary: leg budget {budget.Total.TotalSeconds:0}s, derived from the selected manifests' own declared per-leg timeouts; up to {jobs} World process(es) at once.");
+        Console.WriteLine(value: $"canary: leg budget {budget.Total.TotalSeconds:0}s, derived from the selected manifests' own declared per-leg timeouts; up to {capacity.Processes} World process(es) and {capacity.GpuLegs} GPU leg(s) at once.");
 
         // results is written by each leg's own thread; legs holds only what completed has taken from it, on this thread.
         var results = new CanaryLegRun?[proofs.Count, 2];
@@ -485,18 +540,19 @@ internal static partial class CanaryCommand {
 
                 work.Add(item: new CanaryLegWork {
                     Discriminating = discriminating,
+                    Exclusive = manifest.Exclusive,
+                    Gpu = manifest.UsesGpu,
                     ManifestIndex = manifestIndex,
+                    Processes = LegProcesses(leg: leg),
                     Run = () => results[manifestIndex, side] = run(),
-                    Weight = LegWeight(
-                        jobs: jobs,
-                        leg: leg,
-                        manifest: manifest
-                    ),
                 });
             }
         }
 
         var reported = 0;
+        var ended = 0;
+        var legTime = TimeSpan.Zero;
+        var failedProofs = new List<string>();
 
         Console.CancelKeyPress += OnCancelKeyPress;
 
@@ -516,12 +572,18 @@ internal static partial class CanaryCommand {
 
             RunLegsConcurrently(
                 cancellation: cancellation,
-                completed: item => {
+                completed: (item, elapsed) => {
                     var side = (item.Discriminating
                         ? 1
                         : 0);
+                    var leg = results[item.ManifestIndex, side]!;
 
-                    legs[item.ManifestIndex, side] = results[item.ManifestIndex, side]!;
+                    legs[item.ManifestIndex, side] = leg;
+                    legTime += elapsed;
+                    ended++;
+                    // One line a leg the moment it ends, so a long run shows its progress and where its time went; the
+                    // whole proof reports below keep authored order.
+                    Console.WriteLine(value: $"canary: [{ended.ToString(provider: CultureInfo.InvariantCulture)}/{work.Count.ToString(provider: CultureInfo.InvariantCulture)}] {proofs[item.ManifestIndex].Label} {leg.Leg.Name} {LegOutcome(leg: leg)} in {elapsed.TotalSeconds.ToString(format: "0.0", provider: CultureInfo.InvariantCulture)}s");
 
                     // Reports print in authored order, each proof whole, as soon as it and every proof before it are in.
                     while (
@@ -537,7 +599,15 @@ internal static partial class CanaryCommand {
 
                         endings.Add(item: EndingOf(leg: legs[reported, 0]));
                         endings.Add(item: EndingOf(leg: legs[reported, 1]));
+                        ConcludeLegs(
+                            keepTranscripts: keepTranscripts,
+                            legs: [legs[reported, 0], legs[reported, 1]],
+                            passed: verdict.Passed
+                        );
                         failed |= !verdict.Passed;
+                        if (!verdict.Passed && (verdict.Unsupported is null)) {
+                            failedProofs.Add(item: proofs[reported].Label);
+                        }
                         infrastructureFailed |= verdict.InfrastructureFailed;
                         if (verdict.Unsupported is { } reason) {
                             unsupported.Add(item: $"{proofs[reported].Label}: {reason}");
@@ -545,7 +615,7 @@ internal static partial class CanaryCommand {
                         reported++;
                     }
                 },
-                jobs: jobs,
+                capacity: capacity,
                 work: work
             );
         } catch (Exception exception) {
@@ -555,15 +625,40 @@ internal static partial class CanaryCommand {
             return CliExit.Refused;
         } finally {
             Console.CancelKeyPress -= OnCancelKeyPress;
+
+            // A leg whose proof never reported belongs to a run that stopped; its evidence is kept.
+            for (var index = reported; (index < proofs.Count); index++) {
+                ConcludeLegs(
+                    keepTranscripts: keepTranscripts,
+                    legs: [results[index, 0], results[index, 1]],
+                    passed: false
+                );
+            }
+
+            // The run's shader packages and build directories are evidence only when a proof did not hold.
+            var held = ((reported == proofs.Count) && !failed && !infrastructureFailed && (unsupported.Count == 0) && !cancellation.IsCancellationRequested);
+
+            budget.Packages.Conclude(passed: held);
+
+            foreach (var directory in ((string?[])[worldBuildDirectory, stubBuildDirectory])) {
+                if ((directory is { }) && Directory.Exists(path: directory)) {
+                    RunDirectory.Conclude(
+                        passed: held,
+                        path: directory,
+                        report: Console.Error
+                    );
+                }
+            }
         }
 
         PrintTally(
-            built: (build is not null),
+            built: (world is { Reused: false }),
             endings: endings,
             plan: plan,
             seed: budget.Seed,
             tally: budget.Tally
         );
+        Console.WriteLine(value: $"canary counts: {ended.ToString(provider: CultureInfo.InvariantCulture)} leg(s) ran for {legTime.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}s of leg time in {budget.Clock.Elapsed.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}s of wall time, up to {capacity.Processes.ToString(provider: CultureInfo.InvariantCulture)} World process(es) and {capacity.GpuLegs.ToString(provider: CultureInfo.InvariantCulture)} GPU leg(s) at once.");
 
         if (cancellation.IsCancellationRequested) {
             Console.Error.WriteLine(value: $"ERROR: the run was cancelled after {reported} of {proofs.Count} proof(s); every World process it started has been stopped.");
@@ -584,7 +679,7 @@ internal static partial class CanaryCommand {
             return CliExit.Refused;
         }
         if (failed) {
-            Console.Error.WriteLine(value: $"FAIL: one or more selected canaries{scoped} did not prove both their green leg and executable red leg.");
+            Console.Error.WriteLine(value: $"FAIL: {failedProofs.Count.ToString(provider: CultureInfo.InvariantCulture)} selected canar{((failedProofs.Count == 1) ? "y" : "ies")}{scoped} did not prove both their green leg and executable red leg: {string.Join(separator: ", ", values: failedProofs)}.");
 
             return CliExit.Failed;
         }
@@ -594,62 +689,155 @@ internal static partial class CanaryCommand {
         return CliExit.Success;
     }
 
-    // One leg waiting to run: which proof and side it answers, how many --jobs slots it holds while it runs, and the
-    // run itself, which stores its own result where the completed callback reads it once the leg's thread has ended.
+    // One leg waiting to run: which proof and side it answers, what it holds while it runs, and the run itself, which
+    // stores its own result where the completed callback reads it once the leg's thread has ended.
     internal sealed class CanaryLegWork {
         public required bool Discriminating { get; init; }
+        /// <summary>Whether the leg runs alone on the machine (<see cref="CanaryManifest.Exclusive"/>).</summary>
+        public required bool Exclusive { get; init; }
+        /// <summary>Whether the leg holds one of the run's GPU slots (<see cref="CanaryManifest.UsesGpu"/>).</summary>
+        public required bool Gpu { get; init; }
         public required int ManifestIndex { get; init; }
+        /// <summary>The World processes the leg runs at once (<see cref="LegProcesses"/>).</summary>
+        public required int Processes { get; init; }
         public required Action Run { get; init; }
-        public required int Weight { get; init; }
     }
 
-    // How many of the --jobs slots a leg holds: one per World process it runs at once. An exclusive leg (IsExclusive)
-    // holds them all, so its GPU, window, or device never shares the machine with another leg.
-    internal static int LegWeight(CanaryManifest manifest, CanaryLeg leg, int jobs) {
-        var processes = (IsExclusive(manifest: manifest)
-            ? jobs
-            : ((leg.Authorities.Count != 0)
-                ? leg.Authorities.Count
-                : ((leg.AuthorityWorldPath is null)
-                    ? 1
-                    : 2
-                )
-            )
+    // The World processes one leg runs at once: every listener of an authorities leg, its own World and a companion
+    // authority, or its one World. A relaunch boots after the first process has exited, so it adds none.
+    internal static int LegProcesses(CanaryLeg leg) => ((leg.Authorities.Count != 0)
+        ? leg.Authorities.Count
+        : ((leg.AuthorityWorldPath is null)
+            ? 1
+            : 2
+        )
+    );
+
+    /// <summary>What the legs running at once hold against a run's <see cref="CanaryCapacity"/>, and which waiting leg
+    /// may start next. A leg holds its World processes, clamped to the capacity so a leg wider than the machine still
+    /// runs (alone), and one GPU slot when it uses the GPU. An exclusive leg starts only once nothing runs, and while it
+    /// runs nothing else starts. Every rule the runner schedules by is here, so the laws hold the rules without
+    /// starting a process.</summary>
+    internal sealed class CanaryLegSlots(CanaryCapacity capacity) {
+        private readonly int m_gpuCapacity = Math.Max(
+            val1: 1,
+            val2: capacity.GpuLegs
+        );
+        private readonly int m_processCapacity = Math.Max(
+            val1: 1,
+            val2: capacity.Processes
         );
 
-        return Math.Clamp(
-            max: jobs,
+        private bool m_exclusive;
+
+        /// <summary>The GPU slots the running legs hold.</summary>
+        public int Gpu { get; private set; }
+        /// <summary>Whether an exclusive leg is running.</summary>
+        public bool ExclusiveRunning => m_exclusive;
+        /// <summary>The World processes the running legs hold.</summary>
+        public int Processes { get; private set; }
+        /// <summary>The legs running.</summary>
+        public int Running { get; private set; }
+
+        private int ProcessesOf(CanaryLegWork item) => Math.Clamp(
+            max: m_processCapacity,
             min: 1,
-            value: processes
+            value: item.Processes
         );
+
+        /// <summary>Returns the index of the first leg in <paramref name="waiting"/> that may start now, or -1. Legs are
+        /// considered in order and the first that fits starts, so a leg that does not fit yet never holds back a smaller
+        /// one behind it; an exclusive leg does, since every slot it needs is one a running leg must first give back.</summary>
+        /// <param name="waiting">The legs not yet started, in the order they should start.</param>
+        /// <returns>The index, or -1 when no waiting leg may start.</returns>
+        public int Next(IReadOnlyList<CanaryLegWork> waiting) {
+            if (m_exclusive) {
+                return -1;
+            }
+
+            for (var index = 0; (index < waiting.Count); index++) {
+                var item = waiting[index];
+
+                if (item.Exclusive) {
+                    return ((Running == 0)
+                        ? index
+                        : -1);
+                }
+                if (
+                    ((Processes + ProcessesOf(item: item)) <= m_processCapacity) &&
+                    (!item.Gpu || (Gpu < m_gpuCapacity))
+                ) {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+        /// <summary>Records that <paramref name="item"/> started.</summary>
+        /// <param name="item">The leg <see cref="Next"/> chose.</param>
+        public void Take(CanaryLegWork item) {
+            Running++;
+            Processes += ProcessesOf(item: item);
+            Gpu += (item.Gpu
+                ? 1
+                : 0);
+            m_exclusive |= item.Exclusive;
+        }
+        /// <summary>Records that <paramref name="item"/> ended.</summary>
+        /// <param name="item">A leg <see cref="Take"/> recorded.</param>
+        public void Release(CanaryLegWork item) {
+            Running--;
+            Processes -= ProcessesOf(item: item);
+            Gpu -= (item.Gpu
+                ? 1
+                : 0);
+            if (item.Exclusive) {
+                m_exclusive = false;
+            }
+        }
     }
-    // Starts legs strictly in authored order whenever enough slots are free, each on its own thread, and hands every
-    // finished leg to completed on the calling thread. In-order starts mean a heavy leg is never passed over by lighter
-    // ones behind it. Once cancellation fires no further leg starts, and no leg that finishes afterwards is reported.
-    // Nothing leaves this method while a leg still runs: a leg that throws, or a completed callback that throws,
-    // cancels the rest, which kills their children, and the first failure is rethrown only after every leg has ended.
-    internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, int jobs, Action<CanaryLegWork> completed, CancellationTokenSource cancellation) {
-        var running = new List<(Task Task, CanaryLegWork Item)>(capacity: jobs);
-        var next = 0;
-        var free = jobs;
+
+    // The order legs are offered to the slots in: every exclusive leg first, each alone before the run widens, then the
+    // rest in authored order.
+    internal static List<CanaryLegWork> StartOrder(IReadOnlyList<CanaryLegWork> work) => [
+        .. work.Where(predicate: static item => item.Exclusive),
+        .. work.Where(predicate: static item => !item.Exclusive),
+    ];
+    // Starts every leg the slots admit (CanaryLegSlots), each on its own thread, and hands every finished leg, with its
+    // wall time, to completed on the calling thread. Once cancellation fires no further leg starts, and no leg that
+    // finishes afterwards is reported. Nothing leaves this method while a leg still runs: a leg that throws, or a
+    // started or completed callback that throws, cancels the rest, which kills their children, and the first failure
+    // is rethrown only after every leg has ended.
+    // started observes dispatch on the calling thread before completion is reported; the worker may already be running.
+    internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, CanaryCapacity capacity, Action<CanaryLegWork, TimeSpan> completed, CancellationTokenSource cancellation, Action<CanaryLegWork>? started = null) {
+        var slots = new CanaryLegSlots(capacity: capacity);
+        var waiting = StartOrder(work: work);
+        var running = new List<(Task<TimeSpan> Task, CanaryLegWork Item)>(capacity: work.Count);
         ExceptionDispatchInfo? failure = null;
 
         try {
             while (true) {
                 while (
                     !cancellation.IsCancellationRequested &&
-                    (next < work.Count) &&
-                    (work[next].Weight <= free)
+                    (slots.Next(waiting: waiting) is var next and >= 0)
                 ) {
-                    var item = work[next++];
+                    var item = waiting[next];
 
-                    free -= item.Weight;
+                    waiting.RemoveAt(index: next);
+                    slots.Take(item: item);
                     running.Add(item: (Task.Factory.StartNew(
-                        action: item.Run,
                         cancellationToken: CancellationToken.None,
                         creationOptions: TaskCreationOptions.LongRunning,
+                        function: () => {
+                            var clock = Stopwatch.StartNew();
+
+                            item.Run();
+
+                            return clock.Elapsed;
+                        },
                         scheduler: TaskScheduler.Default
                     ), item));
+                    started?.Invoke(obj: item);
                 }
 
                 if (running.Count == 0) {
@@ -661,7 +849,7 @@ internal static partial class CanaryCommand {
                 var (task, done) = running[finished];
 
                 running.RemoveAt(index: finished);
-                free += done.Weight;
+                slots.Release(item: done);
 
                 if (task.Exception?.InnerException is { } exception) {
                     // A leg the cancellation stopped ends in OperationCanceledException; only another failure is one.
@@ -674,7 +862,7 @@ internal static partial class CanaryCommand {
                 }
 
                 if (!cancellation.IsCancellationRequested) {
-                    completed(obj: done);
+                    completed(arg1: done, arg2: task.Result);
                 }
             }
         } catch (Exception exception) {
@@ -693,6 +881,16 @@ internal static partial class CanaryCommand {
         failure?.Throw();
     }
 
+    // How one leg ended, in the words its progress line uses.
+    private static string LegOutcome(CanaryLegRun leg) => ((leg.Unsupported is not null)
+        ? "unsupported"
+        : ((leg.InfrastructureError is not null)
+            ? "infrastructure failure"
+            : (leg.TimedOut
+                ? "timed out"
+                : (leg.Passed
+                    ? "held"
+                    : "did not hold"))));
     // Prints one proof's whole report — both legs, then the discriminator verdict — and answers whether it held. A leg
     // that could not exercise its environment makes the proof unsupported rather than judged: neither its observations
     // nor the discriminator mean anything about the code under test.
@@ -748,8 +946,9 @@ internal static partial class CanaryCommand {
     // a short timeout reports exit -1 with empty streams, which reads as a failure to launch rather than as the
     // budget refusal it is. Total is therefore the exact sum of what every selected leg may spend
     // (CanaryPlan.BudgetSeconds), so a leg is refused only when an earlier one overran its own declared ceiling. Concurrency keeps
-    // that true: a leg waits only while legs started before it run, so the time spent before it starts never exceeds
-    // their timeouts; the warm boots run first, under their own summed timeouts. Packages holds the run's shader
+    // that true whatever order legs start in: a leg waits only while some other leg runs, so the time spent before it
+    // starts never exceeds the timeouts of the legs that started before it; the warm boots run first, under their own
+    // summed timeouts. Packages holds the run's shader
     // packages, Seed the pipeline cache the warm boots left, and Tally counts what the run starts.
     private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryPipelineCacheSeed Seed, CanaryTally Tally) {
         public TimeSpan Remaining => CliProcess.RemainingBudget(
@@ -1030,6 +1229,7 @@ internal static partial class CanaryCommand {
             Stdout: SplitLines(text: process.Stdout)
         );
         var invariants = EvaluateRunnerInvariants(
+            backend: backend,
             debugLayers: debugLayers,
             executionWorld: executionWorld,
             leg: leg,
@@ -1050,7 +1250,8 @@ internal static partial class CanaryCommand {
         var exitCode = process.ExitCode;
         var timedOut = process.TimedOut;
 
-        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote.
+        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote or on
+        // the leg's own world.
         if (
             (leg.Relaunch is { } relaunch) &&
             (unsupported is null) &&
@@ -1064,10 +1265,12 @@ internal static partial class CanaryCommand {
                 );
             }
 
-            var relaunchWorld = Path.Combine(
-                path1: runDirectory,
-                path2: relaunch.WorldFileName
-            );
+            var relaunchWorld = (relaunch.WorldSourcePath ?? ((relaunch.WorldFileName is { } relaunchFile)
+                ? Path.Combine(
+                    path1: runDirectory,
+                    path2: relaunchFile
+                )
+                : executionWorld));
             var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",
@@ -1101,6 +1304,7 @@ internal static partial class CanaryCommand {
                         artifact,
                         "--world", relaunchWorld,
                         "--state-dir", stateDirectory,
+                        .. (leg.RunSchedule ? new[] { "--schedule-dir", Path.Combine(path1: runDirectory, path2: "schedule-relaunch") } : []),
                         "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
                         .. BootShapeArguments(
                         backend: backend,
@@ -1153,6 +1357,7 @@ internal static partial class CanaryCommand {
             invariants = [
                 .. invariants,
                 .. EvaluateRunnerInvariants(
+                    backend: backend,
                     debugLayers: debugLayers,
                     executionWorld: relaunchWorld,
                     leg: (leg with { Commands = relaunch.Commands }),
@@ -1203,29 +1408,13 @@ internal static partial class CanaryCommand {
             Unsupported = unsupported,
         };
     }
-
-    /// <summary>The runner's one rule for a leg booted with its backend's validation layer: any validation message, or
-    /// the statement that the layer never loaded, fails the leg, and the verdict names the first such line
-    /// (<see cref="DebugLayerOutput.FirstFailure"/>). A leg booted without the layer has no such invariant.</summary>
-    /// <param name="debugLayers">Whether the leg's World was booted with <c>--debug-layers</c>.</param>
-    /// <param name="stderr">The leg's standard-error lines, in order.</param>
-    /// <returns>The invariant, or <see langword="null"/> when the leg ran without the layer.</returns>
-    internal static CanaryAssertionResult? DebugLayerInvariant(bool debugLayers, IReadOnlyList<string> stderr) {
-        if (!debugLayers) {
-            return null;
-        }
-
-        return ((DebugLayerOutput.FirstFailure(stderr: stderr) is { } failure)
-            ? new CanaryAssertionResult(Detail: $"validation layer reported nothing (first: {failure})", Passed: false)
-            : new CanaryAssertionResult(Detail: "validation layer reported nothing", Passed: true));
-    }
-
     private static IReadOnlyList<CanaryAssertionResult> EvaluateRunnerInvariants(
         CanaryManifest manifest,
         CanaryLeg leg,
         CliProcessResult process,
         CanaryTranscript transcript,
         string executionWorld,
+        string? backend,
         bool debugLayers
     ) {
         var results = new List<CanaryAssertionResult> {
@@ -1255,8 +1444,9 @@ internal static partial class CanaryCommand {
         ));
         results.AddRange(collection: PipelineWaitInvariants(transcript: transcript));
 
-        if (DebugLayerInvariant(debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation) {
-            results.Add(item: validation);
+        // A leg boots under the layer only when it names a backend.
+        if ((backend is not null) && (DebugLayerOutput.Verdict(backend: backend, debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation)) {
+            results.Add(item: new CanaryAssertionResult(Detail: validation.Detail, Passed: validation.Passed));
         }
 
         return results;
@@ -1421,24 +1611,41 @@ internal static partial class CanaryCommand {
             Kind: CanarySelectionKind.Automatic
         );
     }
-    // The run directory names its canary and leg after the prefix SweepScratch finds.
-    private static string CreateRunDirectory(string id, string leg) =>
-        Directory.CreateTempSubdirectory(prefix: $"{ScratchPrefix}{id}-{leg}-").FullName;
+
+    /// <summary>Names a build run directory without creating it, so a reused or named artifact leaves no directory.</summary>
+    /// <param name="id">The build's name.</param>
+    /// <returns>A unique path under the canary scratch prefix, created when the build writes its output or log.</returns>
+    public static string BuildRunDirectory(string id) =>
+        Path.Combine(path1: Path.GetTempPath(), path2: $"{ScratchPrefix}{id}-build-{Guid.NewGuid():N}");
+
+    // The run directory names its canary and leg after the prefix RunSelected sweeps. Each call creates a directory of
+    // its own, however many legs of one proof run at once: a leg's state directory, captures and keys live under it.
+    internal static string CreateRunDirectory(string id, string leg) =>
+        RunDirectory.CreatePath(prefix: $"{ScratchPrefix}{id}-{leg}-");
+
+    // Concludes a reported proof's legs with its verdict: a held proof's are deleted, a failed one's are kept and named,
+    // and --keep-transcripts leaves every one to its caller. A leg that never ran, or never created its directory, has
+    // nothing to conclude.
+    private static void ConcludeLegs(IEnumerable<CanaryLegRun?> legs, bool passed, bool keepTranscripts) {
+        if (keepTranscripts) {
+            return;
+        }
+
+        foreach (var leg in legs) {
+            if (leg is not null) {
+                RunDirectory.Conclude(
+                    passed: passed,
+                    path: leg.RunDirectory,
+                    report: Console.Error
+                );
+            }
+        }
+    }
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.ReplaceLineEndings(replacementText: "\n").Split(
             options: StringSplitOptions.RemoveEmptyEntries,
             separator: '\n'
         );
-    private static void PrintCaptured(CliProcessResult result) {
-        if (result.Stdout.Length != 0) {
-            Console.Error.WriteLine(value: "--- build stdout ---");
-            Console.Error.Write(value: result.Stdout);
-        }
-        if (result.Stderr.Length != 0) {
-            Console.Error.WriteLine(value: "--- build stderr ---");
-            Console.Error.Write(value: result.Stderr);
-        }
-    }
     private static string Verdict(bool value) => (value
         ? "PASS"
         : "FAIL"

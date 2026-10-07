@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 using Puck.Cli.Branding;
+using Puck.Testing;
 
 using Xunit;
 
@@ -186,25 +187,18 @@ public sealed class BrandingCommandTests {
     [Fact]
     public void ReparsePointPathRefusesBeforeWriting() {
         using var fixture = Fixture.Create(copyPath: "link/copy.bin");
-        var outside = Directory.CreateTempSubdirectory(prefix: "puck-branding-outside-");
+        using var outside = new TemporaryDirectory(prefix: "puck-branding-outside-");
+        var link = Path.Combine(
+            path1: fixture.Root,
+            path2: "link"
+        );
+
+        DirectoryLinks.Create(link: link, target: outside.RootPath);
 
         try {
-            try {
-                Directory.CreateSymbolicLink(
-                    path: Path.Combine(
-                        path1: fixture.Root,
-                        path2: "link"
-                    ),
-                    pathToTarget: outside.FullName
-                );
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-                Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
-                return;
-            }
-
             AssertRefusesWithoutChangingCopy(fixture: fixture);
         } finally {
-            outside.Delete(recursive: true);
+            DirectoryLinks.Remove(link: link);
         }
     }
     [Fact]
@@ -269,8 +263,10 @@ public sealed class BrandingCommandTests {
     }
 
     private sealed class Fixture : IDisposable {
-        private Fixture(string root, byte[] sourceBytes, string destinationPath) {
-            Root = root;
+        private readonly TemporaryDirectory m_directory;
+
+        private Fixture(TemporaryDirectory directory, byte[] sourceBytes, string destinationPath) {
+            m_directory = directory;
             SourceBytes = sourceBytes;
             DestinationPath = destinationPath;
         }
@@ -281,7 +277,7 @@ public sealed class BrandingCommandTests {
             path2: "branding",
             path3: "manifest.json"
         );
-        public string Root { get; }
+        public string Root => m_directory.RootPath;
         public byte[] SourceBytes { get; }
 
         public static Fixture Create(
@@ -293,7 +289,8 @@ public sealed class BrandingCommandTests {
             string copyPath = "consumer/copy.bin",
             string? secondCopyPath = null,
             string wiringText = "brand-token") {
-            var root = Directory.CreateTempSubdirectory(prefix: "puck-branding-").FullName;
+            var directory = new TemporaryDirectory(prefix: "puck-branding-");
+            var root = directory.RootPath;
             var sourceDirectory = Directory.CreateDirectory(path: Path.Combine(
                 path1: root,
                 path2: "branding"
@@ -373,17 +370,10 @@ public sealed class BrandingCommandTests {
 
             return new Fixture(
                 destinationPath: destinationPath,
-                root: root,
+                directory: directory,
                 sourceBytes: sourceBytes
             );
         }
-        public void Dispose() {
-            try {
-                Directory.Delete(
-                Root,
-                recursive: true
-            );
-            } catch { }
-        }
+        public void Dispose() => m_directory.Dispose();
     }
 }

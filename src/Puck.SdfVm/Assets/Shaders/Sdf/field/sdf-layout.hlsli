@@ -1,7 +1,7 @@
 // The field-scope save, the visible instance ranges, the per-invocation program layout and the compiled parts.
 #ifndef FIELD_SDF_LAYOUT_HLSLI
 #define FIELD_SDF_LAYOUT_HLSLI
-// The one-deep scoped-accumulator save slot for the dual walk carries distance, material, and gradient together.
+// Each parent entry in the dual walk's bounded scope stack carries distance, material and gradient together.
 struct SdfFieldSave {
     float distance;
     int material;
@@ -24,11 +24,24 @@ struct SdfFieldSave {
 // wraps onto word 0 on the first call. An empty range (an instance declared around zero instructions) is skipped,
 // never surfaced.
 void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uint instanceCount, inout uint maskWordIndex, inout uint maskWordBits, out uint segmentFirst, out uint segmentEnd, out uint instanceIndex) {
+    segmentFirst = SDF_SEGMENT_NONE;
+    segmentEnd = SDF_SEGMENT_NONE;
+    instanceIndex = SDF_SEGMENT_NONE;
+    if (instanceCount > SDF_MAX_INSTANCES) { return; }
     uint wordCount = sdfInstanceMaskWordCount(instanceCount);
     bool hasSummary = sdfInstanceMaskHasSummary(instanceMaskBase);
+#ifdef SDF_INSTANCE_MASKS
+    if (hasSummary) {
+        uint capacity;
+        uint stride;
+        sdfInstanceMasks.GetDimensions(capacity, stride);
+        uint summaryCount = (wordCount + 31u) >> 5u;
+        if (instanceMaskBase > capacity || wordCount + summaryCount > capacity - instanceMaskBase) { return; }
+    }
+#endif
 
     [loop]
-    for (;;) {
+    for (uint candidate = 0u; candidate < SDF_MAX_INSTANCES; candidate++) {
         if ((maskWordBits == 0u) && hasSummary) {
 #ifdef SDF_INSTANCE_MASKS
             uint nextWord = (maskWordIndex + 1u);
@@ -40,7 +53,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
                 uint summaryBits = (sdfInstanceMasks[summaryBase + summaryIndex] & (0xFFFFFFFFu << (nextWord & 31u)));
 
                 [loop]
-                while ((summaryBits == 0u) && ((summaryIndex + 1u) < summaryCount)) {
+                for (uint advance = 0u; advance < SDF_INSTANCE_MASK_MAX_WORDS; advance++) {
+                    if (summaryBits != 0u || summaryIndex + 1u >= summaryCount) { break; }
                     summaryIndex++;
                     summaryBits = sdfInstanceMasks[summaryBase + summaryIndex];
                 }
@@ -58,7 +72,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         [loop]
-        while ((maskWordBits == 0u) && ((maskWordIndex + 1u) < wordCount)) {
+        for (uint advance = 0u; advance < SDF_INSTANCE_MASK_MAX_WORDS; advance++) {
+            if (maskWordBits != 0u || maskWordIndex + 1u >= wordCount) { break; }
             maskWordIndex++;
             maskWordBits = sdfInstanceMaskWord(instanceMaskBase, maskWordIndex, instanceCount);
         }
@@ -75,32 +90,35 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         maskWordBits &= (maskWordBits - 1u);
 
         uint entryBase = sdfInstanceEntryOffset(instanceOffset, instanceIndex);
+        if (instanceIndex >= instanceCount || !sdfProgramRange(entryBase, SDF_BOUND_RECORD_VECTORS, 1u)) { break; }
         // A PARKED instance (a reserved-pool slot with no live content this rebuild) packs a negative-radius sentinel in
         // its bound (SdfProgram.ParkedBoundRadius): it contributes nothing to any ray, so skip its whole segment range —
         // this is what makes the beam prepass's own cone march (which evaluates under the SDF_INSTANCE_MASK_ALL sentinel,
         // so it would otherwise walk every parked pool slot's segments) cost track LIVE content, not reserved capacity.
         // Stage 1 never reaches here for a parked instance (its per-tile mask bit is always 0), so this only fires on the
         // all-visible cone-march / full-eval paths — exactly the ones that lacked the beam's per-tile skip.
-        float parkedRadius = asfloat(sdfWords[entryBase]).w;
+        float parkedRadius = asfloat(sdfProgramWord(entryBase)).w;
 
         if (parkedRadius < 0.0) {
             continue;
         }
 
-        uint4 instanceMeta = sdfWords[entryBase + 1u];
+        uint4 instanceMeta = sdfProgramWord(entryBase + 1u);
+        if (sdfIndirectParticipationActive && sdfInstanceIndirectPolicy(instanceMeta) != SDF_INDIRECT_PARTICIPATION_CAST) {
+            continue;
+        }
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        // The per-instance soft-shadow-participation skip — active ONLY inside the soft-shadow march window (the flag is
-        // false for every camera/AO/coverage enumeration and for the beam/cull kernels). A DYNAMIC instance whose packed
+        // The per-instance shadow-participation skip is active in direct soft-shadow marches;
+        // indirect queries and ordinary camera/AO/coverage enumerations do not use it. A DYNAMIC instance whose packed
         // position.w > 0.5 is shadow-suppressed (host encoding: 0 casts / 1 suppressed), so drop its whole segment range
         // from the shadow enumeration — mirroring the parked-radius continue above. Static instances (no dynamic slot)
         // always cast: they never take this branch.
-        if (sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * instanceMeta.y].w > 0.5)) {
+        if (!sdfIndirectParticipationActive && sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransformRow(3u * instanceMeta.y).w > 0.5)) {
             continue;
         }
 #endif
-        // Strip the shadow-transparent flag (i1.w's high bit — SDF_INSTANCE_SHADOW_TRANSPARENT_BIT) before using the
-        // lane as segmentEnd: it is a shadow-gather-only classification, unrelated to the render range. The mask is the
-        // identity when the flag is clear; a set flag never changes the segment range it names.
+        // Strip the four participation/visibility flag bits before using this lane as segmentEnd.
+        // Their values never change the segment range they classify.
         uint metaSegmentEnd = (instanceMeta.w & SDF_INSTANCE_SEGMENT_END_MASK);
 
         if (instanceMeta.z < metaSegmentEnd) {
@@ -109,15 +127,21 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
             return;
         }
     }
+    segmentFirst = SDF_SEGMENT_NONE;
+    segmentEnd = SDF_SEGMENT_NONE;
+    instanceIndex = SDF_SEGMENT_NONE;
 }
 
 // The program's LAYOUT — every offset/count mapCore/mapGradCore need to walk the instruction stream. There is one
-// program per dispatch, so this is dispatch-uniform; mapCore/mapGradCore used to re-derive it from sdfWords[0] on
+// program per dispatch, so this is dispatch-uniform; mapCore/mapGradCore used to re-derive it from sdfProgramWord(0) on
 // EVERY call, and marchers call them once per step (up to 128 primary steps plus exhaustion re-evaluation) —
 // DXC's no-GVN-over-StructuredBuffer-loads gap (see sdfInstanceDirectoryOffsetFrom above)
 // turned that into a real per-step reload. sdfLoadProgramLayout is now the ONE decode point; mapCore/mapGradCore read
 // the cached static instead.
 struct SdfProgramLayout {
+    bool valid;
+    uint instructionCount;
+    uint vectorCount;
     uint dataOffset;         // header.z: instruction data table offset
     uint boundsOffset;       // per-shape bounding-sphere table offset
     uint segmentOffset;      // segment directory offset
@@ -138,23 +162,42 @@ static SdfProgramLayout sdfProgramLayout = (SdfProgramLayout)0;
 
 // The ONE per-invocation layout decode. Same loads, same order as mapCore's former inline sequence.
 SdfProgramLayout sdfLoadProgramLayout() {
-    uint4 header = sdfWords[0];
+    SdfProgramLayout layout = (SdfProgramLayout)0;
+    layout.stepScale = 1.0;
+    uint vectors = sdfProgramVectorCount();
+    if (vectors == 0u) { return layout; }
+    uint4 header = sdfProgramWord(0);
+    uint instructions = SDF_PROGRAM_INSTRUCTION_COUNT(header);
+    if (!sdfProgramRange(SDF_PROGRAM_HEADER_VECTORS, instructions, 1u)
+        || !sdfProgramRange(SDF_PROGRAM_DATA_OFFSET(header), instructions, SDF_INSTRUCTION_DATA_VECTORS)
+        || !sdfProgramRange(SDF_PROGRAM_MATERIAL_OFFSET(header), SDF_PROGRAM_MATERIAL_COUNT(header), SDF_MATERIAL_VECTORS_PER_ENTRY)) { return layout; }
     uint boundsOffset = (SDF_PROGRAM_MATERIAL_OFFSET(header) + (SDF_MATERIAL_VECTORS_PER_ENTRY * SDF_PROGRAM_MATERIAL_COUNT(header)));
+    if (!sdfProgramRange(boundsOffset, instructions, SDF_BOUND_RECORD_VECTORS)) { return layout; }
     uint segmentOffset = (boundsOffset + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
-    uint4 segmentHeader = sdfWords[segmentOffset];
+    if (segmentOffset >= vectors) { return layout; }
+    uint4 segmentHeader = sdfProgramWord(segmentOffset);
     uint segmentCount = SDF_SEGMENT_COUNT(segmentHeader);
+    if (!sdfProgramRange(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS, segmentCount, SDF_BOUND_RECORD_VECTORS)) { return layout; }
     float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(segmentHeader));
     uint instanceOffset = sdfInstanceDirectoryOffsetFrom(segmentOffset, segmentCount);
-    uint instanceCount = SDF_INSTANCE_COUNT(sdfWords[instanceOffset]);
-    SdfProgramLayout layout;
+    if (instanceOffset >= vectors) { return layout; }
+    uint instanceCount = SDF_INSTANCE_COUNT(sdfProgramWord(instanceOffset));
+    if (instanceCount > SDF_MAX_INSTANCES
+        || !sdfProgramRange(instanceOffset + SDF_DIRECTORY_HEADER_VECTORS, instanceCount, SDF_BOUND_RECORD_VECTORS)) { return layout; }
+    uint worldOffset = instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + SDF_BOUND_RECORD_VECTORS * instanceCount;
+    if (worldOffset >= vectors || !sdfProgramRange(worldOffset + SDF_DIRECTORY_HEADER_VECTORS,
+        SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldOffset)), 1u)) { return layout; }
+    layout.valid = true;
+    layout.vectorCount = vectors;
+    layout.instructionCount = instructions;
 
     layout.dataOffset = SDF_PROGRAM_DATA_OFFSET(header);
     layout.boundsOffset = boundsOffset;
     layout.segmentOffset = segmentOffset;
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = SDF_SEGMENT_RIGID_PLAN_OFFSET(segmentHeader);
-    layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfWords[instanceOffset]);
-    layout.noDetailShapes = (SDF_INSTANCE_FLAGS(sdfWords[instanceOffset]) & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
+    layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfProgramWord(instanceOffset));
+    layout.noDetailShapes = (SDF_INSTANCE_FLAGS(sdfProgramWord(instanceOffset)) & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
@@ -177,10 +220,10 @@ SdfProgramLayout sdfLoadProgramLayout() {
 #define SDF_VM_LOAD_DATA0
 #define SDF_VM_LOAD_DATA1
 #else
+// The validated payload span and the interpreter's index < instructionCount guard dominate these reads.
 #define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)])
 #define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u])
 #endif
 
-#include "sdf-parts.hlsli"
 
 #endif

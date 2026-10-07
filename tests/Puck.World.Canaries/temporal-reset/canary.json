@@ -1,0 +1,99 @@
+{
+  "id": "temporal-reset",
+  "title": "The first frame after a cut is exactly the spatial path's frame",
+  "binding": "The positive leg boots the still counters blocks at native render scale with world.temporal on, viewed from a start camera. A seat-granted layout edit submitted at tick 64 cuts the view's slot to a second camera on tick 65. The world view is captured at ticks 64 and 65, the capture at 64 placing the one at 65 on that tick's first frame, and a camera view of the second camera, which renders the spatial path, is captured at tick 66. The first frame after the cut equals that spatial frame exactly, so a cut discards the history accumulated from the start camera. The discriminating leg submits the cut one tick earlier, so the tick 65 capture already holds a second accumulated sample and is no longer exactly the spatial frame.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-reset/fixture.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-cut-frame-is-the-spatial-frame",
+        "capture": "state/captures/cut~65.png",
+        "reference": "state/captures/reference~66.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maximumMeanCodes": 0,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-reset/discriminating.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-cut-frame-is-the-spatial-frame",
+        "capture": "state/captures/cut~65.png",
+        "reference": "state/captures/reference~66.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maximumMeanCodes": 0,
+        "holds": false
+      }
+    ]
+  }
+}

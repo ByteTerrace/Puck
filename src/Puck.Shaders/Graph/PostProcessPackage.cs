@@ -99,7 +99,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
     /// <exception cref="InvalidDataException">The pass does not read one image and write one, or a stage's bytecode is
     /// not valid bytecode of the backend's format.</exception>
     /// <exception cref="IOException">A stage's deployed bytecode is missing or cannot be read.</exception>
-    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+    public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         if (
@@ -147,7 +147,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         );
 
         try {
-            _ = lease.Wait(cancellationToken: cancellationToken);
+            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } catch {
             lease.Release();
 

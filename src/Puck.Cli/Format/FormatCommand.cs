@@ -82,7 +82,7 @@ internal static class FormatCommand {
                 selected: selected,
                 targets: [.. targets]
             );
-        } catch (Exception error) when ((error is IOException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)) {
+        } catch (Exception error) when ((error is IOException or ArgumentException or InvalidOperationException or TimeoutException or System.Text.Json.JsonException)) {
             return CliExit.Refuse(
                 verb: "format",
                 what: (fileList ?? root),
@@ -119,7 +119,9 @@ internal static class FormatCommand {
             left alone. A C# source goes through `dotnet format whitespace` first (phase 0,
             over exactly the selected files, loading no project), then the syntactic passes,
             then the semantic null-pattern and named-args passes, which resolve symbols against
-            each project's compile closure as MSBuild reports it for --configuration. A project
+            each project's compile closure as MSBuild reports it for --configuration. Closure
+            queries use one MSBuild node; a two-minute deadline stops a stalled query and refuses
+            the run without retrying each project from the batch. A project
             not built in that configuration has its files skipped and named in every mode. A
             pass whose input has syntax errors, or whose output would add them, is dropped and
             reported, never written. Without --check the run writes: run --check first on a

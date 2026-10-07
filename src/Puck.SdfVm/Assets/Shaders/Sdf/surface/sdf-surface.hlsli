@@ -21,10 +21,10 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     bool needsNormal = hit && (mode == DebugViewModeNormals || (finalMode && !sampledScreen));
     if (needsNormal) {
         sdfDetailShadingActive = true;
-        if (worldCurvatureShadingEnabled())
-            normal = calculateNormalCurvature(surfacePoint, mask, primaryRadius, curvature, gradientMagnitude);
-        else if (worldUseTapNormals())
-            normal = calculateNormal(surfacePoint, mask, gradientMagnitude);
+        // The curvature and tap paths share one probe call, so the kernel inlines the interpreter once for both.
+        bool curvatureShading = worldCurvatureShadingEnabled();
+        if (curvatureShading || worldUseTapNormals())
+            normal = calculateTapNormal(surfacePoint, mask, curvatureShading, primaryRadius, curvature, gradientMagnitude);
         else normal = calculateNormalAnalytic(surfacePoint, mask, gradientMagnitude);
         sdfDetailShadingActive = false;
     }
@@ -58,8 +58,8 @@ void sdfResolveMeshSurface(float3 normal, float ambient, uint record) {
 }
 
 // The surface stage: resolves an active pixel's normal and curvature from the field, or a mesh hit's from its triangle,
-// which the record names, and a textured mesh's normal and occlusion from the atlases, facing the camera as the geometric
-// normal does.
+// which the record names, a textured mesh's normal and occlusion from the atlases, and an impostor card's normal from the
+// impostor's views, facing the camera as the geometric normal does.
 void sdfSurfaceStage(SdfPixel p) {
     if (!p.active) {
         return;
@@ -74,8 +74,14 @@ void sdfSurfaceStage(SdfPixel p) {
         uint draw = sdfVisibilitySource(visibility.identity);
         uint triangleIndex = sdfVisibilityMeshTriangle(record);
         float3 meshPoint = (p.rayOrigin + (p.rayDirection * visibility.t));
-        float3 meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
         float meshAmbient = 1.0;
+        float3 meshNormal;
+
+        if (sdfMeshIsImpostor(draw)) {
+            meshNormal = sdfImpostorSurfaceAt(draw, p.rayOrigin, p.rayDirection, visibility.t, p.pixelFootprint).normal;
+        } else {
+            meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
+        }
 
         if (sdfMeshTextured(draw)) {
             SdfMeshTexel meshTexel = sdfMeshTexelAt(draw, triangleIndex, meshPoint, (p.pixelFootprint * visibility.t));
@@ -139,7 +145,10 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #ifdef SDF_GROUP_SHADOW_GATHER
     if (!fast) sdfBuildAmbientMask(surfacePoint, lit, lane);
 #endif
-    if (!lit) return; // All lanes have passed the group barriers.
+    if (!lit) {
+        if (active) sdfStoreVisibilityQueries(record, SDF_VISIBILITY_AMBIENT_QUERIES_WORD, 0.0);
+        return;
+    }
     SdfVisibilityNormal surface = sdfLoadVisibilityNormal(record);
     float stepScale = sdfProgramLayout.stepScale * max(surface.gradientMagnitude, GradientMagnitudeFloor);
     uint mask = fast ? cameraMask : SDF_INSTANCE_MASK_ALL;
@@ -154,7 +163,7 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #ifdef SDF_GROUP_SHADOW_GATHER
     sdfAmbientMaskActive = false;
 #endif
-    info.queries += sdfEvalCount - initialQueries;
+    sdfStoreVisibilityQueries(record, SDF_VISIBILITY_AMBIENT_QUERIES_WORD, sdfEvalCount - initialQueries);
     sdfStoreVisibilitySurface(record, info);
 }
 

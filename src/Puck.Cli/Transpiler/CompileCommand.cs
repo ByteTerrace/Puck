@@ -1,9 +1,10 @@
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
-using Puck.Transpiler.Diagnostics;
+using Puck.GamingBricks.Forge;
 using Puck.GamingBricks.Transpiler;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
@@ -33,7 +34,7 @@ internal static partial class CompileCommand {
         var fullPath = Path.GetFullPath(path: path);
 
         if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"error: Source file not found: '{fullPath}'");
+            Console.Error.WriteLine(value: $"error: Source file not found: '{CliPaths.ToDisplay(fullPath: fullPath)}'");
             return 2;
         }
 
@@ -95,7 +96,7 @@ internal static partial class CompileCommand {
         try {
             sourceText = File.ReadAllText(path: sourcePath);
         } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Could not read source file '{sourcePath}': {ex.Message}");
+            Console.Error.WriteLine(value: $"error: Could not read source file '{CliPaths.ToDisplay(fullPath: sourcePath)}': {ex.Message}");
             return 2;
         }
 
@@ -192,10 +193,10 @@ internal static partial class CompileCommand {
                 bytes: jsonBytes,
                 path: outputPath
             );
-            Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{outputPath}' ({jsonBytes.Length:N0} bytes).");
+            Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: outputPath)}' ({jsonBytes.Length:N0} bytes).");
             return 0;
         } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
+            Console.Error.WriteLine(value: $"error: Failed to write the output of '{CliPaths.ToDisplay(fullPath: sourcePath)}': {ex.Message}");
             return 2;
         }
     }
@@ -224,7 +225,7 @@ internal static partial class CompileCommand {
             a: (PuckParser.TryReadDocumentSchema(schema: out var schema, source: sourceText)
                 ? schema
                 : null),
-            b: CartridgeVocabulary.Schema,
+            b: CartridgeDocument.SchemaId,
             comparisonType: StringComparison.Ordinal
         )) {
             var compilation = WorldCompiler.Compile(
@@ -318,7 +319,7 @@ internal static partial class CompileCommand {
         bool bundle,
         bool updateAssets = false
     ) {
-        Console.WriteLine(value: $"[puck watch] Monitoring '{sourcePath}' for changes (Ctrl+C to stop)...");
+        Console.WriteLine(value: $"[puck watch] Monitoring '{CliPaths.ToDisplay(fullPath: sourcePath)}' for changes (Ctrl+C to stop)...");
 
         // Initial run
         ExecuteCompilation(
@@ -383,7 +384,7 @@ internal static partial class CompileCommand {
     }
 
     public static Command Create() {
-        var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.OneOrMore, Description = "Paths to .puck sources, or .world.json documents to write only the compiled world of, compiled in input order in one process. Stops on the first failure." };
+        var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.ZeroOrMore, Description = "Paths to .puck sources, or .world.json documents to write only the compiled world of, compiled in input order in one process. Stops on the first failure. Required unless --tree selects every .puck and .world.json under its directory in ordinal order." };
         var outputOption = new Option<string?>(
             name: "--output",
             aliases: ["-o"]
@@ -396,10 +397,10 @@ internal static partial class CompileCommand {
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
         var bundleOption = new Option<bool>(name: "--bundle") { Description = "Inline and bundle all imported .puck module ASTs into a single standalone document." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
-        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory: each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, the bakes they name ship once in one bake pack (bakes.puckbake) at the output's root, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb, *.puckbake and stored package under --output is removed, so the output holds exactly this run's worlds." };
+        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory. With no source paths, select every .puck and .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, the bakes they name ship once in one bake pack (bakes.puckbake) at the output's root, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb, *.puckbake and stored package under --output is removed, so the output holds exactly this run's worlds." };
         var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world, bake pack or stored package --output holds that the run does not write. Writes nothing under --output." };
         var writtenOption = new Option<string?>(name: "--written") { Description = "With --tree, write the files the run left under --output to this file once it succeeds, one output-relative path with forward slashes per line, and remove it before the run starts, so it exists only for a whole run." };
-        var bakeCacheOption = new Option<string?>(name: "--bake-cache") { Description = "With --tree, read each creation bake from this content-addressed cache directory and keep every bake the run makes there, so a creation whose key (its pin, the baker's version and the tier) an earlier run kept is not baked again. The bake pack's bytes are the same with or without it." };
+        var bakeCacheOption = new Option<string?>(name: "--bake-cache") { Description = "With --tree, read each creation bake from this content-addressed cache directory and keep every bake the run makes there, so a creation whose key (its pin, the bake code fingerprint and the tier) an earlier run kept is not baked again. The bake pack's bytes are the same with or without it." };
 
         var command = new Command(
             description: "Compile .puck source files into canonical JSON world or cartridge definitions, and each world document into its compiled world (.puckb) beside it.",
@@ -436,17 +437,27 @@ internal static partial class CompileCommand {
                 result.AddError(errorMessage: "--check compares a --tree run with its --output and requires --tree.");
             } else if (result.GetValue(option: writtenOption) is not null) {
                 result.AddError(errorMessage: "--written reports a --tree run and requires --tree.");
+            } else if ((result.GetValue(argument: pathArgument)?.Length ?? 0) == 0) {
+                result.AddError(errorMessage: "At least one source path is required unless --tree is supplied.");
             } else if ((result.GetValue(argument: pathArgument)?.Length > 1) &&
                 ((result.GetValue(option: outputOption) is not null) || result.GetValue(option: watchOption))) {
                 result.AddError(errorMessage: "--output and --watch require exactly one source file.");
             }
         });
         command.SetAction(action: parseResult => {
+            var paths = (parseResult.GetValue(argument: pathArgument) ?? []);
+
+            if ((paths.Length == 0) && (parseResult.GetValue(option: treeOption) is { } sourceTree)) {
+                paths = [.. Directory.EnumerateFiles(path: sourceTree, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+                    .Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") || file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".world.json")))
+                    .Order(comparer: StringComparer.Ordinal)];
+            }
+
             if ((parseResult.GetValue(option: treeOption) is { } checkedTree) && parseResult.GetValue(option: checkOption)) {
                 return RunTreeCheck(
                     bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetRequiredValue(option: outputOption)!,
-                    paths: parseResult.GetRequiredValue(argument: pathArgument),
+                    paths: paths,
                     strict: parseResult.GetValue(option: strictOption),
                     tree: checkedTree,
                     validate: parseResult.GetValue(option: validateOption)
@@ -458,7 +469,7 @@ internal static partial class CompileCommand {
                     bakeCache: parseResult.GetValue(option: bakeCacheOption),
                     bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetRequiredValue(option: outputOption)!,
-                    paths: parseResult.GetRequiredValue(argument: pathArgument),
+                    paths: paths,
                     report: parseResult.GetValue(option: writtenOption),
                     strict: parseResult.GetValue(option: strictOption),
                     tree: tree,
@@ -466,7 +477,7 @@ internal static partial class CompileCommand {
                 );
             }
 
-            foreach (var path in parseResult.GetRequiredValue(argument: pathArgument)) {
+            foreach (var path in paths) {
                 var exitCode = Run(
                     bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetValue(option: outputOption),

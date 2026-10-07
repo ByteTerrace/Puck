@@ -1,0 +1,59 @@
+schema: "puck.world.definition.v1"
+basis: "../indirect-near/scenes"
+documentId: "indirect-near-sealed"
+state {
+  world {
+    slot scene = 2
+  }
+}
+render {
+  indirect {
+    tier: high
+    bounces: 0
+    sources {
+      lights: 0
+      emission: 1
+      screens: 0
+      sky: 0
+      feedback: 0
+    }
+  }
+  lighting {
+    lights []
+  }
+}
+placements {
+  placement "sealed-room" {
+    prototype: "sealed-room"
+    position [8, 0.4, 0]
+  }
+}
+cameras [
+  {
+    name: "study-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "study-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [8.2832, 0.4, 0.0988]))
+        lookAt(subject: worldPoint(point: [8, 0.4, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+hud {
+  defaults {
+    enabled: true
+    cursor {
+      hoverRadius: 100
+      sizePx: 3
+      role: Accent
+      visible: null
+    }
+  }
+  panels []
+}

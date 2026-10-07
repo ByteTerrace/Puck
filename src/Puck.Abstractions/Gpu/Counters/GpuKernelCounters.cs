@@ -5,8 +5,8 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// The counter buffers a node's kernels count their own work into (<see cref="GpuWork.KernelKinds"/>), and the readback
 /// its ledger reads them from once a submission completes. Each frame slot has a device-local storage buffer of
-/// <see cref="Rows"/> rows and a readback buffer of the same size. A row is one pass's counts, the pass's index in the
-/// node's configured passes, and holds each kernel kind in <see cref="GpuWork.KernelKinds"/> order as one 64-bit count
+/// <see cref="RowsOf"/> rows and a readback buffer of the same size. The configured pass rows precede named detail rows,
+/// and each holds the kernel kinds in <see cref="GpuWork.KernelKinds"/> order as one 64-bit count
 /// in two 32-bit words, low word first, which a kernel adds to with one atomic on the low word and one on the high word
 /// when that addition carries. The HLSL that adds to a row is generated from these constants into every pass interface
 /// that declares the work counters (<c>ShaderWorkCounters</c> in <c>Puck.Shaders</c>).
@@ -18,16 +18,23 @@ namespace Puck.Abstractions.Gpu;
 /// is recorded again, so a slot's readback is never read while a copy into it is in flight.
 /// </para>
 /// </summary>
-public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
+public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <summary>The 32-bit words one count takes: its low word, then its high word.</summary>
     public const int CountWords = 2;
 
     // The sample column of each kernel kind, in GpuWork.KernelKinds order.
-    private static readonly int[] KernelColumns = [GpuWork.MarchStepsColumn, GpuWork.TexelsWrittenColumn];
+    private static readonly int[] KernelColumns = GpuWork.KernelKinds.ToArray()
+        .Select(selector: kind => GpuWork.SubmissionKinds.IndexOf(kind)).ToArray();
 
     private readonly IGpuBuffer[] m_counters;
     private readonly IGpuReadbackBuffer[] m_readbacks;
-    private readonly byte[] m_read;
+
+    private byte[] m_read;
+
+    private readonly IGpuBufferFactory m_buffers;
+    private readonly string m_owner;
+    private readonly string m_part;
+    private readonly int[] m_rows;
 
     private bool m_disposed;
 
@@ -55,10 +62,16 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
         );
 
         Rows = rows;
-        SizeBytes = ((ulong)(rows * RowBytes));
+        m_buffers = buffers;
+        m_owner = owner;
+        m_part = part;
+        m_rows = new int[slots];
+        Array.Fill(array: m_rows, value: rows);
+        var sizeBytes = checked((((ulong)rows) * ((ulong)RowBytes)));
+
         m_counters = new IGpuBuffer[slots];
         m_readbacks = new IGpuReadbackBuffer[slots];
-        m_read = new byte[((int)SizeBytes)];
+        m_read = new byte[checked((int)sizeBytes)];
 
         try {
             for (var slot = 0; (slot < slots); slot++) {
@@ -68,7 +81,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
                         owner: owner,
                         part: part
                     ),
-                    sizeBytes: SizeBytes,
+                    sizeBytes: sizeBytes,
                     usage: GpuBufferUsage.Storage
                 );
                 m_readbacks[slot] = buffers.CreateReadback(
@@ -78,7 +91,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
                         owner: owner,
                         part: part
                     ),
-                    sizeBytes: SizeBytes
+                    sizeBytes: sizeBytes
                 );
             }
         } catch {
@@ -94,14 +107,15 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <summary>Gets the bytes one row takes.</summary>
     public static int RowBytes =>
         (RowWords * sizeof(uint));
-    /// <summary>Gets the rows each buffer holds.</summary>
-    public int Rows { get; }
-    /// <summary>Gets the size, in bytes, of each counter buffer and of each readback buffer.</summary>
-    public ulong SizeBytes { get; }
+    /// <summary>Gets the largest row capacity held by a slot.</summary>
+    public int Rows { get; private set; }
+    /// <summary>Gets the largest buffer size held by a slot, in bytes.</summary>
+    public ulong SizeBytes => ((ulong)m_read.Length);
     /// <summary>Gets the bytes every buffer holds together, device-local and readback: two buffers a frame
     /// slot.</summary>
-    public ulong TotalBytes =>
-        (((ulong)(m_counters.Length * 2)) * SizeBytes);
+    public ulong TotalBytes {
+        get { var bytes = 0UL; foreach (var rows in m_rows) { bytes += ((((ulong)rows) * ((ulong)RowBytes)) * 2UL); } return bytes; }
+    }
 
     private static string ReadbackDetail => "readback";
 
@@ -113,7 +127,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="row"/> is not a row of the buffer.</exception>
     public GpuKernelCounterRow RowOf(int slot, int row) {
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            other: ((uint)Rows),
+            other: ((uint)m_rows[slot]),
             value: ((uint)row),
             paramName: nameof(row)
         );
@@ -140,7 +154,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
         recorder.ClearStorageBuffer(
             bufferHandle: counter,
             commandBufferHandle: commandBuffer,
-            sizeBytes: SizeBytes
+            sizeBytes: m_counters[slot].SizeBytes
         );
         recorder.TransitionBuffer(
             bufferHandle: counter,
@@ -172,7 +186,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
         recorder.CopyBuffer(
             commandBufferHandle: commandBuffer,
             destinationBufferHandle: readback,
-            sizeBytes: SizeBytes,
+            sizeBytes: m_counters[slot].SizeBytes,
             sourceBufferHandle: counter
         );
         recorder.TransitionBuffer(
@@ -187,17 +201,17 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <inheritdoc/>
     /// <remarks>Reads the slot's readback into a buffer the instance allocated once, so reading allocates
     /// nothing.</remarks>
-    public void AddTo(int slot, Span<long> counts, int passCount) {
+    public void AddTo(int slot, Span<long> counts, int rowCount) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        m_readbacks[slot].Read(destination: m_read);
+        m_readbacks[slot].Read(destination: m_read.AsSpan(start: 0, length: checked((int)m_counters[slot].SizeBytes)));
 
         var rows = Math.Min(
-            val1: Rows,
-            val2: passCount
+            val1: m_rows[slot],
+            val2: rowCount
         );
 
         for (var row = 0; (row < rows); row++) {

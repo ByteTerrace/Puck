@@ -6,10 +6,11 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
-/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes sky, mask, beam,
-/// cull arguments, mesh, primary, surface, ambient, shadow and views, and plans between them exactly the buffer transitions the
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, beam, tape, cull
+/// arguments, mesh, primary, surface, ambient, shadow, views, sky and composite, the sky's field runs and the composite
+/// after the hits are shaded, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
-/// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
+/// scratch buffer is retained, one allocation shared by every frame slot, whose first use of a frame orders it after the
 /// frame before, and at every capacity the planner sizes each buffer as the kernels index it. Every compute pass counts its
 /// kernels' work into the node's kernel counters, which are no planned storage.
 /// </summary>
@@ -19,9 +20,9 @@ public sealed partial class SdfPassPlanLawTests {
 
     // The fragment's passes in dispatch order.
     private static readonly string[] Order = [
-        SdfWorldPackage.Parts.Sky,
         SdfWorldPackage.Parts.Mask,
         SdfWorldPackage.Parts.Beam,
+        SdfWorldPackage.Parts.Tape,
         SdfWorldPackage.Parts.CullArgs,
         SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.Primary,
@@ -29,18 +30,22 @@ public sealed partial class SdfPassPlanLawTests {
         SdfWorldPackage.Parts.Ambient,
         SdfWorldPackage.Parts.Shadow,
         SdfWorldPackage.Parts.Views,
+        SdfWorldPackage.Parts.Sky,
+        SdfWorldPackage.Parts.Composite,
     ];
     // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
     // before, and the accesses and stages on either side.
     private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
         (SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Arguments, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.IndirectCommandRead, GpuStage.ComputeShader, GpuStage.DrawIndirect),
         (SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.SegmentTapes, SdfWorldPackage.Parts.Tape, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Composite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
     ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
@@ -68,6 +73,7 @@ public sealed partial class SdfPassPlanLawTests {
     // words, and one visibility record a pixel of every viewport.
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
         SdfWorldPackage.Parts.InstanceMasks => ((counts.Viewports * counts.Tiles) * (counts.InstanceMaskWords * sizeof(uint))),
+        SdfWorldPackage.Parts.SegmentTapes => ((counts.Viewports * counts.Tiles) * (counts.SegmentTapeWords * sizeof(uint))),
         SdfWorldPackage.Parts.Tiles => ((counts.Viewports * ((SdfWorldPackage.TilePlaneCount * counts.Tiles) + (SdfWorldPackage.PartBoundFloatCount * counts.Instances))) * sizeof(float)),
         SdfWorldPackage.Parts.Arguments => ShaderPipelineDispatch.ArgumentBytes,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsByteLength,
@@ -100,7 +106,8 @@ public sealed partial class SdfPassPlanLawTests {
     // the mesh hit from the visibility record, whose version each stage forwards.
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
-        string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
+        string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.SegmentTapes];
+        string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
 
         Assert.Equal(
             actual: SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => (
@@ -109,16 +116,18 @@ public sealed partial class SdfPassPlanLawTests {
                 string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))
             )),
             expected: [
-                (SdfWorldPackage.Parts.Sky, "", SdfWorldPackage.Parts.SkyImage),
                 (SdfWorldPackage.Parts.Mask, "", SdfWorldPackage.Parts.InstanceMasks),
                 (SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles),
+                (SdfWorldPackage.Parts.Tape, $"{SdfWorldPackage.Parts.InstanceMasks},{SdfWorldPackage.Parts.Tiles}", SdfWorldPackage.Parts.SegmentTapes),
                 (SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Tiles, $"{SdfWorldPackage.Parts.Arguments},{SdfWorldPackage.Parts.CullBounds}"),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
                 (SdfWorldPackage.Parts.Primary, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.MeshTarget]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.SurfaceVisibility),
                 (SdfWorldPackage.Parts.Ambient, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.AmbientVisibility),
                 (SdfWorldPackage.Parts.Shadow, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.ShadowVisibility),
-                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), SdfWorldPackage.Color),
+                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), $"{SdfWorldPackage.Parts.Lit},{SdfWorldPackage.IndirectVisibility}"),
+                (SdfWorldPackage.Parts.Sky, $"{SdfWorldPackage.Parts.Lit},{SdfWorldPackage.Parts.CullBounds}", string.Join(separator: ",", values: runs)),
+                (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.ShadowVisibility, .. runs]), SdfWorldPackage.Color),
             ]
         );
     }
@@ -166,6 +175,7 @@ public sealed partial class SdfPassPlanLawTests {
         ) {
             InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
             Instances = ((ulong)instances),
+            SegmentTapeWords = ((ulong)SdfWorldPackage.SegmentTapeWordCountFor(segments: instances, tokens: (instances * 4))),
             Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
             Viewports = 1,
         };
@@ -176,6 +186,7 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.SegmentTapes,
                 SdfWorldPackage.Parts.Tiles,
                 SdfWorldPackage.Parts.Visibility,
             }.Order(comparer: StringComparer.Ordinal)
@@ -192,17 +203,23 @@ public sealed partial class SdfPassPlanLawTests {
         );
     }
     [Fact]
-    public void EveryScratchStorageIsTransientAndTheColorIsPublishedPerSlot() {
-        var transient = Plan.Pipeline.Storages.Where(predicate: static storage => storage.Declaration.Transient).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
+    public void EveryScratchStorageIsRetainedAndTheColorIsPublishedPerSlot() {
+        var retained = Plan.Pipeline.Storages.Where(predicate: static storage => storage.Declaration.Retained).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
         Assert.Equal(
-            actual: transient,
+            actual: retained,
             expected: new[] {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.SegmentTapes,
+                SdfWorldPackage.Parts.Lit,
                 SdfWorldPackage.Parts.MeshDepth,
                 SdfWorldPackage.Parts.MeshTarget,
+                SdfWorldPackage.Parts.SkyBase,
+                SdfWorldPackage.Parts.SkyUpper0,
+                SdfWorldPackage.Parts.SkyUpper1,
+                SdfWorldPackage.Parts.SkyUpper2,
                 SdfWorldPackage.Parts.Tiles,
                 SdfWorldPackage.Parts.Visibility,
             }.Select(selector: static part => RenderGraphPackageFragment.Spliced(name: part, pass: Sdf)).Order(comparer: StringComparer.Ordinal)
@@ -213,12 +230,12 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.False(condition: color.Declaration.Transient);
         Assert.Equal(
             actual: color.Versions,
-            expected: [RenderGraphPackageFragment.Spliced(name: SdfWorldPackage.Parts.SkyImage, pass: Sdf), SdfWorldPackage.Color]
+            expected: [SdfWorldPackage.Color]
         );
     }
     [Fact]
     public void EachBuffersFirstUseInTheFrameStartsFromTheFrameBefore() {
-        // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one transient
+        // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one retained
         // allocation after the frame before, and every later use a pass prior.
         foreach (var storage in Buffers) {
             var accesses = Plan.Pipeline.Passes.SelectMany(selector: static pass => pass.Accesses).Where(predicate: access => (access.Storage == storage.Index)).ToArray();

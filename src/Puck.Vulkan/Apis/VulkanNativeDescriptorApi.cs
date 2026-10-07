@@ -31,7 +31,7 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             request.Device.Handle,
             in allocateInfo,
             ((nint)(&setHandle))
-        ).ThrowIfFailed(operation: "vkAllocateDescriptorSets");
+        ).ThrowIfFailed(device: request.Device, operation: "vkAllocateDescriptorSets");
 
         return setHandle;
     }
@@ -61,7 +61,7 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
                 in createInfo,
                 0,
                 out var poolHandle
-            ).ThrowIfFailed(operation: "vkCreateDescriptorPool");
+            ).ThrowIfFailed(device: request.Device, operation: "vkCreateDescriptorPool");
 
             return poolHandle;
         }
@@ -93,7 +93,7 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             in createInfo,
             0,
             out var samplerHandle
-        ).ThrowIfFailed(operation: "vkCreateSampler");
+        ).ThrowIfFailed(device: request.Device, operation: "vkCreateSampler");
 
         return samplerHandle;
     }

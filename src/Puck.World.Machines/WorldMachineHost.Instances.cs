@@ -43,7 +43,7 @@ public sealed partial class WorldMachineHost {
         ((m_instances.TryGetValue(
             key: instance,
             value: out var entry
-        ) && (entry.Lease.Runtime is IMachineVideoOutputs outputs) &&
+        ) && entry.Declaration.Running && (entry.Lease.Runtime is IMachineVideoOutputs outputs) &&
         outputs.VideoOutputs.TryGetValue(
             key: output,
             value: out var selected
@@ -120,7 +120,7 @@ public sealed partial class WorldMachineHost {
         ) {
             refusal = new(
                 MachineOperationStatus.Unsupported,
-                reason: $"Machine '{instance}' provider does not support operations."
+                reason: $"Machine '{instance}' provider does not support operations ({nameof(WorldMachineOperationRefusal.ProviderWithoutOperations)})."
             );
             return false;
         }

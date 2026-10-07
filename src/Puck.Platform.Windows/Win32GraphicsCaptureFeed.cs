@@ -29,11 +29,23 @@ namespace Puck.Platform.Windows;
 /// consumer does not hold (<see cref="NativeImageGpuCaptureTargets.Slots"/>), signals the consumer's shared fence (or,
 /// on a device that cannot open it, waits on the CPU), and publishes the slot with the value it signalled. The GPU path is the D3D12 render host's transport; the CPU path stays live (at a reduced cadence)
 /// for the Vulkan host and the POST probe.
+/// <para>
+/// The captured display decides the frames' format and color space once, at open (<see cref="Output"/>,
+/// <see cref="CaptureOutputOf"/>): an SDR display is captured in B8G8R8A8 sRGB, and an HDR display in half-float scRGB,
+/// which keeps its luminance above SDR white where an 8-bit capture would clip it. Either rides the GPU path in shared
+/// targets of its own format, which the copy preserves, so an HDR capture's scRGB frames reach the consumer's device to
+/// convert there (<see cref="NativeImageGpuCaptureTargets.Format"/>). An HDR toggle, a move to a display that differs in it, or failed display
+/// discovery ends the feed, with display checks on frame callbacks and background checks queued by consumer liveness
+/// polls even when no frames arrive. Both read through a held DXGI factory (<see cref="Win32DisplayColorSpaceProbe"/>);
+/// its consumer reopens it with the current display contract.
+/// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
 public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private const long DisposeTimeoutMilliseconds = 2000L;
     private const int FramePoolBufferCount = 2;
+    // MONITOR_DEFAULTTONEAREST: a window off every display is captured as the nearest one shows it.
+    private const int MonitorDefaultToNearest = 2;
     private const long LivenessCheckIntervalMilliseconds = 100L;
     private const int MaximumDimension = 8192;
     private const long MaximumSourcePixels = 67_108_864L;
@@ -43,6 +55,25 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
     private static readonly Guid GraphicsCaptureItemGuid = new(g: "79C3F95B-31F7-4EC2-A464-632EF5D30760");
 
+    /// <summary>Returns the output a capture of a display reads: B8G8R8A8 in <see cref="DisplayColorSpace.Srgb"/> for an
+    /// SDR display, and half-float RGBA in <see cref="DisplayColorSpace.ScRgb"/> for an HDR one, whichever HDR color space
+    /// it presents in, since Windows Graphics Capture composes an HDR desktop in scRGB and hands it over in half floats
+    /// alone.</summary>
+    /// <param name="display">The color space the captured display presents in.</param>
+    /// <returns>The format and color space of the captured frames.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="display"/> is not defined.</exception>
+    public static DisplayOutput CaptureOutputOf(DisplayColorSpace display) => display switch {
+        DisplayColorSpace.Srgb => DisplayOutput.Sdr(format: GpuPixelFormat.B8G8R8A8Unorm),
+        DisplayColorSpace.Hdr10 or DisplayColorSpace.ScRgb => new DisplayOutput(
+            ColorSpace: DisplayColorSpace.ScRgb,
+            Format: DisplayOutput.HdrFormatOf(colorSpace: DisplayColorSpace.ScRgb)
+        ),
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: display,
+            message: "The display color space is not defined.",
+            paramName: nameof(display)
+        ),
+    };
     /// <summary>Creates and starts a fully owned window feed, or returns false without retaining native resources.</summary>
     public static bool TryCreate(nint windowHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null) {
         return TryCreateCore(
@@ -56,11 +87,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
     }
     /// <summary>Creates and starts a fully owned monitor feed, or returns false without retaining native resources.</summary>
-    public static bool TryCreateForMonitor(nint monitorHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null) {
+    /// <remarks><paramref name="openOutputs"/> supplies owned display enumerations and defaults to system DXGI.
+    /// <paramref name="allocatePixels"/> supplies each buffer of the requested byte length and defaults to a GC array.
+    /// Failed initialization releases the display enumeration even when buffer allocation fails.</remarks>
+    public static bool TryCreateForMonitor(nint monitorHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null, Func<IDisplayAdapterOutputs?>? openOutputs = null, Func<int, byte[]>? allocatePixels = null) {
         return TryCreateCore(
             adapterLuid: adapterLuid,
+            allocatePixels: allocatePixels,
             feed: out feed,
             height: height,
+            openOutputs: openOutputs,
             refreshRateHz: refreshRateHz,
             targetHandle: monitorHandle,
             targetKind: CaptureTargetKind.Monitor,
@@ -68,7 +104,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
     }
 
-    private static bool TryCreateCore(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid) {
+    private static bool TryCreateCore(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid, Func<IDisplayAdapterOutputs?>? openOutputs = null, Func<int, byte[]>? allocatePixels = null) {
         feed = null;
         ValidateOutputExtent(
             height: height,
@@ -90,7 +126,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         try {
             feed = new Win32GraphicsCaptureFeed(
                 adapterLuid: adapterLuid,
+                allocatePixels: allocatePixels,
                 height: height,
+                openOutputs: openOutputs,
                 refreshRateHz: refreshRateHz,
                 targetHandle: targetHandle,
                 targetKind: targetKind,
@@ -115,12 +153,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private readonly TypedEventHandler<Direct3D11CaptureFramePool, object> m_frameArrivedHandler;
 
     private readonly object m_lifetimeGate = new();
+    private readonly Lock m_livenessGate = new();
 
     private readonly uint m_ownerProcessId;
     private readonly uint m_ownerThreadId;
 
     private readonly Lock m_publicationGate = new();
 
+    private readonly Win32CaptureDisplay m_display;
+    private readonly Win32CaptureDisplayPoll m_displayPoll;
+    private readonly Win32DisplayColorSpaceProbe m_displayProbe;
     private readonly long m_refreshPeriodTicks;
     private readonly TypedEventHandler<GraphicsCaptureItem, object> m_targetClosedHandler;
     private readonly nint m_targetHandle;
@@ -143,6 +185,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private long m_gpuRevision;
     private bool m_hasFrame;
     private volatile bool m_isEnded;
+    private long m_lastDisplayCheckTicks;
     private long m_lastLivenessCheckTicks;
     private long m_nextCaptureTicks;
     private long m_publishedRevision;
@@ -157,28 +200,39 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             // GraphicsCaptureItem.Closed is the fast path, but Win32 destruction can precede that callback by an
             // unbounded compositor delay. Consumers poll this property, so also retire a window feed once its owner
             // window is gone. The HWND alone is unreliable — Win32 recycles handles — so the fallback also matches the
-            // owning process/thread, and is rate-limited to keep the per-poll syscall cost off the hot path. A monitor
-            // target has no owner window; disconnect surfaces through GraphicsCaptureItem.Closed, which latches m_isEnded.
+            // owning process/thread. A monitor target has no owner window; disconnect surfaces through
+            // GraphicsCaptureItem.Closed, which latches m_isEnded. The display's color space is not read here: consumers
+            // poll this on the render thread, so queue the check off-thread even when captured content stays still.
             if (m_isEnded) {
                 return true;
             }
 
-            var now = Environment.TickCount64;
-
-            if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
-                m_lastLivenessCheckTicks = now;
-                if (!IsTargetAlive()) {
-                    m_isEnded = true;
+            lock (m_livenessGate) {
+                if (m_isEnded) {
+                    return true;
                 }
-            }
 
-            return m_isEnded;
+                var now = Environment.TickCount64;
+
+                if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
+                    m_lastLivenessCheckTicks = now;
+                    if (!IsTargetAlive()) {
+                        EndAndScheduleDispose();
+                    } else {
+                        m_displayPoll.Poll(milliseconds: now);
+                    }
+                }
+
+                return m_isEnded;
+            }
         }
     }
     /// <inheritdoc/>
     /// <remarks>A window feed's window is created with the feed, over the handle it captures; a monitor feed has
     /// none.</remarks>
     public ISourcePassthroughWindow? Window { get; }
+    /// <inheritdoc/>
+    public DisplayOutput Output => m_display.Output;
     /// <inheritdoc/>
     public int SourceWidth => Volatile.Read(location: ref m_sourceWidth);
     /// <inheritdoc/>
@@ -204,6 +258,14 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     /// <inheritdoc/>
     public void AttachGpuTargets(NativeImageGpuCaptureTargets targets) {
         ArgumentNullException.ThrowIfNull(argument: targets);
+
+        if (targets.Format != Output.Format) {
+            throw new ArgumentException(
+                message: $"The capture's frames are {Output.Format}; its shared targets must be too, since a copy across formats is silently dropped, but they are {targets.Format}.",
+                paramName: nameof(targets)
+            );
+        }
+
         var handles = targets.SharedTargetHandles;
 
         ArgumentNullException.ThrowIfNull(argument: handles);
@@ -293,8 +355,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             (processId == m_ownerProcessId)
         );
     }
+    private nint MonitorHandle() => ((m_targetKind == CaptureTargetKind.Monitor)
+        ? m_targetHandle
+        : User32.MonitorFromWindow(flags: MonitorDefaultToNearest, windowHandle: m_targetHandle));
 
-    private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid) {
+    private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid, Func<IDisplayAdapterOutputs?>? openOutputs, Func<int, byte[]>? allocatePixels) {
         m_targetHandle = targetHandle;
         m_targetHeight = height;
         m_targetKind = targetKind;
@@ -306,20 +371,39 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
         }
-        var outputByteLength = checked(((width * height) * 4));
-
-        m_consumerPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_publishedPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_workingPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_refreshPeriodTicks = Math.Max(
-            val1: 1L,
-            val2: ((long)Math.Round(a: (Stopwatch.Frequency / refreshRateHz)))
-        );
-        m_frameArrivedHandler = OnFrameArrived;
-        m_targetClosedHandler = OnTargetClosed;
-
+        allocatePixels ??= static length => GC.AllocateUninitializedArray<byte>(length: length);
+        m_displayProbe = ((openOutputs is null)
+            ? Win32DisplayColorSpaceProbe.Dxgi()
+            : new Win32DisplayColorSpaceProbe(openOutputs: openOutputs));
         try {
-            m_device = new Win32GraphicsCaptureDevice(adapterLuid: adapterLuid);
+            m_display = new Win32CaptureDisplay(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
+            m_lastDisplayCheckTicks = Environment.TickCount64;
+            m_displayPoll = new Win32CaptureDisplayPoll(
+                check: CheckDisplayOnWorker,
+                queue: static action => {
+                    _ = ThreadPool.UnsafeQueueUserWorkItem(
+                        callBack: static (Action check) => check(),
+                        state: action,
+                        preferLocal: false
+                    );
+                }
+            );
+            var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
+
+            m_consumerPixels = allocatePixels(outputByteLength);
+            m_publishedPixels = allocatePixels(outputByteLength);
+            m_workingPixels = allocatePixels(outputByteLength);
+            m_refreshPeriodTicks = Math.Max(
+                val1: 1L,
+                val2: ((long)Math.Round(a: (Stopwatch.Frequency / refreshRateHz)))
+            );
+            m_frameArrivedHandler = OnFrameArrived;
+            m_targetClosedHandler = OnTargetClosed;
+
+            m_device = new Win32GraphicsCaptureDevice(
+                adapterLuid: adapterLuid,
+                format: Output.Format
+            );
             m_captureItem = CreateCaptureItem(
                 targetHandle: targetHandle,
                 targetKind: targetKind
@@ -338,7 +422,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             m_framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                 device: m_device.RuntimeDevice,
-                pixelFormat: DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                pixelFormat: FramePoolFormatOf(format: Output.Format),
                 numberOfBuffers: FramePoolBufferCount,
                 size: initialSize
             );
@@ -370,6 +454,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
     /// <inheritdoc/>
     public bool TryCapture(out Surface surface) {
+        if (IsEnded) {
+            surface = default;
+            return false;
+        }
+
         lock (m_publicationGate) {
             if (
                 !m_hasFrame ||
@@ -387,7 +476,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         surface = Surface.CpuPixels(
-            format: GpuPixelFormat.B8G8R8A8Unorm,
+            format: Output.Format,
             height: checked((uint)m_targetHeight),
             pixels: m_consumerPixels,
             width: checked((uint)m_targetWidth)
@@ -491,6 +580,14 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
     }
     private void PumpFrame(Direct3D11CaptureFramePool sender) {
+        if (IsEnded) {
+            return;
+        }
+        if (!IsDisplayCurrent()) {
+            EndAndScheduleDispose();
+            return;
+        }
+
         var resize = false;
         var contentSize = default(SizeInt32);
         var frame = sender.TryGetNextFrame();
@@ -608,6 +705,45 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
         _ = Interlocked.Increment(location: ref m_gpuRevision);
     }
+    // Whether the display the target shows on still takes the capture's opening format and encoding (an HDR toggle, or a
+    // move to a display that differs in it, ends the feed). It runs on a frame callback or a worker, under m_callbackGate,
+    // so the render thread never pays for DXGI, at most once per liveness interval; the probe re-reads the held output's
+    // description while its factory is current and only a display change makes it enumerate again.
+    private bool IsDisplayCurrent() {
+        var now = Environment.TickCount64;
+
+        if ((now - m_lastDisplayCheckTicks) < LivenessCheckIntervalMilliseconds) {
+            return true;
+        }
+
+        m_lastDisplayCheckTicks = now;
+        return m_display.IsCurrent(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
+    }
+    private void CheckDisplayOnWorker() {
+        if (!TryAcquireCallback()) {
+            return;
+        }
+
+        var ended = false;
+
+        try {
+            lock (m_callbackGate) {
+                if (!m_isEnded && !IsDisplayCurrent()) {
+                    m_isEnded = true;
+                    ended = true;
+                }
+            }
+        } catch {
+            m_isEnded = true;
+            ended = true;
+        } finally {
+            ReleaseCallback();
+        }
+
+        if (ended) {
+            EndAndScheduleDispose();
+        }
+    }
     private bool ShouldRunCpuReadback(int divisor) {
         if (divisor <= 0) {
             return false;
@@ -631,7 +767,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
         m_framePool!.Recreate(
             device: m_device.RuntimeDevice,
-            pixelFormat: DirectXPixelFormat.B8G8R8A8UIntNormalized,
+            pixelFormat: FramePoolFormatOf(format: Output.Format),
             numberOfBuffers: FramePoolBufferCount,
             size: size
         );
@@ -710,6 +846,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         m_device?.Dispose();
         m_device = null;
+        // Frame callbacks and display-check workers have drained; queued workers cannot acquire the stopped feed.
+        m_displayProbe.Dispose();
     }
     private static void ReleaseTargetSet(GpuTargetSet? targets) {
         if (targets is null) {
@@ -768,6 +906,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             _ = Marshal.Release(pUnk: itemPointer);
         }
     }
+    // The Windows Graphics Capture pool format a capture output's frames arrive in.
+    private static DirectXPixelFormat FramePoolFormatOf(GpuPixelFormat format) => ((format == GpuPixelFormat.R16G16B16A16Float)
+        ? DirectXPixelFormat.R16G16B16A16Float
+        : DirectXPixelFormat.B8G8R8A8UIntNormalized);
     private static bool ExceedsResourceBudget(int width, int height) {
         return (
             (width > MaximumDimension) ||
@@ -788,7 +930,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
         }
 
-        _ = checked(((width * height) * 4));
+        _ = checked(((width * height) * 8));
     }
     private static void ValidateSourceExtent(int width, int height) {
         if (
@@ -840,11 +982,13 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     private const int DxgiErrorWasStillDrawing = unchecked((int)0x887A000A);
 
     private readonly ReadbackSlot[] m_readbacks = [new(), new(), new()];
+    private readonly GpuPixelFormat m_format;
 
     private ID3D11DeviceContext* m_context;
     private ID3D11Device* m_device;
     private ID3D11Device1* m_device1;
     private ulong[]? m_downscaleAccumulators;
+    private double[]? m_downscaleSums;
     private IDirect3DDevice? m_runtimeDevice;
     private long m_sequence;
     private int m_sourceHeight;
@@ -854,9 +998,12 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
     // A LUID pins the device to the render host's adapter so its shared-target opens succeed (cross-adapter shared-handle
     // opens fail); the default (null) keeps the CPU-only path adapter-agnostic. An explicit adapter forces UNKNOWN driver
-    // type. device1 carries OpenSharedResource1.
-    public Win32GraphicsCaptureDevice(long? adapterLuid = null) {
+    // type. device1 carries OpenSharedResource1. The format is the capture output's, B8G8R8A8 or half-float RGBA, which the
+    // staging readbacks are created in.
+    public Win32GraphicsCaptureDevice(GpuPixelFormat format, long? adapterLuid = null) {
         IDXGIAdapter1* adapter = null;
+
+        m_format = format;
 
         if (adapterLuid is long luid) {
             adapter = Win32D3D11.FindAdapterByLuid(adapterLuid: luid);
@@ -927,7 +1074,8 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     // Opens a consumer-provisioned shared texture (a D3D12 CreateSharedHandle NT handle) on this device; the caller owns
     // the returned ID3D11Texture2D* and releases it via ReleaseTexture. Device-level and safe off the callback gate
     // (the device is multithread-protected). Rejects a target whose format or extent CopyResource would silently drop:
-    // the capture pool is B8G8R8A8_UNORM, and a cross-format/extent CopyResource is a release-build no-op, not an error.
+    // the capture pool is in the capture's format, B8G8R8A8_UNORM or R16G16B16A16_FLOAT, and a cross-format/extent
+    // CopyResource is a release-build no-op, not an error.
     public nint OpenSharedTarget(nint sharedHandle, int expectedWidth, int expectedHeight) {
         using var handle = new SafeFileHandle(
             ownsHandle: false,
@@ -941,16 +1089,19 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         );
 
         D3D11_TEXTURE2D_DESC description;
+        var expectedFormat = ((m_format == GpuPixelFormat.R16G16B16A16Float)
+            ? DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT
+            : DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM);
 
         ((ID3D11Texture2D*)texture)->GetDesc(pDesc: &description);
         if (
-            (description.Format != DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM) ||
+            (description.Format != expectedFormat) ||
             (description.Width != ((uint)expectedWidth)) ||
             (description.Height != ((uint)expectedHeight))
         ) {
             ReleaseTexture(texture: ((nint)texture));
             throw new ArgumentException(
-                message: $"The shared target must be a {expectedWidth}x{expectedHeight} B8G8R8A8_UNORM texture; got {description.Width}x{description.Height} {description.Format}.",
+                message: $"The shared target must be a {expectedWidth}x{expectedHeight} {expectedFormat} texture; got {description.Width}x{description.Height} {description.Format}.",
                 paramName: nameof(sharedHandle)
             );
         }
@@ -986,7 +1137,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             Height = checked((uint)height),
             MipLevels = 1,
             ArraySize = 1,
-            Format = DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
+            Format = ((m_format == GpuPixelFormat.R16G16B16A16Float)
+                ? DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT
+                : DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM),
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
             Usage = D3D11_USAGE.D3D11_USAGE_STAGING,
             BindFlags = ((D3D11_BIND_FLAG)0),
@@ -1108,18 +1261,32 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             hr: hr,
             operation: "ID3D11DeviceContext::Map"
         );
-        m_downscaleAccumulators ??= new ulong[(targetWidth * 4)];
         try {
-            ScaleMapped(
-                accumulators: m_downscaleAccumulators,
-                destination: destination,
-                source: ((byte*)mapped.pData),
-                sourceHeight: m_sourceHeight,
-                sourceRowPitch: mapped.RowPitch,
-                sourceWidth: m_sourceWidth,
-                targetHeight: targetHeight,
-                targetWidth: targetWidth
-            );
+            if (m_format == GpuPixelFormat.R16G16B16A16Float) {
+                m_downscaleSums ??= new double[(targetWidth * 4)];
+                ScaleMappedHalf(
+                    destination: destination,
+                    source: ((byte*)mapped.pData),
+                    sourceHeight: m_sourceHeight,
+                    sourceRowPitch: mapped.RowPitch,
+                    sourceWidth: m_sourceWidth,
+                    sums: m_downscaleSums,
+                    targetHeight: targetHeight,
+                    targetWidth: targetWidth
+                );
+            } else {
+                m_downscaleAccumulators ??= new ulong[(targetWidth * 4)];
+                ScaleMapped(
+                    accumulators: m_downscaleAccumulators,
+                    destination: destination,
+                    source: ((byte*)mapped.pData),
+                    sourceHeight: m_sourceHeight,
+                    sourceRowPitch: mapped.RowPitch,
+                    sourceWidth: m_sourceWidth,
+                    targetHeight: targetHeight,
+                    targetWidth: targetWidth
+                );
+            }
         } finally {
             m_context->Unmap(
                 pResource: ((ID3D11Resource*)readback.Texture),
@@ -1203,6 +1370,69 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
                 var r = ((uint)(accumulatorSpan[(bucket + 2)] / count));
 
                 target[(targetRow + x)] = b | (g << 8) | (r << 16) | 0xFF000000u;
+            }
+        }
+    }
+    // ScaleMapped for half-float RGBA scRGB: the same nearest-pixel upscale and box-filter downscale, which at an equal
+    // extent copies each pixel, alpha forced opaque, the box averaging linear light in double precision so an HDR
+    // highlight keeps its luminance.
+    private static void ScaleMappedHalf(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, double[] sums) {
+        const ulong ColorMask = 0x0000_FFFF_FFFF_FFFFUL;
+        // Half.One in the alpha channel's 16 bits.
+        const ulong OpaqueAlpha = (0x3C00UL << 48);
+
+        var target = MemoryMarshal.Cast<byte, ulong>(span: destination.AsSpan());
+
+        if (
+            (sourceWidth < targetWidth) ||
+            (sourceHeight < targetHeight)
+        ) {
+            for (var y = 0; (y < targetHeight); y++) {
+                var sourceY = ((((long)y) * sourceHeight) / targetHeight);
+                var sourceRow = (source + (sourceY * sourceRowPitch));
+                var targetRow = (y * targetWidth);
+
+                for (var x = 0; (x < targetWidth); x++) {
+                    var sourceX = ((((long)x) * sourceWidth) / targetWidth);
+
+                    target[(targetRow + x)] = (Unsafe.ReadUnaligned<ulong>(source: (sourceRow + (sourceX * 8))) & ColorMask) | OpaqueAlpha;
+                }
+            }
+
+            return;
+        }
+
+        var sumSpan = sums.AsSpan();
+
+        for (var y = 0; (y < targetHeight); y++) {
+            sumSpan.Clear();
+            var sourceY0 = ((((long)y) * sourceHeight) / targetHeight);
+            var sourceY1 = ((((long)(y + 1)) * sourceHeight) / targetHeight);
+
+            for (var sy = sourceY0; (sy < sourceY1); sy++) {
+                var sourceRow = (source + (sy * sourceRowPitch));
+
+                for (var sx = 0; (sx < sourceWidth); sx++) {
+                    var pixel = (sourceRow + (((long)sx) * 8));
+                    var bucket = (((sx * targetWidth) / sourceWidth) * 4);
+
+                    sumSpan[bucket] += ((double)Unsafe.ReadUnaligned<Half>(source: pixel));
+                    sumSpan[(bucket + 1)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 2)));
+                    sumSpan[(bucket + 2)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 4)));
+                    sumSpan[(bucket + 3)]++;
+                }
+            }
+
+            var targetRow = (y * targetWidth);
+
+            for (var x = 0; (x < targetWidth); x++) {
+                var bucket = (x * 4);
+                var count = sumSpan[(bucket + 3)];
+
+                target[(targetRow + x)] = BitConverter.HalfToUInt16Bits(value: ((Half)(sumSpan[bucket] / count)))
+                    | (((ulong)BitConverter.HalfToUInt16Bits(value: ((Half)(sumSpan[(bucket + 1)] / count)))) << 16)
+                    | (((ulong)BitConverter.HalfToUInt16Bits(value: ((Half)(sumSpan[(bucket + 2)] / count)))) << 32)
+                    | OpaqueAlpha;
             }
         }
     }

@@ -1,48 +1,43 @@
+using System.Text.Json.Serialization;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
 
-/// <summary>
-/// A <c>puck.counters.ceilings.v1</c> document: the counted-cost ceilings <c>puck counters --check</c> holds the counters
-/// workload to, pass by pass, and <c>puck counters --record</c> writes. Each backend's run states, for every pass of every
-/// render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling,
-/// where a ceiling of zero is a required zero. A deterministic kind is judged on any device; a per-backend-deterministic
-/// kind (<see cref="WorkClass.PerBackendDeterministic"/>) only on the device its run was recorded on, and is reported as
-/// not judged on any other.
-/// </summary>
-/// <param name="Workload">The workload's world document, repository-relative with forward slashes.</param>
-/// <param name="Script">The workload's console script, repository-relative with forward slashes.</param>
-/// <param name="Runs">One run per backend, in the order they ran.</param>
-public sealed record WorldCountersCeilings(
-    string Workload,
-    string Script,
-    IReadOnlyList<WorldCountersCeilingRun> Runs
-) {
-    /// <summary>The document schema tag every well-formed <c>puck.counters.ceilings.v1</c> document carries.</summary>
+/// <summary>A counted-cost ledger. Its compact document records measurement layouts and only nonzero budgets, grouped
+/// by node, pass and detail. Kind classes come from <see cref="GpuWork.SubmissionKinds"/> unless the layout overrides
+/// them. Device documents hold only differences from their backend's defaults. The expanded rows retain measurement
+/// order and scope so missing rows, class changes and zero violations keep their exact diagnostics.</summary>
+/// <param name="Workload">The world document, repository-relative with forward slashes.</param>
+/// <param name="Script">The console script, repository-relative with forward slashes.</param>
+/// <param name="Width">The offscreen presentation width in pixels.</param>
+/// <param name="Height">The offscreen presentation height in pixels.</param>
+/// <param name="Backends">The backends in recording order.</param>
+[JsonConverter(typeof(WorldCountersCeilingsJsonConverter))]
+public sealed record WorldCountersCeilings(string Workload, string Script, int Width, int Height,
+    IReadOnlyList<WorldCountersBackendCeilings> Backends) {
+    /// <summary>The document schema tag.</summary>
     public const string SchemaVersion = "puck.counters.ceilings.v1";
 
-    /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
+    /// <summary>Gets the document schema tag.</summary>
     public string Schema { get; init; } = SchemaVersion;
 }
-/// <summary>One backend's ceilings, as recorded on one device.</summary>
-/// <param name="Backend">The backend the ceilings were recorded on: <c>vulkan</c> or <c>directx</c>.</param>
-/// <param name="Device">The device they were recorded on, which a per-backend-deterministic ceiling is judged on
-/// alone.</param>
-/// <param name="Width">The offscreen presentation's width in pixels.</param>
-/// <param name="Height">The offscreen presentation's height in pixels.</param>
-/// <param name="Ceilings">Every pass's ceiling for every kind, in the order the run reported the counts.</param>
-public sealed record WorldCountersCeilingRun(
-    string Backend,
-    GpuDeviceIdentity Device,
-    int Width,
-    int Height,
-    IReadOnlyList<WorldCountCeiling> Ceilings
-);
-/// <summary>What one kind may read in one pass of one render node, or in the work outside its every pass.</summary>
+/// <summary>The expanded measurement scopes of a backend. Shared rows also judge an unrecorded device; device rows
+/// judge only their recorded device. Storage factors common values and layouts without changing either scope.</summary>
+/// <param name="Backend">The backend name.</param>
+/// <param name="Devices">Device records in first-recorded order. The first device supplies the runtime floor budget.</param>
+/// <param name="Ceilings">The shared measurement rows in diagnostic order, including implicit zero budgets.</param>
+public sealed record WorldCountersBackendCeilings(string Backend, IReadOnlyList<WorldCountersDeviceCeilings> Devices,
+    IReadOnlyList<WorldCountCeiling> Ceilings);
+/// <summary>The expanded rows specific to one recorded device.</summary>
+/// <param name="Device">The device identity, including its recorded driver version.</param>
+/// <param name="Ceilings">The device's measurement rows in diagnostic order, including implicit zero budgets.</param>
+public sealed record WorldCountersDeviceCeilings(GpuDeviceIdentity Device, IReadOnlyList<WorldCountCeiling> Ceilings);
+/// <summary>An expanded measurement expectation. The document stores its presence in a layout and omits a zero budget.</summary>
 /// <param name="Node">The render node.</param>
-/// <param name="Pass">The pass, or <see langword="null"/> for the work outside every pass.</param>
-/// <param name="Kind">The GPU submission kind's dotted name.</param>
-/// <param name="Class">What the count was recorded as: the kind's class, loosened to its pass's.</param>
-/// <param name="Ceiling">The most the count may read; zero requires it to read zero.</param>
-public sealed record WorldCountCeiling(string Node, string? Pass, string Kind, WorkClass Class, long Ceiling);
+/// <param name="Pass">The pass, or null for work outside all passes.</param>
+/// <param name="Kind">The GPU submission kind.</param>
+/// <param name="Class">The kind's default class or its layout's explicit override.</param>
+/// <param name="Ceiling">The nonzero budget, or zero when no budget is stored.</param>
+/// <param name="Detail">The detail label, or null for the pass total or outside work.</param>
+public sealed record WorldCountCeiling(string Node, string? Pass, string Kind, WorkClass Class, long Ceiling, string? Detail = null);

@@ -18,7 +18,7 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet" Version="[0.15.*, )" />
-        <PackageReference Include="FSharp.Core" Version="[10.*, )" />
+        <PackageReference Include="FSharp.Core" Version="[11.*, )" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" />
         <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="[5.*, )" />
@@ -26,38 +26,38 @@
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.World.Silo\Puck.World.Silo.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.World.Silo/Puck.World.Silo.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <!-- The self-update canary's throwaway root/issuing/subject signing chain (CanaryCommand.cs), the same
              primitive the federation identity chain already mints for its own legs. -->
-        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <ProjectReference Include="../Puck.Attestation/Puck.Attestation.csproj" />
         <!-- The `puck bench world` lane's EngineTicks.PerRate — the same per-rate tick-width conversion the World
              test fixtures step by. -->
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <!-- puck publish (PublishRelease/PublishCommand.cs) and the self-update canary's stub-boot leg mode both build/read
              puck.release.v1 documents (ReleaseManifest/ReleaseCanonicalizer) and mint an AttestationReleaseVerifier
              — reusing the one type rather than a second hand-rolled mirror of it (rule 8). -->
-        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
-        <ProjectReference Include="..\Puck.Embeddings\Puck.Embeddings.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
-        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
-        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <ProjectReference Include="../Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../Puck.Embeddings/Puck.Embeddings.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Scripting/Puck.Scripting.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+        <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
         <!-- The `puck bench world` lane boots a real WorldServer over the shipped world and a checked-in Klondike
              fixture document. -->
-        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
-        <ProjectReference Include="..\Puck.World.Machines\Puck.World.Machines.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
-        <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
-        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
-        <ProjectReference Include="..\Puck.World.Embeddings\Puck.World.Embeddings.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks.Transpiler\Puck.GamingBricks.Transpiler.csproj" />
-        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
-        <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
-        <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+        <ProjectReference Include="../Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
+        <ProjectReference Include="../Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.Transpiler/Puck.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.Mcp/Puck.Mcp.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension only. The ratchet verbs
@@ -65,7 +65,7 @@
              ledger, its judgement and the per-file counts they check are the analyzers' own; it stays an analyzer
              over this project too. -->
         <ProjectReference
-            Update="..\Puck.Analyzers\Puck.Analyzers.csproj"
+            Update="../Puck.Analyzers/Puck.Analyzers.csproj"
             ReferenceOutputAssembly="true"
         />
     </ItemGroup>
@@ -84,4 +84,7 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <PropertyGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <DefineConstants>$(DefineConstants);PUCK_SCHEMA_BOOTSTRAP</DefineConstants>
+    </PropertyGroup>
 </Project>

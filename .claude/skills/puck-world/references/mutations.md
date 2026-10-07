@@ -31,9 +31,12 @@ the [rule-effects-land-on-the-arena contract](../../../../src/Puck.World.Server/
 - The kind catalog
 - Adding a mutation kind, end to end
 
-## The tick (`WorldServer.Step`, `src/Puck.World.Server/WorldServer.cs`)
+## The tick (`WorldServer.Step`, which runs `WorldTick.StepCore` in `src/Puck.World.Server/WorldTick.Step.cs`)
 
-The exact per-tick order, transcribed from `Step`:
+The per-tick order of the steps this document cares about, transcribed from
+`StepCore` (it also runs the federated-intent taps, the music director, the rule
+host's `EvaluateWorldRules`, board, search and field steps, and the deadline
+sweeps between steps 9 and 10):
 
 1. `WorldAddonRuntime.TickAddons` — run every mounted guest FIRST; decodes and
    validates, applies nothing (a guest's effect never depends on where in the
@@ -123,9 +126,10 @@ A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
 
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
-(`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) edit what
-the NEXT boot wakes on while live session levers keep their values
-(`world.save` folds levers back into the fields). Two rows split honestly and
+(`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) update document
+defaults while live session levers keep their values (`world.save` folds levers
+back into the fields). This echo classification does not defer fields read from
+the delivered definition: authored lighting applies live. Two rows split timing and
 the accept echo narrates the split: `SetAuthoringDefaults` (headroom/repeat
 caps boot-consumed, candidate/layout/preview live) and `SetPopulationDefaults`
 (census figures next boot, spawn policy live for future activations).
@@ -141,8 +145,8 @@ table — a row added there grants nothing until relaunch.
   server's own `m_base`, hashed fresh via `WorldDefinitionSerialization.
   Serialize`; Load/Reload: the console-resolved document, whose hash the
   console already computed from the exact bytes it read — or, on a REPLAY
-  drive, a fresh re-read of the path hint, since the tape carries no
-  document) → on replay, refuse BY NAME on a content-hash mismatch before
+  drive, a fresh re-read of a file origin, since the tape carries no
+  document; a store origin refuses as `RebuildSourceUnavailable`) → on replay, refuse BY NAME on a content-hash mismatch before
   anything else runs → `RebuildTap` fires (the replay tape's apply-time
   capture point — see [replay.md](replay.md)) → the principal must hold
   Mutate over EVERY section (`WorldGrants.AllowsAllSections`) → (Load-only,
@@ -174,10 +178,13 @@ table — a row added there grants nothing until relaunch.
   journal. `WorldSaveSnapshot.Compose` runs the authority fold
   (`WorldSessionCapture.Capture`: peer-source default, machine declarations,
   magazine selectors, moving `state` cells) and then the lever fold
-  (`WorldSessionLevers.Fold`: render levers, master volume, present target,
-  binding bar). Each fold reads the `*Raw` member and hands it back as the same
-  instance when the session agrees, so an omitted section stays omitted and a
-  lever folds only into an authored section. `world.status`'s drift hint names
+  (`WorldSessionLevers.Fold`: render levers, view ceilings and floors into
+  `views.quality`, master volume, present target, binding bar, the primary
+  seat's editor grid; session pins never fold). Each fold reads the `*Raw`
+  member and hands it back as the same instance when the session agrees, so an
+  omitted section stays omitted and a lever folds only into an authored
+  section, except that moved render ceilings, view quality and editor values
+  create their valid section when absent. `world.status`'s drift hint names
   each section the snapshot replaced (`WorldSessionCapture.DescribeDrift`).
   `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Tests`) saves every
   shipped, fixture (`tests/Puck.World.Tests/Fixtures`), and canary world and
@@ -284,8 +291,8 @@ Rules the catalog encodes:
   one whole-panel commit boundary; `UpsertHudElement` is a single-element
   read-modify-write on an already-declared panel.
 - **Double authority check.** The five `State` kinds — `UpsertStateRow`/
-  `RemoveStateRow` (whole row, 46/47), `UpsertStateCell`/`RemoveStateCell`
-  (one cell, 49/50) and `Generate` (51, which names the row it WRITES) — are the
+  `RemoveStateRow` (whole row, 44/45), `UpsertStateCell`/`RemoveStateCell`
+  (one cell, 47/48) and `Generate` (49, which names the row it WRITES) — are the
   ONE set checked TWICE by the admission predicate
   (`WorldServer.TryAdmitMutation`): the standard `Mutate`/`section:state` hold
   every kind requires, PLUS a second, row-scoped `Edit` hold over the CONCRETE
@@ -331,13 +338,13 @@ shape unique to rules:
 
 | `.puck` effect statement | `ActionEffect` discriminant | `Mutation` | Folds through |
 |---|---|---|---|
-| `row[key] = rhs` | `setState` | `Write` (`StateWriteKind.Set`), or `WriteText` for a `Text` row | `UpsertStateCell` (49) |
-| `row[key] += rhs` | `addState` | `Write` (`StateWriteKind.Add`) | `UpsertStateCell` (49) |
-| `schedule row[key] in Ns` | `scheduleState` | `Write` (writes the due tick) | `UpsertStateCell` (49) |
-| `remove row[key]` | `removeStateCell` | `Remove` | `RemoveStateCell` (50) |
-| `push row = rhs` | `pushState` | `Push` | `TransformState` (75) |
-| `transform call(...)` | `transformState` | none — `IArenaTransformHost.TryTransform` | `TransformState` (75) |
-| `generate(row: ...)` | `generate` | `Generate` | `Generate` (51) |
+| `row[key] = rhs` | `setState` | `Write` (`StateWriteKind.Set`), or `WriteText` for a `Text` row | `UpsertStateCell` (47) |
+| `row[key] += rhs` | `addState` | `Write` (`StateWriteKind.Add`) | `UpsertStateCell` (47) |
+| `schedule row[key] in Ns` | `scheduleState` | `Write` (writes the due tick) | `UpsertStateCell` (47) |
+| `remove row[key]` | `removeStateCell` | `Remove` | `RemoveStateCell` (48) |
+| `push row = rhs` | `pushState` | `Push` | `TransformState` (67) |
+| `transform call(...)` | `transformState` | none — `IArenaTransformHost.TryTransform` | `TransformState` (67) |
+| `generate(row: ...)` | `generate` | `Generate` | `Generate` (49) |
 | `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireSavepoint`) | — | each grouped effect folds as its own row above |
 | `if Gate { } [else if Gate { }]* [else { }]` | `if` | branches to `Then`/`Else`; each fired effect folds as its own row above | — |
 
@@ -401,11 +408,13 @@ gate do the steps below apply.
    `[MutationKind(ordinal, section)]` (the next ordinal past the last, keeping the set dense). XML-doc the row
    semantics (rejection conditions, timing class) in the
    same style as its neighbors.
-2. **Server:** an arm in each of these `WorldServer` switches — `TryCompose`
-   (compose the candidate) and `SectionOf` (which THROWS on a missing arm
-   rather than mis-authorizing) — plus membership in the classification
-   predicates that apply: `AffectsPopulation`, `AffectsSolidField`,
-   `AffectsRenderEnvelope`, `IsDocumentDefaults`, and a `Describe` arm.
+2. **Server:** an arm in each of these `WorldDocument` switches
+   (`WorldDocument.Compose.cs`) — `TryCompose` (compose the candidate) and
+   `SectionOf` (which THROWS on a missing arm rather than mis-authorizing) —
+   plus membership in the classification predicates that apply:
+   `AffectsPopulation`, `AffectsSolidField`, `AffectsRenderEnvelope`,
+   `IsDocumentDefaults`, and a `WorldServer.Describe` arm
+   (`WorldServer.Describe.cs`).
 3. **Validator:** whatever whole-document invariant the new row needs lives in
    `WorldDefinitionValidator`, never in the apply arm.
 4. **Console:** a verb in the owning command module submitting

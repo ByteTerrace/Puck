@@ -1,0 +1,55 @@
+schema: "puck.world.definition.v1"
+basis: "../editor-grid/fixture"
+documentId: "sky-artist-surface"
+host {
+  width: 96
+  height: 96
+}
+views {
+  layout "world" {
+    seatCount: 0
+    slots [{ camera: "artist-eye", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0.25
+    transitionRenderScale: 1
+  }
+}
+cameras [{
+    name: "artist-eye"
+    renderWidth: 96
+    renderHeight: 96
+    rig {
+      name: "artist-eye-rig"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2, 4]))
+        lookAt(subject: worldPoint(point: [0, 10, -4]))
+        fieldOfView(fieldOfViewRadians: 0.7)
+      ]
+    }
+  }
+]
+render {
+  temporal: false
+  dynamicResolution: false
+  renderScale: 1
+  ambientOcclusion: false
+  environment {
+    ambient: 0
+    reflection: 0
+  }
+  atmosphere {
+    fog {
+      density: 0.01
+    }
+  }
+  sky {
+    layers [gradient(name: "artist", stops: [{ elevation: -1, color: "#FF0000" }, { elevation: 1, color: "#FF0000" }])]
+  }
+  low {
+    shadows: Off
+    temporal: false
+    dynamicResolution: false
+    renderScale: 1
+    ambientOcclusion: false
+  }
+}

@@ -141,8 +141,8 @@ public sealed class GpuRegionCopyPassLawTests {
     private static IGpuComputePipeline Ready(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) {
         GpuPassPipeline? pipeline = null;
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => ((pipeline = lease.Poll()) is not null),
+        TestLiveness.Until(
+            step: () => ((pipeline = lease.Poll()) is not null),
             reason: () => "the region-copy pipeline is still building",
             wait: lease.WaitFinished
         );

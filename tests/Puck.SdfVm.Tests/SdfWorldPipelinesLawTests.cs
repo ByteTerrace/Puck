@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a set leases one pass-pipeline cache entry
-/// per engine kernel (the brick baker only when asked for and present), which the cache creates and counts once and
+/// per base or reachable fade kernel (the brick baker only when asked for and present), which the cache creates and counts once and
 /// persists the device's cache once for; a reload leases only the pipelines whose bytecode changed; the cache holds at
 /// most <see cref="GpuPassPipelineCache.BuildConcurrency"/> creations in the driver however many entries build; a set
 /// disposed while creations are in the driver waits for those alone and creates no more; and creations failing together
@@ -16,7 +16,7 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
-    public void ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
+    public async Task ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
         var device = new PersistingDevice(services: new FakeGpuDevice().Services);
         var cache = new GpuPassPipelineCache();
 
@@ -26,7 +26,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (16L, 16), actual: (Created(cache: cache), device.Persisted));
 
         using var reflector = SdfTestPipelines.Reflector();
 
@@ -45,11 +45,11 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 2),
             reflector: reflector
         )) {
-            changed.Wait(cancellationToken: CancellationToken.None);
+            await changed.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: (12L, 12), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (17L, 17), actual: (Created(cache: cache), device.Persisted));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
@@ -58,7 +58,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: 12L, actual: Created(cache: cache));
+        Assert.Equal(expected: 17L, actual: Created(cache: cache));
     }
     // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
     // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
@@ -66,7 +66,7 @@ public sealed class SdfWorldPipelinesLawTests {
     // other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
     // compiled as the host was prepare.
     [Fact]
-    public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
+    public async Task AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
         var gpu = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
         using var pipelines = SdfTestPipelines.Build(
@@ -80,9 +80,9 @@ public sealed class SdfWorldPipelinesLawTests {
         var changed = SdfTestPipelines.Kernels(beam: 2);
         var foreign = changed.With(
             bytecode: SpirvEdits.Renamed(
-                from: ("passGroup" + SdfIsaHlsl.Stamp),
+                from: ("passGroup" + SdfWorldInterfaces.Stamp),
                 module: changed[SdfKernel.Beam].Span,
-                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
             ),
             kernel: SdfKernel.Beam
         );
@@ -129,7 +129,7 @@ public sealed class SdfWorldPipelinesLawTests {
             reflector: reflector
         );
 
-        reload.Wait(cancellationToken: CancellationToken.None);
+        await reload.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
     }
     [Fact]
@@ -145,7 +145,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 12L, actual: Created(cache: cache));
+        Assert.Equal(expected: 17L, actual: Created(cache: cache));
     }
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
@@ -167,20 +167,17 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 11) {
+        while (started.Count < 16) {
             driver.Step();
             started.Add(item: driver.Next());
         }
 
         driver.Open();
-        await Task.Run(
-            action: () => pipelines.Wait(cancellationToken: TestContext.Current.CancellationToken),
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        await pipelines.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
-            expected: (GpuPassPipelineCache.BuildConcurrency, 11, 11L)
+            expected: (GpuPassPipelineCache.BuildConcurrency, 16, 16L)
         );
     }
     [Fact]
@@ -207,8 +204,8 @@ public sealed class SdfWorldPipelinesLawTests {
             cancellationToken: TestContext.Current.CancellationToken
         );
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => (cache.SharedPipelines == 0),
+        TestLiveness.Until(
+            step: () => (cache.SharedPipelines == 0),
             reason: () => $"{cache.SharedPipelines} pipelines are still leased"
         );
         driver.Open();
@@ -219,7 +216,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
     }
     [Fact]
-    public void TwoCreationsFailingInTheDriverAtOnceAreBothNamedAndEverythingCreatedIsReleased() {
+    public async Task TwoCreationsFailingInTheDriverAtOnceAreBothNamedAndEverythingCreatedIsReleased() {
         Assert.SkipWhen(
             condition: (GpuPassPipelineCache.BuildConcurrency < 2),
             reason: "Two creations are in the driver at once only when the cache's concurrency is at least two."
@@ -236,7 +233,7 @@ public sealed class SdfWorldPipelinesLawTests {
                 }
 
                 Assert.True(
-                    condition: bothInDriver.SignalAndWait(timeout: SdfTestPipelines.Liveness),
+                    condition: bothInDriver.SignalAndWait(timeout: TestLiveness.Bound),
                     userMessage: $"{description.Name} waited out the liveness bound for the other failing creation to reach the driver."
                 );
 
@@ -250,7 +247,7 @@ public sealed class SdfWorldPipelinesLawTests {
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
-        var failure = Assert.Throws<AggregateException>(testCode: () => pipelines.Wait(cancellationToken: CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<AggregateException>(testCode: () => pipelines.WaitAsync(cancellationToken: CancellationToken.None));
 
         pipelines.Dispose();
         Assert.StartsWith(
@@ -325,7 +322,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.True(condition: m_entered.TryTake(
                 cancellationToken: TestContext.Current.CancellationToken,
                 item: out var name,
-                millisecondsTimeout: ((int)SdfTestPipelines.Liveness.TotalMilliseconds)
+                millisecondsTimeout: ((int)TestLiveness.Bound.TotalMilliseconds)
             ));
 
             return name!;

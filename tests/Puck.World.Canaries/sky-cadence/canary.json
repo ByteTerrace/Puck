@@ -1,0 +1,53 @@
+{
+  "id": "sky-cadence",
+  "title": "A drifting sky leaves the camera march and shadow standing",
+  "binding": "The sky-drift counter fixture has a still camera, lit geometry and cloud drift. Both reads occur after readiness and many flight slots. With cadence on, mask, beam, cull-args, primary, surface and views stand; the low tier skips ambient and shadow, and sky and composite alone execute with zero march steps. The discriminating leg disables cadence, so the primary-standing assertion fails because camera traversal executes again.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.Counters/sky-drift.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "lines", "name": "the-march-group-stands", "stream": "stdout", "match": "exact", "lines": [
+        "  work sdf.world$mask standing", "  work sdf.world$beam standing", "  work sdf.world$cull-args standing",
+        "  work sdf.world$primary standing", "  work sdf.world$surface standing", "  work sdf.world$views standing"
+      ] },
+      { "type": "response", "name": "the-drift-work", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "skyMarch", "field": "march.steps", "line": "work sdf.world$sky executed:" },
+          { "name": "compositeMarch", "field": "march.steps", "line": "work sdf.world$composite executed:" }
+        ] },
+      { "type": "relation", "name": "the-sky-marches-zero", "operator": "equal", "left": { "value": "skyMarch" }, "right": { "literal": "0" } },
+      { "type": "relation", "name": "the-composite-marches-zero", "operator": "equal", "left": { "value": "compositeMarch" }, "right": { "literal": "0" } }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.Counters/sky-drift.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-march-group-stands", "stream": "stdout", "match": "exact", "text": "  work sdf.world$primary standing", "present": false },
+      { "type": "line", "name": "the-primary-executes", "stream": "stdout", "match": "contains", "text": "  work sdf.world$primary executed:", "present": true }
+    ]
+  }
+}

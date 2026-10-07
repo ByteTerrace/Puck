@@ -13,8 +13,9 @@ namespace Puck.World.Client;
 /// <see cref="InspectorWriter.MaxLineChars"/> characters): a long line wraps onto indented continuation lines up to its
 /// own line budget and elides its end past it, and optional lines (the frame rate, pass times) past the panel's last
 /// line are counted into one closing <c>... n more lines</c> line. A reload diagnostic shows its file and location first,
-/// shortened to the part relative to the world's document directory. The whole panel is refused only when the fixed
-/// lines themselves cannot fit, which the reservation rules out by construction.</remarks>
+/// shortened to the part relative to the world's document directory. Captured indirect rows follow the surface
+/// identity and pixel cost before optional live rows; later lines share the remaining room and are counted when
+/// omitted.</remarks>
 public sealed partial class WorldInspectorText {
     // Display lines a wrapped logical line may take: a reload diagnostic, and a line naming authored identifiers.
     private const int ReloadLines = 5;
@@ -35,8 +36,10 @@ public sealed partial class WorldInspectorText {
 
     private string m_reloadLine = "reload=none";
 
-    /// <summary>Gets whether this snapshot's fixed lines exceeded the editor writer's declared line reservation.</summary>
-    public bool Refused { get; private set; }
+    private WorldRenderSky? m_sky;
+    private WorldRenderAtmosphere? m_atmosphere;
+    private string? m_skyText;
+
     /// <summary>Gets the formatted panel and command text without allocating.</summary>
     public ReadOnlySpan<char> Text => m_chars.AsSpan(length: m_length, start: 0);
 
@@ -51,7 +54,7 @@ public sealed partial class WorldInspectorText {
         var normal = (hit?.Normal ?? default);
         var settings = snapshot.Settings;
         var quality = snapshot.View?.Quality;
-        var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderScale ?? 1f) }).RenderGrid;
+        var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderCeiling ?? 1f) }).RenderGrid;
         var shadows = ((quality is { } resolved) ? (resolved.DisableSoftShadows ? 0 : ((resolved.ShadowDistanceScale > 0) ? resolved.ShadowDistanceScale : 1)) : (settings?.ShadowReach ?? 0));
         var ambient = ((quality is { } shading) ? !shading.DisableAmbientOcclusion : (settings?.AmbientOcclusion ?? false));
         var surfaced = (hit?.Hit ?? false);
@@ -62,7 +65,6 @@ public sealed partial class WorldInspectorText {
         m_length = 0;
         m_lines = 0;
         m_omitted = 0;
-        Refused = false;
         ShapeReload(diagnostic: snapshot.ReloadError, root: snapshot.WorldRoot);
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"[world.inspect: seat={(snapshot.Slot + 1)} hit={(surfaced ? "surface" : "none")}") && Line(text: scratch[..written]));
@@ -77,6 +79,9 @@ public sealed partial class WorldInspectorText {
                 handler: $"point=unavailable normal=unavailable distance={distance:0.###}")) && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"steps={(hit?.Steps ?? 0)} queries={(hit?.Queries ?? 0)} selection={(snapshot.Selection ?? "none")}") && Line(text: scratch[..written], lines: NameLines));
+        // A captured indirect explanation reserves the remaining panel before optional live presentation rows.
+        // Its reference and provenance must not disappear behind camera, sky or timing diagnostics.
+        if (hit?.Indirect is not null) { Indirect(snapshot: snapshot); }
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"camera={camera.Position.X:0.###},{camera.Position.Y:0.###},{camera.Position.Z:0.###} forward={camera.Forward.X:0.###},{camera.Forward.Y:0.###},{camera.Forward.Z:0.###}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
@@ -95,32 +100,61 @@ public sealed partial class WorldInspectorText {
             handler: $"words={snapshot.Words}/{snapshot.WordCapacity} headroom={(snapshot.WordCapacity - snapshot.Words)}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"instances={snapshot.Instances}/{SdfProgramBuilder.MaxInstances} headroom={(SdfProgramBuilder.MaxInstances - snapshot.Instances)}") && Line(text: scratch[..written]));
-        _ = Line(text: m_reloadLine, lines: ReloadLines);
+        _ = Line(lines: ReloadLines, text: m_reloadLine);
+        if (hit?.Indirect is null) { Indirect(snapshot: snapshot); }
+        Environment(snapshot: snapshot);
     }
+
+    private void Environment(in WorldInspectorSnapshot snapshot) {
+        if (snapshot.Definition is not { } definition) { return; }
+        if ((m_skyText is null) || !ReferenceEquals(objA: m_sky, objB: definition.Render.Sky) || !ReferenceEquals(objA: m_atmosphere, objB: definition.Render.Atmosphere)) {
+            m_sky = definition.Render.Sky;
+            m_atmosphere = definition.Render.Atmosphere;
+            m_skyText = WorldLightingText.DescribeSky(atmosphere: m_atmosphere, sky: m_sky);
+        }
+        _ = Line(m_skyText, lines: 4);
+        var scratch = m_scratch.AsSpan();
+
+        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={(definition.Timeline.Clocks?.Count ?? 0)}", out var written) && Line(scratch[..written]));
+        var clocks = definition.Timeline.Clocks;
+
+        for (var index = 0; (index < (clocks?.Count ?? 0)); index++) {
+            var clock = clocks![index];
+            var mirror = snapshot.Mirror;
+            var rate = 1d;
+            var held = (mirror?.ClockHeld(name: clock.Name, rate: out rate) ?? false);
+            var tick = (mirror?.ClockTick(name: clock.Name) ?? default);
+            var phase = 0d;
+            var available = (mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false);
+
+            _ = (scratch.TryWrite(CultureInfo.InvariantCulture,
+                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : "anchor"))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines));
+        }
+    }
+
     /// <summary>Appends the observational frame-rate readout while timing is enabled.</summary>
     /// <param name="mean">The mean frames per second over the monitor's window.</param>
     /// <param name="slowest">The slowest frame's rate over the same window.</param>
     public void FrameRate(float mean, float slowest) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"fps={mean:0.0} slowest-fps={slowest:0.0}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), optional: true); }
+            handler: $"fps={mean:0.0} slowest-fps={slowest:0.0}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
     }
     /// <summary>Appends an observational completed pass mean.</summary>
     /// <param name="node">The render-graph instance that recorded the pass.</param>
     /// <param name="timing">The pass's completed mean.</param>
     public void Timing(string node, in Puck.Abstractions.Gpu.GpuPassTiming timing) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"{node}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), optional: true); }
+            handler: $"{node}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
     }
     /// <summary>Appends why a render-graph instance refused the pass timing it was asked for.</summary>
     /// <param name="node">The render-graph instance.</param>
     /// <param name="refusal">The instance's named refusal.</param>
     public void TimingRefused(string node, string refusal) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"{node}: gpu-timing refused {refusal}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), lines: NameLines, optional: true); }
+            handler: $"{node}: gpu-timing refused {refusal}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0), lines: NameLines); }
     }
     /// <summary>Closes the shared console and panel record, naming the optional lines the panel had no room for.</summary>
     public void Finish() {
-        if (Refused) { return; }
         if ((m_omitted > 0) &&
             m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written, handler: $"... {m_omitted} more lines")) {
             Write(text: m_scratch.AsSpan(length: written, start: 0));
@@ -129,17 +163,12 @@ public sealed partial class WorldInspectorText {
     }
 
     // Appends one logical line, wrapped onto continuation lines up to its budget and elided past it. An optional line
-    // past the panel's last content line is counted instead; a fixed line that cannot fit refuses the panel.
-    private bool Line(ReadOnlySpan<char> text, int lines = 1, bool optional = false) {
-        if (Refused) { return false; }
+    // past the panel's last content line is counted instead; fixed snapshot content fits within this reservation.
+    private bool Line(ReadOnlySpan<char> text, int lines = 1) {
         var remaining = text;
 
         for (var used = 1; ; used++) {
             if (m_lines >= (InspectorWriter.MaxLines - 1)) {
-                if (!optional) {
-                    Refuse();
-                    return false;
-                }
                 m_omitted++;
                 return true;
             }
@@ -173,14 +202,6 @@ public sealed partial class WorldInspectorText {
             m_length += Elision.Length;
         }
         m_lines++;
-    }
-    private void Refuse() {
-        const string Message = "[world.inspect: editor refused text beyond its declared 32-line/96-column reservation]";
-
-        Message.AsSpan().CopyTo(destination: m_chars);
-        m_length = Message.Length;
-        m_lines = 1;
-        Refused = true;
     }
     // Shapes a reload diagnostic once per change: the refusal's wrapper removed, paths under the world's document
     // directory relative to it, line breaks folded, and the first file and location it names leading the line.
@@ -223,10 +244,16 @@ public sealed partial class WorldInspectorText {
 }
 /// <summary>The captured presentation facts a formatter displays; no field changes simulation state.</summary>
 public readonly record struct WorldInspectorSnapshot {
+    /// <summary>The inspected world's authored environment and timeline.</summary>
+    public WorldDefinition? Definition { get; init; }
+    /// <summary>That world's presented clock readings and session previews.</summary>
+    public WorldStateMirror? Mirror { get; init; }
     /// <summary>The zero-based local seat.</summary>
     public int Slot { get; init; }
     /// <summary>The completed pixel and its captured lookup.</summary>
     public SdfPickResult? Pick { get; init; }
+    /// <summary>The once-evaluated independent reference of this exact pick, or null before explanation.</summary>
+    public WorldIndirectReferenceResult? IndirectReference { get; init; }
     /// <summary>The exact displayed camera.</summary>
     public CameraSnapshot? Camera { get; init; }
     /// <summary>The selected placement, or null.</summary>

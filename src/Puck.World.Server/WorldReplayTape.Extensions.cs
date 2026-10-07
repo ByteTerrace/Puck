@@ -33,7 +33,7 @@ public sealed partial class WorldReplayTape {
         return ("puck-replay:" + Convert.ToBase64String(inArray: stream.ToArray()));
     });
 
-    private WorldReplaySnapshot SnapshotRecording() {
+    private WorldReplaySnapshot SnapshotRecording(IReadOnlyList<WorldReplaySnapshot>? companions = null) {
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_definitionJson is null) ||
@@ -44,14 +44,20 @@ public sealed partial class WorldReplayTape {
             throw new InvalidOperationException(message: "No recording is active.");
         }
         return new WorldReplaySnapshot {
+            Authority = m_liveServer.AuthorityIdentity,
+            Companions = (companions ?? []),
             DefinitionJson = [.. m_definitionJson],
+            DocumentDirectory = m_documentDirectory,
+            DocumentPath = m_documentPath,
             ForkedFrom = m_forkedFrom,
+            Instance = m_liveServer.InstanceIdentity,
             MountedAddons = [.. m_mountedAddons],
             PipelineSourceDirectory = m_pipelineSourceDirectory,
             RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
             RecordedHashes = [.. m_liveHashes],
             Seats = [.. m_seats],
             SimulationRate = m_recordRateHz,
+            StartCheckpoint = m_startCheckpoint,
             Ticks = [.. m_ticks],
         };
     }

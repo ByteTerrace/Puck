@@ -390,81 +390,13 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    // The fields a key may leave to inheritance are judged where they RESOLVE, not where they are written: each key
-    // holds every field the previous key left it, the first inherits from the statics and then from the last key
-    // (the wrap), so a stop order or an ink band that is fine in every fragment can still resolve inverted. Walks
-    // the keys twice exactly as WorldRenderCycleTrack.Rebuild does and judges the resolved values after each key.
-    // The lighting topology a cycle key moves: the authored list, or the pinned sun and hemisphere when the statics
-    // author no list (a curvature-only section keeps the pinned lights, exactly as the cycle track resolves it).
+    // The lights a sun disc's slot indexes: the authored list, or the pinned sun when the section
+    // authors no list (a curvature-only section keeps the pinned lights).
     private static WorldRenderLighting ResolvedLightingShape(WorldRenderLighting? lighting) => (lighting switch {
         { Lights: not null } authored => authored,
         { } curvatureOnly => (curvatureOnly with { Lights = WorldRenderLighting.Pinned.Lights }),
         null => WorldRenderLighting.Pinned,
     });
-    private static void ValidateRenderCycleResolution(WorldRenderCycle cycle, List<string> errors, WorldRenderLighting lightingShape, WorldRenderSky skyShape) {
-        var stops = ((skyShape.Layers?.OfType<WorldRenderSkyLayer.Gradient>().FirstOrDefault()?.Stops)
-            ?.Select(selector: static stop => (stop?.Elevation ?? 0f))
-            .ToArray()
-            ?? []);
-        var lights = (lightingShape.Lights ?? []);
-        var shadows = lights.Select(selector: static light => ((light as WorldRenderLight.Directional)?.Shadows ?? false)).ToArray();
-        var inkLow = (lightingShape.Curvature?.InkLow ?? SdfEnvironment.DefaultCurvatureInkLow);
-        var inkHigh = (lightingShape.Curvature?.InkHigh ?? SdfEnvironment.DefaultCurvatureInkHigh);
-
-        // Two passes exactly as WorldRenderCycleTrack.Rebuild walks them: the first only establishes what the last
-        // key hands the first (the wrap), the second is what every key RETAINS and renders — so only the second
-        // pass is judged, and a value the first pass passes through on its way round is never refused.
-        for (var pass = 0; (pass < 2); pass++) {
-            for (var index = 0; (index < cycle.Keys.Count); index++) {
-                var key = cycle.Keys[index];
-                var path = $"render.cycle.keys[{index}]";
-
-                if (key?.Sky?.Layers?.OfType<WorldRenderSkyLayer.Gradient>().FirstOrDefault()?.Stops is { } moved) {
-                    for (var stopIndex = 0; ((stopIndex < moved.Count) && (stopIndex < stops.Length)); stopIndex++) {
-                        if (moved[stopIndex]?.Elevation is { } elevation) {
-                            stops[stopIndex] = elevation;
-                        }
-                    }
-                }
-
-                if (key?.Lighting?.Lights is { } movedLights) {
-                    for (var light = 0; ((light < movedLights.Count) && (light < shadows.Length)); light++) {
-                        if ((movedLights[light] as WorldRenderLight.Directional)?.Shadows is { } flag) {
-                            shadows[light] = flag;
-                        }
-                    }
-                }
-
-                if (key?.Lighting?.Curvature is { } curvature) {
-                    inkLow = (curvature.InkLow ?? inkLow);
-                    inkHigh = (curvature.InkHigh ?? inkHigh);
-                }
-
-                if (pass == 0) {
-                    continue;
-                }
-
-                for (var stopIndex = 1; (stopIndex < stops.Length); stopIndex++) {
-                    if (stops[stopIndex] <= stops[(stopIndex - 1)]) {
-                        errors.Add(item: $"{path}.sky resolves gradient stops [{string.Join(
-                            separator: ", ",
-                            values: stops
-                        )}] once the fields it leaves unset are inherited; stops must stay strictly ascending in elevation at every key.");
-
-                        break;
-                    }
-                }
-
-                if (shadows.Count(predicate: static flag => flag) > 1) {
-                    errors.Add(item: $"{path}.lighting resolves {shadows.Count(predicate: static flag => flag)} shadowing lights once the flags it leaves unset are inherited; at most one light shadows at every key.");
-                }
-
-                if (inkLow >= inkHigh) {
-                    errors.Add(item: $"{path}.lighting.curvature resolves an ink band {inkLow}..{inkHigh} once the field it leaves unset is inherited; inkLow must stay below inkHigh at every key.");
-                }
-            }
-        }
-    }
     // definition null = identity scope: a document authored independent of any world cannot resolve a placement id
     // or a state row, so those checks are skipped there and the reference is refused at the seam instead.
     private static void ValidateOverlaySubject(OverlaySubject? subject, string path, List<string> errors, WorldDefinition? definition) {
@@ -735,65 +667,6 @@ public static partial class WorldDefinitionValidator {
                 : $"{subject} names no {rowNoun}; the world declares none."));
         }
     }
-    private static void RequireFinite(float value, string name, List<string> errors) {
-        if (!float.IsFinite(f: value)) {
-            errors.Add(item: $"{name} must be finite.");
-        }
-    }
-    private static void RequireIntRange(int value, int min, int max, string name, List<string> errors) {
-        if (
-            (value < min) ||
-            (value > max)
-        ) {
-            errors.Add(item: $"{name} {value} is outside {min}..{max}.");
-        }
-    }
-    private static void RequireNonNegative(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f)
-        ) {
-            errors.Add(item: $"{name} must be finite and non-negative.");
-        }
-    }
-    private static void RequireNonNegativeEpoch(long value, string name, List<string> errors) {
-        if (value < 0) {
-            errors.Add(item: $"{name} {value} must be non-negative.");
-        }
-    }
-    private static void RequirePositive(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value <= 0f)
-        ) {
-            errors.Add(item: $"{name} must be finite and positive.");
-        }
-    }
-    // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
-    // folds onto: finite, and within [min, max] with either edge switchable to an open bound (e.g. a half-angle's
-    // 0 is excluded — a zero-width cone senses nothing — while its 180 ceiling is admitted).
-    private static void RequireRange(float value, float min, float max, string name, List<string> errors, bool minExclusive = false, bool maxExclusive = false) {
-        if (
-            !float.IsFinite(f: value) ||
-            (minExclusive
-            ? (value <= min)
-            : (value < min)) ||
-            (maxExclusive
-            ? (value >= max)
-            : (value > max))
-        ) {
-            var openBracket = (minExclusive
-                ? "("
-                : "["
-            );
-            var closeBracket = (maxExclusive
-                ? ")"
-                : "]"
-            );
-
-            errors.Add(item: $"{name} {value} must be finite and within {openBracket}{min}, {max}{closeBracket}.");
-        }
-    }
     // The required-then-unique name door every row loop needing an ordinal identity opens: absent/blank is
     // "{path}[.field] is required.", a repeat against the caller's own seen-set is "…is duplicated.". field may be
     // empty when path already names the leaf (e.g. a tags[] entry) — no trailing dot is emitted in that case.
@@ -818,15 +691,6 @@ public static partial class WorldDefinitionValidator {
         }
 
         return true;
-    }
-    private static void RequireUnitInterval(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f) ||
-            (value > 1f)
-        ) {
-            errors.Add(item: $"{name} {value} must be within 0..1.");
-        }
     }
     // The null-tolerant twin of ValidateAssets, for an OPTIONAL asset section (null = none authored) rather than a
     // required one (Tunes/Patches) — a document declaring no music is not missing anything.
@@ -975,29 +839,39 @@ public static partial class WorldDefinitionValidator {
             farDistance: definition.Render.FarDistance,
             errors: errors
         );
+        ValidateRenderResolution(definition: definition, errors: errors);
 
-        ValidateRenderLighting(
+        ValidateTimeline(
             definition: definition,
-            lighting: definition.Render.Lighting,
+            errors: errors
+        );
+        ValidateKeyedValues(
+            definition: definition,
+            errors: errors
+        );
+        var (expandedLighting, expandedSky) = ValidateAndExpandRenderKeys(
+            definition: definition,
             errors: errors
         );
 
+        ValidateRenderLighting(
+            definition: definition,
+            lighting: expandedLighting,
+            errors: errors
+        );
         ValidateRenderSky(
             definition: definition,
-            sky: definition.Render.Sky,
+            sky: expandedSky,
             errors: errors,
-            lighting: ResolvedLightingShape(lighting: definition.Render.Lighting)
+            lighting: ResolvedLightingShape(lighting: expandedLighting)
         );
         ValidateRenderEnvironment(
             definition: definition,
             environment: definition.Render.Environment,
             errors: errors
         );
-        ValidateRenderCycle(
-            definition: definition,
-            errors: errors
-        );
-        ValidateTimeline(
+        ValidateRenderAtmosphere(
+            atmosphere: definition.Render.Atmosphere,
             definition: definition,
             errors: errors
         );
@@ -1563,6 +1437,14 @@ public static partial class WorldDefinitionValidator {
             proveNeighbours: validateAdjacencyClaims
         );
 
+        // A load is the one boundary that judges a bound presentation value's starting value (ValidateBoundStarts).
+        if (validateAdjacencyClaims) {
+            ValidateBoundStarts(
+                definition: definition,
+                errors: errors
+            );
+        }
+
         var authoring = definition.Authoring;
 
         // Only an AUTHORED section validates — absence reads the derived WorldPlacementPolicyDefaults.DeriveFrom
@@ -1580,7 +1462,7 @@ public static partial class WorldDefinitionValidator {
         // bodyless document may author none and reads the inert WorldCollision.Absent.
         if (definition.CollisionRaw is null) {
             if (definition.Population.Capacity > 0) {
-                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
+                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis that does.");
             }
         } else {
             ValidateCollision(
@@ -1952,12 +1834,6 @@ public static partial class WorldDefinitionValidator {
                     scope: scope,
                     errors: errors,
                     deferred: deferredSink
-                );
-                ValidateScreenMemory(
-                    definition: definition,
-                    bindings: screen.Memory,
-                    path: $"{path}.memory",
-                    errors: errors
                 );
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective

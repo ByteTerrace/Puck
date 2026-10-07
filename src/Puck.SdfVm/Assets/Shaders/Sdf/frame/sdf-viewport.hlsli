@@ -5,12 +5,15 @@
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
 #include "../isa/sdf-isa.hlsli"
+#include "../isa/sdf-indirect-layout.hlsli"
+
+bool sdfLightCamera() { return sdfIndirectLightSlice(passGroup.lightSlice).x != 0u; }
 
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
 // read it through.
 struct ViewportData {
     float4 position;    // xyz = world position, w = zero
-    float4 right;       // xyz = right basis,   w = tan(fov / 2)
+    float4 right;       // xyz = right basis, w = tan(fov / 2), or world half-width for the scoped light camera
     float4 up;          // xyz = up basis,      w = aspect ratio
     float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
     // xy = the view's RENDER extent in pixels, which is the size of the output image its dispatch set writes: the host
@@ -19,7 +22,7 @@ struct ViewportData {
     float4 extent;
     // x = the view's near distance (read through worldNearDistance below). yz = the off-axis (asymmetric) frustum's
     // tangent-space center offset (SdfAsymmetricFrustum), including this sample's ray jitter, consumed by
-    // march/sdf-cone.hlsli's cameraRayDirection. An unjittered symmetric camera has (0,0). w = FAR DISTANCE.
+    // cameraRayDirection below. An unjittered symmetric camera has (0,0). w = FAR DISTANCE.
     float4 lens;
 };
 ViewportData worldView() {
@@ -35,6 +38,45 @@ ViewportData worldView() {
     return data;
 }
 
+// The perspective ray for a viewport-local UV (pixel centers in [0,1] within the viewport's region; screen-up maps
+// to the camera's +up). SYMMETRIC by construction: `direction`'s defining expression below is untouched from before
+// the off-axis branch existed, so a camera that never sets lens.yz (every camera but a border window) takes
+// the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
+// branch not taken needs to prove byte-identity against a build without it at all.
+float3 cameraRayDirection(ViewportData view, float2 localUv) {
+    if (sdfLightCamera()) { return view.forward.xyz; }
+    float2 ndc = ((localUv * 2.0) - 1.0);
+
+    ndc.y = -ndc.y;
+
+    float tanHalfFov = view.right.w;
+    float aspect = view.up.w;
+
+    float3 direction = (
+        view.forward.xyz +
+        (((ndc.x * aspect) * tanHalfFov) * view.right.xyz) +
+        ((ndc.y * tanHalfFov) * view.up.xyz)
+    );
+
+    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the lens
+    // row's two otherwise-zero lanes carry the frustum's tangent-space center offset, appended as a TRAILING
+    // term so the symmetric sum above is never reassociated (float addition is not associative — computing the
+    // offset into a fresh accumulator first, then adding, can round differently than one flat left-to-right sum).
+    if ((view.lens.y != 0.0) || (view.lens.z != 0.0)) {
+        direction += ((view.lens.y * view.right.xyz) + (view.lens.z * view.up.xyz));
+    }
+
+    return normalize(direction);
+}
+
+// Only the residency light camera is orthographic. Its nearby plane avoids the subtraction of a distant virtual
+// eye from world-space geometry; ordinary cameras retain their exact eye and ray arithmetic.
+float3 cameraRayOrigin(ViewportData view, float2 localUv) {
+    if (!sdfLightCamera()) { return view.position.xyz; }
+    float2 plane = (localUv * 2.0 - 1.0) * float2(view.up.w, -1.0) * view.right.w;
+    return view.position.xyz + view.right.xyz * plane.x + view.up.xyz * plane.y;
+}
+
 // The view camera's own near distance (CameraSnapshot.Near): the forward distance of the plane its image begins on,
 // zero for a camera whose image begins at its eye. A border window's plane is its aperture, so nothing between its eye
 // and the glass is seen. The bounded volumes composite from it. The host writes a finite, non-negative value.
@@ -42,12 +84,11 @@ float worldNearDistance(ViewportData view) {
     return view.lens.x;
 }
 
-// The forward distance the view's surfaces are rendered from (SdfFrameBlock.NearOf): the near plane, never nearer than
-// SDF_MINIMUM_NEAR, which the mesh pass's reversed-Z depth needs. The beam's cone entry begins at that ray distance, a
-// conservative start since no ray of the cone meets the plane nearer, sdfPixelAt raises each primary ray's start to the
-// plane itself, and the mesh pass clips there.
+// Perspective surfaces keep SDF_MINIMUM_NEAR for their infinite reversed-Z projection. The scoped light camera has a
+// finite orthographic depth interval and starts at its positive authored near plane: raising that plane can clip a
+// caster the finite projection placed just beyond it. Beam, primary and mesh must use the same plane.
 float worldSurfaceNearDistance(ViewportData view) {
-    return max(worldNearDistance(view), SDF_MINIMUM_NEAR);
+    return sdfLightCamera() ? worldNearDistance(view) : max(worldNearDistance(view), SDF_MINIMUM_NEAR);
 }
 
 // The ray distance at which a camera ray along the unit `rayDirection` crosses the plane at forward distance
@@ -68,6 +109,12 @@ float worldFarDistance(ViewportData view) {
 // sky, the tile passes' coverage, the hit passes and views) reads this one value, so none can disagree on it.
 uint2 worldViewDims(ViewportData view) {
     return max((uint2)view.extent.xy, uint2(1u, 1u));
+}
+
+// The element of `pixel` in viewport `viewIndex` of a temporal view's reactivity buffer: one float a render-extent pixel,
+// laid out as the visibility records are (SdfWorldPackage.Parts.Reactivity).
+uint sdfReactivityIndex(uint2 pixel, uint viewIndex, uint2 extent) {
+    return ((((viewIndex * extent.y) + pixel.y) * extent.x) + pixel.x);
 }
 
 #endif

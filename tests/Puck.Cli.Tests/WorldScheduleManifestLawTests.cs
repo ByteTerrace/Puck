@@ -11,7 +11,7 @@ namespace Puck.Cli.Tests;
 /// comparison inside <c>puck test</c> rests on: that comparison can only refuse a difference it is able to see.</remarks>
 public sealed class WorldScheduleManifestLawTests {
     private const int Runs = 10;
-    private const string ScheduledWorld = "phase-advance.world.json";
+    private const string ScheduledWorld = "phase-advance.puck";
     // The document's own export tick is 12; fencing two past it lands the export before the pipe closes.
     private const string Script = "world.wait 14\nquit\n";
 

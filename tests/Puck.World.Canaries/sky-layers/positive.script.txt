@@ -33,13 +33,79 @@ world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1
 world.wait 12
 world.screenshot {run}/clouds-absent.png
 world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"aurora","intensity":4,"base":0,"height":1.4,"fold":0.05,"seed":9}]}
+world.wait 12
+world.screenshot {run}/aurora.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
+world.wait 12
+world.screenshot {run}/aurora-absent.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"noise","low":"#000000","high":"#FFFFFF","scale":3}]}
+world.wait 12
+world.screenshot {run}/noise.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
+world.wait 12
+world.screenshot {run}/noise-absent.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"pattern","shape":"checker","colors":["#000000","#FFFFFF"],"cells":8}]}
+world.wait 12
+world.screenshot {run}/pattern.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
+world.wait 12
+world.screenshot {run}/pattern-absent.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"panorama","screen":0}]}
+world.wait 12
+world.screenshot {run}/panorama.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
+world.wait 12
+world.screenshot {run}/panorama-absent.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"sunDisc","light":0,"radius":0.3,"intensity":4,"texture":{"screen":0}}]}
+world.wait 12
+world.screenshot {run}/texture.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
+world.wait 12
+world.screenshot {run}/texture-absent.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":0,"color":"#000000"},{"elevation":0.01,"color":"#2060A0"},{"elevation":1,"color":"#2060A0"}]}]}
+world.wait 12
+world.screenshot {run}/frame-level.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":0,"color":"#000000"},{"elevation":0.01,"color":"#2060A0"},{"elevation":1,"color":"#2060A0"}]}],"frame":{"up":[0,-1,0]}}
+world.wait 12
+world.screenshot {run}/frame-tilted.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#404040"},{"elevation":1,"color":"#404040"}]},{"$type":"gradient","stops":[{"elevation":-1,"color":"#808080"},{"elevation":1,"color":"#808080"}],"blend":"over"}]}
+world.wait 12
+world.screenshot {run}/blend-over.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#404040"},{"elevation":1,"color":"#404040"}]},{"$type":"gradient","stops":[{"elevation":-1,"color":"#808080"},{"elevation":1,"color":"#808080"}],"blend":"add"}]}
+world.wait 12
+world.screenshot {run}/blend-add.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#404040"},{"elevation":1,"color":"#404040"}]},{"$type":"gradient","stops":[{"elevation":-1,"color":"#808080"},{"elevation":1,"color":"#808080"}],"blend":"multiply"}]}
+world.wait 12
+world.screenshot {run}/blend-multiply.png
+world.wait captures 30
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#404040"},{"elevation":1,"color":"#404040"}]},{"$type":"gradient","stops":[{"elevation":-1,"color":"#808080"},{"elevation":1,"color":"#808080"}],"blend":"screen"}]}
+world.wait 12
+world.screenshot {run}/blend-screen.png
+world.wait captures 30
 world.row.set cameras sky-cam rig.operations[1].subject.point [0,-10,-8]
 world.wait 12
-world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#00FFFF"},{"elevation":1,"color":"#00FFFF"}]},{"$type":"fog","density":0}]}
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#00FFFF"},{"elevation":1,"color":"#00FFFF"}]}]}
+world.wait 12
+world.row.set render atmosphere {"fog":{"density":0}}
 world.wait 12
 world.screenshot {run}/fog-absent.png
 world.wait captures 30
-world.row.set render sky.layers[1].density 1
+world.row.set render atmosphere.fog.density 1
 world.wait 12
 world.screenshot {run}/fog.png
 world.wait captures 30

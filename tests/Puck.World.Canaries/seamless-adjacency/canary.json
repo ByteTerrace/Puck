@@ -4,17 +4,20 @@
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 60,
-  "binding": "Both legs boot the same quilt-nw shard over the island basis, prove authored ground reaches the invisible east seam, and require grounded contacts with zero wire errors. Only the positive leg flies east, so its post-crossing contacts must follow the seat authority and only it can emit a handoff and expose a generation-addressed NE entity through NW's delivered neighbour image.",
+  "binding": "Both legs boot the same quilt-nw shard over the island basis, prove authored ground reaches the invisible east seam, and require grounded contacts with zero wire errors. Both record a tape over their first forty ticks; replay.record tapes every row of the process beside the boot row, so the set carries ne's own tape. Only the positive leg flies east, so its post-crossing contacts must follow the seat authority and only it can emit a handoff and expose a generation-addressed NE entity through NW's delivered neighbour image; its set pairs nw's departure with the arrival ne's own tape lands again and names the crossing verified, while the control set replays with no crossing to pair.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
     "script": "positive.script.txt",
     "commands": [
+      { "verb": "replay.record", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
       { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.stop", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
@@ -29,6 +32,8 @@
       { "type": "relation", "name": "the crossed body remains grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },
       { "type": "line", "name": "automatic adjacency handoff fired", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": true },
       { "type": "line", "name": "remote entity carries authority slot and generation", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": true },
+      { "type": "line", "name": "the destination's own tape replays the arrival and the set verifies the crossing", "stream": "stdout", "match": "contains", "text": "crossing transfer=0 'boot' -> '6~global2~ne' verified", "present": true },
+      { "type": "line", "name": "every authority of the set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful capture]", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -36,10 +41,13 @@
     "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
     "script": "discriminating.script.txt",
     "commands": [
+      { "verb": "replay.record", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
       { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.stop", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
@@ -55,6 +63,8 @@
       { "type": "response", "name": "adjacency read-back answered", "stream": "stdout", "verb": "world.adjacencies", "occurrence": 1, "count": 1, "extract": [] },
       { "type": "line", "name": "no automatic handoff without a crossing", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": false },
       { "type": "line", "name": "no remote entity without a crossing", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": false },
+      { "type": "line", "name": "no crossing is paired without a crossing", "stream": "stdout", "match": "contains", "text": "crossing transfer=", "present": false },
+      { "type": "line", "name": "the control set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful capture]", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

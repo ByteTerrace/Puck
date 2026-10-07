@@ -86,7 +86,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
 
         // Begin implicitly resets this one buffer (pool created with RESET_COMMAND_BUFFER_BIT); the
         // caller's in-flight fence wait guarantees the buffer is not pending.
-        m_commandBufferRecordingApi.BeginCommandBuffer(request: request).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        m_commandBufferRecordingApi.BeginCommandBuffer(request: request).ThrowIfFailed(device: request.Device, operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.StartRenderPass(request: request);
         // The present path's display encode — the surface compositor's one draw — as a GPU-capture debug group.
         m_commandBufferRecordingApi.BeginDebugLabel(
@@ -188,6 +188,6 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         m_commandBufferRecordingApi.EndCommandBuffer(
             commandBufferHandle: request.CommandBufferHandle,
             device: request.Device
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+        ).ThrowIfFailed(device: request.Device, operation: "vkEndCommandBuffer");
     }
 }

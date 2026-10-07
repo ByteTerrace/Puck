@@ -4,11 +4,11 @@
 // The polynomial smooth minimum every smooth blend derives from (smoothIntersection/smoothSubtraction are its
 // negations, so all three share one seam). BOTH saturated endpoints return their input TO THE BIT:
 //
-//  * FAR (b at least k beyond a): h clamps to exactly 1, lerp(a, b, 0) == a and k*h*(1-h) == 0. This is what lets a
+//  * FAR (b at least k beyond a): h clamps to exactly 1 and the endpoint returns a, including its zero sign. This lets a
 //    masked-out smooth-blended instance (dropped past its cull bound) return the accumulator identically to evaluating
 //    it, so a smooth instance can carry a FINITE, k-inflated bound instead of an unmaskable one (SdfProgram.PackInstances).
 //    The usual lerp(b, a, h) form leaves candidate + (current - candidate) here, ~1 LSB off.
-//  * NEAR (a at least k beyond b): h clamps to exactly 0, and the `h <= 0` select returns b. Without that select the
+//  * NEAR (a at least k beyond b): h clamps to exactly 0, and the endpoint returns b. Without that select the
 //    expression is a + (b - a), which is NOT b when |a| >> |b| — and `a` is SDF_FAR_DISTANCE (1e9) for the first shape
 //    evaluated in a mapCore call. blendSmoothUnion(1e9, 5, 0.2) then returns 0 rather than 5, collapsing the whole field
 //    to a surface at the march origin. Reachable whenever a segment's first shape carries SmoothUnion and every earlier
@@ -16,7 +16,9 @@
 //    what it must: the shape itself.
 float blendSmoothUnion(float a, float b, float k) {
     float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
-    float blended = ((h <= 0.0) ? b : lerp(a, b, (1.0 - h)));
+    if (h <= 0.0) { return b; }
+    if (h >= 1.0) { return a; }
+    float blended = lerp(a, b, (1.0 - h));
 
     return (blended - ((k * h) * (1.0 - h)));
 }
@@ -115,7 +117,7 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
 // mapGradCore below is the HIT-ONLY dual twin of mapCore: it walks the SAME instruction stream and, alongside the
 // scalar distance, carries the WORLD-space gradient of the accumulated field so the surface normal is analytic —
 // forward-mode chain rule through the runtime transforms, NOT the baked Lipschitz scalars (those bound the STEP; these
-// propagate the DERIVATIVE). It runs once per lit hit pixel, replacing the 4-tap finite-difference calculateNormal;
+// propagate the DERIVATIVE). It runs once per lit hit pixel, replacing the 4-tap finite-difference calculateTapNormal;
 // the march stays scalar (mapCore). The dual eval costs ~2x a scalar one, paid once per hit — never in the march loop.
 //
 // TRANSPORT STATE. The gradient is created only at a SHAPE (a primitive's local gradient), so between shapes there is

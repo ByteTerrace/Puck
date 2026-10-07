@@ -45,7 +45,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The pass does not read one image and write one.</exception>
-    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+    public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         if (
@@ -86,7 +86,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         );
 
         try {
-            _ = lease.Wait(cancellationToken: cancellationToken);
+            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } catch {
             lease.Release();
 

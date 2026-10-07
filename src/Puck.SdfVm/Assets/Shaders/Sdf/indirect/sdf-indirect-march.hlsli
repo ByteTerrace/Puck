@@ -1,0 +1,109 @@
+#ifndef SDF_INDIRECT_MARCH_HLSLI
+#define SDF_INDIRECT_MARCH_HLSLI
+#include "sdf-indirect-field.hlsli"
+
+struct SdfIndirectRay {
+    uint kind;
+    float distance;
+    float3 normal;
+    uint material;
+    uint launchHeight;
+};
+
+// A contracted multiply-add can move a sample across the field's zero boundary. Match primary's two rounded
+// operations at every indirect sample and bracket witness, so backend contraction cannot change its certificate.
+float3 sdfIndirectPointAt(float3 origin, float3 direction, float distance) {
+    precise float3 advance = direction * distance;
+    precise float3 position = origin + advance;
+    return position;
+}
+
+// Acceptance is absolute and certified by a sign bracket, never by the conservative distance alone.
+// A rounded advance may land just inside a surface; its witness points outward. An inside origin stays unresolved.
+// Normal and bracket queries consume the same whole-ray allowance, including continuation segments. Radius zero
+// is the cache's point ray; a light-camera texel subtracts its conservative sphere radius from every clear advance
+// and extends the sign witness by that radius, without replacing the certificate by a small distance alone.
+SdfIndirectRay sdfIndirectMarch(float3 origin, float3 direction, float reach, float farDistance, uint mask, float sweepRadius, inout uint budget) {
+    SdfIndirectRay result = (SdfIndirectRay)0;
+    result.kind = SdfIndirectKindUnresolved;
+    if (!all(isfinite(origin)) || !all(isfinite(direction)) || !isfinite(reach) || !isfinite(farDistance)
+        || !isfinite(sweepRadius) || farDistance < 0.0 || sweepRadius < 0.0) { return result; }
+    bool gradientUsed = false;
+    float3 normal = 0.0;
+    [loop]
+    for (uint step = 0u; step < SdfIndirectLightMarchSteps && budget > 0u; step++) {
+        budget--;
+        sdfIndirectSteps++;
+        float3 position = sdfIndirectPointAt(origin, direction, result.distance);
+        uint activeMask = sdfIndirectMasked(result.distance, reach, mask) ? mask : SDF_INSTANCE_MASK_ALL;
+        SdfHit sample = sdfIndirectSample(position, activeMask);
+        float clearance = sdfMapBallClearance(sample.distance) - sweepRadius;
+        if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
+        if (abs(sample.distance) <= sweepRadius + SdfIndirectSurfaceEpsilon) {
+            if (activeMask != SDF_INSTANCE_MASK_ALL) {
+                if (budget == 0u) { return result; }
+                budget--;
+                sample = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
+                clearance = sdfMapBallClearance(sample.distance) - sweepRadius;
+                if (!isfinite(sample.distance) || (sample.distance < 0.0 && result.distance == 0.0)) { return result; }
+            }
+            if (!gradientUsed && budget > 0u) { budget--; normal = sdfIndirectGradient(position); gradientUsed = true; }
+            if (dot(normal, normal) > 0.0 && budget > 0u) {
+                budget--;
+                float witnessOffset = (sample.distance < 0.0 ? 1.0 : -1.0) * (sweepRadius + SdfIndirectSurfaceEpsilon);
+                SdfHit witness = sdfIndirectSample(sdfIndirectPointAt(position, normal, witnessOffset), SDF_INSTANCE_MASK_ALL);
+                if (isfinite(witness.distance) && (sample.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0)) {
+                    result.kind = SdfIndirectKindHit;
+                    result.normal = normal;
+                    result.material = (uint)sample.material;
+                    return result;
+                }
+            }
+        }
+        if (result.distance >= farDistance && sample.distance > sweepRadius) { result.kind = SdfIndirectKindExit; return result; }
+        float advance = sdfIndirectAdvance(clearance, result.distance, reach, farDistance, mask);
+        if (advance <= 0.0) { return result; }
+        bool strictlyClearEnd = clearance > farDistance - result.distance;
+        result.distance += advance;
+        if (result.distance >= farDistance && strictlyClearEnd) { result.kind = SdfIndirectKindExit; return result; }
+    }
+    return result;
+}
+
+// A finite segment is free only when overlapping positive clear balls cover its entire length.
+bool sdfIndirectSegment(float3 a, float3 b, inout uint budget, out float3 blockedPoint) {
+    blockedPoint = asfloat(0x7fc00000u).xxx;
+    float distance = length(b - a);
+    if (!all(isfinite(a)) || !all(isfinite(b)) || !isfinite(distance)) { return false; }
+    if (distance == 0.0) { return true; }
+    float3 direction = (b - a) / distance;
+    float travel = 0.0;
+    [loop]
+    for (uint step = 0u; step < SdfIndirectSegmentSteps && budget > 0u; step++) {
+        budget--;
+        sdfIndirectSteps++;
+        float3 position = sdfIndirectPointAt(a, direction, travel);
+        SdfHit sample = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
+        float clearance = sdfMapBallClearance(sample.distance);
+        if (sample.distance <= 0.0) { blockedPoint = position; return false; }
+        if (!isfinite(clearance) || clearance <= 0.0) { return false; }
+        if (clearance > distance - travel) { return true; }
+        if (travel >= distance) { return true; }
+        if (sample.distance <= SdfIndirectSurfaceEpsilon && budget > 0u) {
+            float bracketEnd = min(distance, travel + SdfIndirectSurfaceEpsilon);
+            if (bracketEnd > travel) {
+                budget--;
+                sdfIndirectSteps++;
+                SdfHit inside = sdfIndirectSample(sdfIndirectPointAt(a, direction, bracketEnd), SDF_INSTANCE_MASK_ALL);
+                if (isfinite(inside.distance) && inside.distance <= 0.0) {
+                    float weight = sample.distance / (sample.distance - inside.distance);
+                    blockedPoint = sdfIndirectPointAt(a, direction, lerp(travel, bracketEnd, saturate(weight)));
+                    return false;
+                }
+            }
+        }
+        travel = min(distance, travel + clearance);
+    }
+    return false;
+}
+#endif

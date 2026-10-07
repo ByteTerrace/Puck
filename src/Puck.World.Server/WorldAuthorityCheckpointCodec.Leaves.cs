@@ -89,53 +89,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value");
         }
     }
-    private static void WriteIdentityProjection(WireWriter writer, WorldIdentityProjection projection) {
-        writer.WriteString(value: projection.Id);
-        writer.WriteString(value: projection.Name);
-        writer.WriteString(value: projection.ColorHex);
-        writer.WriteNullableFixed(value: projection.MoveSpeed);
-        writer.WriteNullableFixed(value: projection.TurnSpeed);
-        WorldIdentityRecordWire.Write(writer: writer, records: projection.Records);
-    }
-    private static WorldIdentityProjection ReadIdentityProjection(ref WireReader reader) => new(
-        Id: reader.ReadString(
-            field: "identity id",
-            maxBytes: MaxStringBytes
-        ),
-        Name: reader.ReadString(
-            field: "identity name",
-            maxBytes: MaxStringBytes
-        ),
-        ColorHex: reader.ReadString(
-            field: "identity color",
-            maxBytes: MaxStringBytes
-        ),
-        MoveSpeed: reader.ReadNullableFixed(),
-        TurnSpeed: reader.ReadNullableFixed(),
-        Records: WorldIdentityRecordWire.Read(reader: ref reader)
-    );
-    // A traveler/committed-member identity is carried across a checkpoint restore through the identical reduction a
-    // federated crossing already applies (WorldIdentity.Project()/FromProjection) — a body's own simulation never
-    // reads a Document/Bindings/Hud/SeatLook off an in-flight traveler's identity, only its projection (Name/Color/
-    // MoveSpeed/TurnSpeed), so this is the SAME exclusion §3.1's rule already grants Server.WorldPopulation's own
-    // Profile field (see WorldPopulationEntryCheckpoint.Profile), extended to escrow's own identity-carrying rows.
-    private static void WriteIdentityOptional(WireWriter writer, WorldIdentity? identity) => writer.WriteOptional(
-        value: identity?.Project(),
-        writeValue: WriteIdentityProjection
-    );
-    private static WorldIdentity? ReadIdentityOptional(ref WireReader reader, WorldPlayerDefaults defaults) {
-        var projection = reader.ReadOptional(
-            readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
-        );
-
-        return ((projection is { } value)
-            ? WorldIdentity.FromProjection(
-                defaults: defaults,
-                projection: in value
-            )
-            : null
-        );
-    }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
         if (!WorldWireCodec.TryWriteIntentSource(
             source: source,

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Assets;
 using Puck.Cli.Parity;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -17,16 +18,10 @@ public sealed class ParityComparatorTests : IDisposable {
     private const string ValidStateHash = "0123456789abcdef";
 
     private readonly ITestOutputHelper m_output;
-    private readonly string m_root;
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-");
 
     public ParityComparatorTests(ITestOutputHelper output) {
         m_output = output;
-        m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-cli-tests-parity-{Guid.NewGuid():N}"
-        );
-
-        Directory.CreateDirectory(path: m_root);
     }
 
     private static void ApplyBlockDelta(byte[] rgba, int width, int height, int x0, int y0, int size, int deltaPerChannel) {
@@ -124,7 +119,7 @@ public sealed class ParityComparatorTests : IDisposable {
         (((((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"regionTick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
     private string CreateSubdirectory(string name) {
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"{name}-{Guid.NewGuid():N}"
         );
 
@@ -153,7 +148,7 @@ public sealed class ParityComparatorTests : IDisposable {
     }
     private string WriteContractFile(int tileSize, double tileMeanDelta, int tileMaxDelta, long censusFloorMaterial0) {
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"contract-{Guid.NewGuid():N}.json"
         );
         var json = $$"""
@@ -180,11 +175,65 @@ public sealed class ParityComparatorTests : IDisposable {
 
         return path;
     }
-    private static void WriteManifestFile(string path, string backend, string captureLine) =>
+    private static void WriteManifestFile(string path, string backend, string captureLine, string? shape = null) =>
         File.WriteAllText(
-            contents: (((("{\"schema\":\"puck.parity.manifest.v1\",\"backend\":\"" + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
+            contents: (((((("{\"schema\":\"puck.parity.manifest.v1\",\"shape\":\"" + (shape ?? FormatLedgerShapes.Of(id: "WorldCaptureManifest.SchemaId"))) + "\",\"backend\":\"") + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
             path: path
         );
+
+    // A capture manifest carries the shape fingerprint the ledger records for its layout; the same schema under another shape is
+    // refused by the fingerprint's name before any member is read.
+    [Fact]
+    public void AManifestOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+        using var directory = new TemporaryDirectory(prefix: "puck-parity-shape-");
+
+        var path = Path.Combine(
+            path1: directory.RootPath,
+            path2: "manifest.json"
+        );
+
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ),
+            path: path
+        );
+        Assert.True(
+            condition: ParityManifestLoader.TryLoadManifest(
+                error: out var control,
+                manifest: out _,
+                path: path
+            ),
+            userMessage: control
+        );
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ),
+            path: path,
+            shape: "0000000000000000"
+        );
+        Assert.False(condition: ParityManifestLoader.TryLoadManifest(
+            error: out var error,
+            manifest: out _,
+            path: path
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "shape fingerprint '0000000000000000'"
+        );
+    }
+
     private static void WritePng(string directory, string fileName, byte[] rgba, int width, int height) =>
         PngEncoder.Write(
             height: height,
@@ -846,15 +895,7 @@ public sealed class ParityComparatorTests : IDisposable {
             expectedSubstring: "carries a refusal, so frame, census, regionTick and sourceVerdict must be absent"
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void IdenticalFramesAndManifestsPassEveryVerdictThroughTheCliVerb() {
         var leftDir = CreateSubdirectory(name: "left");

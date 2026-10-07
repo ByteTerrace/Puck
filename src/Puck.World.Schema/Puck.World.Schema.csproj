@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <!-- WorldSchema's own node-converter/vocabulary lookups (TryGetNodeConverter/TryGetStringVocabulary/
-             TryGetTypeVocabulary), WorldNameRegistry's reflected-row walk, and WorldStateDocumentValues' property
-             walk all call reflection-based JsonSerializer/Type APIs carrying RequiresUnreferencedCode; so does every
+             TryGetTypeVocabulary), WorldNameRegistry's instruction-payload discovery, and WorldStateDocumentValues'
+             getter binding for caller-owned graph types still need reflection; document getters are generated. So does every
              JsonNode/JsonArray-based document diff/merge in WorldDocumentBasis and the composed-tree loaders in
              WorldDefinitionFileSource/WorldAssetRowLoader/WorldJsonPayload. -->
         <IsAotCompatible>false</IsAotCompatible>
@@ -10,19 +10,39 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
-        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
-        <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
-        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Attestation/Puck.Attestation.csproj" />
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Physics/Puck.Physics.csproj" />
+        <ProjectReference Include="../Puck.State.Rules/Puck.State.Rules.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
+        <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.World.Authoring/Puck.World.Authoring.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <!-- Only the schema generator's private build may omit stale getters after a model rename. -->
+    <PropertyGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <DefineConstants>$(DefineConstants);PUCK_SCHEMA_BOOTSTRAP</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <Compile Remove="WorldModelShape.generated.cs" />
+    </ItemGroup>
+    <!-- The commit this assembly is built at, embedded as a manifest resource (WorldSchema.SourceRevision). A
+         resource is not part of the reference assembly, so a new commit recompiles this project alone and its
+         dependents only copy it; the file is rewritten only when the commit changes. Empty outside a git tree. -->
+    <Target Name="PuckEmbedSourceRevision" BeforeTargets="AssignTargetPaths" DependsOnTargets="InitializeSourceControlInformation">
+        <PropertyGroup>
+            <_PuckSourceRevisionFile>$(IntermediateOutputPath)puck.source-revision.txt</_PuckSourceRevisionFile>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_PuckSourceRevisionFile)" Lines="$(SourceRevisionId)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <EmbeddedResource Include="$(_PuckSourceRevisionFile)" LogicalName="Puck.World.Schema.SourceRevision" />
+            <FileWrites Include="$(_PuckSourceRevisionFile)" />
+        </ItemGroup>
+    </Target>
 </Project>

@@ -87,7 +87,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
     // The screen-machine host builder, supplied by the composition root: Puck.World.Server carries no reference to
-    // the emulator cores or the Tune instrument engine, so it cannot construct Puck.World.Addons.Machines'
+    // Puck.World.Machines or the engines it hosts, so it cannot construct that project's
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
@@ -99,7 +99,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The local seats this host embodies — the ONE seam into a desktop's client/roster/seat-router/input-router.
     // WorldEmbodiedSeats.None for a host with no local seats.
     private readonly IWorldEmbodiedSeats m_seats;
+    private readonly WorldRoutedSeatTurns m_routedTurns;
     private readonly WorldStateRoot m_stateRoot;
+    // Fixed at composition and null in every production composition: told of each traveler route wrapper this host
+    // newly creates, after the wrapper and its published endpoint exist and before the seat's claim is held and
+    // published — see the constructor's travelerRouteStarted.
+    private readonly Action<WorldRemoteAuthority>? m_travelerRouteStarted;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     // Whether the instance's own document came from a composed image this process already held when the instance
@@ -158,7 +163,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // so the host canonicalizes once, here, and threads the same canonical string into every resolver call
     // (TryResolve, TryGetActive, TryAdopt, DescribeActive) — never the raw WorldReference.Document string a
     // destination row spells, since two documents naming the identical underlying file through different
-    // spellings ("dive.world.json" beside it vs "../modules/dive.world.json") would otherwise mint two separate
+    // spellings ("dive.puck" beside it vs "../modules/dive.puck") would otherwise mint two separate
     // resolver cache entries even though they resolve to one file.
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to
@@ -344,6 +349,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var instance in m_instances.Values) {
+            if (instance.Tape is { Mode: WorldReplayMode.Recording } tape) {
+                _ = tape.CancelRecording();
+            }
+        }
         foreach (var owner in m_screenSessions.Keys.ToList()) { CloseScreenSessions(owner: owner); }
         foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
         m_forwardedBodies.Clear();
@@ -454,21 +464,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             name: name,
             reason: out _
         );
-    }
-    /// <inheritdoc/>
-    public void ResolveContinuations(WorldServer source) {
-        foreach (var instance in m_instances.Values) {
-            if (ReferenceEquals(
-                objA: instance.Server,
-                objB: source
-            )) {
-                ScanInstanceAdjacencies(
-                    instance: instance,
-                    resolveOnly: true
-                );
-                return;
-            }
-        }
     }
     /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
     /// live <c>WorldSeatAuthorityRouter</c> route — the one structure source every drag-time/read-back
@@ -661,6 +656,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
                 try {
                     _ = WorldServerStepShell.Step(
+                        // An instance steps on its own accumulator, banking the boot pump's delta at its own rate, so
+                        // its time is elapsed engine time whatever the boot world's host steps per frame.
+                        pacing: HostPacing.WallClock,
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,
@@ -684,7 +682,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 // over untouched to the next StepInstances call, which reads the fresh rate and
                 // resumes correctly; tick numbering and ElapsedEngineTicks stay contiguous across the
                 // boundary since neither is reset by this break.
-                if (instance.Server.Definition.SimulationRateHz != rateHz) {
+                // Closing an unreachable cycle of screen sessions can reap the instance currently stepping.
+                if (instance.Server.IsRetiring || (instance.Server.Definition.SimulationRateHz != rateHz)) {
                     break;
                 }
             }
@@ -1223,6 +1222,16 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         _ = m_instances.Remove(key: name);
         _ = m_documentShared.Remove(key: name);
+        // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
+        // row that next claims it: a destination recovered from its crossing log answers what that log holds.
+        for (var index = 0; (index < m_inDoubtTransfers.Count); index++) {
+            if (ReferenceEquals(
+                objA: m_inDoubtTransfers[index].TargetAuthority?.Local,
+                objB: instance
+            )) {
+                m_inDoubtTransfers[index] = m_inDoubtTransfers[index] with { TargetAuthority = null, RecoveryAuthority = instance.Server.AuthorityIdentity };
+            }
+        }
         RemoveSourceForwarding(source: instance.Server);
         foreach (var forwarded in m_forwardedBodies.Values) {
             if (
@@ -1282,13 +1291,21 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="catalogFingerprint">The stable fingerprint of the selected host machine catalog.</param>
     /// <param name="machineCatalog">The selected host machine catalog, or null for structural-only test hosts.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
+    /// <param name="travelerRouteStarted">Told of each traveler route wrapper a committed federated transfer newly
+    /// creates for a followed local seat, on the thread publishing the transfer, after the wrapper and its published
+    /// endpoint exist and before the seat's commit turn is held and its claim published through
+    /// <see cref="WorldRemoteAuthority.PublishClaim"/>. A later crossing by the same seat reuses the cached wrapper and
+    /// publishes its claim without the route gate, and is not reported. A route observed on the wrapper inside the
+    /// callback reaches no seat until the claim stands. Null in every production composition; a verification harness
+    /// passes it to place an observed route before, during or after the claim.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentNullException.ThrowIfNull(argument: stateRoot);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
 
         m_seats = seats;
+        m_routedTurns = new WorldRoutedSeatTurns(seatCount: seats.SeatCount);
         m_resolver = resolver;
         m_machineId = machineId;
         m_stateRoot = stateRoot;
@@ -1297,6 +1314,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_machineCatalog = machineCatalog;
         m_machineHostFactory = machineHostFactory;
         m_admitsSpawn = admitsSpawn;
+        m_travelerRouteStarted = travelerRouteStarted;
     }
 
     /// <summary>Admits <paramref name="row"/> into the registry under its own name — the one place a row enters this
@@ -1323,6 +1341,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             instance: row,
             stepped: false
         );
+        RecordAdmittedCompanion(row: row);
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>
@@ -1429,43 +1448,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var targetAuthority = (pending.TargetAuthority?.Local?.Server.AuthorityIdentity
-                ?? (pending.TargetAuthority?.Remote?.PeerAuthority ?? (pending.RecoveryAuthority ?? string.Empty)));
-
-            inDoubt.Add(item: new WorldInDoubtTransferCheckpoint(
-                RollbackOnly: pending.RollbackOnly,
-                CommitConfirmed: pending.CommitConfirmed,
-                Continuation: CaptureTransferContinuation(
-                    pending.Transfer,
-                    pending.Landed
-                ),
-                TargetDefinitionJson: (((pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition)
-                ? WorldDefinitionSerialization.Serialize(definition: remoteDefinition)
-                : null),
-                CommitMembers: [.. pending.CommitMembers],
-                Landed: [.. pending.Landed.Select(selector: static member => new WorldLandedMemberCheckpoint(
-                        AdmissionGrants: member.AdmissionGrants,
-                        BodyColor: member.BodyColor,
-                        Designations: member.Designations,
-                        DynamicState: member.DynamicState,
-                        Mobility: member.Mobility,
-                        FollowedSeatMask: member.FollowedSeatMask,
-                        Peer: member.Peer,
-                        Position: member.Position,
-                        SourceGrants: member.SourceGrants,
-                        SourceSlot: member.SourceSlot,
-                        TargetSlot: member.TargetSlot,
-                        Yaw: member.Yaw
-                    ))],
-                MemberCount: pending.MemberCount,
-                SourceDeadlineTick: pending.SourceDeadlineTick,
-                SourceInstance: pending.Transfer.SourceInstance,
-                Spawned: pending.Spawned,
-                TargetAuthority: targetAuthority,
-                TargetEndpoint: (pending.TargetAuthority?.Remote?.Endpoint ?? pending.RecoveryEndpoint),
-                TargetName: pending.TargetName,
-                TransferId: pending.Transfer.TransferId
-            ));
+            inDoubt.Add(item: CaptureInDoubt(pending: pending));
         }
 
         // Unbound destinations remain in this table as data, so admission order cannot erase a durable route.
@@ -1479,22 +1462,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var destination = pair.Value.Authority.DescribeForCheckpoint();
-
-            forwarded.Add(item: new WorldForwardedBodyCheckpoint(
-                SourceIncarnation: pair.Key.Incarnation,
-                DestinationAddress: new WorldEntityAddress(
-                    Authority: destination.DestinationAuthority,
-                    Index: pair.Value.BodyIndex,
-                    Generation: 0
-                ),
-                DestinationBodyIndex: pair.Value.BodyIndex,
-                Mobility: destination.Mobility,
-                SourceAuthority: destination.SourceAuthority,
-                DestinationEndpoint: destination.Endpoint,
-                DestinationDefinitionJson: ((destination.Definition is { } definition)
-                ? WorldDefinitionSerialization.Serialize(definition: definition)
-                : null)
+            forwarded.Add(item: CaptureForwarded(
+                body: pair.Value,
+                incarnation: pair.Key.Incarnation
             ));
         }
 

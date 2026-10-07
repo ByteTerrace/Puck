@@ -1,0 +1,19 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+basis: "quilt-nw"
+documentId: "quilt-nw-gap"
+
+adjacencies [
+  {
+    name: "east"
+    $drop: true
+  }
+  {
+    name: "south"
+    $drop: true
+  }
+]

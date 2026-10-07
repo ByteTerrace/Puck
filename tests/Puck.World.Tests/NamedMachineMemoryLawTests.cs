@@ -6,6 +6,7 @@ using Puck.AdvancedGamingBrick;
 using Puck.World.Machines;
 using Puck.World.Protocol;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -48,80 +49,75 @@ public sealed class NamedMachineMemoryLawTests {
 
     [Fact]
     public void ARealAdvancedMachineReceivesAndMirrorsA32BitWordWithoutAScreen() {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-named-memory-{Guid.NewGuid():N}.gba"
-        );
+        using var directory = new TemporaryDirectory(prefix: "puck-named-memory-");
         var image = new byte[0xC0];
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: image,
             value: 0xEAFFFFFEU
         );
-        File.WriteAllBytes(
+
+        var path = directory.WriteBytes(
             bytes: image,
-            path: path
+            name: "content.gba"
         );
-        try {
-            var configuration = JsonSerializer.SerializeToElement(new {
-                schema = "puck.advanced-gaming-brick.config.v1",
-                boot = "fast",
-                content = new { path },
-            });
-            var machine = new WorldMachine(
-                "device",
-                "advanced-gaming-brick",
-                configuration,
-                Memory: [
-                Write() with { Name = "send", Row = "send", Address = 0x02000040 },
-                Read() with { Address = 0x02000040 },
-            ]
-            );
-            var document = Document(
-                binding: Read(),
-                value: 0
-            ) with { MachinesRaw = [machine] };
 
-            document = document.WithWorldState(rows: [.. document.State,
-                new WorldStateRow(
-                    Name: CellName.Parse(candidate: "send"),
-                    Kind: CellKind.Int,
-                    Cells: [new StateCell(
-                            Key: WorldStateRow.SlotKey,
-                            Value: CellValue.Int(value: 0x12345678)
-                        )]
-                )]);
-            using var fixture = Fixtures.FreshServer(
-                document,
-                engines: [new AdvancedGamingBrickEngine()]
-            );
+        var configuration = JsonSerializer.SerializeToElement(new {
+            schema = "puck.advanced-gaming-brick.config.v1",
+            boot = "fast",
+            content = new { path },
+        });
+        var machine = new WorldMachine(
+            "device",
+            "advanced-gaming-brick",
+            configuration,
+            Memory: [
+            Write() with { Name = "send", Row = "send", Address = 0x02000040 },
+            Read() with { Address = 0x02000040 },
+        ]
+        );
+        var document = Document(
+            binding: Read(),
+            value: 0
+        ) with { MachinesRaw = [machine] };
 
-            fixture.Step();
-            Assert.Equal(
-                0x12345678L,
-                Value(fixture: fixture)
-            );
-            var direct = fixture.Server.Machines.Inspect(
-                "device",
-                new(
-                    Address: 0x02000040,
-                    Space: "bus",
-                    Width: 4
-                )
-            );
+        document = document.WithWorldState(rows: [.. document.State,
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: "send"),
+                Kind: CellKind.Int,
+                Cells: [new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: CellValue.Int(value: 0x12345678)
+                    )]
+            )]);
+        using var fixture = Fixtures.FreshServer(
+            document,
+            engines: [new AdvancedGamingBrickEngine()]
+        );
 
-            Assert.Equal(
-                MachineAccessStatus.Available,
-                direct.Status
-            );
-            Assert.Equal(
-                0x12345678UL,
-                direct.Value
-            );
-            Assert.Empty(collection: fixture.Server.Definition.Screens);
-        } finally {
-            File.Delete(path: path);
-        }
+        fixture.Step();
+        Assert.Equal(
+            0x12345678L,
+            Value(fixture: fixture)
+        );
+        var direct = fixture.Server.Machines.Inspect(
+            "device",
+            new(
+                Address: 0x02000040,
+                Space: "bus",
+                Width: 4
+            )
+        );
+
+        Assert.Equal(
+            MachineAccessStatus.Available,
+            direct.Status
+        );
+        Assert.Equal(
+            0x12345678UL,
+            direct.Value
+        );
+        Assert.Empty(collection: fixture.Server.Definition.Screens);
     }
     [Fact]
     public void AReplacementReceivesTheFirstWriteEvenWhenWorldStateDidNotChange() {
@@ -320,45 +316,38 @@ public sealed class NamedMachineMemoryLawTests {
     }
     [Fact]
     public void PreparedContentSymbolsResolveThroughTheNamedBinding() {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-named-symbol-{Guid.NewGuid():N}.tiny"
-        );
-
-        File.WriteAllBytes(
+        using var directory = new TemporaryDirectory(prefix: "puck-named-symbol-");
+        var path = directory.WriteBytes(
             bytes: [17],
-            path: path
+            name: "content.tiny"
         );
-        try {
-            var engine = new MemoryEngine();
-            var document = Document(Write() with { Address = null, Symbol = "register" });
-            var configuration = JsonSerializer.SerializeToElement(new {
-                schema = "puck.memory.config.v1",
-                seed = 0,
-                content = new { path },
-            });
 
-            document = document with { MachinesRaw = [document.Machines[0] with { Configuration = configuration }] };
-            using var fixture = Fixtures.FreshServer(
-                document,
-                machineCatalog: new WorldMachineCatalog(
-                    [engine],
-                    [new SymbolProvider()]
-                )
-            );
+        var engine = new MemoryEngine();
+        var document = Document(Write() with { Address = null, Symbol = "register" });
+        var configuration = JsonSerializer.SerializeToElement(new {
+            schema = "puck.memory.config.v1",
+            seed = 0,
+            content = new { path },
+        });
 
-            fixture.Step();
-            Assert.Equal(
-                WideAddress,
-                engine.Created[0].LastAddress
-            );
-            Assert.Equal(
-                99UL,
-                engine.Created[0].Value
-            );
-        } finally {
-            File.Delete(path: path);
-        }
+        document = document with { MachinesRaw = [document.Machines[0] with { Configuration = configuration }] };
+        using var fixture = Fixtures.FreshServer(
+            document,
+            machineCatalog: new WorldMachineCatalog(
+                [engine],
+                [new SymbolProvider()]
+            )
+        );
+
+        fixture.Step();
+        Assert.Equal(
+            WideAddress,
+            engine.Created[0].LastAddress
+        );
+        Assert.Equal(
+            99UL,
+            engine.Created[0].Value
+        );
     }
     [InlineData("i8", 255UL)]
     [InlineData("i16", 65535UL)]

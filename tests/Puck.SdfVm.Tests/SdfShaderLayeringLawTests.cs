@@ -6,20 +6,22 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// The SDF kernels' module tree (<c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>) is layered, lowest first: the generated
 /// declarations (<c>isa</c>), the field interpreter (<c>field</c>), the frame's data (<c>frame</c>), the march
-/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the debug views (<c>debug</c>), and the
-/// pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
+/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the sky's layer stack and its kinds'
+/// modules (<c>sky</c>), the indirect cache's classify, trace and reads (<c>indirect</c>), the debug views (<c>debug</c>), and the pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
 /// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
-/// includes a higher module first would otherwise hide the dependency. Every source lives in a layer's directory, and
+/// includes a higher module first would otherwise hide the dependency. Every source lives in a named directory, and
 /// every include resolves to a source in the tree or the shared reconstruction module, which has no SDF dependency.
+/// The indirect field, march and approach modules belong to the march layer: both the primary light camera and the
+/// indirect cache use that same certified traversal. Their indirect directory identifies the transport policy.
 /// </summary>
 public sealed partial class SdfShaderLayeringLawTests {
     private const string SharedReconstruction = "Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli";
 
-    private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "debug", "passes"];
+    private static readonly string[] Layers = ["isa", "field", "frame", "march", "surface", "shade", "sky", "indirect", "debug", "passes"];
 
     [Fact]
     public void NoModuleDependsOnAHigherLayer() {
-        var root = RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+        var root = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
         var files = Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*.hlsl*")
             .Where(predicate: static path => (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli")))
             .ToDictionary(
@@ -57,6 +59,24 @@ public sealed partial class SdfShaderLayeringLawTests {
                 "march/e.hlsli includes passes/missing.hlsli, which is not in the tree",
             ]
         );
+    }
+    [Fact]
+    public void SharedIndirectTraversalStaysBelowSurfaceAndCachePolicy() {
+        var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["march/primary.hlsli"] = "#include \"../indirect/sdf-indirect-march.hlsli\"\n",
+            ["indirect/sdf-indirect-march.hlsli"] = "#include \"sdf-indirect-field.hlsli\"\n#include \"sdf-indirect-cache.hlsli\"\n",
+            ["indirect/sdf-indirect-field.hlsli"] = "#include \"../surface/sample.hlsli\"\n",
+            ["indirect/sdf-indirect-approach.hlsli"] = "#include \"../shade/light.hlsli\"\n",
+            ["indirect/sdf-indirect-cache.hlsli"] = string.Empty,
+            ["surface/sample.hlsli"] = string.Empty,
+            ["shade/light.hlsli"] = string.Empty,
+        };
+
+        Assert.Equal(actual: Violations(files: files), expected: [
+            "indirect/sdf-indirect-approach.hlsli includes shade/light.hlsli, a higher layer",
+            "indirect/sdf-indirect-field.hlsli includes surface/sample.hlsli, a higher layer",
+            "indirect/sdf-indirect-march.hlsli includes indirect/sdf-indirect-cache.hlsli, a higher layer",
+        ]);
     }
     // The check refuses a use of a function, constant, global or macro that only a higher layer declares, a macro tested
     // in a conditional included, and a name used outside the one function whose parameter or local shares it. It accepts
@@ -175,6 +195,9 @@ public sealed partial class SdfShaderLayeringLawTests {
     // A source's layer, by the directory it sits in, or -1 when it sits in none.
     private static int LayerOf(string path) {
         if (path == SharedReconstruction) { return 0; }
+        if (path is "indirect/sdf-indirect-field.hlsli" or "indirect/sdf-indirect-march.hlsli" or "indirect/sdf-indirect-approach.hlsli") {
+            return Array.IndexOf(array: Layers, value: "march");
+        }
         var slash = path.IndexOf(comparisonType: StringComparison.Ordinal, value: '/');
 
         return ((slash < 0)

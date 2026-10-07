@@ -1,0 +1,117 @@
+schema: "puck.world.definition.v1"
+documentId: "records-pools-canary"
+
+bodies {
+  capacity: 1
+  localSeats: 0
+  networkPlayers: 1
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "still"
+    operations [CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels []
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+kits {
+  rows [
+    {
+      bodyMotionProgram: "still"
+      motion {
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 1
+        }
+        turn {
+          rate: 1
+        }
+      }
+      name: "defaultKit"
+    }
+  ]
+}
+
+rule "cycle" {
+  when request == 1
+  mode: Edge
+  claim actors as x {
+    x.score = 17
+    first = x.score
+    release x
+  }
+  claim actors as y {
+    second = y.score
+    release y
+  }
+  done = 1
+}
+
+simulation {
+  rateHz: 60
+}
+
+state {
+  world {
+    slot request = 0
+
+    slot first = 0
+
+    slot second = 0
+
+    slot done = 0
+  }
+
+  record Actor {
+    score: Int = 7
+  }
+
+  pool actors of Actor capacity(1)
+}
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "table-view" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 16, pitch: 0.6, pivotOffset: [0, 0, 0], yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 0, 0], worldAxes: true)
+      fieldOfView(fieldOfViewRadians: 0.96)
+    ]
+  }
+}

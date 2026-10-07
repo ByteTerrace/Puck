@@ -69,11 +69,21 @@ neither an asset read nor a new refusal.
 A door that needs only a source's documents compiles through
 [`Composition/WorldCompileCache`](Composition/WorldCompileCache.cs) instead: the game's boot loader, the basis
 composer every basis and import reads through (and so `world.reload`), and `puck test`'s compile of the source its
-tests generate worlds from. A compile reads the file system only through `Puck.Transpiler`'s `CompileInputs`, which
+tests generate worlds from. Document compiles omit test lowering; `puck test` requests a distinct cache entry with
+tests included. A compile reads the file system only through `Puck.Assets.CompileInputs`, which
 records every fact it learned — the bytes of the source, of each module the import walk read, of the embedding and
 asset locks and of every hashed asset, every path it only probed, absent or present, and every directory whose
 names it resolved a basis in — and a held compile is served again only while every one of those facts still holds,
 so editing a module recompiles exactly the sources that import it and nothing is compiled twice unchanged.
+`WorldCompilation.Inputs` retains those facts even when an editor or CLI compiles the root directly.
+`WorldCompiledSource.From` snapshots its output and facts for the composer to reuse without lowering that root
+again. The composer still resolves the current carrier, compares the supplied document's bytes and checks every
+original input fact. An unsaved buffer records its own text, so it cannot claim the different file on disk as its
+provenance. Supplying a completed root is not a compile-cache lookup and adds no cache-hit count.
+The same store holds composed images with the original source-chain bytes and the complete input facts, so an
+unchanged boot can skip the basis/import merge too. Its identity includes the resolved path, source kind and
+catalog fingerprint; its persisted header includes the compiler identity and format shape. Both kinds stream
+through the atomic writer while computing the checksum, without staging the entry in a second byte buffer.
 
 A document name resolves through one index per directory,
 [`Composition/WorldSourceIndex`](Composition/WorldSourceIndex.cs): each `.world.json` document carries the name it
@@ -96,6 +106,13 @@ Concurrent misses on one source compile it once, the rest waiting for that compi
 records is a full path. A failed compile is never held. Each compile and each answer counts under the `world.boot` work source (`world.boot.compiles`,
 `world.boot.puck-cache-hits`). [`Composition/WorldSourceLoader`](Composition/WorldSourceLoader.cs) admits a compiled
 single-document source exactly as the game boots one.
+
+A cold source compile composes its basis to read inherited enum declarations.
+The composer attributes that work to `world.boot.compile-documents-read`,
+`world.boot.compile-compositions` and `world.boot.compile-compositions-shared`.
+These counts have class `pacing`, since a held compile skips the work. The
+admission's ordinary document-read, composition and shared-composition counts are also `pacing`, since a held
+composed image skips that work. Admission parsing, validation and rule-compilation counts stay deterministic.
 
 ## The construct table
 

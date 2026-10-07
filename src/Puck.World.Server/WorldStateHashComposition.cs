@@ -13,8 +13,8 @@ public enum WorldStateHashScope : byte {
     Pose,
     /// <summary>The store's own contents, the rows its host owns, and the topologies they are declared over.</summary>
     World,
-    /// <summary><see cref="World"/> plus poses, rule latches, group progress, body/identity action state, navigation,
-    /// flock perception, and search progress.</summary>
+    /// <summary><see cref="World"/> plus poses, rule latches, group progress, body/identity action state, every body's
+    /// simulation continuation, navigation, flock perception, and search progress.</summary>
     Authoritative,
 }
 /// <summary>One named component of the world hash composition. A scope is an ordered list of these and nothing
@@ -50,6 +50,11 @@ public enum WorldStateHashComponent : byte {
     /// <summary>Every body's action-state declaration and per-lane trigger runtime. The stored values ride
     /// <see cref="Arena"/> with the rest of the slot lanes.</summary>
     BodyActionState,
+    /// <summary>Every active body's simulation continuation, through its population checkpoint field codecs: velocities,
+    /// integration remainders, channel timers, the input and tape it carries, its producer, autonomy and navigation
+    /// runtime, excluding rendered color and rig, beside the pose <see cref="PopulationPose"/> also folds. Two bodies at one pose but different
+    /// continuations diverge at the next tick, so the hash tells them apart now.</summary>
+    BodyContinuation,
     /// <summary>Cached navigation: the shared domains and every active route.</summary>
     Navigation,
     /// <summary>Flock perception, slot generations, autonomy cadence, and prior travel.</summary>
@@ -82,6 +87,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.Decisions,
         WorldStateHashComponent.BoardEnforcement,
         WorldStateHashComponent.BodyActionState,
+        WorldStateHashComponent.BodyContinuation,
         WorldStateHashComponent.Navigation,
         WorldStateHashComponent.Flock,
         WorldStateHashComponent.Search,
@@ -122,6 +128,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.Arena => "Puck.State.StateArena",
         WorldStateHashComponent.BoardEnforcement => "Puck.World.Server.WorldServer.BoardEnforcement",
         WorldStateHashComponent.BodyActionState => "Puck.World.Server.WorldBody.ActionState",
+        WorldStateHashComponent.BodyContinuation => "Puck.World.Server.WorldPopulation.CaptureEntries",
         WorldStateHashComponent.Declaration => "Puck.World.Server.WorldStateHashComposition",
         WorldStateHashComponent.Decisions => "Puck.World.Server.WorldServer.Decisions",
         WorldStateHashComponent.Flock => "Puck.World.Server.WorldPopulation.Flock",
@@ -203,9 +210,10 @@ public static partial class WorldStateHashComposition {
 
         var hash = Fnv1aHash.Create();
 
-        foreach (var component in order) {
+        // Walked by index: an interface enumerator would allocate one box per composed hash.
+        for (var index = 0; (index < order.Count); index++) {
             server.Persistence.AppendStateHashComponent(
-                component: component,
+                component: order[index],
                 hash: ref hash,
                 seed: seed,
                 tick: tick

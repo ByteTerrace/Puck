@@ -1,0 +1,179 @@
+{
+  "id": "thin-wall-sweep",
+  "title": "A body never passes a thin wall: at 3000 m/s and from inside its own radius, it stops on the wall's face",
+  "binding": "A headless world under the field contact provider (collision.requirements SmoothUnionContact) holds one thin wall, 0.02 m thick with its near face at z = -99.99, and one flying kit at 3000 m/s with an instant response, so a forward segment moves the body 50 m a tick. The positive leg proves two classes. First, extreme speed: a 0.5 s segment straddles the wall in one step, and the body ends at z = -99.47, exactly its radius (0.5) plus the contact skin (0.02) from the face. Second, a body already inside its own radius: the script queues a slow segment (0.3 m a tick, under the radius) and on the same tick poses the body 0.24 m before the face, the geometry the former stepper resolved only at the step's endpoint, past the wall, and pushed out the far side. The certified sweep proves each core sphere's travel clear of the wall before the contact solve runs, so the body again ends at -99.47. The discriminating leg runs the same script in the same world with no wall: the body flies to -1500 and then to -117.74, so the positive leg's -99.47 is the wall's doing, not a short segment's. Red leg (recorded in the change that added this canary, not a committed artifact): the same positive leg against the solver without the certified sweep ends past the wall.",
+  "bootShape": "headless",
+  "requirements": [],
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/thin-wall-sweep/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.pose",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "lines",
+        "name": "the-body-stops-on-the-face-both-times",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "[body.where: body:0 pos=(0.00, 0.00, 0.00)",
+          "[body.where: body:0 pos=(0.00, 0.00, -99.47)",
+          "[body.where: body:0 pos=(0.00, 0.00, -99.47)"
+        ]
+      },
+      {
+        "type": "line",
+        "name": "no-mutation-rejected",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "world.mutation rejected",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/thin-wall-sweep/discriminating.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.pose",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "lines",
+        "name": "with-no-wall-the-body-flies-on",
+        "stream": "stdout",
+        "match": "contains",
+        "lines": [
+          "[body.where: body:0 pos=(0.00, 0.00, 0.00)",
+          "[body.where: body:0 pos=(0.00, 0.00, -1500.00)",
+          "[body.where: body:0 pos=(0.00, 0.00, -117.74)"
+        ]
+      },
+      {
+        "type": "line",
+        "name": "no-mutation-rejected",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "world.mutation rejected",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

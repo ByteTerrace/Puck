@@ -13,13 +13,14 @@ namespace Puck.World;
 /// <remarks>Refusal-tagged enums sit in every layer that owns a door — the state core's <c>state.rule.compile</c> and
 /// <c>state.rule.fire</c> doors in Puck.State, the rule substrate's <c>state.transform</c> door in Puck.State.Rules,
 /// the document doors in Puck.World.Schema, the tape in Puck.World.Server, <c>addon.mutate</c> in
-/// Puck.World.Addons, <c>sdf.decode</c> in Puck.World.Client, and this composition root's own. One registry covers
-/// them because there is one <see cref="RefusalAttribute"/>, declared in Puck.State, the lowest assembly every one
-/// of those projects already references. The list below anchors on one known type per assembly rather than scanning
-/// the AppDomain, so it names exactly what it covers; an assembly left off it goes silently uncataloged.</remarks>
-internal static class RefusalCatalog {
+/// Puck.World.Addons, and <c>sdf.decode</c> in Puck.World.Client. One registry covers them because there is one
+/// <see cref="RefusalAttribute"/>, declared in Puck.State, the lowest assembly every one of those projects already
+/// references. The list below anchors on one known type per declaring assembly rather than scanning the AppDomain, so
+/// it names exactly what it covers. <c>RefusalCatalogAnchorLawTests</c> holds it to the projects whose sources tag a
+/// refusal, so an assembly left off it, or one anchored that declares none, fails a law rather than going silently
+/// uncataloged.</remarks>
+public static class RefusalCatalog {
     private static readonly Assembly[] Assemblies = [
-        typeof(RefusalCatalog).Assembly,
         typeof(CellValue).Assembly,
         typeof(State.Rules.TransformRefusal).Assembly,
         typeof(WorldDefinition).Assembly,
@@ -29,6 +30,9 @@ internal static class RefusalCatalog {
     ];
 
     private static IReadOnlyList<RefusalCatalogEntry>? Entries;
+
+    /// <summary>Gets the assemblies the catalog scans, one anchored per door-owning project.</summary>
+    public static IReadOnlyList<Assembly> AnchoredAssemblies => Assemblies;
 
     private static IReadOnlyList<RefusalCatalogEntry> Discover() {
         var entries = new List<RefusalCatalogEntry>();
@@ -53,7 +57,8 @@ internal static class RefusalCatalog {
                         Door: refusal.Door,
                         Id: field.Name,
                         Kind: refusal.Kind,
-                        Condition: refusal.Condition
+                        Condition: refusal.Condition,
+                        Unsupported: refusal.Unsupported
                     ));
                 }
             }

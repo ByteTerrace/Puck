@@ -141,7 +141,7 @@ public sealed class ScheduledStepVocabularyLawTests {
                 "quit",
                 string.Empty
             ),
-            world: "refused-command.world.json"
+            world: "refused-command.puck"
         );
 
         var opened = run.Stdout.IndexOf(
@@ -198,8 +198,10 @@ public sealed class ScheduledStepVocabularyLawTests {
     // The registry refuses an operator verb for every principal but the console before its handler runs
     // (Puck.Commands' CommandAudienceLawTests), so what a host must get right is which verbs carry the audience. The
     // evaluation diagnostics print values the rules computed, some of them from state a seat is not shown; every one
-    // of them, in whichever module the host composes it, answers the operator alone, and in the headless host this
-    // class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
+    // of them, in whichever module the host composes it, answers the operator alone. world.history is bindable instead:
+    // its handler answers the operator alone for every form that prints state or administers the history, and runs its
+    // seat forms for a seat that holds control over history (HistoryScrubLawTests in Puck.World.Tests). In the
+    // headless host this class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
     // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb.
     [Fact]
     public void TheHeadlessHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {

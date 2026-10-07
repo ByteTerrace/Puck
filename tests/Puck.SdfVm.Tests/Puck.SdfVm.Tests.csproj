@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -9,19 +10,13 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" />
-        <Compile Include="..\Shared\SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
-        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
-        <Compile Include="..\Shared\RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
-        <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
-        <Compile Include="..\Shared\SpirvEdits.cs" Link="SpirvEdits.cs" />
-        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="..\Shared\SdfTestView.cs" Link="SdfTestView.cs" />
-        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+        <ProjectReference Include="../../src/Puck.SdfVm/Puck.SdfVm.csproj" />
+        <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
+        <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
+        <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
+        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
 </Project>

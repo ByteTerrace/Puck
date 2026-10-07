@@ -1,0 +1,293 @@
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
+using Puck.Testing;
+
+namespace Puck.Shaders.Tests;
+
+/// <summary>
+/// The runtime reports whether the root's image shows the frame it was asked to compose
+/// (<see cref="RenderGraphRuntime.Render"/>), which the offscreen host steps on. A cold build is not yet renderable
+/// until the root renders, and a producer that keeps its older output while it rebuilds leaves the root not yet renderable
+/// though the root renders over that output: a host that took the surface alone would show an older frame's image for a
+/// newer one.
+/// </summary>
+public sealed partial class RenderGraphRuntimeLawTests {
+    // A camera and the root reading it within the frame, as a world's root reads its view.
+    private static (RenderGraphRuntime Runtime, Frames Frames) CompletionScene(FakePipelineGpu gpu) {
+        var runtime = Runtime(
+            gpu,
+            new Recorders(Camera),
+            Set(
+                Instance(name: "camera"),
+                Instance(
+                    name: "main",
+                    reads: new RenderGraphRead(Producer: "camera")
+                )
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(ScreensGraph(false, "screen"), ("screen", "camera"))
+        );
+
+        return (runtime, new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+            runtime: runtime
+        ));
+    }
+
+    [Fact]
+    public void AColdBuildIsNotYetRenderableUntilTheRootRendersTheFrame() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames) = CompletionScene(gpu: gpu);
+
+        using (runtime) {
+            // Declared inside the runtime's scope, the opener releases a build held in the driver before the runtime's
+            // disposal waits for it.
+            using var opener = new PipelineGateOpener();
+
+            gpu.PipelineGate = opener.Gate;
+
+            for (var frame = 0; (frame < 4); frame++) {
+                var surface = frames.Next();
+
+                Assert.True(condition: surface.IsEmpty);
+                Assert.Equal(
+                    actual: runtime.Render.Completion,
+                    expected: FrameCompletion.NotYetRenderable
+                );
+                Assert.Contains(
+                    expectedSubstring: "has no installed graph yet: its pipelines are building",
+                    actualString: runtime.Render.Reason
+                );
+            }
+
+            gpu.PipelineGate = null;
+            opener.Gate.Set();
+
+            var rendered = default(Surface);
+
+            TestLiveness.Until(
+                reason: () => (runtime.Render.Reason ?? "rendered"),
+                step: () => {
+                    rendered = frames.Next();
+
+                    return (runtime.Render.Completion == FrameCompletion.Rendered);
+                }
+            );
+            Assert.False(condition: rendered.IsEmpty);
+            Assert.Null(@object: runtime.Render.Reason);
+        }
+    }
+    /// <summary>A paused instance presents its last image on purpose (a pipeline paused, or held at time scale zero, by
+    /// an editor), so the root that reads it within the frame renders the frame over that image: the offscreen host steps
+    /// on rather than holding the tick for a render the paused instance will never make. A step renders it again, and
+    /// the root stays rendered throughout. The red leg is a root held not yet renderable for as long as its input is
+    /// paused, since it read an earlier frame's image.</summary>
+    [Fact]
+    public void ARootReadingAPausedInstanceRendersOverItsStandingImage() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames) = CompletionScene(gpu: gpu);
+
+        using (runtime) {
+            frames.Settle();
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+
+            var camera = runtime.Node(instance: 0);
+            var submitted = camera.FrameCounter;
+
+            camera.Paused = true;
+
+            for (var frame = 0; (frame < 4); frame++) {
+                Assert.False(condition: frames.Next().IsEmpty);
+                Assert.Equal(expected: submitted, actual: camera.FrameCounter);
+                Assert.Equal(expected: (FrameCompletion.Rendered, ((string?)null)), actual: (runtime.Render.Completion, runtime.Render.Reason));
+            }
+
+            camera.Step();
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 1), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 1), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+
+            camera.Paused = false;
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 2), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+        }
+    }
+    [Fact]
+    public void ARebuildNeverYieldsAnOlderImageForANewerFrame() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+
+            frames.Settle();
+            _ = frames.Next();
+            Assert.Equal(
+                actual: runtime.Render.Completion,
+                expected: FrameCompletion.Rendered
+            );
+
+            // The world rebuilds and produces nothing: the root renders over the world's older output.
+            world.Holding = true;
+
+            var produced = world.Produced;
+
+            for (var frame = 0; (frame < 3); frame++) {
+                var surface = frames.Next();
+
+                // The red leg: the root rendered and hands out an image, one showing the world of an earlier frame.
+                Assert.False(condition: surface.IsEmpty);
+                Assert.Equal(
+                    actual: world.Produced,
+                    expected: produced
+                );
+                Assert.Equal(
+                    actual: runtime.Render.Completion,
+                    expected: FrameCompletion.NotYetRenderable
+                );
+                Assert.Equal(
+                    actual: runtime.Render.Reason,
+                    expected: "the instance 'world' produced no output: the fake world is holding"
+                );
+            }
+
+            world.Holding = false;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (runtime.Render.Completion, world.Produced),
+                expected: (FrameCompletion.Rendered, (produced + 1))
+            );
+        }
+    }
+
+    // A package whose build never finishes, as an SDF view's does while its residency's tables are refused, and which
+    // states a refusal for its instances when told to.
+    private sealed class RefusingPackage : IRenderGraphPackageFactory {
+        public RefusingPackage(string package = Camera) => Registry.Register(
+            factory: this,
+            package: package
+        );
+
+        public string? Refusal { get; set; }
+        public string? RefusedInstance { get; init; }
+        public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
+
+        public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                delay: Timeout.InfiniteTimeSpan
+            );
+
+            return null;
+        }
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
+            throw new InvalidOperationException(message: "The refusing package never builds.");
+        public string? RefusalOf(string instance) => (((RefusedInstance is null) || (RefusedInstance == instance)) ? Refusal : null);
+    }
+
+    /// <summary>A package that refuses its instance (an SDF residency whose tables' build was refused) makes the frame
+    /// <see cref="FrameCompletion.Refused"/>, naming the refusal, so the offscreen host steps on. The red leg: the same
+    /// package stating no refusal leaves the frame not yet renderable, a wait the host would hold forever.</summary>
+    [Fact]
+    public void APackageRefusalIsARefusedFrameNeverAWait() {
+        var gpu = new FakePipelineGpu();
+        var package = new RefusingPackage();
+
+        Assert.True(condition: RenderGraphRuntime.TryCreate(
+            deviceContext: gpu,
+            graphs: [Graph(pipeline: CameraGraph()), Graph(ScreensGraph(false, "screen"), ("screen", "camera"))],
+            hostsOnDirectX: false,
+            packages: package.Registry,
+            pipelines: new GpuPassPipelineCache(),
+            refusal: out var created,
+            root: "main",
+            runtime: out var refusing,
+            set: Set(
+                Instance(name: "camera"),
+                Instance(
+                    name: "main",
+                    reads: new RenderGraphRead(Producer: "camera")
+                )
+            )
+        ), userMessage: created?.Message);
+
+        using (refusing) {
+            var frames = new Frames(
+                footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+                roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+                runtime: refusing
+            );
+
+            // The root installs, and renders over a stand-in for the camera, whose build never finishes: a wait.
+            const string Waiting = "the instance 'camera' has no installed graph yet: its pipelines are building";
+
+            TestLiveness.Until(
+                reason: () => (refusing.Render.Reason ?? "rendered"),
+                step: () => {
+                    _ = frames.Next();
+
+                    return (refusing.Render.Reason == Waiting);
+                }
+            );
+            frames.Next(count: 3);
+            Assert.Equal(
+                actual: (refusing.Render.Completion, refusing.Render.Reason),
+                expected: (FrameCompletion.NotYetRenderable, Waiting)
+            );
+
+            package.Refusal = "the engine's build was refused and is retried when its inputs change: [GPU_CREATION_FAULT] the law refused it";
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (refusing.Render.Completion, refusing.Render.Reason),
+                expected: (FrameCompletion.Refused, $"the instance 'camera' cannot render: {package.Refusal}")
+            );
+        }
+    }
+    /// <summary>A producer answers three ways, and the frame follows it: one still making its image (holding) leaves the
+    /// frame not yet renderable, which an offscreen host waits out, and one that ended (an imported feed whose window is
+    /// gone) refuses it by its own reason, so the host steps on. The red leg: the same ended producer read as a wait
+    /// would hold the tick forever, as a bool answer had to.</summary>
+    [Fact]
+    public void AnEndedProducerRefusesTheFrameAndAWaitingOneHoldsIt() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+
+            frames.Settle();
+            world.Holding = true;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Waiting(reason: "the instance 'world' produced no output: the fake world is holding")
+            );
+
+            world.Ended = "the fake world's feed ended";
+            frames.Next(count: 2);
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Refused(reason: "the instance 'world' produced no output: the fake world's feed ended")
+            );
+
+            world.Ended = null;
+            world.Holding = false;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Rendered
+            );
+        }
+    }
+}
+

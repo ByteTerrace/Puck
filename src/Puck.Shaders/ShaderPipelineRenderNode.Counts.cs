@@ -1,12 +1,15 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 /// <summary>What a node resolves its counted buffers against (<see cref="ShaderPipelineResource.Count"/>): the counts of
 /// every basis at a frame extent, and a revision that moves whenever a count that is not the extent's own changes, such
-/// as a program growing its instances. A package states it for the instances running it
+/// as a program growing its instances, or retained package storage must be replaced even at the same size.
+/// A package states it for the instances running it
 /// (<see cref="IRenderGraphPackageFactory.CounterOf"/>).</summary>
 public interface IShaderPipelineStorageCounter {
-    /// <summary>Gets the revision of the counts, which moves whenever <see cref="CountsAt"/> would return another value
-    /// at an unchanged extent.</summary>
+    /// <summary>Gets the storage revision, which moves whenever <see cref="CountsAt"/> would return another value
+    /// at an unchanged extent or the installed recorders must bind replacement package storage.</summary>
     long Revision { get; }
 
     /// <summary>Returns the counts at a frame extent.</summary>
@@ -52,7 +55,17 @@ public sealed partial class ShaderPipelineRenderNode {
     private ShaderPipelineStorageCounts CountsAt(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
         var render = (RenderExtentOf(plan: plan)?.CeilingAt(height: extent.Height, width: extent.Width) ?? extent);
 
-        ValidateRenderExtent(ceiling: extent, render: render);
+        // Buffer exports have no output pixel grid: their requested extent is only a scheduler placeholder.
+        // Any exported image retains the output bound; an all-buffer package owns its positive allocation ceiling.
+        var imageOutput = false;
+
+        foreach (var output in plan.Outputs) {
+            if (plan.FindResource(name: output)!.Declaration.Kind != ShaderPipelineResourceKind.Buffer) {
+                imageOutput = true;
+                break;
+            }
+        }
+        ValidateRenderExtent(ceiling: (imageOutput ? extent : render), render: render);
         var counts = (CounterOf(plan: plan)?.CountsAt(height: render.Height, width: render.Width) ?? new ShaderPipelineStorageCounts(Height: extent.Height, Width: extent.Width));
 
         return counts with {
@@ -64,7 +77,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // A changed counter can mean larger scratch or a replaced residency. Its old recorders cannot render current data.
-    private bool CountsChanged => (
+    internal bool CountsChanged => (
         ((m_installedCounter is { } counter) && (counter.Revision != m_installedCountRevision)) ||
         ((m_installedRenderExtent is { } extent) && (extent.Revision != m_installedRenderRevision))
     );

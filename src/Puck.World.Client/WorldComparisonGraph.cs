@@ -76,7 +76,7 @@ public static class WorldComparisonGraph {
         composed.Add(item: new RenderGraphRuntimeGraph(
             Pipeline: new CompiledShaderPipeline(plan: plan.Pipeline, shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)),
             Inputs: inputs));
-        if (!RenderGraphInstanceSet.TryCreate(instances: instances, refusal: out var refusal, set: out var wrapped)) {
+        if (!RenderGraphInstanceSet.TryCreate(instances: instances, nestingDepth: set.NestingDepth, refusal: out var refusal, set: out var wrapped)) {
             throw new WorldRootGraphRefusedException(message: $"comparison graph: {refusal.Message}");
         }
         set = wrapped;

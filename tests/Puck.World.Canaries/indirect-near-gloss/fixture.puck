@@ -1,0 +1,34 @@
+schema: "puck.world.definition.v1"
+basis: "../indirect-near/gloss-fog"
+documentId: "indirect-near-gloss"
+render {
+  indirect {
+    tier: high
+    bounces: 0
+    sources {
+      lights: 1
+      emission: 0
+      screens: 0
+      sky: 0
+      feedback: 0
+    }
+  }
+}
+placements {
+  placement "near-study" {
+    prototype: "near-study"
+    position [0, 0, 0]
+  }
+}
+hud {
+  defaults {
+    enabled: true
+    cursor {
+      hoverRadius: 100
+      sizePx: 3
+      role: Accent
+      visible: null
+    }
+  }
+  panels []
+}

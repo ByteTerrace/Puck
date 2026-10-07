@@ -57,7 +57,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
             in createInfo,
             0,
             out var bufferHandle
-        ).ThrowIfFailed(operation: "vkCreateBuffer");
+        ).ThrowIfFailed(device: commands, operation: "vkCreateBuffer");
 
         if (0 == bufferHandle) {
             throw new InvalidOperationException(message: $"vkCreateBuffer returned success without a valid handle for a buffer of usage 0x{usage:X8}.");
@@ -93,7 +93,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                 in allocateInfo,
                 0,
                 out memoryHandle
-            ).ThrowIfFailed(operation: "vkAllocateMemory");
+            ).ThrowIfFailed(device: commands, operation: "vkAllocateMemory");
             commands.CountAllocated(
                 allocationSize: allocateInfo.AllocationSize,
                 memoryHandle: memoryHandle,
@@ -104,7 +104,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                 bufferHandle,
                 memoryHandle,
                 0
-            ).ThrowIfFailed(operation: "vkBindBufferMemory");
+            ).ThrowIfFailed(device: commands, operation: "vkBindBufferMemory");
             return new VulkanBufferHandles(
                 Buffer: bufferHandle,
                 Device: commands,
@@ -136,7 +136,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
             checked((nuint)sizeBytes),
             0,
             out var mappedMemory
-        ).ThrowIfFailed(operation: "vkMapMemory");
+        ).ThrowIfFailed(device: handles.Device, operation: "vkMapMemory");
 
         return mappedMemory;
     }

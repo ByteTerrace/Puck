@@ -22,6 +22,8 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
 
     /// <summary>The encoded snapshot's contract.</summary>
     public string Schema { get; init; } = CurrentSchema;
+    /// <summary>The shape fingerprint of the snapshot's layout, which a reader requires before any field is used.</summary>
+    public string Shape { get; init; } = FormatShapes.WorldAuthorityReceiptSnapshotCurrentSchema;
 
     /// <summary>Reads a bounded canonical receipt snapshot and validates its complete graph.</summary>
     /// <param name="bytes">The exact encoded snapshot.</param>
@@ -63,6 +65,7 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
     /// <exception cref="InvalidDataException">The snapshot is incomplete, corrupt, inconsistent or oversized.</exception>
     public IReadOnlyDictionary<Guid, WorldAuthorityOperationReceipt> Validate() {
         if (Schema != CurrentSchema) { throw new InvalidDataException(message: $"unsupported receipt snapshot schema '{Schema}'"); }
+        if (Shape != FormatShapes.WorldAuthorityReceiptSnapshotCurrentSchema) { throw new InvalidDataException(message: $"receipt snapshot shape fingerprint '{Shape}' is not '{FormatShapes.WorldAuthorityReceiptSnapshotCurrentSchema}'"); }
         if (
             (Owner == Guid.Empty) ||
             string.IsNullOrWhiteSpace(value: World) ||

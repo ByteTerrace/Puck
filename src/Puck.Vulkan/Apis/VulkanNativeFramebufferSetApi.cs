@@ -146,7 +146,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             0
         );
 
-        result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
+        result.ThrowIfFailed(device: device, operation: "vkGetSwapchainImagesKHR");
 
         if (0 == imageCount) {
             return [];
@@ -161,7 +161,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
                 ref imageCount,
                 imageBuffer
             );
-            result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
+            result.ThrowIfFailed(device: device, operation: "vkGetSwapchainImagesKHR");
 
             var imageHandles = new nint[imageCount];
 

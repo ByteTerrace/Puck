@@ -3,7 +3,6 @@ using System.Net;
 using System.Numerics;
 using System.Text;
 
-using Puck.Attestation;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Testing;
@@ -12,6 +11,7 @@ using Puck.World.Server;
 
 using Xunit;
 using Puck.Physics.Motion;
+using static Puck.World.Tests.FederationSigning;
 
 namespace Puck.World.Tests;
 
@@ -63,15 +63,6 @@ public sealed partial class FederationTransferLawTests {
                     Mobility: Mobility(index: 0)
                 )]
         );
-    /// <summary>The SignsDirectly admission row a peer must author to trust <paramref name="oracle"/>'s own key.</summary>
-    private static WorldAdmissionEntry TrustEntryFor(LocalKeySigningOracle oracle) => new(
-        Domain: oracle.Domain,
-        Subject: oracle.Subject,
-        Mode: WorldAdmissionTrustMode.SignsDirectly,
-        Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-        PublicKey: Convert.ToBase64String(inArray: oracle.PublicKeySubjectPublicKeyInfo),
-        Grants: []
-    );
 
     [Fact]
     public void AutonomousTransfer_RefusesAnUnsupportedProducerBeforeCommit() {
@@ -141,12 +132,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
@@ -239,12 +230,12 @@ public sealed partial class FederationTransferLawTests {
         );
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: later.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 
@@ -284,12 +275,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: reservation.Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var firstReason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: firstReason
         );
         Assert.Equal(
@@ -300,23 +291,23 @@ public sealed partial class FederationTransferLawTests {
             )
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var replayReason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replayReason
         );
 
         var altered = member with { HasMappedArrival = true };
 
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [altered],
             reason: out var alteredReason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -337,11 +328,11 @@ public sealed partial class FederationTransferLawTests {
     [Fact]
     public void CommitWire_PreservesTheSelectedMotionProgramAndTheCommitTimeProfile() {
         using var fixture = Fixtures.FreshServer();
-        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to the
-        // destination, so a codec that drops it gives federated and colocated crossings different semantics.
+        // The commit-time projection is the discriminating field: a colocated crossing lands the same projection, so a
+        // codec that drops or alters it gives federated and colocated crossings different semantics.
         var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
-            Profile: profile,
+            Profile: profile.Project(),
             HasMappedArrival: true,
             BodyMotionProgramName: "free",
             Position: new FixedVector3(
@@ -392,11 +383,10 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                sourceAuthority: out var sourceAuthority,
-                transferId: out var transferId,
+                failure: out var failure,
                 members: out var members,
-                failure: out var failure
+                sourceAuthority: out var sourceAuthority,
+                transferId: out var transferId
             ),
             userMessage: failure.ToString()
         );
@@ -422,6 +412,10 @@ public sealed partial class FederationTransferLawTests {
             expected: profile.Name,
             actual: member.Profile?.Name
         );
+        Assert.True(condition: WorldIdentityProjectionWire.Matches(
+            left: expected.Profile,
+            right: member.Profile
+        ));
         Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
         Assert.Equal(
             expected: FixedQ4816.One,
@@ -458,7 +452,6 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: defaults,
                 failure: out var control,
                 members: out _,
                 sourceAuthority: out _,
@@ -469,7 +462,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: [.. encoded, 0],
-            defaults: defaults,
             failure: out var trailing,
             members: out _,
             sourceAuthority: out _,
@@ -488,7 +480,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: writer.ToArray(),
-            defaults: defaults,
             sourceAuthority: out _,
             transferId: out _,
             members: out _,
@@ -530,12 +521,12 @@ public sealed partial class FederationTransferLawTests {
             condition: reservation.Accepted,
             userMessage: reservation.Reason
         );
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [member],
             reason: out var reason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -594,12 +585,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [member],
                 out var first
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: first
         );
         var equal = member with {
@@ -610,16 +601,16 @@ public sealed partial class FederationTransferLawTests {
         };
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [equal],
                 out var replay
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
-        var alternatives = new WorldTransferActionContinuity?[] {
-            null, continuity with { Channels = [] }, continuity with { Registers = [] },
+        var alternatives = new WorldTransferActionContinuity[] {
+            WorldTransferActionContinuity.Empty, continuity with { Channels = [] }, continuity with { Registers = [] },
             continuity with { Channels = channels.Reverse().ToArray() }, continuity with { Registers = registers.Reverse().ToArray() },
             continuity with { Channels = [channels[0] with { Name = "other" }, channels[1]] },
             continuity with { Channels = [channels[0] with { PreviousBit = false }, channels[1]] },
@@ -631,12 +622,12 @@ public sealed partial class FederationTransferLawTests {
         };
 
         foreach (var alternative in alternatives) {
-            Assert.False(condition: fixture.Server.CommitTransfer(
+            Assert.True(condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [member with { ActionContinuity = alternative }],
                 out var reason
-            ));
+            ) == WorldTransferStatus.Missing));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -644,19 +635,19 @@ public sealed partial class FederationTransferLawTests {
         }
         // Mutating the same collections originally submitted must not mutate the retained receipt.
         channels[0] = channels[0] with { PreviousBit = false }; registers[1] = registers[1] with { TimerTicks = 1 };
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             request.SourceAuthority,
             request.TransferId,
             [member],
             out _
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [equal],
                 out replay
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
     }
@@ -695,12 +686,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: escrow.Reserve(request: request).Accepted);
         Assert.True(
-            condition: escrow.Commit(
+            condition: (escrow.Commit(
                 request.SourceAuthority,
                 request.TransferId,
                 [member],
                 out var first
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: first
         );
         var checkpoint = escrow.Capture();
@@ -727,20 +718,20 @@ public sealed partial class FederationTransferLawTests {
         );
         foreach (var target in new[] { escrow, restored }) {
             Assert.True(
-                condition: target.Commit(
+                condition: (target.Commit(
                     request.SourceAuthority,
                     request.TransferId,
                     [member],
                     out var reason
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
-            Assert.False(condition: target.Commit(
+            Assert.True(condition: (target.Commit(
                 request.SourceAuthority,
                 request.TransferId,
                 [member with { ActionContinuity = carried }],
                 out reason
-            ));
+            ) == WorldTransferStatus.Missing));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -782,12 +773,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(
@@ -877,12 +868,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 
@@ -898,7 +889,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -913,6 +904,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1033,12 +1025,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(
@@ -1097,7 +1089,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1112,6 +1104,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1173,7 +1166,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1188,6 +1181,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: testToken,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
         var challenge = await RequireFrameAsync(
@@ -1278,7 +1272,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         byte[] capturedProof;
@@ -1294,6 +1288,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1328,6 +1323,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1357,6 +1353,56 @@ public sealed partial class FederationTransferLawTests {
             );
         }
     }
+    // A federation hello carries the shape of the federation wire contract after its key; the same key under another shape
+    // is refused by name before any challenge is issued.
+    [Fact]
+    public async Task FederationDoor_RefusesAHelloOfThisKeyUnderAnotherShape_BeforeAnyChallenge() {
+        using var fixture = Fixtures.FreshServer();
+        using var oracle = LocalOracle(subject: "machine-a/boot");
+        var security = Authenticator(
+            trustEntries: () => [TrustEntryFor(oracle: oracle)],
+            oracle: oracle
+        );
+        using var host = new WorldPeerHost(
+            server: fixture.Server,
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
+
+        PeerTestClient.StartOrSkip(host: host);
+        var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
+        var testToken = TestContext.Current.CancellationToken;
+        using var client = new PeerTestClient();
+
+        await client.ConnectAsync(
+            address: endpoint.Address,
+            port: endpoint.Port,
+            cancellationToken: testToken
+        );
+        var stream = client.GetStream();
+
+        await HandshakeWireFormat.WriteHelloAsync(
+            ct: testToken,
+            key: WorldFederationCodec.WireKey,
+            shape: "0000000000000000",
+            stream: stream
+        );
+        var refusal = await RequireFrameAsync(
+            ct: testToken,
+            stream: stream
+        );
+
+        Assert.Equal(
+            expected: ((byte)WorldFederationResponse.Refusal),
+            actual: refusal.Kind
+        );
+        Assert.StartsWith(
+            expectedStartString: nameof(WorldFederationRefusal.WireShapeMismatch),
+            actualString: Encoding.UTF8.GetString(bytes: refusal.Body.Span),
+            comparisonType: StringComparison.Ordinal
+        );
+    }
     [Fact]
     public async Task FederationDoor_RejectsBadProof_AndAuthorityRebinding() {
         using var fixture = Fixtures.FreshServer();
@@ -1372,7 +1418,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
 
@@ -1387,6 +1433,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1432,6 +1479,7 @@ public sealed partial class FederationTransferLawTests {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: testToken,
                 key: WorldFederationCodec.WireKey,
+                shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
@@ -1548,12 +1596,12 @@ public sealed partial class FederationTransferLawTests {
 
             Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
             Assert.True(
-                condition: fixture.Server.CommitTransfer(
+                condition: (fixture.Server.CommitTransfer(
                     members: [commit],
                     reason: out var reason,
                     sourceAuthority: SourceAuthority,
                     transferId: crossing
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
             Assert.Equal(
@@ -1622,12 +1670,12 @@ public sealed partial class FederationTransferLawTests {
             condition: reservation.Accepted,
             userMessage: reservation.Reason
         );
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [member],
             reason: out var reason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -1674,12 +1722,12 @@ public sealed partial class FederationTransferLawTests {
             );
 
             Assert.True(
-                condition: fixture.Server.CommitTransfer(
+                condition: (fixture.Server.CommitTransfer(
                     members: [commit],
                     reason: out var reason,
                     sourceAuthority: SourceAuthority,
                     transferId: crossing
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
 
@@ -1800,12 +1848,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: fixture.Server.ReserveTransfer(request: first).Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: first.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         fixture.Server.AcknowledgeTransfer(
@@ -1854,7 +1902,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var verifyOnly = Authenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
 
         Assert.True(condition: verifyOnly.IsConfigured);
@@ -2053,9 +2101,8 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeReservation(
                 body: bytes,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                request: out var decoded,
-                failure: out var failure
+                failure: out var failure,
+                request: out var decoded
             ),
             userMessage: failure.ToString()
         );
@@ -2089,7 +2136,6 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteString(value: "seam");
         writer.WriteBoolean(value: false);
         writer.WriteBoolean(value: true);
-        writer.WriteBoolean(value: true);
         writer.WriteInt32(value: 1);
         writer.WriteInt32(value: 0);
         writer.WriteString(value: "origin/world");
@@ -2109,7 +2155,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeReservation(
             body: writer.ToArray(),
-            defaults: fixture.Server.Definition.PlayerDefaults,
             request: out var request,
             failure: out var failure
         ));
@@ -2118,99 +2163,6 @@ public sealed partial class FederationTransferLawTests {
             expectedSubstring: "identity id",
             actualString: failure.Detail,
             comparisonType: StringComparison.Ordinal
-        );
-    }
-    [Fact]
-    public void RouteWire_PreservesOneCompleteAuthorityEpoch() {
-        var expected = new WorldAuthorityRouteDescription(
-            Endpoint: "127.0.0.1:42001",
-            Entity: new WorldEntityAddress(
-                Authority: "world/corner-sw",
-                Generation: 23,
-                Index: 17
-            ),
-            Tick: 987654321UL,
-            Position: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: -12.25),
-                Y: FixedQ4816.FromDouble(value: 3.5),
-                Z: FixedQ4816.FromDouble(value: 0.125)
-            ),
-            Orientation: FixedQuaternion.FromAxisAngle(
-                axis: new FixedVector3(
-                    X: FixedQ4816.Zero,
-                    Y: FixedQ4816.One,
-                    Z: FixedQ4816.Zero
-                ),
-                angle: FixedQ4816.FromDouble(value: 1.75)
-            ),
-            BodyColor: new Vector3(x: 0.25f, y: 0.5f, z: 0.75f),
-            Kit: 0,
-            Look: 0,
-            CatalogRig: 71,
-            PlacementId: "traveler-shell",
-            Definition: Fixtures.BuildDocument(),
-            Version: new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 42L)
-        );
-
-        var encoded = WorldFederationCodec.EncodeRoute(
-            authority: "world/corner-sw",
-            revision: 0,
-            route: in expected,
-            tier: WorldDisclosureTier.Replica
-        );
-
-        Assert.True(
-            condition: WorldFederationCodec.TryDecodeRoute(
-                body: encoded,
-                failure: out var failure,
-                route: out var actual
-            ),
-            userMessage: failure.ToString()
-        );
-        Assert.Equal(
-            expected: expected.Endpoint,
-            actual: actual.Endpoint
-        );
-        Assert.Equal(
-            expected: expected.Entity,
-            actual: actual.Entity
-        );
-        Assert.Equal(
-            expected: expected.Tick,
-            actual: actual.Tick
-        );
-        Assert.Equal(actual: actual.Version, expected: expected.Version);
-        Assert.Equal(
-            expected: expected.Position,
-            actual: actual.Position
-        );
-        Assert.Equal(
-            expected: expected.Orientation,
-            actual: actual.Orientation
-        );
-        Assert.Equal(
-            expected: expected.BodyColor,
-            actual: actual.BodyColor
-        );
-        Assert.Equal(
-            expected: expected.Kit,
-            actual: actual.Kit
-        );
-        Assert.Equal(
-            expected: expected.Look,
-            actual: actual.Look
-        );
-        Assert.Equal(
-            expected: expected.CatalogRig,
-            actual: actual.CatalogRig
-        );
-        Assert.Equal(
-            expected: expected.PlacementId,
-            actual: actual.PlacementId
-        );
-        Assert.Equal(
-            expected: expected.Definition.DocumentId,
-            actual: actual.Definition.DocumentId
         );
     }
     [Fact]

@@ -1,0 +1,932 @@
+{
+  "id": "dynamic-resolution",
+  "title": "A pinned dynamic-resolution sweep moves the world view through its tiers inside one allocation, each frame matching that tier allocated on its own",
+  "binding": "The positive leg boots the still counters blocks at a 256x144 output with render.dynamicResolution on at the native tier, so the world view is allocated at the three-quarter ceiling (224x126). The script pins the grid to three-quarter, half and quarter with world.render-scale and captures each, then turns dynamic resolution off and captures the same view with world.render-scale set to each tier, which allocates the view at that tier. Each grid capture differs from its tier's capture by a mean of at most 0.5 codes over the blocks, and the quarter grid differs from the three-quarter tier by more, so the claims separate the extents. Between a read after the first capture and a read after the sweep, the world node's graph revision and its created images, buffers and descriptor sets, the tables' created images and buffers, and the created pipelines and shader modules are all unchanged, while the sky pass writes one texel per grid pixel: 28224 (224x126) before and 11664 (144x81) after, and primary marches fewer steps. The discriminating leg runs the same timeline with dynamic resolution off through the sweep, so every grid capture is the native frame: the texel counts read 36864 twice and no grid capture matches its tier.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-counters-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "revision-before",
+            "field": "revision",
+            "line": "node world work"
+          },
+          {
+            "name": "images-before",
+            "field": "created.images",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "buffers-before",
+            "field": "created.buffers",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "sets-before",
+            "field": "created.descriptor-sets",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "tables-images-before",
+            "field": "created.images",
+            "line": "work lifetime"
+          },
+          {
+            "name": "tables-buffers-before",
+            "field": "created.buffers",
+            "line": "work lifetime"
+          },
+          {
+            "name": "pipelines-before",
+            "field": "gpu.created.pipelines",
+            "line": "gpu.created.pipelines"
+          },
+          {
+            "name": "shader-modules-before",
+            "field": "gpu.created.shader-modules",
+            "line": "gpu.created.shader-modules"
+          },
+          {
+            "name": "sky-texels-before",
+            "field": "texels.written",
+            "line": "work sdf.world$sky"
+          },
+          {
+            "name": "primary-steps-before",
+            "field": "march.steps",
+            "line": "work sdf.world$primary"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "the-counters-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "revision-after",
+            "field": "revision",
+            "line": "node world work"
+          },
+          {
+            "name": "images-after",
+            "field": "created.images",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "buffers-after",
+            "field": "created.buffers",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "sets-after",
+            "field": "created.descriptor-sets",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "tables-images-after",
+            "field": "created.images",
+            "line": "work lifetime"
+          },
+          {
+            "name": "tables-buffers-after",
+            "field": "created.buffers",
+            "line": "work lifetime"
+          },
+          {
+            "name": "pipelines-after",
+            "field": "gpu.created.pipelines",
+            "line": "gpu.created.pipelines"
+          },
+          {
+            "name": "shader-modules-after",
+            "field": "gpu.created.shader-modules",
+            "line": "gpu.created.shader-modules"
+          },
+          {
+            "name": "sky-texels-after",
+            "field": "texels.written",
+            "line": "work sdf.world$sky"
+          },
+          {
+            "name": "primary-steps-after",
+            "field": "march.steps",
+            "line": "work sdf.world$primary"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "no-graph-rebuilds-across-the-sweep",
+        "operator": "equal",
+        "left": {
+          "value": "revision-after"
+        },
+        "right": {
+          "value": "revision-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-image",
+        "operator": "equal",
+        "left": {
+          "value": "images-after"
+        },
+        "right": {
+          "value": "images-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-buffer",
+        "operator": "equal",
+        "left": {
+          "value": "buffers-after"
+        },
+        "right": {
+          "value": "buffers-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-descriptor-set",
+        "operator": "equal",
+        "left": {
+          "value": "sets-after"
+        },
+        "right": {
+          "value": "sets-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-tables-create-no-image",
+        "operator": "equal",
+        "left": {
+          "value": "tables-images-after"
+        },
+        "right": {
+          "value": "tables-images-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-tables-create-no-buffer",
+        "operator": "equal",
+        "left": {
+          "value": "tables-buffers-after"
+        },
+        "right": {
+          "value": "tables-buffers-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "no-pipeline-is-created",
+        "operator": "equal",
+        "left": {
+          "value": "pipelines-after"
+        },
+        "right": {
+          "value": "pipelines-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "no-shader-module-is-created",
+        "operator": "equal",
+        "left": {
+          "value": "shader-modules-after"
+        },
+        "right": {
+          "value": "shader-modules-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-three-quarter-grid-fills-224x126",
+        "operator": "equal",
+        "left": {
+          "value": "sky-texels-before"
+        },
+        "right": {
+          "literal": 28224
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-quarter-grid-fills-144x81",
+        "operator": "equal",
+        "left": {
+          "value": "sky-texels-after"
+        },
+        "right": {
+          "literal": 11664
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-quarter-grid-marches-fewer-steps",
+        "operator": "greater",
+        "left": {
+          "value": "primary-steps-before"
+        },
+        "right": {
+          "value": "primary-steps-after"
+        }
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-three-quarter-grid-matches-its-tier",
+        "capture": "grid-three-quarter.png",
+        "reference": "reference-three-quarter.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-half-grid-matches-its-tier",
+        "capture": "grid-half.png",
+        "reference": "reference-half.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-quarter-grid-matches-its-tier",
+        "capture": "grid-quarter.png",
+        "reference": "reference-quarter.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-quarter-grid-is-not-the-three-quarter-tier",
+        "capture": "grid-quarter.png",
+        "reference": "reference-three-quarter.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/dynamic-resolution/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "the-counters-before",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "revision-before",
+            "field": "revision",
+            "line": "node world work"
+          },
+          {
+            "name": "images-before",
+            "field": "created.images",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "buffers-before",
+            "field": "created.buffers",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "sets-before",
+            "field": "created.descriptor-sets",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "tables-images-before",
+            "field": "created.images",
+            "line": "work lifetime"
+          },
+          {
+            "name": "tables-buffers-before",
+            "field": "created.buffers",
+            "line": "work lifetime"
+          },
+          {
+            "name": "pipelines-before",
+            "field": "gpu.created.pipelines",
+            "line": "gpu.created.pipelines"
+          },
+          {
+            "name": "shader-modules-before",
+            "field": "gpu.created.shader-modules",
+            "line": "gpu.created.shader-modules"
+          },
+          {
+            "name": "sky-texels-before",
+            "field": "texels.written",
+            "line": "work sdf.world$sky"
+          },
+          {
+            "name": "primary-steps-before",
+            "field": "march.steps",
+            "line": "work sdf.world$primary"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "the-counters-after",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "revision-after",
+            "field": "revision",
+            "line": "node world work"
+          },
+          {
+            "name": "images-after",
+            "field": "created.images",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "buffers-after",
+            "field": "created.buffers",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "sets-after",
+            "field": "created.descriptor-sets",
+            "line": "work lifetime",
+            "after": "node world work"
+          },
+          {
+            "name": "tables-images-after",
+            "field": "created.images",
+            "line": "work lifetime"
+          },
+          {
+            "name": "tables-buffers-after",
+            "field": "created.buffers",
+            "line": "work lifetime"
+          },
+          {
+            "name": "pipelines-after",
+            "field": "gpu.created.pipelines",
+            "line": "gpu.created.pipelines"
+          },
+          {
+            "name": "shader-modules-after",
+            "field": "gpu.created.shader-modules",
+            "line": "gpu.created.shader-modules"
+          },
+          {
+            "name": "sky-texels-after",
+            "field": "texels.written",
+            "line": "work sdf.world$sky"
+          },
+          {
+            "name": "primary-steps-after",
+            "field": "march.steps",
+            "line": "work sdf.world$primary"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "no-graph-rebuilds-across-the-sweep",
+        "operator": "equal",
+        "left": {
+          "value": "revision-after"
+        },
+        "right": {
+          "value": "revision-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-image",
+        "operator": "equal",
+        "left": {
+          "value": "images-after"
+        },
+        "right": {
+          "value": "images-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-buffer",
+        "operator": "equal",
+        "left": {
+          "value": "buffers-after"
+        },
+        "right": {
+          "value": "buffers-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-views-create-no-descriptor-set",
+        "operator": "equal",
+        "left": {
+          "value": "sets-after"
+        },
+        "right": {
+          "value": "sets-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-tables-create-no-image",
+        "operator": "equal",
+        "left": {
+          "value": "tables-images-after"
+        },
+        "right": {
+          "value": "tables-images-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-tables-create-no-buffer",
+        "operator": "equal",
+        "left": {
+          "value": "tables-buffers-after"
+        },
+        "right": {
+          "value": "tables-buffers-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "no-pipeline-is-created",
+        "operator": "equal",
+        "left": {
+          "value": "pipelines-after"
+        },
+        "right": {
+          "value": "pipelines-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "no-shader-module-is-created",
+        "operator": "equal",
+        "left": {
+          "value": "shader-modules-after"
+        },
+        "right": {
+          "value": "shader-modules-before"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-three-quarter-grid-fills-224x126",
+        "operator": "equal",
+        "left": {
+          "value": "sky-texels-before"
+        },
+        "right": {
+          "literal": 36864
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-quarter-grid-fills-144x81",
+        "operator": "equal",
+        "left": {
+          "value": "sky-texels-after"
+        },
+        "right": {
+          "literal": 36864
+        }
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-half-grid-matches-its-tier",
+        "capture": "grid-half.png",
+        "reference": "reference-half.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": false
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-quarter-grid-matches-its-tier",
+        "capture": "grid-quarter.png",
+        "reference": "reference-quarter.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 0.5,
+        "holds": false
+      }
+    ]
+  }
+}

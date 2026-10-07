@@ -4,8 +4,20 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfKernelSet.StemOf"/>), pipeline, build order and loaded bytecode (<see cref="SdfKernelSet"/>) derive
 /// from.</summary>
 public enum SdfKernel {
+    /// <summary>Conservative swept primary traversal for a residency light camera.</summary>
+    LightPrimary,
+    /// <summary>Publication of one light camera region into the retained depth bank.</summary>
+    LightDepth,
+    /// <summary>Residency probe placement and cell partitioning.</summary>
+    IndirectClassify,
+    /// <summary>Residency transport records and visibility proofs.</summary>
+    IndirectTrace,
+    /// <summary>Finite lighting of stored transport records into the other radiance and irradiance generation.</summary>
+    IndirectShade,
     /// <summary>The tile prepass, cone-marching each tile's field into its march planes and part bounds.</summary>
     Beam,
+    /// <summary>The certified per-tile live-segment mask.</summary>
+    Tape,
     /// <summary>The per-tile instance mask.</summary>
     InstanceCull,
     /// <summary>The reduction of the surviving tiles to the hit passes' indirect arguments and dispatch box.</summary>
@@ -16,7 +28,7 @@ public enum SdfKernel {
     Surface,
     /// <summary>Ambient occlusion, updating the record's S row.</summary>
     Ambient,
-    /// <summary>The key light's soft shadow, writing the record's K row.</summary>
+    /// <summary>The stable and incoming soft shadows, writing the record's K row.</summary>
     Shadow,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
@@ -24,10 +36,35 @@ public enum SdfKernel {
     ViewsCore,
     /// <summary>Shading with the heavy warp and noise family compiled out.</summary>
     ViewsFolds,
-    /// <summary>The sky pre-pass.</summary>
+    /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
     Sky,
+    /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
+    Composite,
+    /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's upload
+    /// when lighting-visible irradiance crosses one display code.</summary>
+    SkyEnvironment,
+    /// <summary>The environment map's reduction to its spherical-harmonic coefficients, dispatched after the map.</summary>
+    SkyEnvironmentReduce,
+    /// <summary>One acquired-image reduction per bound screen, shared by direct lighting and indirect face emission.</summary>
+    ScreenEmission,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
+    /// <summary>Shadows with one incoming handoff visibility channel.</summary>
+    ShadowFade1,
+    /// <summary>Shadows with two incoming handoff visibility channels.</summary>
+    ShadowFade2,
+    /// <summary>Full shading with one incoming handoff visibility channel.</summary>
+    ViewsFade1,
+    /// <summary>Core shading with one incoming handoff visibility channel.</summary>
+    ViewsCoreFade1,
+    /// <summary>Fold shading with one incoming handoff visibility channel.</summary>
+    ViewsFoldsFade1,
+    /// <summary>Full shading with two incoming handoff visibility channels.</summary>
+    ViewsFade2,
+    /// <summary>Core shading with two incoming handoff visibility channels.</summary>
+    ViewsCoreFade2,
+    /// <summary>Fold shading with two incoming handoff visibility channels.</summary>
+    ViewsFoldsFade2,
 }

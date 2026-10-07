@@ -1,7 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Commands;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -15,9 +18,10 @@ namespace Puck.World.Tests;
 /// pass block (<see cref="SdfFrameBlock"/>, SdfFrameBlockLawTests) and the ambient and shadow parts skip a frame whose
 /// lever turns them off (the world-counters canary's pass lines).
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldRenderLeverFrameLawTests : IDisposable {
     private const uint Display = 64;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-render-levers-");
 
@@ -29,12 +33,58 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
 
     public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
+    public void TheIndirectMethodStaysPresentationOnlyAndReachesEveryDressedView() {
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen, stateDirectory: m_stateDirectory, world: World
+        ).Build());
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var settings = host.Services.GetRequiredService<WorldRenderSettings>();
+        var registry = host.Services.GetRequiredService<CommandRegistry>();
+        var server = host.Services.GetRequiredService<WorldServer>();
+        var document = WorldDefinitionSerialization.Serialize(definition: server.Definition);
+        var revision = settings.Revision;
+
+        Assert.Equal(expected: SdfIndirectMethod.Cache, actual: settings.IndirectMethod);
+        Assert.Equal(expected: "[world.indirect-method: cache]", actual: registry.Submit(line: "world.indirect-method").Output);
+        Assert.Equal(expected: revision, actual: settings.Revision);
+        foreach (var method in Enum.GetValues<SdfIndirectMethod>()) {
+            var name = method.ToString().ToLowerInvariant();
+            var result = registry.Submit(line: ("world.indirect-method " + name));
+
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+            Assert.Equal(expected: method, actual: settings.IndirectMethod);
+            Assert.Equal(expected: $"[world.indirect-method: {name}]", actual: result.Output);
+            var frame = presenter.CaptureFrame(deltaSeconds: 0f, height: Display, interpolationAlpha: 1f, width: Display);
+
+            Assert.NotEmpty(collection: frame.Views);
+            Assert.All(collection: frame.Views, action: view => Assert.Equal(expected: method, actual: view.Quality.IndirectMethod));
+            var panel = presenter.DressResolution(view: new SdfViewSnapshot { Quality = WorldSessionSceneEmitter.ReducedQuality },
+                name: WorldViewGraphs.WorldInstance, width: Display, height: Display);
+
+            Assert.Equal(expected: method, actual: panel.Quality.IndirectMethod);
+            Assert.True(condition: panel.Quality.DisableAmbientOcclusion);
+            Assert.True(condition: panel.Quality.DisableSoftShadows);
+            Assert.Equal(expected: method, actual: panel.Quality.Restrict(other: default).IndirectMethod);
+        }
+        foreach (var line in new[] { "world.indirect-method wrong", "world.indirect-method cone cache" }) {
+            var held = settings.IndirectMethod;
+            var heldRevision = settings.Revision;
+
+            Assert.True(condition: registry.Submit(line: line).IsError);
+            Assert.Equal(expected: held, actual: settings.IndirectMethod);
+            Assert.Equal(expected: heldRevision, actual: settings.Revision);
+        }
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => settings.IndirectMethod = ((SdfIndirectMethod)42));
+        Assert.Equal(expected: document, actual: WorldDefinitionSerialization.Serialize(definition: server.Definition));
+        Assert.Equal(expected: SdfIndirectTier.Medium, actual: settings.IndirectTier);
+    }
+    [Fact]
     public void EveryLiveLeverSettingReachesTheDressedFrame() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var settings = host.Services.GetRequiredService<WorldRenderSettings>();
 
@@ -47,6 +97,11 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
 
         settings.AmbientOcclusion = true;
         settings.ShadowReach = 1f;
+        Assert.Equal(SdfIndirectTier.Medium, Dress().IndirectTier);
+        foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
+            settings.IndirectTier = tier;
+            Assert.Equal(tier, Dress().IndirectTier);
+        }
         settings.ShadowMask = ShadowMaskMode.Auto;
         settings.ShadowMarch = ShadowMarchMode.Auto;
         settings.AmbientOcclusionQuality = AmbientOcclusionMode.Auto;

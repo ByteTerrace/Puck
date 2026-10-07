@@ -6,10 +6,26 @@ namespace Puck.World;
 
 // The module owns the endpoint's lifetime. Text source resolution is deferred to avoid the source -> registry ->
 // modules -> source DI cycle; no worker starts until the human explicitly opts in through the console.
-internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldRenderProbe? probe) : ICommandModule, IDisposable {
+internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldCaptureScheduler captureScheduler, WorldRenderProbe? probe) : ICommandModule, IAsyncDisposable, IDisposable {
     private LocalControlServer? m_server;
+    private Task m_draining = Task.CompletedTask;
 
-    public void Dispose() { m_server?.Dispose(); m_server = null; }
+    // The stop verb only begins the stop, since it runs on the pump the endpoint's sessions wait for; the stopped
+    // endpoint's completion is kept for the host's disposal to await.
+    public void Dispose() {
+        if (m_server is { } server) {
+            server.Dispose();
+            m_draining = Task.WhenAll(
+                m_draining,
+                server.Completion
+            );
+            m_server = null;
+        }
+    }
+    public async ValueTask DisposeAsync() {
+        Dispose();
+        await m_draining.ConfigureAwait(continueOnCapturedContext: false);
+    }
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: "world.control",
@@ -32,7 +48,10 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
                             path => {
                                 var request = new FrameCaptureRequest(path: path);
 
-                                (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(request: request);
+                                captureScheduler.ArmUnscheduled(
+                                    request: request,
+                                    target: (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer."))
+                                );
 
                                 return request;
                             }

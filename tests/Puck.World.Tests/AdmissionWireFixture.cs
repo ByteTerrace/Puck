@@ -84,6 +84,7 @@ internal static class AdmissionWireFixture {
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
                 key: WorldProtocol.WireProtocolKey,
+                shape: WorldProtocol.WireShape,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -204,7 +205,7 @@ internal static class AdmissionWireFixture {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
 
         return host;
     }

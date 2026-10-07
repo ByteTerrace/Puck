@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// </summary>
 [Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class StagedRegionDeviceLawTests {
     private const uint Extent = 16;
     private const string Instance = "pattern";
@@ -166,23 +167,20 @@ public sealed class StagedRegionDeviceLawTests {
 
             // The conversion and the copy pipeline build on the thread pool, so frames run until the node has converted
             // several ticks, each owing the region's copy, and a capture of the instance would be served.
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        tick++;
-                        _ = runtime.ProduceFrame(
-                            context: default,
-                            frame: Frame(tick: tick)
-                        );
+            TestLiveness.Until(
+                reason: () => $"{backend}: the staged source never converted: {runtime.UnservedCaptureReasonOf(instance: Instance)}",
+                step: () => {
+                    tick++;
+                    _ = runtime.ProduceFrame(
+                        context: default,
+                        frame: Frame(tick: tick)
+                    );
 
-                        return (
-                            (runtime.Node(instance: 0).FrameCounter >= ConvertedFramesBeforeCapture) &&
-                            (runtime.UnservedCaptureReasonOf(instance: Instance) is null)
-                        );
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 60)
-                ),
-                userMessage: $"{backend}: the staged source never converted: {runtime.UnservedCaptureReasonOf(instance: Instance)}"
+                    return (
+                        (runtime.Node(instance: 0).FrameCounter >= ConvertedFramesBeforeCapture) &&
+                        (runtime.UnservedCaptureReasonOf(instance: Instance) is null)
+                    );
+                }
             );
 
             var node = runtime.Node(instance: 0);
@@ -263,7 +261,7 @@ public sealed class StagedRegionDeviceLawTests {
         public long LastTick { get; private set; }
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) {
+        public FrameRender Write(long tick, GpuRegion region) {
             WritePattern(
                 pixels: m_pixels,
                 tick: tick
@@ -274,7 +272,7 @@ public sealed class StagedRegionDeviceLawTests {
             );
             LastTick = tick;
 
-            return true;
+            return FrameRender.Rendered;
         }
     }
 }

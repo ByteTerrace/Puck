@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Testing;
 
 namespace Puck.HumbleGamingBrick.Tests;
 
@@ -44,6 +45,8 @@ public sealed class GateLaneTests {
 
     [Fact]
     public async Task CancellingTheWaitRetiresTheChildProcess() {
+        using var directory = new TemporaryDirectory(prefix: "puck-gb-post-cancellation-");
+
         // The actual battery is already built alongside this test assembly. Cancel its pending wait as soon as
         // it starts; this exercises process ownership without a platform-specific shell or another fixture exe.
         var startInfo = new ProcessStartInfo {
@@ -61,11 +64,7 @@ public sealed class GateLaneTests {
         startInfo.ArgumentList.Add(item: "--lane");
         startInfo.ArgumentList.Add(item: "gate");
         startInfo.ArgumentList.Add(item: "--artifacts");
-        startInfo.ArgumentList.Add(item: Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: "puck-gb-post-cancellation",
-            path3: Guid.NewGuid().ToString(format: "N")
-        ));
+        startInfo.ArgumentList.Add(item: directory.PathOf(name: "artifacts"));
         using var process = Process.Start(startInfo: startInfo)!;
         using var cancellation = new CancellationTokenSource();
         var waiting = WaitForExitAndDrainAsync(
@@ -95,11 +94,9 @@ public sealed class GateLaneTests {
     [Fact]
     public async Task GateLaneIsGreen() {
         var repositoryRoot = RepositoryPaths.RequireRoot();
-        var artifacts = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: "puck-gb-post-gate",
-            path3: Guid.NewGuid().ToString(format: "N")
-        );
+        using var directory = new TemporaryDirectory(prefix: "puck-gb-post-gate-");
+
+        var artifacts = directory.PathOf(name: "artifacts");
         var startInfo = new ProcessStartInfo {
             FileName = "dotnet",
             RedirectStandardError = true,

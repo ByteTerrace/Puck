@@ -1,0 +1,327 @@
+schema: "puck.world.definition.v1"
+documentId: "temporal-disocclusion"
+
+cameras [
+  {
+    anchor: null
+    name: "scene-cam"
+    renderHeight: 144
+    renderWidth: 256
+    rig {
+      name: "scene-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "reference-cam"
+    renderHeight: 144
+    renderWidth: 256
+    rig {
+      name: "reference-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 2
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "backdrop" {
+    prototype: "backdrop"
+    position [0, 0, -1.5]
+  }
+
+  placement "slab" {
+    prototype: "slab"
+    position [0, 0, 0]
+  }
+
+  placement "reference-screen" {
+    prototype: "screen"
+    faceSources [
+      {
+        face: "display"
+        source: view(cameraName: "reference-cam")
+      }
+    ]
+    position [0, 1.2, 14]
+  }
+}
+
+prototypes {
+  prototype "backdrop" {
+    document {
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "backdrop"
+      palette [
+        {
+          color: "#D8C8A0"
+          roughness: 0.6
+          sheen: 0
+          specular: 0.2
+        }
+        {
+          color: "#2A3E70"
+          roughness: 0.6
+          sheen: 0
+          specular: 0.2
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "bar0" {
+        material: 0
+        position [-1.4, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar1" {
+        material: 1
+        position [-0.9999999999999999, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar2" {
+        material: 0
+        position [-0.5999999999999999, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar3" {
+        material: 1
+        position [-0.19999999999999973, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar4" {
+        material: 0
+        position [0.20000000000000018, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar5" {
+        material: 1
+        position [0.6000000000000001, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar6" {
+        material: 0
+        position [1.0000000000000004, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+
+      shape Box "bar7" {
+        material: 1
+        position [1.4000000000000004, 1, 0]
+        scale [0.2, 1, 0.2]
+      }
+    }
+  }
+
+  prototype "slab" {
+    document {
+      name: "slab"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -20, 0]
+        scale [0.05, 0.05, 0.05]
+      }
+    }
+    mesh {
+      indices [
+        0
+        1
+        2
+        0
+        2
+        3
+      ]
+      material: 1
+      vertices [
+        [-0.5, 0.3, 0]
+        [0.5, 0.3, 0]
+        [0.5, 1.3, 0]
+        [-0.5, 1.3, 0]
+      ]
+    }
+  }
+
+  prototype "screen" {
+    document {
+      behavior {
+        faces [
+          {
+            defaultSource: null
+            name: "display"
+            shapeId: 0
+          }
+        ]
+      }
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "screen"
+      palette [
+        {
+          color: "#DDE8EA"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "panel" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.9, 0.6, 0.05]
+      }
+    }
+  }
+}
+
+render {
+  temporal: true
+  low {
+    shadows: Off
+    ambientOcclusion: false
+    renderScale: 0.70980394
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "counters" {
+    seatCount: 0
+    slots [
+      {
+        camera: "scene-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "counters-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
+
+captures {
+  rows [
+    {
+      station: revealed
+      ticks [65]
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      instance: "world"
+    }
+    {
+      station: reference
+      ticks [66]
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      instance: "reference-cam"
+    }
+  ]
+}
+
+"schedule" {
+  rows [
+    {
+      command: "world.row.set placements slab position [4,0,0]"
+      principal: "seat1"
+      tick: 64
+    }
+  ]
+  settleTicks: 4
+}
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:placements"
+  }
+]

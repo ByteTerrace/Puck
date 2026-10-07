@@ -42,7 +42,7 @@ public sealed class ViewProjectionLawTests {
             }
         }
     }
-    // The ray march/sdf-cone.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
+    // The ray frame/sdf-viewport.hlsli's cameraRayDirection takes through a sample, spelled from the camera basis alone.
     private static Vector3 MarchDirection(CameraSnapshot camera, Vector2 offset, Vector2 ndc) =>
         Vector3.Normalize(value: (
             ((camera.Forward +
@@ -165,17 +165,10 @@ public sealed class ViewProjectionLawTests {
         }
     }
     [Fact]
-    public void ACreatedViewIsItsOwnPreviousFrame() {
-        var first = ViewProjection.Create(camera: Cameras[0], near: Near);
-        var second = ViewProjection.Create(camera: Cameras[1], near: Near);
-        var moved = second.WithPrevious(previous: first);
+    public void ACreatedViewCarriesNoJitter() {
+        var view = ViewProjection.Create(camera: Cameras[0], near: Near);
 
-        Assert.Equal(expected: first.WorldToClip, actual: first.PreviousWorldToClip);
-        Assert.Equal(expected: first.WorldToView, actual: first.PreviousWorldToView);
-        Assert.Equal(expected: first.WorldToClip, actual: moved.PreviousWorldToClip);
-        Assert.Equal(expected: first.WorldToView, actual: moved.PreviousWorldToView);
-        Assert.Equal(expected: second.WorldToClip, actual: moved.WorldToClip);
-        Assert.Equal(expected: Vector2.Zero, actual: first.Jitter);
+        Assert.Equal(expected: Vector2.Zero, actual: view.Jitter);
     }
     [Fact]
     public void JitteredProjectionMatchesTheShiftedMarchRay() {

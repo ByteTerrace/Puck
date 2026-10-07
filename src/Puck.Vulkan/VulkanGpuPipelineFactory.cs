@@ -54,7 +54,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             device: device,
             groups: VulkanGroupLayouts.Plan(description: description),
             layouts: out var layouts
-        ).ThrowIfFailed(operation: "vkCreatePipelineLayout");
+        ).ThrowIfFailed(device: device, operation: "vkCreatePipelineLayout");
 
         return layouts!;
     }
@@ -125,7 +125,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 );
             }
 
-            groupResult.ThrowIfFailed(operation: "vkCreateComputePipelines");
+            groupResult.ThrowIfFailed(device: device, operation: "vkCreateComputePipelines");
 
             return new VulkanGpuComputePipeline(
                 api: computePipelineApi,
@@ -171,7 +171,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             descriptorSetLayoutHandle: out var setLayout,
             pipelineLayoutHandle: out var pipelineLayout,
             pipelineHandle: out var pipeline
-        ).ThrowIfFailed(operation: "vkCreateComputePipelines");
+        ).ThrowIfFailed(device: device, operation: "vkCreateComputePipelines");
 
         return new VulkanGpuComputePipeline(
             api: computePipelineApi,
@@ -322,7 +322,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
             );
         }
 
-        result.ThrowIfFailed(operation: "vkCreateGraphicsPipelines");
+        result.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateGraphicsPipelines");
 
         if (0 == pipelineHandle) {
             throw new InvalidOperationException(message: "vkCreateGraphicsPipelines returned success without a valid graphics-pipeline handle.");

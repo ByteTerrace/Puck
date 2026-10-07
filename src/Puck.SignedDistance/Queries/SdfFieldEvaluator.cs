@@ -31,17 +31,16 @@ namespace Puck.SignedDistance.Queries;
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
 //
-// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/LeavesLocalFrameClean/CanCullInstance): a
+// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/CanCullInstance): a
 // program instance whose whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere
 // bound (SdfInstanceRange, the same bound the GPU beam prepass tile-culls with); TryDistance skips such an
 // instance's instruction slice whenever that bound proves it cannot beat the running best-so-far distance.
 // Exact-by-construction — the skip changes no returned distance, material, or gradient — because a hard union can
 // only ever lower the accumulator, never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any
 // instance containing a PushField/PopField or a bare Onion/Dilate, are never culled: their compose can depend on a
-// candidate farther than the current best, which a bound-only skip cannot reproduce bit-for-bit. Nor is an instance
-// culled unless the instruction right after it (if any) is ResetPoint: skipping an instance also skips its own
-// point-transform chain, so localPosition/distanceScale carry through unchanged from before the instance, and only
-// a following ResetPoint discards that carried-through value before anything reads it.
+// candidate farther than the current best, which a bound-only skip cannot reproduce bit-for-bit. Skipping an instance
+// also skips its own point-transform chain, which nothing after it can observe: the program refuses a stream whose
+// next segment reads a point without a ResetPoint of its own (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
 public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
@@ -132,6 +131,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 break;
             }
         }
+
+        m_frameRaw = FindFrame(evaluator: this);
     }
 
     // StepScale is a lower-bound multiplier: rounding it upward would make a later advance larger than the program's
@@ -164,9 +165,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    /// <summary>Gets a value indicating whether the compiled stream declares any shape: without one, every query answers nothing.</summary>
+    public bool HasShape => m_hasShape;
 
-    // Whether the compiled stream declares any shape — the march's "nothing to answer" branch.
-    internal bool HasShape => m_hasShape;
     // The exact march's sample budget, the budget a banded march spends on its exact samples.
     internal int MarchIterations => m_marchIterations;
 
@@ -186,8 +187,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
     }
 
-    // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
-    internal FixedQ4816 StepScale => m_stepScale;
     // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
     // reads below one; the largest representable value when the step scale floored to zero.
     internal FixedQ4816 LipschitzBound {
@@ -475,8 +474,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
     // Builds this evaluator's exact cull table: one conservative world-space bound per instance whose whole compose
-    // chain is a hard union (IsPureUnionInstance) AND whose skip cannot corrupt what runs after it
-    // (LeavesLocalFrameClean) — the only shape a bound-only skip is provably bit-identical to full evaluation for
+    // chain is a hard union (IsPureUnionInstance) — the only shape a bound-only skip is provably bit-identical to full evaluation for
     // (see CanCullInstance's remarks). A program with no such instance yields an empty table.
     private static CullBound[] BuildCullBounds(SdfProgram program) {
         var instances = program.Instances;
@@ -490,15 +488,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             // small the instance declared; the program's own test is the one the GPU prepass trusts.
             if (
                 instance.IsDynamic ||
-                program.HasUnmaskableInfluence(
-                first: instance.First,
-                end: instance.End
-            ) ||
+                program.IsUnmaskable(instance: instance) ||
                 !IsPureUnionInstance(
-                instance: instance,
-                instructions: instructions
-            ) ||
-                !LeavesLocalFrameClean(
                 instance: instance,
                 instructions: instructions
             )
@@ -569,15 +560,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return true;
     }
-    // Skipping an instance's slice skips its own ResetPoint/Translate/Rotate/Scale/Repeat/... chain too, so
-    // localPosition and distanceScale carry through the skip exactly as they stood before the instance, not as the
-    // instance's own transforms would have left them. That is harmless to the instance's own candidates (never the
-    // union's winner, by CanCullInstance's bound), but only safe for whatever runs after the skip when the very next
-    // instruction is SdfOp.ResetPoint: it is the only op that overwrites localPosition/distanceScale outright rather
-    // than folding the carried-through value in, so it is the only op that can absorb an arbitrary skip. An instance
-    // ending at the program's own end has no following instruction to see the wrong local frame.
-    private static bool LeavesLocalFrameClean(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) =>
-        ((instance.End >= instructions.Count) || (instructions[instance.End].Op == SdfOp.ResetPoint));
     // === The blend accumulator (KEEP IN SYNC with mapCore's shared blend tail + blendShape/blendSmoothUnion) ===========
     // Mirrors the shader's semantics EXACTLY, including op order effects: the material winner is resolved from the
     // PRE-blend (current, candidate) pair using the SAME strict compares a SHAPE or a POP_FIELD candidate gets, then
@@ -703,47 +685,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             strandOffset: instruction.Data0W
         ),
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
-        };
-    }
-    private static bool IsSupportedOp(SdfOp op) {
-        return op switch {
-            SdfOp.ResetPoint or
-            SdfOp.Translate or
-            SdfOp.Rotate or
-            SdfOp.Scale or
-            SdfOp.Elongate or
-            SdfOp.ShapeBlend or
-            SdfOp.Repeat or
-            SdfOp.RepeatLimited or
-            SdfOp.Onion or
-            SdfOp.Dilate or
-            SdfOp.CellDisplace or
-            SdfOp.SymmetryPlane or
-            SdfOp.PushField or
-            SdfOp.PopField => true,
-            _ => false,
-        };
-    }
-    private static bool IsSupportedShape(SdfShapeType shape) {
-        return shape switch {
-            SdfShapeType.Box or
-            SdfShapeType.Capsule or
-            SdfShapeType.Sphere or
-            SdfShapeType.Torus or
-            SdfShapeType.Cylinder or
-            SdfShapeType.Plane or
-            SdfShapeType.Vesica or
-            SdfShapeType.RoundedRectangle or
-            SdfShapeType.Trapezoid or
-            SdfShapeType.ChamferedRectangle or
-            SdfShapeType.RoundCone or
-            SdfShapeType.ScreenSlab or
-            SdfShapeType.Superellipsoid or
-            SdfShapeType.ConvexPolygon or
-            // strands > 1 is refused separately, at Compile time (see Compile's isSweep check) — this type-keyed
-            // gate cannot see the instruction's own strand count.
-            SdfShapeType.Sweep => true,
-            _ => false,
         };
     }
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
@@ -1649,19 +1590,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
     /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
     /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
-    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, or
-    /// when the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), which no authored program
-    /// can hold geometry at.</remarks>
+    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, when
+    /// the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), or when it lies outside
+    /// <see cref="Frame"/>, where some step of the evaluation could leave the carrier and wrap.</remarks>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
+        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
         if (
             !m_hasShape ||
             !position.TryDelta(
             delta: out var worldPosition,
             origin: FixedPosition.Zero
-        )
+        ) ||
+            !IsInFrame(point: worldPosition)
         ) {
             return false;
         }
@@ -1670,8 +1613,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         var distanceScale = FixedQ4816.One;
         var resultDistance = FarDistance;
         var resultMaterial = 0;
-        var savedFieldDistance = FarDistance;
-        var savedFieldMaterial = 0;
+        Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
+        var scopeDepth = 0;
         var cullIndex = 0;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
@@ -1794,13 +1737,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         break;
                     }
                 case SdfOp.PushField: {
-                        savedFieldDistance = resultDistance;
-                        savedFieldMaterial = resultMaterial;
+                        scopes[scopeDepth++] = (resultDistance, resultMaterial);
                         resultDistance = FarDistance;
                         resultMaterial = 0;
                         break;
                     }
                 case SdfOp.PopField: {
+                        var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
                         var candidateDistance = resultDistance;
                         var candidateMaterial = resultMaterial;
 

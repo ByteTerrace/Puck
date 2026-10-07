@@ -233,6 +233,29 @@ public sealed class GpuWorkLedgerLawTests {
         Assert.Equal(expected: 2L, actual: sample.GetOutsidePassCount(column: DispatchColumn));
     }
     [Fact]
+    public void PollReadsReadySlotsInSubmissionOrderAfterTheRecordRingWraps() {
+        var rig = new Rig(framesInFlight: 2);
+        var readback = new OrderedReadback();
+        var first = rig.NewFence();
+        var second = rig.NewFence();
+        var third = rig.NewFence();
+
+        rig.Ledger.ReadOnCompletion(readback: readback, slot: 0);
+        rig.Submit(fence: first);
+        rig.Ledger.ReadOnCompletion(readback: readback, slot: 1);
+        rig.Submit(fence: second);
+        first.Counted.Wait();
+        // The third submission reuses the first physical record, ahead of the still-pending second record.
+        rig.Ledger.ReadOnCompletion(readback: readback, slot: 2);
+        rig.Submit(fence: third);
+        second.Raw.Completed = true;
+        third.Raw.Completed = true;
+        rig.Ledger.Poll();
+
+        Assert.Equal(expected: new[] { 0, 1, 2 }, actual: readback.Slots);
+        Assert.Equal(expected: 3L, actual: rig.Read()!.Submission);
+    }
+    [Fact]
     public void ARecordReusedWhilePendingIsDropped() {
         var rig = new Rig(framesInFlight: 1);
         var first = rig.NewFence();
@@ -411,6 +434,11 @@ public sealed class GpuWorkLedgerLawTests {
     }
 
     private sealed record Fence(IGpuSubmissionFence Counted, FakeGpuDevice.Fence Raw);
+    private sealed class OrderedReadback : IGpuWorkReadback {
+        public List<int> Slots { get; } = [];
+
+        public void AddTo(int slot, Span<long> counts, int rowCount) => Slots.Add(item: slot);
+    }
     private sealed class Rig {
         public Rig(int framesInFlight) {
             Gpu = new FakeGpuDevice(holdFences: true);

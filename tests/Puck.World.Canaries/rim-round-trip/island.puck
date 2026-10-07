@@ -1,0 +1,248 @@
+schema: "puck.world.definition.v1"
+documentId: "rim-drop-island"
+
+simulation {
+  rateHz: 60
+}
+
+bodies {
+  capacity: 8
+  localSeats: 1
+  networkPlayers: 2
+  seatSpawns [
+    "deck"
+  ]
+  defaultPeerSource: "Idle"
+}
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -46, 0]
+}
+
+collision {
+  requirements []
+  contactSkin: 0.02
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  gradientProbe: 0
+}
+
+channels [
+  {
+    name: "forward"
+    shape: Bipolar
+    role: MoveAdvance
+    frame: Heading
+  }
+  {
+    name: "strafe"
+    shape: Bipolar
+    role: MoveStrafe
+    frame: Heading
+  }
+  {
+    name: "turn"
+    shape: Bipolar
+    role: Turn
+  }
+  {
+    name: "rise"
+    shape: Bipolar
+    role: MoveUp
+  }
+  {
+    name: "jump"
+    shape: Binary
+    composition: true
+  }
+]
+
+spawnPoints [
+  {
+    id: "deck"
+    position [0, 120.03, 0]
+  }
+]
+
+prototypes {
+  prototype "rimDeck" {
+    document {
+      schema: "puck.creation.v1"
+      name: "rimDeck"
+      palette [
+        {
+          color: "#8C8780"
+        }
+      ]
+      shape Box "plate" {
+        position [0, -0.25, 0]
+        scale [6, 0.25, 6]
+        material: 0
+      }
+    }
+  }
+}
+
+placements {
+  placement "islandDeck" {
+    prototype: "rimDeck"
+    position [0, 120, 0]
+    solid
+  }
+}
+
+bodyMotionPrograms [
+  {
+    name: "traverse"
+    version: "puck.body.program.v1"
+    kind: Motion
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+  }
+]
+
+state {
+  body [
+    {
+      name: "stamina"
+      kind: "Counter"
+      initial: 0
+    }
+    {
+      name: "airTicks"
+      kind: "Counter"
+      initial: 0
+      resetFact: "Grounded"
+    }
+  ]
+}
+
+kits {
+  rows [
+    {
+      name: "traveller"
+      bodyMotionProgram: "traverse"
+      bodyContact: Solid
+      collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
+      motion {
+        speed {
+          value: 6.5
+        }
+        turn {
+          rate: 2.5
+        }
+        facingSnap: true
+        shaping [
+          {
+            along {
+              engage: 30
+              release: 17
+            }
+          }
+        ]
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            reach: 1.2
+            cone [0, 60]
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+          {
+            name: "air"
+            bond: Free
+            hold: Gravity
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+        ]
+      }
+      actions {
+        jump {
+          onFact [
+            {
+              fact: "Grounded"
+              mode: "Edge"
+              effects [
+                addState(state: stamina, value: 3)
+              ]
+            }
+            {
+              fact: "Airborne"
+              mode: "Level"
+              effects [
+                addState(state: airTicks, value: 1)
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+
+defaultSeatKit: "traveller"
+
+references [
+  {
+    name: "corner"
+    document: "corner"
+  }
+]
+
+destinations [
+  {
+    name: "corner"
+    reference: "corner"
+    durability: persisted
+    scope: global
+  }
+]
+
+adjacencies [
+  {
+    name: "under"
+    destination: "corner"
+    counterpart: "sky"
+    boundary {
+      center [0, 80, 0]
+      outwardYawDegrees: 0
+      outwardPitchDegrees: -90
+      width: 90
+      height: 90
+    }
+    unavailable: Closed
+  }
+]
+
+views {
+  seatControl {
+    yawReference: World
+    minPitch: -0.35
+    maxPitch: 1.2
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626001, yaw: 0, pitch: 0.4145069, pivotOffset: [0, 0, 0])
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599311)
+    ]
+  }
+}

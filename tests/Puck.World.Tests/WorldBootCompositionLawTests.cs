@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Commands;
+using Puck.DirectX.Presentation;
+using Puck.Vulkan.Presentation;
 using Puck.Testing;
 using Xunit;
 
@@ -13,15 +15,16 @@ namespace Puck.World.Tests;
 /// run of that shape needs before its first frame: the offscreen shape answers every verb the <c>puck counters</c>
 /// workload sends, and both the offscreen and the windowed shape register the persistent pipeline-cache store and the
 /// creation faults the backend's device creation reads, the faults with their operator-only <c>gpu.faults</c> verb,
-/// which is the one operator verb the offscreen shape adds to the headless shape's. The neutral GPU services a node
+/// beside the indirect-cache operator controls. The neutral GPU services a node
 /// records through resolve to a <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device
 /// throws when resolved, so a law that reached a device fails by name instead of creating one.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
-    private const string WorkloadWorld = "tests/Puck.Counters/counters.world.json";
+    private const string WorkloadWorld = "tests/Puck.Counters/counters.puck";
     // An offscreen world declaring one screen, a machine's video output, with no view screen.
-    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
+    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.puck";
 
     // The collector closes the workload's script with these two lines (WorldOffscreenLeg.Launch in Puck.Cli), so the
     // offscreen World receives them as well.
@@ -62,8 +65,8 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     }
     // The law: every verb the workload sends that the shape's command registry, resolved as a boot resolves it, cannot
     // dispatch.
-    private static IReadOnlyList<string> UnansweredWorkloadVerbs(HostApplicationBuilder builder) {
-        using var host = builder.Build();
+    private IReadOnlyList<string> UnansweredWorkloadVerbs(HostApplicationBuilder builder) {
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
 
         return WorkloadVerbs().Where(predicate: verb => !registry.TryGetId(
@@ -107,7 +110,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         );
         Assert.Equal(
             actual: UnansweredWorkloadVerbs(builder: builder),
-            expected: ["world.cadence", "world.quality"]
+            expected: ["world.cadence", "world.quality", "world.indirect"]
         );
     }
     [InlineData(WorldHostPresentation.Offscreen)]
@@ -144,7 +147,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     // through the same AddGpuCreationFaults call.
     [Fact]
     public void TheOffscreenShapeArmsItsCreationFaultsThroughAnOperatorVerb() {
-        using var host = ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build();
+        var host = m_stateDirectory.Own(owner: ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build());
 
         Assert.NotNull(@object: host.Services.GetService<GpuCreationFaults>());
         Assert.True(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetMetadata(
@@ -156,6 +159,58 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             expected: CommandAudience.Operator
         );
     }
+    // A counter readout reads the counts the composition owns; resolving the command registry and answering
+    // world.counters must not create the backend's renderer, whose device a composition law never has.
+    [Fact]
+    public void TheCounterReadoutDoesNotCreateTheRenderer() {
+        var host = m_stateDirectory.Own(owner: ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build());
+        var result = host.Services.GetRequiredService<CommandRegistry>().Submit(line: "world.counters");
+
+        Assert.False(
+            condition: result.IsError,
+            userMessage: result.Output
+        );
+    }
+    // world.counters reads both backends alike: each backend's presenter registration carries its own
+    // presentation.skipped source, registered without resolving a device or a presenter.
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows10.0.10240")]
+    public void EachBackendRegistersItsPresentationCounters() {
+        var services = new ServiceCollection();
+
+        services.AddVulkanPresenter();
+        services.AddDirectXPresenter();
+
+        var names = services
+            .Where(predicate: static descriptor => ((descriptor.ServiceType == typeof(Puck.Abstractions.Counting.IWorkCounterSource)) && (descriptor.ImplementationInstance is Puck.Abstractions.Presentation.PresentationWork)))
+            .Select(selector: static descriptor => ((Puck.Abstractions.Counting.IWorkCounterSource)descriptor.ImplementationInstance!).Name)
+            .Order(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            actual: names,
+            expected: ["presentation.directx", "presentation.vulkan"]
+        );
+    }
+    // The seal itself: a service that brings up a device throws by name when a law resolves it, so the law above and
+    // every composition law fail loudly rather than creating one.
+    [Fact]
+    public void TheDeviceSealRefusesAResolvedRenderRoot() {
+        var builder = ComposeBoot(presentation: WorldHostPresentation.Offscreen);
+
+        Assert.Contains(
+            collection: builder.Services,
+            filter: static descriptor => (descriptor.ServiceType == typeof(Puck.Hosting.IRenderRoot))
+        );
+
+        var host = m_stateDirectory.Own(owner: builder.Build());
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => host.Services.GetRequiredService<Puck.Hosting.IRenderRoot>());
+
+        Assert.Contains(
+            expectedSubstring: "brings up a GPU device",
+            actualString: refusal.Message
+        );
+    }
     // The headless shape's operator verbs are the evaluation diagnostics, which ScheduledStepVocabularyLawTests pins
     // against the live executable. A GPU shape answers the operator with exactly those and the verb that arms its
     // device's creation faults, and nothing else. The windowed shape's registry is not resolvable without a device; it
@@ -163,11 +218,11 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     [Fact]
     public void TheOffscreenShapesOperatorVerbsAreTheHeadlessShapesAndItsCreationFaults() => Assert.Equal(
         actual: OperatorVerbs(presentation: WorldHostPresentation.Offscreen),
-        expected: [.. OperatorVerbs(presentation: WorldHostPresentation.None).Append(element: "gpu.faults").Order(comparer: StringComparer.Ordinal)]
+        expected: [.. OperatorVerbs(presentation: WorldHostPresentation.None).Concat(second: ["gpu.faults", "world.indirect-method", "world.indirect-freeze", "world.indirect-reset"]).Order(comparer: StringComparer.Ordinal)]
     );
 
     private string[] OperatorVerbs(WorldHostPresentation presentation) {
-        using var host = ComposeBoot(presentation: presentation).Build();
+        var host = m_stateDirectory.Own(owner: ComposeBoot(presentation: presentation).Build());
 
         return [.. host.Services.GetRequiredService<CommandRegistry>().Definitions
             .Where(predicate: static metadata => (metadata.Audience == CommandAudience.Operator))
@@ -186,7 +241,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             world: ScreensWorld
         );
 
-        using var host = builder.Build();
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var screens = registry.Submit(line: "world.screens");
         var refresh = registry.Submit(line: "world.view-refresh");
@@ -213,11 +268,11 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     // headless boot presents nothing to resize and has no such verb.
     [Fact]
     public void AnOffscreenBootAnswersWorldResizeWithItsExtentAndRefusesBeforeItsRendererIsReady() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: ScreensWorld
-        ).Build();
+        ).Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
 
         Assert.Equal(
@@ -238,7 +293,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         );
         Assert.True(condition: registry.Submit(line: "world.resize 0 1080").IsError);
 
-        using var headless = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+        var headless = m_stateDirectory.Own(owner: ComposeBoot(presentation: WorldHostPresentation.None).Build());
 
         Assert.False(condition: headless.Services.GetRequiredService<CommandRegistry>().TryGetId(
             id: out _,
@@ -258,7 +313,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     );
     [Fact]
     public void TheHeadlessShapeHasNoCreationFaults() {
-        using var host = ComposeBoot(presentation: WorldHostPresentation.None).Build();
+        var host = m_stateDirectory.Own(owner: ComposeBoot(presentation: WorldHostPresentation.None).Build());
 
         Assert.Null(@object: host.Services.GetService<GpuCreationFaults>());
         Assert.False(condition: host.Services.GetRequiredService<CommandRegistry>().TryGetId(

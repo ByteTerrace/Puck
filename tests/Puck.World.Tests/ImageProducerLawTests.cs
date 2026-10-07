@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
 using Puck.Hosting;
@@ -54,6 +55,7 @@ public sealed class ImageProducerLawTests {
         (string Id, ImageContentClass Content, ImageSourceTransport Transport)[] expected = [
             (WorldImageProducerSettings.TestPatternId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
             (WorldImageProducerSettings.QrId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
+            (WorldImageProducerSettings.ColorId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
             (WorldImageProducerSettings.CameraId, ImageContentClass.External, ImageSourceTransport.Imported),
             (WorldImageProducerSettings.CaptureId, ImageContentClass.External, ImageSourceTransport.Imported),
         ];
@@ -112,10 +114,10 @@ public sealed class ImageProducerLawTests {
             slotCount: 1
         );
 
-        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).TryWrite(
+        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).Write(
             region: region,
             tick: 640L
-        ));
+        ).IsRendered);
         Assert.True(condition: reference.TryWriteReference(rgba: rgba, stamp: out var stamp));
         Assert.Equal(expected: new ImageSourceStamp(Sequence: 1UL, Tick: 640UL), actual: stamp);
 
@@ -265,7 +267,7 @@ public sealed class ImageProducerLawTests {
             Id: ThirdId,
             Settings: new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal) { ["level"] = JsonSerializer.SerializeToElement(value: 3) }
         );
-        var sources = WorldSourceInstances.Of(shown: [source]);
+        var sources = WorldSourceInstances.Of(shown: [source], world: WorldDefinitionLoader.BootInstanceName);
         var instance = Assert.Single(collection: sources.Instances);
 
         Assert.Equal(expected: $"source.{ThirdId}", actual: instance.ExternalPackage);
@@ -464,15 +466,18 @@ public sealed class ImageProducerLawTests {
 
         var filling = true;
         var filled = new List<uint>();
+        var fillImage = Surface.SameDeviceImage(format: GpuPixelFormat.R16G16B16A16Float, height: 1,
+            imageHandle: 0xF110, imageViewHandle: 0xF111, width: 1);
 
         GpuImageLease Fill(uint rgba) {
             filled.Add(item: rgba);
 
-            return ((nint)0xF111);
+            return new GpuImageLease(0xF111) { Image = fillImage };
         }
 
         using var source = new WorldImageFeedProducer(
             fill: Fill,
+            fillRender: static _ => FrameRender.Rendered,
             gate: new WorldCaptureGate(
                 alwaysFills: false,
                 captureArmed: () => filling
@@ -491,6 +496,7 @@ public sealed class ImageProducerLawTests {
 
         for (var frame = 0; (frame < 3); frame++) {
             Assert.True(condition: source.TryAcquireOutput(output: out var output));
+            Assert.Equal(fillImage, output.Image);
             Assert.Equal(
                 actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout, output.Tainted),
                 expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly, false)
@@ -527,6 +533,7 @@ public sealed class ImageProducerLawTests {
         );
         using var source = new WorldImageFeedProducer(
             fill: static _ => default,
+            fillRender: static _ => FrameRender.Waiting(reason: "fill not converted"),
             gate: new WorldCaptureGate(
                 alwaysFills: false,
                 captureArmed: static () => false
@@ -606,6 +613,7 @@ public sealed class ImageProducerLawTests {
         public List<(int Seat, WorldCameraSensor Sensor)> Reads { get; } = [];
 
         public GpuImageLease Acquire(int seat, WorldCameraSensor sensor) => default;
+        public FrameRender Answer(int seat, WorldCameraSensor sensor) => FrameRender.Waiting(reason: "no camera assigned");
         public string? Fault(int seat, WorldCameraSensor sensor) => null;
         public nint Handle(int seat, WorldCameraSensor sensor) => 0;
         public Vector3 Light(int seat, WorldCameraSensor sensor) => Vector3.Zero;
@@ -618,10 +626,180 @@ public sealed class ImageProducerLawTests {
             return Extent;
         }
     }
+    // An imported feed that answers its publish as the law says, with an image only when it answers rendered.
+    private sealed class AnsweringFeed : IWorldImportFeed {
+        public int Publications { get; private set; }
+
+        public FrameRender Answer { get; set; } = FrameRender.Rendered;
+        public ImageSourceDescriptor Descriptor { get; } = new(
+            Cadence: ImageSourceCadence.Rate(rateHz: 30U),
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.External,
+            Format: ImagePixelFormat.B8G8R8A8Unorm,
+            Height: 8U,
+            Producer: WorldImageProducerSettings.CaptureId,
+            Transport: ImageSourceTransport.Imported,
+            Width: 8U
+        );
+
+        public string? Fault => Answer.Reason;
+        public Vector3 Light => Vector3.Zero;
+
+        public GpuImageLease AcquireFrame() => (Answer.IsRendered ? FakeFeed.DesktopHandle : 0);
+        public void Dispose() { }
+        public nint Handle() => (Answer.IsRendered ? FakeFeed.DesktopHandle : 0);
+        public void NotifyDeviceLost() { }
+        public FrameRender Publish(in FrameContext context) {
+            Publications++;
+
+            return Answer;
+        }
+    }
+
+    [Fact]
+    public void ReadingASourcesAnswerNeverPublishesItsFeed() {
+        var feed = new AnsweringFeed { Answer = FrameRender.Refused(reason: "the capture cannot convert") };
+        var filling = false;
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => default,
+            fillRender: static _ => FrameRender.Rendered,
+            gate: new WorldCaptureGate(alwaysFills: false, captureArmed: () => filling),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(Device: null!, HostsOnDirectX: false, Instance: "capture", Package: "source.capture"),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 32); frame++) {
+            Assert.Equal(expected: feed.Answer, actual: source.Answer);
+        }
+
+        filling = true;
+
+        for (var frame = 0; (frame < 32); frame++) {
+            Assert.True(condition: source.Answer.IsRendered);
+        }
+
+        Assert.Equal(expected: 0, actual: feed.Publications);
+    }
+    [Fact]
+    public void ASteadyOffscreenFillAllocatesNothingWhileItsSeatHasNoCamera() {
+        var feed = new WorldCameraSourceFeed(cameras: new FakeSeatCameras(), profile: null, seat: 1, sensor: WorldCameraSensor.Color);
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => ((nint)0xF111),
+            fillRender: static _ => FrameRender.Rendered,
+            gate: new WorldCaptureGate(alwaysFills: true, captureArmed: static () => false),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(Device: null!, HostsOnDirectX: false, Instance: "camera", Package: "source.camera"),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 32); frame++) {
+            _ = source.Produce(context: default, width: 8U, height: 8U);
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var rendered = true;
+
+        for (var frame = 0; (frame < 128); frame++) {
+            rendered &= source.Produce(context: default, width: 8U, height: 8U).IsRendered;
+        }
+
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+
+        Assert.True(condition: rendered);
+        Assert.Equal(actual: allocated, expected: 0L);
+    }
+    /// <summary>An imported source answers its frame three ways. Outside a fill it answers as its feed does: an image is
+    /// rendered, a feed still making its first frame waits, and a feed that ended (its window gone) refuses by its own
+    /// reason, so an offscreen host steps on rather than holding the tick for an image that cannot come. While the gate
+    /// fills, the source shows its capture fill whatever the feed answers, so an ended feed renders once the fill has
+    /// converted and waits only for the conversion. A source that opened no feed refuses. The red leg is the ended feed
+    /// outside a fill, which a bool answer could only call a wait.</summary>
+    [Fact]
+    public void AnImportedSourceAnswersAsItsFeedOrItsFill() {
+        var feed = new AnsweringFeed();
+        var filling = false;
+        var fillHandle = ((nint)0);
+        var fillRender = FrameRender.Waiting(reason: "fill converting");
+        var context = new RenderGraphExternalProducerContext(
+            Device: null!,
+            HostsOnDirectX: false,
+            Instance: "source$capture$0",
+            Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CaptureId)
+        );
+
+        using var source = new WorldImageFeedProducer(
+            fill: _ => fillHandle,
+            fillRender: _ => fillRender,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: () => filling
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: context,
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        FrameRender Produce() => source.Produce(
+            context: default,
+            height: 8U,
+            width: 8U
+        );
+
+        Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
+
+        feed.Answer = FrameRender.Waiting(reason: "window 'law' awaiting a compositor frame");
+        Assert.Equal(actual: Produce(), expected: feed.Answer);
+
+        feed.Answer = FrameRender.Refused(reason: "window 'law' is unavailable");
+        Assert.Equal(actual: Produce(), expected: FrameRender.Refused(reason: "window 'law' is unavailable"));
+
+        filling = true;
+        Assert.Equal(
+            actual: Produce(),
+            expected: fillRender
+        );
+        fillRender = FrameRender.Refused(reason: "fill conversion build refused");
+        Assert.Equal(actual: Produce(), expected: fillRender);
+        fillHandle = 0xF111;
+        fillRender = FrameRender.Rendered;
+        Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
+
+        using var unopened = new WorldImageFeedProducer(
+            fill: static _ => default,
+            fillRender: static _ => FrameRender.Rendered,
+            gate: new WorldCaptureGate(
+                alwaysFills: true,
+                captureArmed: static () => false
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: context,
+                Fault: "image producer 'capture' could not open window 'law'",
+                Feed: null
+            )
+        );
+
+        Assert.Equal(
+            actual: unopened.Produce(
+                context: default,
+                height: 8U,
+                width: 8U
+            ),
+            expected: FrameRender.Refused(reason: "image producer 'capture' could not open window 'law'")
+        );
+    }
+
     private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {
         public static readonly nint DesktopHandle = 0xDE5C;
 
         public int Acquisitions { get; private set; }
+        public FrameRender Answer => FrameRender.Rendered;
         public ImageSourceDescriptor Descriptor { get; } = descriptor;
         public bool Disposed { get; private set; }
         public string? Fault => null;
@@ -635,7 +813,7 @@ public sealed class ImageProducerLawTests {
         public void Dispose() => Disposed = true;
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(in FrameContext context) { }
+        public FrameRender Publish(in FrameContext context) => FrameRender.Rendered;
     }
     // The third producer's runtime: an uploaded producer whose feed writes a one-pixel region, recording the level each
     // opening read from its source's settings.
@@ -668,7 +846,7 @@ public sealed class ImageProducerLawTests {
         public Vector3 Light => Vector3.Zero;
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) => false;
+        public FrameRender Write(long tick, GpuRegion region) => FrameRender.Waiting(reason: "the fake has no image");
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

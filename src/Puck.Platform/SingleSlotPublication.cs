@@ -75,7 +75,8 @@ public sealed class SingleSlotPublication : ISharedSlotRing {
     /// releases it when its reads finish, and nothing writes it again.</summary>
     public void Retire() => m_retired = true;
     /// <inheritdoc/>
-    public bool TryAcquireLatest(out int slot, out ulong fenceValue) {
+    public bool TryAcquireLatest(out int slot, out ulong fenceValue, out long version) {
+        version = 0L;
         while (true) {
             var state = Volatile.Read(location: ref m_state);
 
@@ -108,6 +109,7 @@ public sealed class SingleSlotPublication : ISharedSlotRing {
 
             slot = 0;
             fenceValue = Volatile.Read(location: ref m_fenceValue);
+            version = Interlocked.Read(location: ref m_version);
 
             return true;
         }

@@ -1,0 +1,9 @@
+world.cadence off
+world.wait ready 25
+world.wait 4
+world.screenshot {run}/room-reference.png
+world.wait captures 5
+world.state.cell.set station $value 1
+world.wait 4
+world.screenshot {run}/terrace-reference.png
+world.wait captures 5

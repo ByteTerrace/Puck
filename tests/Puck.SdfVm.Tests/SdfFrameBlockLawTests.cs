@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Shaders;
@@ -12,9 +11,43 @@ namespace Puck.SdfVm.Tests;
 /// declares is written, at the offset its generated declaration reads, and the mesh pass's interface lays the same block
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
+    [Fact]
+    public void ComparisonBoundsEmitTypedShaderConstantsWithoutAnotherPolicyTable() {
+        var generated = SdfIndirectHlsl.Generate();
+
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeRays = 4u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeScreenSteps = 12u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeConeSteps = 24u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativePhases = 4u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeReach = 4;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeConeSlope = 0.25;");
+    }
+    [Fact]
+    public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
+        var block = new byte[SdfFrameBlock.SizeBytes];
+        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectSources));
+
+        SdfFrameBlock.Write(block: block, frame: Frame(), height: 1, tables: default, view: 0, width: 1);
+        // Every source category is captured and enabled by default, including screen emission.
+        Assert.Equal(31u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
+        var frame = Frame() with { IndirectSources = SdfIndirectSources.Sky | SdfIndirectSources.Screens };
+
+        SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
+        Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
+        var generated = SdfIndirectHlsl.Generate();
+
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesSky = 8u;");
+        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesScreens = 16u;");
+    }
+
     // The values the writer leaves as their zero default on every frame: the extent, which the node writes, and the view
     // base, since each instance renders its one view at row zero.
-    private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView];
+    private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
+        SdfWorldPackage.LightSlice, SdfWorldPackage.LightMapCount, SdfWorldPackage.LightMaps, SdfWorldPackage.LightSweepRadius,
+        SdfWorldPackage.IndirectAllocation, SdfWorldPackage.IndirectCertificateRevision, SdfWorldPackage.IndirectEpoch,
+        SdfWorldPackage.IndirectFrame, SdfWorldPackage.IndirectNearEnabled, SdfWorldPackage.IndirectPickPixel,
+        SdfWorldPackage.IndirectPreviousPublication, SdfWorldPackage.IndirectReadGeneration, SdfWorldPackage.IndirectReadPublication,
+        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.
@@ -35,18 +68,25 @@ public sealed class SdfFrameBlockLawTests {
         DisableAmbientOcclusion = true,
         DisableFarBound = true,
         DisableSoftShadows = true,
+        GeometryOnly = true,
+        IndirectMethod = SdfIndirectMethod.Screen,
+        ShadowAmortize = true,
         ShadowDistanceScale = 0.5f,
         UseCameraTileShadowMask = true,
         UseFastAmbientOcclusion = true,
         UseFastSoftShadowMarch = true,
     };
     private static readonly (string Member, SdfViewQuality Quality, uint Bits)[] QualityValues = [
+        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Screen }, 1u),
+        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Cone }, 2u),
+        (SdfWorldPackage.GeometryOnly, new() { GeometryOnly = true }, 1u),
         (SdfWorldPackage.CameraTileShadowMask, new() { UseCameraTileShadowMask = true }, 1u),
         (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u),
         (SdfWorldPackage.DisableFarBound, new() { DisableFarBound = true }, 1u),
         (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u),
         (SdfWorldPackage.FastAmbientOcclusion, new() { UseFastAmbientOcclusion = true }, 1u),
         (SdfWorldPackage.FastSoftShadowMarch, new() { UseFastSoftShadowMarch = true }, 1u),
+        (SdfWorldPackage.ShadowAmortize, new() { ShadowAmortize = true }, 1u),
         (SdfWorldPackage.ShadowDistanceScale, new() { ShadowDistanceScale = 0.5f }, BitConverter.SingleToUInt32Bits(value: 0.5f)),
     ];
 
@@ -83,35 +123,81 @@ public sealed class SdfFrameBlockLawTests {
             ],
             Time: 7f
         ) {
-            AmbientScale = 0.5f,
             DebugSliceAxis = 2f,
             DebugSliceOffset = 3f,
             DisableScreenLights = true,
             DisableShadowCull = true,
             EnableShadowProxy = true,
             FarDistance = 30f,
-            SunScale = 0.75f,
+            IndirectTier = SdfIndirectTier.High,
+            IndirectBodies = SdfIndirectParticipation.Cast,
+            Lights = Lights(),
             UseFiniteDifferenceNormals = true,
         };
     }
+    // Lights whose count, shadow light and curvature gains are none of them zero.
+    private static SdfLights Lights() {
+        var lights = SdfLights.Default();
 
+        lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
+        lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 1, slot: 0);
+        lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 0, Outgoing: 1, Slot: 0, Weight: 0.5f)]);
+        lights.Curvature = new SdfCurvature(
+            Cavity: 0.25f,
+            Ink: 0.5f,
+            InkColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
+            InkHigh: 12f,
+            InkLow: 4f,
+            Rim: 0.75f
+        );
+
+        return lights;
+    }
+
+    [InlineData(SdfIndirectTier.Off)]
+    [InlineData(SdfIndirectTier.Medium)]
+    [InlineData(SdfIndirectTier.High)]
+    [Theory]
+    public void IndirectTierReachesTheGeneratedPassBlock(SdfIndirectTier tier) {
+        var block = new byte[SdfFrameBlock.SizeBytes];
+
+        SdfFrameBlock.Write(block: block, frame: Frame() with { IndirectTier = tier }, height: 16, tables: default, view: 0, width: 16);
+        Assert.Equal(((uint)tier), BitConverter.ToUInt32(block, ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectTier))));
+    }
+    [Fact]
+    public void EveryStableSlotAndBothActiveCountsReachTheFrameBlock() {
+        var frame = Frame();
+        var slots = frame.Lights.ShadowSlots;
+
+        slots.Configure(fadeCapacity: 2, slots: 4);
+        int[] owners = [7, 5, 3, 1];
+
+        for (var slot = 0; (slot < owners.Length); slot++) {
+            slots.SetSlot(slot: slot, light: owners[slot]);
+        }
+        slots.SetHandoffs(handoffs: [new(Incoming: 0, Outgoing: 7, Slot: 0, Weight: 0.25f), new(Incoming: 2, Outgoing: 3, Slot: 2, Weight: 0.75f)]);
+        var block = new byte[SdfFrameBlock.SizeBytes];
+
+        SdfFrameBlock.Write(block: block, frame: frame, height: 16, tables: default, view: 0, width: 16);
+        var parameters = SdfWorldInterfaces.WorldParameters;
+        var start = ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots));
+
+        Assert.Equal(expected: owners, actual: Enumerable.Range(count: 4, start: 0).Select(selector: slot => BitConverter.ToInt32(startIndex: (start + (slot * sizeof(int))), value: block)));
+        Assert.Equal(expected: 4u, actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlotCount))));
+        Assert.Equal(expected: 2u, actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowFadeCount))));
+    }
     [Fact]
     public void EveryDeclaredValueIsWrittenWhereItsDeclarationReadsIt() {
         var frame = Frame();
-        var environment = new float[SdfEnvironment.LaneCount];
         var block = new byte[SdfFrameBlock.SizeBytes];
 
-        SdfFrameBlock.BakeEnvironment(
-            frame: frame,
-            rows: environment
-        );
         SdfFrameBlock.Write(
             block: block,
             frame: frame,
             height: 200u,
             tables: new SdfPassValues(
                 DebugMode: 4,
-                Environment: environment,
                 InstanceMaskWordCount: 2u,
                 MeshDraws: 5u,
                 ScreenCount: 3u
@@ -120,7 +206,9 @@ public sealed class SdfFrameBlockLawTests {
             width: 300u
         );
 
-        SdfFrameBlock.WriteTemporal(block: block, jitter: new Vector2(x: 0.25f, y: -0.125f), historyFrames: 3);
+        SdfFrameBlock.WriteTemporal(block: block, jitter: new Vector2(x: 0.25f, y: -0.125f), historyFrames: 3, temporal: true);
+        // The rejection masks are the shadow recorder's, written from its history after the view's writer.
+        SdfFrameBlock.WriteShadowHistory(block: block, enabled: true, lightMotion: 0b0100u, ownership: 0b0010u);
         var parameters = SdfWorldInterfaces.WorldParameters;
 
         // The row names the pass, so the view's writer leaves it to the recorder.
@@ -136,6 +224,19 @@ public sealed class SdfFrameBlockLawTests {
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row))),
             expected: 6u
         );
+        // The detail row names the pass's first named row, which the recorder alone writes, so it starts at zero.
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))),
+            expected: 0u
+        );
+        SdfFrameBlock.WriteWorkCounterDetailRow(
+            block: block,
+            row: 7u
+        );
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))),
+            expected: 7u
+        );
         var pass = parameters.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
 
         foreach (var member in pass.BlockMembers.Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))) {
@@ -146,8 +247,6 @@ public sealed class SdfFrameBlockLawTests {
 
             if (ZeroValues.Contains(value: member.Name)) {
                 Assert.True(condition: !bytes.ContainsAnyExcept(value: ((byte)0)), userMessage: member.Name);
-            } else if (string.Equals(a: member.Name, b: SdfWorldPackage.Environment, comparisonType: StringComparison.Ordinal)) {
-                Assert.True(condition: bytes.SequenceEqual(other: MemoryMarshal.AsBytes(span: environment.AsSpan())), userMessage: member.Name);
             } else {
                 // Every component of a written value is non-zero here, so a component the writer misses reads as zero.
                 for (var component = 0; (component < member.Type.ComponentCount()); component++) {
@@ -163,6 +262,10 @@ public sealed class SdfFrameBlockLawTests {
         Assert.Equal(
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.TileGrid))),
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
+        );
+        Assert.Equal(
+            actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
+            expected: (1u, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from
@@ -182,6 +285,7 @@ public sealed class SdfFrameBlockLawTests {
         SdfFrame WithQuality(SdfViewQuality quality) => (defaults with { Views = [(defaults.Views[0] with { Quality = quality })] });
 
         (string Member, SdfFrame Frame)[] levers = [
+            (SdfWorldPackage.GeometryOnly, WithQuality(quality: new() { GeometryOnly = true })),
             (SdfWorldPackage.DisableAmbientOcclusion, WithQuality(quality: new() { DisableAmbientOcclusion = true })),
             (SdfWorldPackage.DisableFarBound, WithQuality(quality: new() { DisableFarBound = true })),
             (SdfWorldPackage.DisableScreenLights, (defaults with { DisableScreenLights = true })),
@@ -204,7 +308,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -247,8 +350,7 @@ public sealed class SdfFrameBlockLawTests {
                     height: 200u,
                     tables: new SdfPassValues(
                         DebugMode: 0,
-                        Environment: new float[SdfEnvironment.LaneCount],
-                        InstanceMaskWordCount: 1u,
+                            InstanceMaskWordCount: 1u,
                         MeshDraws: 0u,
                         ScreenCount: 0u
                     ),
@@ -276,10 +378,10 @@ public sealed class SdfFrameBlockLawTests {
     public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
         Assert.Matches(
             actualString: SdfIsaHlsl.Generate(),
-            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfFrameBlock.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
+            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfWorldPackage.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
         );
 
-        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfFrameBlock.MinimumNear), (0.01f, SdfFrameBlock.MinimumNear), (8.9f, 8.9f)])) {
+        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfWorldPackage.MinimumNear), (0.01f, SdfWorldPackage.MinimumNear), (8.9f, 8.9f)])) {
             var authored = Frame();
             var frame = (authored with { Views = [(authored.Views[0] with { Camera = (authored.Views[0].Camera with { Near = near }) })] });
             var block = new byte[SdfFrameBlock.SizeBytes];
@@ -290,7 +392,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -326,7 +427,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -383,10 +483,4 @@ public sealed class SdfFrameBlockLawTests {
             expected: PassBlock(layout: SdfWorldInterfaces.WorldLayout)
         );
     }
-    [Fact]
-    public void TheEnvironmentArrayHoldsEveryEnvironmentRow() =>
-        Assert.Equal(
-            actual: SdfWorldPackage.EnvironmentRows,
-            expected: ((uint)SdfEnvironment.RowCount)
-        );
 }

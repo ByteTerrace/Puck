@@ -183,6 +183,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             },
             physicalDeviceApi: driver,
             physicalDeviceSelector: new VulkanPhysicalDeviceSelector(physicalDeviceApi: driver),
+            presentation: new PresentationWork(name: "presentation.vulkan"),
             presentationOptions: new PresentationOptions(),
             renderPassFactory: null!,
             surfaceFactory: new VulkanSurfaceFactory(surfaceApi: driver),
@@ -239,7 +240,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             }
         }
 
-        public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
+        public nint CreateDebugMessenger(VulkanInstanceCommands instance, nint userData) {
             Reach(link: "debug messenger");
             Log(entry: "create debug messenger");
 
@@ -340,10 +341,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The base features the factory requires, fragmentStoresAndAtomics (index 26) and shaderSampledImageArrayDynamicIndexing
-        // (index 34), and no other.
+        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 34))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 29 or 34))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
@@ -374,8 +374,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             false;
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
+        // A Vulkan 1.3 device: it reports shaderDemoteToHelperInvocation, which every device is created with, and no
+        // optional feature.
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
-            false;
+            (structureType == 1000276000u);
         public VkResult WaitIdle(VulkanDeviceCommands device) =>
             VkResult.Success;
     }

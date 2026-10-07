@@ -225,7 +225,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
             swapchainHandle: out var swapchainHandle
         );
 
-        result.ThrowIfFailed(operation: "vkCreateSwapchainKHR");
+        result.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateSwapchainKHR");
 
         if (0 == swapchainHandle) {
             throw new InvalidOperationException(message: "vkCreateSwapchainKHR returned success without a valid swapchain handle.");

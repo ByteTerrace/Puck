@@ -21,6 +21,11 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly ShaderPipelineResource Spec;
         public readonly int Count;
         public readonly CadenceVersion[] Cadence;
+
+        // The ring follows successful writes independently of the submission slot.
+        public int HistoryLatest;
+        public bool HistoryWriting;
+
         // Per instance: whether it holds contents (cleared, written by a pass, or carried with them), and the unplanned
         // state a host event left it in, if any (see ShaderPipelineRenderNode.Tracker.cs).
         public readonly bool[] Initialized;
@@ -31,6 +36,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly bool[] OverridePlanned;
 
         public IGpuBuffer[]? Buffers;
+        public bool Borrowed;
         public IGpuImage[]? Images;
         // The image an export copies this storage into, the export that created it, and whether a copy has written it.
         public IGpuExportableImage? Export;
@@ -39,11 +45,16 @@ public sealed partial class ShaderPipelineRenderNode {
         // The input this output stands for while the package pass writing it draws nothing.
         public PackageAlias Alias;
 
-        public RuntimeResource(ShaderPipelinePlannedStorage storage, int count) {
+        public RuntimeResource(ShaderPipelinePlannedStorage storage, int count, bool shared) {
             Storage = storage;
             Spec = storage.Declaration;
             Count = count;
-            Cadence = (storage.Declaration.Retained ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
+            HistoryLatest = (count - 1);
+            // Package-owned buffers keep one queue-ordered content identity, like retained storage. Ordinary
+            // per-flight rings have no such identity and must not qualify their outputs to stand across slots.
+            Cadence = ((shared || storage.Declaration.Retained || storage.History ||
+                (Spec.IsExternal && !Spec.IsHostBuffer && (Spec.Kind == ShaderPipelineResourceKind.Buffer)))
+                ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
             Initialized = new bool[count];
             HasOverride = new bool[count];
             Override = new ShaderPipelineAccessState[count];
@@ -78,7 +89,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     image?.Dispose();
                 }
             }
-            if (Buffers is not null) {
+            if ((Buffers is not null) && !Borrowed) {
                 foreach (var buffer in Buffers) {
                     buffer?.Dispose();
                 }
@@ -137,6 +148,10 @@ public sealed partial class ShaderPipelineRenderNode {
         // (ShaderPipelinePlan.CountsKernelWork) and null on every other.
         public GpuKernelCounters? KernelCounters;
 
+        public IReadOnlyList<string> WorkDetails = [];
+
+        public uint WorkDetailRow;
+
         public bool Grouped => (PortBindings is not null);
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
@@ -156,6 +171,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuBuffer? GeometryBuffer;
         public IRenderGraphPackageRecorder? Package;
         public PassCadence? Cadence;
+        public bool Recorded;
         public RenderGraphPackageResource[]? PackageInputs;
         public RenderGraphPackageResource[]? PackageOutputs;
         public GpuImageLayout[]? PackageInputLayouts;

@@ -77,7 +77,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             in imageInfo,
             0,
             out var imageHandle
-        ).ThrowIfFailed(operation: "vkCreateImage");
+        ).ThrowIfFailed(device: request.Device, operation: "vkCreateImage");
 
         try {
             request.Device.GetImageMemoryRequirements(
@@ -95,7 +95,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 ExternalMemoryHandleTypeD3D12ResourceBit,
                 request.SharedHandle,
                 out handleProperties
-            ).ThrowIfFailed(operation: "vkGetMemoryWin32HandlePropertiesKHR");
+            ).ThrowIfFailed(device: request.Device, operation: "vkGetMemoryWin32HandlePropertiesKHR");
 
             request.Instance.GetPhysicalDeviceMemoryProperties(
                 request.PhysicalDeviceHandle,
@@ -131,7 +131,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 in allocateInfo,
                 0,
                 out var memoryHandle
-            ).ThrowIfFailed(operation: "vkAllocateMemory");
+            ).ThrowIfFailed(device: request.Device, operation: "vkAllocateMemory");
             request.Device.CountAllocated(
                 allocationSize: allocateInfo.AllocationSize,
                 memoryHandle: memoryHandle,
@@ -144,7 +144,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                     imageHandle,
                     memoryHandle,
                     0
-                ).ThrowIfFailed(operation: "vkBindImageMemory");
+                ).ThrowIfFailed(device: request.Device, operation: "vkBindImageMemory");
 
                 return new VulkanExternalImageImportResult(
                     ImageHandle: imageHandle,

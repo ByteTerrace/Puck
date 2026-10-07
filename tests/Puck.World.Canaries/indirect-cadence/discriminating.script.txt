@@ -1,0 +1,16 @@
+world.indirect off
+world.wait ready 45
+world.counters sdf.indirect
+world.indirect medium
+world.wait 10
+world.counters sdf.indirect
+world.wait 600
+world.counters sdf.indirect
+world.wait 30
+world.counters sdf.indirect
+world.state.cell.set cameraPose $value 2
+world.wait 30
+world.counters sdf.indirect
+world.indirect off
+world.wait 30
+world.counters sdf.indirect

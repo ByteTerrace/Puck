@@ -221,13 +221,13 @@
                   "default": null,
                   "description": "The shading-normal broadening in [0, 1] (null = 0 \u2014 no broadening) \u2014 see Soften."
                 },
-                "bounce": {
+                "fill": {
                   "type": [
                     "string",
                     "null"
                   ],
                   "default": null,
-                  "description": "The bounce tint as #RRGGBB or a state binding (null = black \u2014 no bounce) \u2014 see Bounce."
+                  "description": "The fill tint as #RRGGBB or a state binding (null = black \u2014 no fill) \u2014 see Fill."
                 },
                 "inset": {
                   "type": [
@@ -306,6 +306,22 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "Optional refractive paint layer."
+                },
+                "bleed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white."
+                },
+                "receive": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The finite nonnegative gain on received indirect light; null means one."
                 }
               },
               "required": [
@@ -520,18 +536,22 @@
                           },
                           "limit": {
                             "default": null,
-                            "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedLimit per axis, far past any authored reach)."
+                            "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedRepeatLimit per axis, a lattice with no edge)."
                           },
                           "origin": {
                             "default": null,
                             "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold."
+                          },
+                          "isUnbounded": {
+                            "type": "boolean",
+                            "description": "Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program\u0027s own answer (IsUnboundedRepeat) decides it."
                           }
                         },
                         "required": [
                           "spacing"
                         ],
                         "additionalProperties": false,
-                        "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is UnboundedLimit and does not expand."
+                        "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand."
                       },
                       {
                         "properties": {
@@ -609,7 +629,7 @@
                               "P6",
                               "P6M"
                             ],
-                            "description": "The wallpaper group.",
+                            "description": "The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.",
                             "x-enumDescriptions": {
                               "P1": "Pure lattice translation (bit-identical to a two-axis RepeatLimited).",
                               "P2": "Half-turns keyed on the cell parity.",
@@ -636,7 +656,7 @@
                           },
                           "limit": {
                             "default": null,
-                            "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis)."
+                            "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal)."
                           },
                           "plane": {
                             "enum": [
@@ -660,14 +680,6 @@
                             ],
                             "default": null,
                             "description": "The parity-material stride (null = 0, geometric only)."
-                          },
-                          "lodDistance": {
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null,
-                            "description": "The symmetry-LOD distance threshold (null = 0, off)."
                           }
                         },
                         "required": [
@@ -1040,7 +1052,7 @@
                   "properties": {
                     "inset": {
                       "type": "number",
-                      "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
+                      "description": "How far the panel copy shrinks on every local axis before it is placed \u2014 the copy\u0027s own scale is shape scale \u2212 Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy\u0027s primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape\u0027s smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) \u2014 past that the eroded copy is empty everywhere."
                     },
                     "depth": {
                       "type": "number",
@@ -2330,6 +2342,13 @@
                   ],
                   "default": null
                 },
+                "scatter": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
                 "isKnownKind": {
                   "type": "boolean",
                   "description": "Whether the family is supported."
@@ -2343,7 +2362,7 @@
                 "ramp"
               ],
               "additionalProperties": false,
-              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control."
+              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control. Scatter, in [0, 1], is the share of the medium\u0027s extinction that scatters the light-casting bodies\u0027 light toward the eye; absent scatters none."
             },
             "default": null,
             "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."

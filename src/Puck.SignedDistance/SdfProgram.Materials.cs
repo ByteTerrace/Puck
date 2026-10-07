@@ -6,9 +6,11 @@ public sealed partial class SdfProgram {
     // Twenty float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit.
+    // Bleed occupies the formerly unused 2.w/7.zw, and indirect receive is 3.w.
     private void PackMaterials(int materialOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         for (var index = 0; (index < materialCount); index++) {
             var m = materialTable[index];
+            var bleed = (m.Bleed ?? Vector3.One);
             var materialBase = ((materialOffsetVectors + (MaterialVectorsPerEntry * index)) * WordsPerVector);
 
             void Row(int row, Vector4 value) => WriteVector4(
@@ -41,16 +43,17 @@ public sealed partial class SdfProgram {
                     m.Coat,
                     m.Wrap,
                     m.Soften,
-                    0
+                    bleed.X
                 )
             );
             Row(
                 row: 3,
                 value: new(
-                    value: m.Bounce,
-                    w: 0
+                    value: m.Fill,
+                    w: m.Receive
                 )
             );
+            Row(row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;
 
@@ -86,8 +89,8 @@ public sealed partial class SdfProgram {
                     value: new(
                         paint.ModulationFrequency,
                         BitConverter.UInt32BitsToSingle(value: paint.Seed),
-                        0,
-                        0
+                        bleed.Y,
+                        bleed.Z
                     )
                 );
                 for (var stop = 0; (stop < paint.Stops.Count); stop++) {

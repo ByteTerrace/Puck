@@ -11,9 +11,6 @@ public interface IWorldTransferForwarder {
     /// <summary>Names host-owned transfer state that prevents this authority from rewinding independently, or
     /// returns null when it has none. Called on the host's tick thread while holding the source authority gate.</summary>
     string? TimelineResetRefusal(WorldServer source);
-    /// <summary>Resolves already-evaluated adjacency continuations before this authority advances its population.
-    /// The caller already holds <paramref name="source"/>'s authority gate.</summary>
-    void ResolveContinuations(WorldServer source);
     /// <summary>Forwards one intent addressed to a departed traveler incarnation.</summary>
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
     /// <summary>Forwards one typed submission addressed to a departed traveler incarnation, preserving its caller
@@ -29,6 +26,8 @@ public interface IWorldTransferForwarder {
     bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason);
     /// <summary>Resolves the final observable authority epoch behind a departed traveler incarnation.</summary>
     bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription route, out string reason);
+    /// <summary>Fetches a prototype through the departed traveler's current projection.</summary>
+    byte[]? FetchForwardedPrototype(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin);
     /// <summary>Streams the current owner's projection for an already authenticated departed traveler.</summary>
     /// <param name="source">The authority whose committed onward route is followed.</param>
     /// <param name="request">The credential and remaining disclosure/work bounds.</param>

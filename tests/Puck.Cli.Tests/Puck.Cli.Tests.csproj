@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -9,24 +10,24 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" />
+        <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../../src/Puck.Cli/Puck.Cli.csproj" />
         <!-- TestCommandLawTests boots the real Puck.World executable out of its own Release output, so that
              output has to exist before the suite runs; nothing here links against the assembly. -->
-        <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
+        <ProjectReference Include="../../src/Puck.Actors/Puck.Actors.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
     </ItemGroup>
     <ItemGroup>
-        <None Update="Assets\**">
+        <None Update="Assets/**">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>

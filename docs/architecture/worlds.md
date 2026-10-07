@@ -87,9 +87,20 @@ the same document can take it instead of deriving it again. It is a cache with a
 strong key, never a source of truth: the document stays the durable input, and a
 boot that finds no compiled world derives everything and runs the same world.
 
+Before that lookup, `WorldCompileCache` can answer the composed document itself.
+Its composition entry holds the merged JSON, the original chain bytes used for
+the source hash, and every file, absence and directory listing read through
+`CompileInputs` in `Puck.Assets`. The resolved path, catalog fingerprint, source
+kind and compiler identity identify the entry; every recorded input must still
+hold before it can answer. An edit to the source, a basis or an import causes a
+miss. The same cache holds `.puck` compilations, with distinct keys for document
+compilation and the test lowering requested by `puck test`. Boot compilation
+omits test lowering. Both entry kinds stream their bytes and checksum into the
+atomic file writer.
+
 **The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
 with the magic `PWLD` and format version 1, named `<name>.puckb` after its
-document (`moth.puck` and `moth.world.json` both map to `moth.puckb`). Its header
+document (`moth.puck` maps to `moth.puckb`, and `puck.world.json` to `puck.puckb`). Its header
 holds, in order, four keys, and a boot whose own four keys differ ignores the
 whole file:
 
@@ -114,6 +125,7 @@ names it as deferred. Nothing is repaired or adapted.
 |---|---|---|
 | `DEFN` | The drawn, resolved definition as compact canonical JSON: the composed definition after its first-fill draws and the state references they fill, before host overrides, which every boot applies. Loading it parses the JSON in place of drawing again. | None |
 | `ASST` | For every music, table, tune, and patch row, in order of family then name: the family, row name, authored source, and the source file's 64-bit content hash, or its absence. | Each distinct asset source, by its authored spelling, read beside the document ([paths a document names](#paths-a-document-names)) |
+| `CURV` | Each drawn curve's exact compiled coefficients, stations and arc tables, in document order. `CompiledCurvatureSpline` reads and writes the binary form and refuses a foreign shape fingerprint. Loading seeds the shared curve cache before admission. | None; it reads `DEFN` |
 | `BAKE` | The path of the bake pack relative to the document's directory, then every distinct bake key of the drawn definition's prototypes at the standard tier, as the key's pin, in ordinal order. The outcomes live in the pack, not here ([creation bakes](#creation-bakes)). Its version is the baker's. It does not derive on boot. | None; it reads `DEFN` |
 
 `CompiledWorldChunks` lists the derivations in the order they derive and load,
@@ -141,15 +153,18 @@ where it wrote one.
 **What a boot counts.** The `world.boot` work source counts
 `world.boot.compiled-hits`, one per boot whose drawn definition came from a
 `DEFN` chunk, and `world.boot.chunk-derivations`, one per chunk derived afresh.
-Both depend on what a boot finds on disk, so both are pacing-class. Every
+Both depend on what a boot finds on disk, so both are pacing-class. Each
+composition count, document read, source compile/cache count and curve compile
+is also pacing-class because persisted images can answer that work. Every
 deterministic-class count reads the same whether or not a boot finds a compiled
 world: the `DEFN` load's parse belongs to the hit and is not a
 `world.boot.parses`. `puck counters` relies on that, because its two backend
 legs share one per-user cache and only the first can miss it.
 
 A boot from a compiled world still validates the definition and compiles its
-rules, and still composes, parses and serializes the authored document to
-compute the definition hash, so `DEFN` saves the draw alone. The hosted
+rules, and still parses and serializes the authored document to compute the
+definition hash. A held composition saves the merge, `DEFN` saves the draw, and
+`CURV` saves the spline derivations. The hosted
 asynchronous load and the replay drive draw without a compiled world. The work
 still open, and the chunks that follow, are in
 [the runtime and delivery plan](../plans/runtime-and-delivery.md#compiled-worlds).
@@ -159,7 +174,7 @@ still open, and the chunks that follow, are in
 A creation bake is a prototype's presentation assets: an indexed mesh, its
 surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
-keyed by the creation's pin (the prototype row's hash), the baker's version, and
+keyed by the creation's pin (the prototype row's hash), the bake code fingerprint, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
 contact, queries and simulation keep reading the field. A presentation draws
 its bakes by default when the loaded world's `BAKE` chunk supplies every bake
@@ -169,7 +184,10 @@ this machine's cache or another world's pack holds the same bake keys.
 ones made locally. The default therefore keeps captures independent of local
 baking. While bakes draw, an untinted static
 placement whose prototype's bake is ready draws the baked mesh through the mesh
-pass, textured from the bake's five surface textures, and keeps its field as
+pass, textured from the bake's five surface textures, or, in a view where the
+placement is small on screen, as the bake's impostor card
+([the impostor](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)),
+and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with
 text or noise relief keeps drawing through its field. The engine is not ready
 until the bake schedule has reconciled and, while the presentation draws its
@@ -203,8 +221,9 @@ earlier run kept in the per-user `bakes` cache is read back, and any
 other is baked and kept there, so editing one prototype bakes that prototype
 alone. A prototype draws through its field until its bake is ready. The
 `sdf.bakes` work source counts the keys the cache held, the keys scheduled, the
-bakes made, the refusals, and the field evaluations spent; every kind is
-pacing-class, because what the cache already holds decides it.
+bakes made, the refusals, the held bakes that cannot be decoded, the field
+evaluations spent, and the bakes a presentation switched to from their field;
+every kind is pacing-class, because what the cache already holds decides it.
 
 ## World relationships
 
@@ -392,7 +411,12 @@ and continuous terrain without adding a separate crossing transform.
 That isometry is a rotation about world up — the validator refuses a pair whose map is anything else
 — and the turn it applies is `counterpartYaw - thisYaw - 180` degrees. Two faces pointing at each
 other are 180 degrees apart and map as the identity, so a body arrives at the same world point,
-keeping its heading and its velocity, and any other authored pair turns it by the remainder. A
+keeping its heading and its velocity, and any other authored pair turns it by the remainder. A local
+seat following the body turns its view by the same turn, its eased chase boom included, so it looks
+along what the door's window showed. Every traveler carries its accumulated arrival turn, the sum of
+those turns reduced to `[-pi, pi)`, through each transfer. When an authority in another process hands
+the traveler on through doors of its own, the route it describes carries that turn, and the following
+seat turns by the change since it last turned. A
 boundary's rectangle takes its right axis from its yaw whatever its pitch, so the formula holds
 unchanged for a boundary lying flat: there the yaw no longer contributes to the outward direction
 and becomes the rectangle's roll about the vertical, which means an untwisted floor seam authors its
@@ -624,14 +648,60 @@ admission and read by every remote egress: `frames` (pixels only, no document), 
 (`puck.world.projection.v1` — the visitor's rendered and embodied-from state, with no member to
 carry the logic or authority sections), or `replica` (the whole world document, the sanctioned
 download). An absent tier resolves to `presentation`, so a world authored before the field existed
-hands out no replica. A traveler crossing a seam discloses an identity projection: appearance,
-the two motion rates, and the capacity-one record pools explicitly selected by `identity.records`.
-The rest of its owned document remains private. A counterpart proves a border with a signed
+hands out no replica. A counterpart proves a border with a signed
 attestation over the crossing rather than by handing over its world; assembling a derived corner from
 several such proofs ranks a resolved document over a verified attestation over a plain one,
 first-of-kind winning, so only the first two ever complete a corner. Snapshot delivery separately
 carries a per-observer disclosure policy applied at the output hub's sink boundary, defaulting to
 disclose-all.
+
+A traveler crossing a seam discloses its identity projection and nothing else: its id, name and
+color, the two motion rates, the capacity-one record pools explicitly selected by
+`identity.records`, and its facts row. The rest of its owned document never travels: state rows
+outside the selected records, binding layers, the private HUD panel, the seat look, grants and
+controller history. The rule holds on every path a crossing takes: a reservation, a commit, a
+commit retried after its source restarts, and a colocated crossing, which is the same interface
+short-circuited. Every durable leaf a crossing writes records the projection alone: a crossing-log
+record, a taped arrival, and a checkpoint's escrow, in-doubt and body rows. A destination that needs
+another identity field discloses it by adding that field to the projection.
+
+An identity with no written fact carries an empty facts row with its authored name and capacity,
+so its first write abroad observes the same bound as a write at home.
+
+A visitor's facts and records live on its travelling projection. A destination's `setIdentityFact`
+or record write changes that copy, and the next crossing carries it on; a destination never saves
+a visitor into its own owned-world catalog. A local seat coming home rebinds to the identity it left
+with: the arrival lands at the seat whose incarnation this authority minted, carrying the id of an
+identity this authority's catalog owns. That identity adopts the carried facts and records, and
+only those, and is saved after every landing succeeds and the arrival record is durable. A rolled-back
+arrival leaves the owned identity and its saved document unchanged. An id match alone is not enough,
+since every catalog seeds identities from its template. Facts another world wrote are unsigned: provenance attestation for carried state
+does not exist yet, so an owner adopts whatever a visited world wrote onto its traveler.
+Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
+reservation has no field that could ask for a local seat, so it is always a peer admission. Remote
+home adoption remains deferred. Checkpoint restore rebinds a local home seat to its restored owned
+identity; a visitor with a colliding id keeps its travelling projection. Recovery applies a logged
+departure's facts and records to the owned identity before live writes resume: they are the
+authority's own state newer than its checkpoint. An in-doubt transfer already captured in a
+checkpoint uses that checkpoint's catalog. An eventual abort reseats and saves the current owned
+identity, so neither the departure's facts nor owner writes made while recovery waits are lost.
+
+Replay verification saves no identity. A replay is a function of its tape: the tape records the
+projection a home arrival's seat was bound to once its owned identity adopted what it carried, a
+partial adoption included, and a re-driven home arrival binds exactly that projection, its facts and
+records included, in a detached identity, and takes nothing from the live catalog. Travelers of one
+arrival that come home under one owned identity bind that one identity live, so a later traveler's
+adoption is what every one of them holds: the tape records each binding once every adoption has run,
+and the re-drive binds them to one shared detached identity, so a write through one seat reaches the
+others exactly as it did live. It reports on `replay.profile` where the owned identity as it
+stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
+owner's edit since the recording is named without making the replay diverge. A live
+`replay.drive` refuses a tape that lands travelers. It seats each profiled seat on such a detached
+copy too, and when the drive ends or is cancelled every seat this authority's catalog owns rebinds to
+the live catalog identity and the copy is discarded: a write the drive made never reaches the catalog,
+the same differences are reported on `replay.profile`, and a write after the drive is saved again. A
+seat the catalog does not own keeps what it carries. A drive that ends in a fork records the switch on the fork's own tape,
+at the head of its first tick, so the fork's tape holds the identity the fork continues with.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through
@@ -652,6 +722,24 @@ An observation feed provides:
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
 
+The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
+so each sink consumes or copies them before returning. The federation projection sink copies encoded records
+into a per-subscription queue of at most eight pending deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
+invalidation. The hub detaches it immediately; draining the retained records does not keep the subscription alive.
+A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
+or authority route. The queued records retain their original order and authority/session epochs until that
+invalidation; no later record enters a detached queue. A retired authority route detaches with
+`world.observation.invalidated`, and a composition its recipient's disclosure refuses
+(`WorldDisclosureException`) with `world.observation.disclosure`. Any other failure to compose is a
+fault, and faulting sinks still detach independently.
+
+Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
+`Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
+for delivery. Authoritative readbacks require a `Replica` admission and disclose-all observer policy. A
+session whose observation has ended has no query read door. Session state read views use the delivered tier's
+definition projection; Frames and ended sessions are refused there too.
+
 A session screen observes its destination as a session. When the screen binds,
 `WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
 the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing
@@ -662,6 +750,86 @@ stops the mirror, and granting it again catches the mirror up with the current d
 first. A destination that admits no viewer binds the screen dark and says why, and a destination
 that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
 session screen shows therefore authors an admission row that grants `observe all` with a budget.
+
+Below the replica tier, each recipient, a session screen or a federation observer, is fed by its own
+`WorldProjectionFeed`. Its first delivery is the whole projection; after that it is sent only the
+members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, the document delta a
+basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
+nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
+recipient as a state delivery rather than a new definition, and a session's state mirror reads it at the
+tick it was stamped with, even when no body snapshot was sampled there; on the federation wire it travels
+as a `ProjectionDelta` frame. A delta that changes which rows are observed, their order, or their cells'
+keys installs a new definition instead, so bindings resolve their row ordinals again. A
+peer's projection and deltas are read through `WorldJsonContext.Untrusted`, which refuses duplicate
+members and nulls the model does not admit, and a delta that does not hydrate leaves the held
+projection unchanged. Projections and deltas travel as compact canonical JSON
+(`WorldProjection.SerializeCompact`), as does a replica's whole definition
+(`WorldDefinitionSerialization.SerializeCompact`); the indented canonical forms are kept for what hashes, stores
+or displays a document.
+
+A projection's `prototypes` rows carry their local `id` and a full `sha256/` content pin.
+The pin names the compact canonical creation document and mesh, independently of the prototype's
+name in a world. State-backed values are disclosed and flattened before the body is hashed. The
+recipient resolves each reference through `Puck.Assets.ContentAddressedStore`, shared under the
+per-user `projections` directory across joins and worlds. Hosts can configure the shared content store
+before its first use; feeds and recipients can also take an explicit store. A missing body is fetched through the
+authenticated federation request lane; its bytes must match the pin before they enter the cache or
+hydrate a projection. A rejoin sends no cached prototype bodies, and a changed prototype fetches only
+its new body. The `world.projection.prototype-fetches` and `world.projection.prototype-bytes`
+counters record those fetches separately from projection and delta bytes.
+Those two counters, and compositions that include fetch authorization, are pacing-class because
+the recipient cache survives runs; the laws count them against explicit cold and warm caches.
+
+A content pin grants no access. Every fetch recomposes the recipient's current projection and
+requires the requested pin to occur in it. Traveler fetches follow the existing committed forwarding
+route, carrying its disclosure ceiling and hop bound, and each hop checks its current admission;
+the final authority checks the traveler's Observe grant. A frames-tier request, an unknown pin or a
+prototype no longer disclosed is refused. The content store has no unrestricted remote read door.
+Only the projection's disclosed body crosses; owned identity documents stay at home.
+
+A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
+as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
+share of a turn, which for a Fixed row is its fractional bits exactly, and the phase one authoritative
+tick adds), never the row it reads. The recipient predicts the phase from the anchor at the tick it
+presents, through the same `WorldClockAnchor.Predict` the authority uses, and `WorldClockAnchorLedger`
+sends a new anchor at exactly the authoritative ticks that prediction misses the authority's own phase.
+An anchor carries a rate only over a span the authority proves affine: a Fixed slot whose one trait is
+an advance adding whole raw units every tick, which the next tick confirms. Every other movement, a rate
+change, a quantized advance, a cycle's staircase, an eased row or a seek, carries rate zero and
+re-anchors wherever the phase moves, so a sky held still or moving along a proved span sends nothing.
+A state clock is a reading of its row's slot, and a bindable bound to a state cell a reading of that
+cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
+composition by name before any derived value is emitted, rather than presenting the value at its
+fallback. A row a presented bindable binds that the recipient may read crosses as an observation of the
+cells it may read, whether or not the row declares a policy, and moves with the row's deltas. An
+observed row carries its declared envelope, and an observed cell holds its stored value beside the one
+value-over-time trait that governs it and the clock that trait reads: an advance's base and epoch engine
+tick, a cycle's phase, epoch tick and substep remainder, or an eased cell's target with the dynamics row
+it eases by and its follower's epoch tick, position and velocity. A `.$target` read answers the stored
+target. The recipient evaluates the trait with the engine's own fixed-point computation, over the
+dynamics rows its projection carries, so a bound read presents what the authority presents at every
+tick. Only a write or a jump of the authoritative state changes an observation, and each composes the
+projection: every jump (a whole-document rebuild by `world.reset`, `world.load` or `world.reload`, an
+undo, a replay drive, and a checkpoint restore) marks the definition for
+the one delivery door (`WorldDocument.MarkDefinitionDeliveryPending`), and a restore, which completes
+outside the tick, delivers at once. A history seek is one jump however it gets there: it withholds every
+delivery of its span (its restore, a load-door install, each re-simulated tick's state and snapshot)
+and then delivers the restored definition and the target tick's snapshot once. So the per-tick step sends anchors alone and nothing while a value
+only moves as its trait says; the `world.projection` work
+source counts every composition. A late view hydrates the exact current phase; while a
+clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
+the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
+recipient per clock is a counted row under the `world.projection` work source. It is the only anchor
+kept: one replaced before a delivery reached the recipient is gone. A recipient therefore presents the
+latest authoritative tick it was told about and predicts only forward from the anchor it holds. A frame
+that interpolates toward the delivery that brought an anchor presents the anchor's own phase, and
+`WorldClockAnchor.Predict` refuses a tick before its anchor by name. A held anchor ahead of the
+authority's tick is stale: the authority was restored or sought behind it. The next composition or step
+drops it, released like any other anchor row, and carries what a fresh recipient would hold at that
+tick: the clock's own anchor, its seed while its row holds no number, or no anchor. A recipient therefore
+never holds a frozen phase from a future the authority never presented. The anchor row is also released
+when the recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its
+stream detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
@@ -674,15 +842,18 @@ memory the shared residency saves. The session stays the gate: once it no longer
 everything, the window leaves the scene and shows its own session again, and its input stays on the
 session either way.
 
-A world's authority owns its session screens' sessions, not the presentation that draws them.
-`WorldInstanceHost` opens one for every screen or placement face whose source is a session when the
-world's definition declares it, re-points or closes it when an edit changes the screen's destination
-or removes the screen (an edit of its camera, projection or resolution keeps the session), asks a destination that ended one to admit the screen again, and stops a destination left with
-neither a screen nor anyone in it, as it stops one whose admission it just refused. The boot world's
-screens always hold their sessions; any other world's hold them while someone stands in it, so a
-portal in a world a traveller reached works for them there. A paused or stopped world keeps its
-sessions in step with its definition and its occupants, but forwards nothing. A presentation reads
-the session (`WorldInstanceHost.ScreenSession`) and renders its mirror.
+A world's authority owns the sessions its screens and named infinity layers observe through.
+`WorldInstanceHost` opens one for every screen or placement face whose source is a session and every
+named sky view whose layer names a destination. A screen index and a layer name identify separate
+observations, even when both resolve the same destination. An edit that changes the destination or
+removes the observer closes its session; an edit of its rendering members keeps it. The host asks a
+destination that ended a session to admit its observer again and stops a destination left with
+neither an observer nor anyone in it, as it stops one whose admission it just refused. These
+sessions follow the boot world's nesting depth, including worlds a traveller stands in and worlds
+they observe through another session. A paused or stopped world keeps its sessions in step with its
+definition and occupants, but forwards nothing. Presentation reads `ScreenSession` or
+`InfinitySession` and renders that session's disclosed mirror. Only physical portal faces forward
+input; an infinity layer opens no control route.
 
 A click through a portal reaches the destination's rules as the session's input. A body engages the
 portal face with `Control` over it, as it engages a machine screen, and the fold routes its
@@ -702,14 +873,107 @@ replays from its tape forwards nothing, its drive's last tick included: its dest
 replaying with it. A destination driving its own tape restores the sessions it recorded; when the
 drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
 
+The windowed and offscreen render roots prepare delivery and the graph set, then the package's
+frame capture runs the world's existing view composer before scheduling. That capture places each
+SDF view using the same eased rect its camera projects, including fractional pixel extents, and places
+shader panes from that composition.
+Each occupant's allocation is the largest width and height its slots reach over the layout
+transition in flight, from its starting rect to its ending one, when one of the two contains the
+other, with padded departing cameras and the slot a view ordinal holds on either side of the
+midpoint cut included (`WorldViewOutputRegions`).
+An endpoint with no rendered slot reserves the whole-display spectator. Interrupted transitions
+retain each occupant's largest reservation until the chain settles, so repeated interruptions never
+shrink its allocation mid-ease. A settled layout requests each view and pane's own rect, subject to
+the scheduler's quantization and shrink hysteresis, so the shipped split layout renders
+each seat at half the display. Easing changes placement and the resolved grid inside the
+render-scale ceiling without resizing a node; allocations grow as a transition starts and shrink
+as it settles. An occupant that grows on one axis and shrinks on the other keeps its starting
+extent through the ease, which `place` resamples its eased rect from, and allocates once, at its
+settled rect, so every transition allocates at most once. Collapsed arriving slots keep a
+finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
+frames publish their retained placements on every prepared frame. Editor comparisons record their
+viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
+frame, one rebuild for a shrinking transition across quantization steps and for an opposite-axis one,
+and the split layout's half-display
+allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
+camera projects for, so a pane shader projects at the placed aspect while its output keeps the
+allocation's.
+
+Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
+Repeated window resizes can delay frame production, but cannot advance the capture to a later tick
+or leave it blocking the next scheduled capture. A pending capture presents bound state and body
+poses at fraction one; its image, region tick and state hash describe the scheduled tick
+(`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`). The
+swapchain follows the window's client extent while the world's logical frame extent stays fixed.
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every PNG's tick and hash through delayed frames. When a frame cannot be served, the existing
+readiness-dependent hold budgets apply separately to each accepted request, produce a named refusal
+and withdraw that request when exhausted; a run settles
+anything still owed before disposal (`WorldCaptureHoldLawTests`).
+
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the
-destination's own sky and lighting, along its `render.cycle` when it authors one, and its sky clock
+destination's own sky and lighting, its keys read on the destination's own clocks, and its sky clock
 (star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
 session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
-ambient occlusion, no far bound). A nested screen inside a projected destination binds dark: the
-explicit depth-one policy.
+ambient occlusion, no far bound).
+
+A projected destination draws its own screens wherever it is rendered, as the boot world does: a
+portal inside it shows its own destination, whose portals show theirs, recursively, to the
+presentation's nesting depth. The depth is the boot world's `views.nestingDepth`, 3 when the
+document authors none; a value below 0 or past 8 is refused by name. A screen of the boot world, or
+of a world a seat is presented in, is one level deep, and each screen seen through it one level
+more. Each level renders from its own eye: a window fits to the camera of the view that renders the
+world its glass stands in, which is the boot world's viewer, the first seat presented in a routed
+world, or the window one level up, mapped through its own door. So two portals facing each other
+end at the depth, each level looking through its own glass. A session screen at the depth shows its
+session's `fallback` colour, black when the session authors none, through the `color` producer. That
+is the one rule for every face past the depth: a flat colour the author chose costs nothing to show
+and reads as the end of the recursion.
+
+Every other screen of a world shown through a screen, or of a world a seat is presented in, shows
+what it would show in the boot world, from that world's own sources, never the boot world's:
+
+- A producer whose content is a pure function of its settings (a test pattern, a QR code, a colour)
+  shows the one shared instance of that content.
+- A machine shows its own world's machine. A machine source instance names the world instance whose
+  host runs it, so two worlds' cabinets of one name are two images. That world's server prepares and
+  steps its machines on its own ticks, whether or not any seat stands in it. A session whose delivery
+  withholds the machine declaration opens no reader for it, even when a disclosed screen names it;
+  that screen shows nothing and casts no machine light.
+- A camera view shows a view of that world through its own camera row, posed by its own mirror (a
+  placement anchor, or an active body's interpolated pose; any other anchor reads the world origin).
+  Each level films its world's cameras under its own name (`session$24$camera$<camera>`,
+  `routed$<digest>$camera$<camera>`) into the residency that level's world renders through, after
+  that residency's own views. A camera view reads its world's other camera views at their previous
+  frame, so cameras filming each other's screens never wait on each other within a frame.
+- Text draws through that world's own font catalog, resolved beside that world's own document.
+  An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
+  and reports its text fault until a valid delivery arrives.
+- A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
+  with a fault naming that world.
+- A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
+  shown through a portal never opens the local user's camera or desktop.
+
+A world delivered from another authority carries no document directory and runs its machines there,
+so its text and its machines show nothing here, and `world.nesting` says why. Its session screens
+show nothing too: the authority holds a screen's session only for the worlds this process runs, and
+no message carries a remote world's screen session to the presenting process. A remote world's
+camera views and producers show.
+
+The authority opens the sessions a world's screens and infinity layers show while that world is
+fewer observations deep than the nesting depth. The boot world and every world a human stands in
+are at depth zero, and a world a live session observes is one deeper than the shallowest observation
+showing it. An ended observation
+holds no descendant sessions open, and its retained document grants no live view of those descendants. What a world observes
+therefore follows the documents and the sessions already open, never what a frame draws. The
+presentation renders a level only while something sees it: each view that reads a session tests the
+glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
+behind that camera or outside its frustum schedules nothing beneath it. `world.nesting` echoes every
+level: its depth, its destination, the residency it renders through, what each of its world's
+screens shows (a session or camera view, a source instance with the fault that leaves it dark,
+`text`, or `none`), and why that world's text does not draw when its fonts do not resolve.
 
 A portal's face can show its destination as a window (`projection: window`): the face's portal facet
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
@@ -720,11 +984,13 @@ one per screen, since a screen shows one image: the first joined seat's view, ch
 person, which is the camera a click through that view is cast from, so the texel the glass shows at
 a point and a click at that point look along one line into the destination. With no seat resolving
 a view, the eye is the camera the frame's first view renders with: a fixed camera's, or the
-no-local-seats spectator's. A pick through the glass continues through
-the camera the window rendered into the destination and, since the destination's own screens bind
-dark, ends on its world: on the surface the pick's ray meets among the destination's static
-placements. That pick is presentation; the input a click carries reaches the destination's rules
-through the engaged body's own intent, as above.
+no-local-seats spectator's. When the counterpart seats a screen, a window's rays start past its glass,
+so a window never shows the destination's face it looks through, which shows a window of its own when the counterpart is
+a return portal. A pick through the glass continues through the camera the window rendered into the
+destination, through the destination's own screens to the nesting depth, each world tested against
+its own screens, and ends on the last world it enters: on the surface the pick's ray meets among that
+world's static placements. That pick is presentation; the input a click carries reaches the
+destination's rules through the engaged body's own intent, as above.
 
 A seat that crosses into a world the boot presentation cannot map it into (another document that no
 adjacency relates to the boot world) is presented in that world. Its view draws the destination's own
@@ -742,7 +1008,12 @@ discloses everything joins its destination's scene this way (`WorldSessionWindow
 seat and every such window presenting one endpoint share exactly one residency, and its GPU node
 (`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
 tables hold by memory. Any other session screen renders a residency of its own from its own
-observation of the destination. Split seats in
+observation of the destination. The rule holds at every depth: a destination shown at two depths, or
+by a window and a seat, shares its endpoint's one residency while each session discloses everything.
+Each view of a shared residency binds the screens of the level it renders, so one world seen at two
+depths shows each level's own images. Every level is an instance of its own, with its own temporal
+history and its own resets, so no level's history carries another level's frames. A seat presented
+in a world sees that world's own screens, its return portal among them. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
 showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
 follows the destination's residency in place when its tables are ready, its instance capacity matches
@@ -754,11 +1025,11 @@ also rebuilds the view's scratch.
 
 `world.screenshot <path.png> crossing [player]` waits for a later route of the selected seat
 (player 1 by default) on a frame that includes its viewport, then requests that frame's composed
-image. It captures what the crossing presents, including a held image while incompatible passes
-rebuild. An ordinary capture can run while it waits; if one is still pending at the crossing, the
-crossing capture reports a refusal. If the root cannot serve that frame, the request is withdrawn
-before the next frame instead of capturing a later route. A request still waiting when presentation
-ends also reports a refusal.
+image. If the destination's passes are still rebuilding, the request waits for their first completed
+frame; the departed world's held image cannot serve it. An ordinary capture can run while it waits
+for the route to move; if one is still pending at the crossing, the crossing capture reports a refusal.
+A refused frame, a seat no longer visible, or another route change refuses the request. A completed
+frame that did not serve it also refuses it before the next attempt, as does presentation ending.
 
 Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
 traveller, or a body the world's own census authors. A party door entered by a traveller that is not
@@ -787,13 +1058,111 @@ and enters its ordered domain; it never reads wall clock or compares raw tick or
 with different rates. Abort restores each body's original pose/state, not merely source spawn. The
 source releases authority only after destination acknowledgement.
 
+The handoff token is the source-scoped transfer key: the source's authority identity and the transfer
+id it minted. Three fences hold it. The traveler's ownership epoch admits one commit per epoch, so a
+reservation for an epoch the destination has already consumed is refused as stale. The
+destination's lease deadline refuses a commit after it expires. The destination's crossing log
+refuses an append from an activation its store has fenced off, so a superseded destination cannot
+commit. An exact replay of a committed token is answered as committed, including by a destination
+rebuilt from its checkpoint and log; the same token carrying a different commit is refused.
+
+Every crossing step a peer can see is written ahead to the authority's crossing log
+(`IWorldCrossingLog`) before the step happens:
+
+| Authority | Record | Written before |
+|---|---|---|
+| Source | departure: the complete in-doubt recovery record | the commit is sent |
+| Destination | arrival: the reservation, its body indices and the commit | the commit is answered |
+| Source | settlement: arrived, with its forwarding routes | the arrival is acknowledged |
+| Source | settlement: stayed | the cohort is restored home |
+
+The log answers each append as durable, refused, or uncertain (`WorldCrossingDurability`). Uncertain
+means the store's answer was lost, so the record may or may not have landed. After an uncertain
+record the authority records no further crossing step until it recovers, because the next record
+would take the same sequence.
+
+A source acts only on a durable record. If its departure is not durable, it aborts and keeps the
+cohort. If its settlement is not durable, the settlement stays pending until it lands. Recovery
+redoes whichever of these records did land.
+
+A destination that cannot make its arrival durable lands nothing. If the record was refused, it
+answers the commit as a refusal. If the record is uncertain, it cannot refuse, because the arrival
+may already be durable. It answers `Uncertain` (`WorldTransferStatus.Uncertain`) to the commit, to a
+retried commit and to the status query, and it refuses a reservation for any of the travelers.
+
+The source treats an uncertain answer like a lost one. It keeps the transfer in doubt and neither
+completes it nor restores the cohort. Only the destination's recovery decides. A recovered
+destination answers from its log: an arrival found there lands again and the transfer is committed;
+otherwise the transfer is missing and the source restores the cohort. A stopped row answers for no
+transfer. An in-doubt transfer addressed to it waits for the next row that claims the same authority.
+
+Each authority numbers its records in one dense sequence that every checkpoint captures. A restarted
+authority restores its latest checkpoint and redoes, in order, every record past it:
+
+- an arrival lands again through the escrow;
+- a departure detaches its cohort again and puts the transfer back in doubt;
+- a settlement publishes the forwarding routes or restores the cohort.
+
+The ordinary drain then reconciles the transfer with its peer. Recovery refuses an arrival it cannot
+land again and leaves its sequence unapplied. Whichever step a crash or a lost answer interrupts, the
+traveler ends on exactly one authority.
+
+A hosted silo row writes its records into its fenced authority journal beside its mutations, and
+recovers both kinds in publication order. An activation whose journal does not decode or redo is
+refused. A checkpoint pins its journal coverage at capture and queues its upload under the same
+authority gate, so arrivals after the capture remain in the journal suffix. Uploads run off the tick
+thread. `WorldSiloHost.WaitForCheckpointUploadsAsync` waits for each active row's latest queued upload,
+including cadence captures, without taking another snapshot; retirement uses this barrier before its
+final capture. A failed mutation journal append blocks the activation's later publications, so
+no crossing depends on a document edit its successor cannot recover. A root compare-and-swap the
+store cannot reconcile is uncertain, and it blocks the activation the same way. A blocked row cannot
+write the final checkpoint a deactivation needs. A new activation replaces it only after its silo
+restarts, and until then a source beside it keeps its doubt; routing that doubt through the
+authority directory instead is [open work](../plans/open-items.md#cross-plan-maintenance). A desktop process installs no log, so
+its crossings live only as long as the process.
+
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
 issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
 
-Each authority tape records the initial authored rate and every ordered rate write, pause and resume
-that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
+A departure is taped by its source where the source detached the body, and a rollback where it put
+the body back, each inside the authority operation that decided it. Whatever reaches the source in
+between, a traveler handed straight back into the seat it left included, is taped after the
+departure, and a crossing that stays in doubt for ticks leaves the seat empty on the replay for the
+same ticks. The settlement that follows is narration and the key a set of tapes pairs by.
+
+An arrival is taped by its destination, one entry for each commit that landed at least one
+traveler. The entry carries the reservation, the body indices and the commit, encoded with the same
+leaf the destination's crossing log writes, and the commit's outcome: the generation each traveler
+landed at, and whether the commit rolled its landings back. A commit rolls back when a member is
+refused, or when its arrival record cannot be made durable; the rollback is taped because a landing
+advances its index's generation even when it is undone. Each traveler lands with the identity
+projection its commit carried, which holds its facts and records, and nothing of its owned
+document. A traveler's admission is part of its landing: a local seat joins its session, and a
+transferred peer or entity is admitted inline, even inside an ordered submission's completion, so
+no queued admission outlives a rollback; neither is taped beside the arrival.
+
+The re-drive lands the arrival again through the shadow's own escrow, at the commit's position among
+the tick's authority entries, under the lease the arrival bound: it restores that lease rather than
+deciding the reservation again, because the commit stood under the reservation's own decision. Each
+traveler must land at its recorded body index and generation, and a recorded rollback stops at the
+same traveler and undoes the landings ahead of it through the same undo a live commit uses. A tape
+whose arrival no commit could have decided (a malformed cohort, an outcome that does not fit it, or a
+handoff token arriving again after its commit stood) is refused when it is read, and an arrival the
+shadow cannot reproduce is refused by name. A server step and its tape close hold the same authority
+gate, so an arrival after a step belongs to the following tick.
+
+The destination's tape also records the federated device images that forwarded and federated
+travelers drive the authority with, because that input reaches the authority through no loopback.
+`replay.record` tapes every row of the process beside the boot row in one file. Verification replays
+the tape and every companion a crossing involves, and pairs every crossing's departure with the
+arrival whose commit stood, by handoff token. A crossing whose other half is on a remote authority,
+or on a row nothing taped, is reported as not verified, and `replay.verify` fails.
+
+Each authority tape records the world's simulation rate in its header and notes each pause and
+resume of the boot instance's own rate lever. Replay steps at the header's rate for exactly the
+ticks the tape holds, which already reproduces a paused span's missing steps, and refuses a
 definition/rate disagreement by name before stepping. A missing or mismatched rate must never fall
 through into a plausible-looking ordinary determinism `MISMATCH`. Rate and rate changes are part of
 the simulation input contract, not an out-of-band launcher setting.
@@ -812,6 +1181,13 @@ body. The destination may not commit after the lease deadline and the source may
 it, so the deadline partitions every history into exactly-one-authority outcomes. The deadline is
 denominated in the source's own ticks and converted across rates by the exact 50400 bridge.
 
+**A reservation changes nothing the source's hash folds.** The source's tape records departures and
+restores, not reservations, and the authoritative hash folds every body's mobility credential each
+tick. So the reservation only reads the traveler's credential, the one its authority, slot and
+generation derive when none is stored, and the departure's detach mints it, which a re-drive runs
+too. A refused and retried reservation, an abort before the detach, an in-doubt restore and a reused
+body slot replay tick for tick.
+
 **Policy is authorable; the guarantee is not.** Hold duration, queue-or-refuse, party all-or-nothing
 and per-border capacity are document fields. Atomicity is not: a field that could break "the body
 exists in exactly one authority at every instant" is a defect with a schema entry.
@@ -821,10 +1197,11 @@ and frame compatibility, and the crossing record—so a lying destination cannot
 the wrong size. It rides the trust tiers rather than adding a second trust list.
 
 **A vanished source needs no reaper at the destination.** The body is the source's until commit, so
-transfer durability is the source journal's durability, and a reservation held for a source that dies
-expires at its deadline with capacity released. What dies with a host is in-world body state only:
-identity and its attested facts—items, currency, achievements—live on the identity document, so a
-player loses position rather than possessions.
+transfer durability is the source's crossing log, and a reservation held for a source that dies
+before its departure is durable expires at its deadline with capacity released. What dies with a
+host is in-world body state only: identity and its facts—items, currency, achievements—live on the
+owned identity document, which adopts a traveler's carried facts when its seat comes home, so a player
+loses position rather than possessions.
 
 For population-backed admission, the connection receives a body index, so its
 principal and body arrive together. During transfer, the source authority holds

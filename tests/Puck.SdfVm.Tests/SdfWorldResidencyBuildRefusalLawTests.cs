@@ -61,6 +61,37 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
             expected: 2
         );
     }
+    /// <summary>A refused table build is the residency's <see cref="SdfWorldResidency.Refusal"/>, which the render graph
+    /// reports as a refused frame (<see cref="SdfWorldPasses.RefusalOf"/>), so an offscreen host steps on rather than
+    /// holding its tick for a build no frame retries. The red leg: a residency that is only waiting (no frame captured
+    /// yet) refuses nothing, though it is not ready. A rebuild that succeeds clears the refusal.</summary>
+    [Fact]
+    public void ARefusedTableBuildIsTheResidencysRefusalAndAWaitIsNot() {
+        using var rig = new Rig();
+
+        rig.Faults.Arm(
+            kind: GpuCreationKind.CommandPool,
+            nth: 2
+        );
+        Assert.False(condition: rig.Node.IsReady);
+        Assert.NotNull(@object: rig.Node.NotReadyReason);
+        Assert.Null(@object: rig.Node.Refusal);
+
+        _ = rig.ProduceUntilRefused();
+        Assert.Contains(
+            expectedSubstring: GpuCreationFaults.RefusalCode,
+            actualString: rig.Node.Refusal
+        );
+        Assert.StartsWith(
+            actualString: rig.Node.Refusal,
+            expectedStartString: $"residency '{rig.Node.Name}': the engine's build was refused"
+        );
+
+        rig.ChangeProgram();
+        _ = rig.Node.Produce(context: in rig.Context);
+        Assert.True(condition: rig.Node.IsReady);
+        Assert.Null(@object: rig.Node.Refusal);
+    }
     [Fact]
     public void AFaultedRebuildAfterADeviceLossIsRefusedByNameAndTheNextDeviceLossRebuilds() {
         using var rig = new Rig();
@@ -459,8 +490,8 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
             var context = m_context;
             var node = Node;
 
-            SdfTestPipelines.ProduceUntil(
-                frame: () => {
+            TestLiveness.Until(
+                step: () => {
                     produced = node.Produce(context: in context);
 
                     return (node.NotReadyReason?.Contains(

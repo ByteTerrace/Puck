@@ -53,12 +53,16 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private int m_pendingCount;
     private bool m_pendingEverything;
+    private ArenaTime? m_stateTime;
 
     private int[] m_followedRows = [];
 
     // The one state view the state mirror reads: the delivered definition's rows, plus the field cells each snapshot
     // carries, applied on delivery under m_followGate, which every read of the view (FollowState) also holds.
     private readonly WorldDocumentStateView m_stateView;
+    private readonly IWorldStateView m_synchronizedStateView;
+
+    private int m_followedLifetime;
 
     // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
@@ -66,6 +70,116 @@ public sealed class WorldSessionMirror : IClientSink {
     private WorldStateMirror? m_state;
 
     private int m_stateRevision = -1;
+
+    private WorldStateMirror? m_observedState;
+    private WorldDefinition? m_observedDefinition;
+
+    private int m_observedRevision = -1;
+
+    private bool m_observedSnapshotInstall;
+    private ulong m_observedDefinitionEngineTick;
+
+    private event Action<WorldDefinition, int, WorldStateMirror>? DeliveredStateObservers;
+
+    /// <summary>Observes every completed snapshot after its field cells are applied, without coalescing deliveries.
+    /// The optional observer mirror owns separate binding samples and reuses the ordinary mirror's resolver and
+    /// field storage; the lazy presentation mirror is never advanced on the delivery thread.</summary>
+    /// <param name="observer">Consumes the immutable definition, structural revision, and current delivered samples.
+    /// The mirror is valid only during this callback: copy or reduce needed values before returning. Callbacks run
+    /// synchronously under the delivery gate and must not wait for a presentation-thread operation.</param>
+    /// <returns>A registration seeded from the current state; disposal synchronously ends future callbacks.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="observer"/> is null.</exception>
+    public DeliveredStateObservation ObserveDeliveredState(Action<WorldDefinition, int, WorldStateMirror> observer) {
+        ArgumentNullException.ThrowIfNull(observer);
+        lock (m_snapshotWriteGate) {
+            lock (m_followGate) {
+                if (m_observedState is null) {
+                    m_observedState = new WorldStateMirror(view: m_synchronizedStateView);
+                    PublishObservedState(Tick, EngineTick);
+                }
+                var registration = new DeliveredStateObservation(mirror: m_observedState!, observer: observer, owner: this);
+
+                DeliveredStateObservers += registration.Deliver;
+                try {
+                    registration.Deliver(definition: m_observedDefinition!, mirror: m_observedState!, revision: m_observedRevision);
+                } catch {
+                    registration.Dispose();
+                    throw;
+                }
+                return registration;
+            }
+        }
+    }
+
+    private sealed class SynchronizedStateView(WorldSessionMirror owner) : IWorldStateView {
+        public WorldPresentationManifest Manifest { get { lock (owner.m_followGate) { return owner.m_stateView.Manifest; } } }
+
+        public bool TryResolveRow(string rowName, out int ordinal) {
+            lock (owner.m_followGate) { return owner.m_stateView.TryResolveRow(ordinal: out ordinal, rowName: rowName); }
+        }
+        public int RowLength(int ordinal) {
+            lock (owner.m_followGate) { return owner.m_stateView.RowLength(ordinal: ordinal); }
+        }
+        public bool TryRead(int ordinal, string? key, bool target, ulong tick, ulong engineTick, out WorldStateSample sample) {
+            lock (owner.m_followGate) { return owner.m_stateView.TryRead(engineTick: engineTick, key: key, ordinal: ordinal, sample: out sample, target: target, tick: tick); }
+        }
+        public bool ReadRow(int ordinal, bool target, ulong tick, ulong engineTick, Span<double> elements, out WorldStateMotion motion) {
+            lock (owner.m_followGate) { return owner.m_stateView.ReadRow(elements: elements, engineTick: engineTick, motion: out motion, ordinal: ordinal, target: target, tick: tick); }
+        }
+    }
+
+    private void PublishObservedState(ulong tick, ulong engineTick, bool completedSnapshot = false) {
+        var reinstall = (completedSnapshot && m_observedSnapshotInstall && (engineTick == m_observedDefinitionEngineTick));
+
+        if (completedSnapshot) { m_observedSnapshotInstall = false; }
+        if (m_observedState is not { } mirror) { return; }
+        var definition = Definition;
+        var revision = DefinitionRevision;
+
+        if ((revision != m_observedRevision) || reinstall) {
+            mirror.Install(completingDelivery: reinstall, engineTick: engineTick, tick: tick);
+        } else {
+            mirror.Refresh(stamp: new WorldStateStamp(EngineTick: engineTick, Everything: true, MovedRows: default, Tick: tick));
+        }
+        m_observedDefinition = definition;
+        m_observedRevision = revision;
+        DeliveredStateObservers?.Invoke(definition, revision, mirror);
+    }
+
+    /// <summary>A synchronously removable completed-delivery observer and its existing mirror work source.</summary>
+    public sealed class DeliveredStateObservation : IDisposable {
+        private readonly Action<WorldDefinition, int, WorldStateMirror> m_observer;
+
+        private WorldSessionMirror? m_owner;
+
+        internal DeliveredStateObservation(WorldSessionMirror owner, Action<WorldDefinition, int, WorldStateMirror> observer, WorldStateMirror mirror) {
+            m_owner = owner;
+            m_observer = observer;
+            Work = mirror;
+        }
+
+        /// <summary>Gets the sampled mirror's counted work. Observers of one session share this same source.</summary>
+        public Puck.Abstractions.Counting.IWorkCounterSource Work { get; }
+
+        internal void Deliver(WorldDefinition definition, int revision, WorldStateMirror mirror) {
+            if (m_owner is not null) { m_observer(definition, revision, mirror); }
+        }
+
+        /// <summary>Waits for any active callback and removes this observer before returning.</summary>
+        public void Dispose() {
+            if (m_owner is not { } owner) { return; }
+            lock (owner.m_followGate) {
+                if (m_owner is null) { return; }
+                m_owner = null;
+                owner.DeliveredStateObservers -= Deliver;
+                if (owner.DeliveredStateObservers is null) {
+                    owner.m_observedState = null;
+                    owner.m_observedDefinition = null;
+                    owner.m_observedRevision = -1;
+                }
+            }
+        }
+    }
 
     private WorldBodyContactMode[] m_kitBodyContacts;
     private FixedWorldCollider?[] m_kitColliders;
@@ -124,9 +238,11 @@ public sealed class WorldSessionMirror : IClientSink {
 
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
+            Lifetime: 0,
             Version: default
         );
         m_stateView = new WorldDocumentStateView(definition: () => Definition);
+        m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
 
@@ -248,10 +364,12 @@ public sealed class WorldSessionMirror : IClientSink {
         );
     }
     /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
-    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
+    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks. Placement identities are
+    /// copied with the poses, so a pinned renderer cannot read a newer body's authored policy.</summary>
     public void CopySnapshotTo(
         bool[] active,
         WorldEntityAddress[] addresses,
+        string?[] placementIds,
         Vector3[] previousPositions,
         Quaternion[] previousOrientations,
         Vector3[] currentPositions,
@@ -277,6 +395,7 @@ public sealed class WorldSessionMirror : IClientSink {
             for (var index = 0; (index < EntityCapacity); index++) {
                 active[index] = IsActive(index: index);
                 addresses[index] = Address(index: index);
+                placementIds[index] = PlacementId(index: index);
                 previousPositions[index] = PreviousPosition(index: index);
                 previousOrientations[index] = PreviousOrientation(index: index);
                 currentPositions[index] = CurrentPosition(index: index);
@@ -307,19 +426,22 @@ public sealed class WorldSessionMirror : IClientSink {
     // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
     // repeated delivery allocates nothing.
     private void Publish(WorldDefinition definition, WorldDocumentVersion version) {
-        var current = Volatile.Read(location: ref m_document);
+        lock (m_followGate) {
+            var current = Volatile.Read(location: ref m_document);
 
-        if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
-            return;
+            if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
+                return;
+            }
+
+            Volatile.Write(
+                location: ref m_document,
+                value: new WorldDeliveredDocument(
+                    Definition: definition,
+                    Lifetime: (current.Lifetime + ((current.Version.Activation != version.Activation) ? 1 : 0)),
+                    Version: version
+                )
+            );
         }
-
-        Volatile.Write(
-            location: ref m_document,
-            value: new WorldDeliveredDocument(
-                Definition: definition,
-                Version: version
-            )
-        );
     }
 
     /// <inheritdoc/>
@@ -334,6 +456,10 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        lock (m_stampGate) {
+            m_stateTime = null;
+        }
+
         Volatile.Write(
             location: ref m_kitColliders,
             value: CompileColliders(definition: definition)
@@ -342,11 +468,18 @@ public sealed class WorldSessionMirror : IClientSink {
             location: ref m_kitBodyContacts,
             value: CompileBodyContacts(definition: definition)
         );
-        Publish(
-            definition: definition,
-            version: version
-        );
-        _ = Interlocked.Increment(location: ref m_definitionRevision);
+        lock (m_snapshotWriteGate) {
+            lock (m_followGate) {
+                Publish(
+                    definition: definition,
+                    version: version
+                );
+                _ = Interlocked.Increment(location: ref m_definitionRevision);
+                m_observedSnapshotInstall = true;
+                m_observedDefinitionEngineTick = EngineTick;
+                PublishObservedState(Tick, EngineTick);
+            }
+        }
         DocumentDelivered?.Invoke(obj: Document);
     }
     /// <inheritdoc/>
@@ -478,23 +611,25 @@ public sealed class WorldSessionMirror : IClientSink {
                 value: Stopwatch.GetTimestamp()
             );
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
-        }
 
-        // A field's cells are state the snapshot carries beside the document. They are applied to the one view the state
-        // mirror reads, and each field row they moved is noted as a state delivery's rows are, so the next follow
-        // refreshes the slots bound to it: the path WorldClient.DeliverSnapshot takes for the local mirror.
-        if (!snapshot.FieldCells.IsEmpty) {
+            lock (m_stampGate) {
+                m_stateTime = ArenaTime.At(engineTick: snapshot.EngineTick, tick: snapshot.Tick);
+            }
+            // Fields land before completed-delivery observers reduce the tick. The presentation mirror stays lazy.
             lock (m_followGate) {
-                var moved = m_stateView.ApplyFieldCells(
-                    deltas: snapshot.FieldCells.Span,
-                    moved: m_movedFields
-                );
+                if (!snapshot.FieldCells.IsEmpty) {
+                    var moved = m_stateView.ApplyFieldCells(
+                        deltas: snapshot.FieldCells.Span,
+                        moved: m_movedFields
+                    );
 
-                lock (m_stampGate) {
-                    for (var index = 0; (index < moved); index++) {
-                        NoteRow(ordinal: m_movedFields[index]);
+                    lock (m_stampGate) {
+                        for (var index = 0; (index < moved); index++) {
+                            NoteRow(ordinal: m_movedFields[index]);
+                        }
                     }
                 }
+                PublishObservedState(snapshot.Tick, snapshot.EngineTick, completedSnapshot: true);
             }
         }
     }
@@ -506,25 +641,29 @@ public sealed class WorldSessionMirror : IClientSink {
 
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
-        // The definition publishes before its rows are noted, so a follower that takes a row reads a definition at
-        // least as new as the delivery that moved it.
-        Publish(
-            definition: definition,
-            version: version
-        );
-        DocumentDelivered?.Invoke(obj: Document);
+        // Publish the definition and its stamped clock together with respect to followers, including event readers.
+        lock (m_followGate) {
+            Publish(
+                definition: definition,
+                version: version
+            );
 
-        lock (m_stampGate) {
-            if (stamp.Everything) {
-                m_pendingEverything = true;
+            lock (m_stampGate) {
+                // Anchor and observation deltas arrive at unsampled ticks too. Their values stand at the delivery's
+                // clock, even while the latest body snapshot still names an older tick.
+                m_stateTime = ArenaTime.At(engineTick: stamp.EngineTick, tick: stamp.Tick);
 
-                return;
-            }
-
-            foreach (var ordinal in stamp.MovedRows.Span) {
-                NoteRow(ordinal: ordinal);
+                if (stamp.Everything) {
+                    m_pendingEverything = true;
+                } else {
+                    foreach (var ordinal in stamp.MovedRows.Span) {
+                        NoteRow(ordinal: ordinal);
+                    }
+                }
             }
         }
+
+        DocumentDelivered?.Invoke(obj: Document);
     }
 
     // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under
@@ -563,9 +702,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <returns>The state mirror every presentation read of this destination's rows goes through.</returns>
     public WorldStateMirror FollowState() {
         lock (m_followGate) {
-            var state = (m_state ??= new WorldStateMirror(view: m_stateView));
+            var state = (m_state ??= new WorldStateMirror(view: m_synchronizedStateView));
             int count;
             bool everything;
+            ArenaTime? time;
 
             lock (m_stampGate) {
                 count = m_pendingCount;
@@ -585,13 +725,20 @@ public sealed class WorldSessionMirror : IClientSink {
                 }
 
                 everything = m_pendingEverything;
+                time = m_stateTime;
                 m_pendingCount = 0;
                 m_pendingEverything = false;
             }
 
+            var lifetime = Volatile.Read(location: ref m_document).Lifetime;
+
+            for (; (m_followedLifetime < lifetime); m_followedLifetime++) {
+                state.BeginLifetime();
+            }
+
             var revision = DefinitionRevision;
-            var tick = Tick;
-            var engineTick = EngineTick;
+            var tick = (time?.Tick ?? Tick);
+            var engineTick = (time?.EngineTick ?? EngineTick);
 
             if (revision != m_stateRevision) {
                 m_stateRevision = revision;

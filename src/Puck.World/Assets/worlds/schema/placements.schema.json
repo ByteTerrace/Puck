@@ -127,6 +127,11 @@
             "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
             "type": "integer",
             "default": 0
+          },
+          "indirect": {
+            "$ref": "./common.schema.json#/$defs/SdfIndirectParticipation",
+            "description": "The whole placement\u0027s indirect-light policy. Default follows static casting or the world\u0027s moving-body default; Receive receives without casting, Cast does both, and Off does neither.",
+            "default": "Default"
           }
         },
         "required": [

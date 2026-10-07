@@ -6,7 +6,7 @@ namespace Puck.Analyzers.Tests;
 /// <summary>Exercises <see cref="CommentSmellAnalyzer"/> and <see cref="CommentSmellClassifier"/> against small
 /// compilations and hand-written ledgers.</summary>
 public sealed class CommentSmellAnalyzerTests {
-    private const string LedgerPath = @"X:\repo\CommentSmells.json";
+    private const string LedgerPath = "X:/repo/CommentSmells.json";
 
     private static string Ledger(params (string Path, int Count)[] recorded) =>
         RatchetLedger.Render(

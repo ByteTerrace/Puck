@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -19,112 +18,6 @@ namespace Puck.World;
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static partial class WorldDefinitionFileSource {
-    // A composed image, held per resolved document path and catalog fingerprint, so a second reach for the same document merges nothing.
-    // One quilt shard names the island as its own basis and again as an adjacency neighbour, and each derived
-    // corner reaches it once more, so a single boot used to ask for the same twenty-one-document merge scores of
-    // times and pay for it every time. An image records every file its composition read and the exact bytes it read
-    // from each, and it is offered again only when all of them still hold those bytes, so an edit to the document
-    // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
-    // a file that has since vanished or turned unreadable does the same. Identity is the resolved path plus the catalog
-    // fingerprint, freshness is content: no clock takes part in either.
-    private static readonly ConcurrentDictionary<string, ComposedDocument> ComposedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
-
-    // One file a composition read, with the bytes it read from it.
-    private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
-
-    // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
-    // differently (the directory source refuses what the composer compiles), so neither answers for the other.
-    private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) => ((((path.Replace(
-        newChar: '/',
-        oldChar: '\\'
-    ) + "\0") + fingerprint) + "\0") + source.GetType().FullName);
-    // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default), so a chain link read through
-    // any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
-    private static string DecodeJson(byte[] bytes) {
-        using var reader = new StreamReader(
-            stream: new MemoryStream(buffer: bytes),
-            encoding: Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: true
-        );
-
-        return reader.ReadToEnd();
-    }
-    // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
-    private static bool TryReadDocument(IWorldDocumentSource source, string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-        if (!source.TryRead(
-            content: out content,
-            name: name,
-            reason: out reason,
-            referrerName: referrerName,
-            resolvedName: out resolvedName
-        )) {
-            return false;
-        }
-
-        WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
-
-        return true;
-    }
-    private static string DescribeImport(string resolvedName, string? alias) =>
-        ((alias is null)
-            ? resolvedName
-            : $"{resolvedName} as {alias}"
-        );
-    // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
-    // return, so the next reader of the same path meets an image recorded together with the chain it was composed
-    // from. A composition over a source whose names are not files beside their referrers is never held: nothing
-    // could prove its image still stands.
-    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
-        if (!source.ResolvesFiles) {
-            return;
-        }
-
-        var chain = new List<ComposedDocumentLink>(capacity: touched.Count);
-
-        for (var index = 0; (index < touched.Count); index++) {
-            chain.Add(item: new ComposedDocumentLink(
-                Bytes: touched[index],
-                Path: touchedPaths[index]
-            ));
-        }
-
-        ComposedDocuments[CacheKey(
-            fingerprint: catalogFingerprint,
-            path: resolvedPath,
-            source: source
-        )] = new ComposedDocument(
-            Chain: chain,
-            ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
-            Reach: reach
-        );
-    }
-    // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every document the image read
-    // must still read the same through its source (a .puck link recompiles). The image's own document is the chain's
-    // first link; a reader that has already read it passes its bytes, and one that has not reads it through the
-    // source like every other link.
-    // This one question also settles the cycle rule, which the walk above no longer gets to ask on a reuse: a
-    // document already on the reader's resolution path can only appear inside an image if that document reaches
-    // back into the image's own root, and an image exists only for a document whose own walk COMPLETED — a walk
-    // that would have met exactly that cycle and refused. The only way the two could disagree is a file that has
-    // changed since, which is what this check is.
-    private static bool ImageStillStands(ComposedDocument image, IWorldDocumentSource source, byte[]? ownBytes) {
-        for (var index = 0; (index < image.Chain.Count); index++) {
-            var link = image.Chain[index];
-            var stands = (((index == 0) && (ownBytes is not null))
-                ? ownBytes.AsSpan().SequenceEqual(other: link.Bytes)
-                : source.StillReads(
-                    content: link.Bytes,
-                    resolvedName: link.Path
-                )
-            );
-
-            if (!stands) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     // The shared core both TryComposeDocumentTree overloads call: compose the graph over whichever
     // IWorldDocumentSource the caller supplied (disk-backed or resolver-backed), never duplicating
     // TryComposeLayers' walk itself.
@@ -187,12 +80,15 @@ public static partial class WorldDefinitionFileSource {
             touched = [];
             touchedPaths = [];
             reach = 0;
-            reason = $"{resolvedPath} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
     }
     private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null) {
+        var reads = new CompileInputLog();
+        using var recording = CompileInputs.Record(log: reads);
+
         stack = null;
         composed = null;
         touched = [bytes];
@@ -209,13 +105,13 @@ public static partial class WorldDefinitionFileSource {
                     comparisonType: StringComparison.Ordinal
                 )
                 ) {
-                    reason = $"{resolvedPath} composition received catalog fingerprint '{suppliedFingerprint}', but the selected catalog is '{selectedFingerprint}'.";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} composition received catalog fingerprint '{suppliedFingerprint}', but the selected catalog is '{selectedFingerprint}'.";
                     return false;
                 }
 
                 catalogFingerprint = selectedFingerprint;
             } else if (string.IsNullOrWhiteSpace(value: catalogFingerprint)) {
-                reason = $"{resolvedPath} composition requires the explicit machine catalog fingerprint.";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} composition requires the explicit machine catalog fingerprint.";
                 return false;
             }
         }
@@ -224,16 +120,16 @@ public static partial class WorldDefinitionFileSource {
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
         )) {
-            reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
+            reason = $"composition cycles back to {WorldDocumentLabel.Of(path: resolvedPath)} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(element: resolvedPath)
+                values: ancestors.Append(element: resolvedPath).Select(selector: static ancestor => WorldDocumentLabel.Of(path: ancestor))
             )}).";
 
             return false;
         }
 
         if (ancestors.Count >= WorldDocumentBasis.MaxChainDepth) {
-            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedPath}.";
+            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedPath)}.";
 
             return false;
         }
@@ -267,6 +163,8 @@ public static partial class WorldDefinitionFileSource {
 
         JsonObject? root;
 
+        var recordsInputs = (source.ResolvesFiles && source.RecordInputs(content: bytes, resolvedName: resolvedPath));
+
         try {
             root = (JsonNode.Parse(json: DecodeJson(bytes: bytes)) as JsonObject);
         } catch (JsonException) {
@@ -274,7 +172,7 @@ public static partial class WorldDefinitionFileSource {
         }
 
         if (root is null) {
-            reason = $"{resolvedPath} does not hold a JSON object.";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
 
             return false;
         }
@@ -296,6 +194,7 @@ public static partial class WorldDefinitionFileSource {
             reason = string.Empty;
             WorldBootWork.Count(kind: WorldBootWork.Compositions);
             HoldComposedImage(
+                inputs: (recordsInputs ? reads.Inputs : null),
                 catalogFingerprint: catalogFingerprint,
                 composed: composed,
                 reach: reach,
@@ -320,7 +219,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be a non-empty document name.";
 
                 return false;
             }
@@ -372,7 +271,7 @@ public static partial class WorldDefinitionFileSource {
                 targetDocumentPath: resolvedPath
             )
             ) {
-                reason = $"{resolvedPath} basis {basisResolvedName}: {basisMetadataReason}";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} basis {WorldDocumentLabel.Of(path: basisResolvedName)}: {basisMetadataReason}";
                 return false;
             }
             reach = Math.Max(
@@ -395,13 +294,14 @@ public static partial class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
 
                 return false;
             }
 
             var importTrees = new List<(string Name, JsonObject Tree)>();
             var modules = new List<(string Name, JsonObject Tree, WorldExports Exports)>();
+            var importDescriptions = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var entry in importsArray) {
                 if (!TryReadImportEntry(
@@ -472,7 +372,7 @@ public static partial class WorldDefinitionFileSource {
                         reason: out aliasReason
                     ))
                 ) {
-                    reason = $"{resolvedPath} imports {importResolvedName} as '{importAlias}': {aliasReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)} as '{importAlias}': {aliasReason}";
 
                     return false;
                 }
@@ -488,13 +388,15 @@ public static partial class WorldDefinitionFileSource {
                     targetDocumentPath: resolvedPath
                 )
                 ) {
-                    reason = $"{resolvedPath} imports {importResolvedName}: {importMetadataReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)}: {importMetadataReason}";
                     return false;
                 }
 
                 var importDescription = DescribeImport(
                     alias: importAlias,
-                    resolvedName: importResolvedName
+                    importName: importName,
+                    resolvedName: importResolvedName,
+                    taken: importDescriptions
                 );
 
                 if (!WorldModuleExports.TryTake(
@@ -503,7 +405,7 @@ public static partial class WorldDefinitionFileSource {
                     moduleName: importDescription,
                     reason: out var exportsReason
                 )) {
-                    reason = $"{resolvedPath} imports {exportsReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {exportsReason}";
 
                     return false;
                 }
@@ -535,7 +437,7 @@ public static partial class WorldDefinitionFileSource {
                 reason: out var mergeReason,
                 restated: ownBody
             )) {
-                reason = $"{resolvedPath}: {mergeReason}";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {mergeReason}";
 
                 return false;
             }
@@ -550,7 +452,7 @@ public static partial class WorldDefinitionFileSource {
             overlay: importsLayer,
             reason: out var stackReason
         )) {
-            reason = $"{resolvedPath}: {stackReason}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {stackReason}";
 
             return false;
         }
@@ -564,7 +466,7 @@ public static partial class WorldDefinitionFileSource {
             overlay: ownBody,
             reason: out var finalReason
         )) {
-            reason = $"{resolvedPath}: {finalReason}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {finalReason}";
 
             return false;
         }
@@ -573,6 +475,7 @@ public static partial class WorldDefinitionFileSource {
         reason = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Compositions);
         HoldComposedImage(
+            inputs: (recordsInputs ? reads.Inputs : null),
             catalogFingerprint: catalogFingerprint,
             composed: composed!,
             reach: reach,
@@ -594,22 +497,22 @@ public static partial class WorldDefinitionFileSource {
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
         )) {
-            reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
+            reason = $"composition cycles back to {WorldDocumentLabel.Of(path: resolvedPath)} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(element: resolvedPath)
+                values: ancestors.Append(element: resolvedPath).Select(selector: static ancestor => WorldDocumentLabel.Of(path: ancestor))
             )}).";
 
             return false;
         }
 
         if (ancestors.Count >= WorldDocumentBasis.MaxChainDepth) {
-            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedPath}.";
+            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedPath)}.";
 
             return false;
         }
 
         if (JsonNode.Parse(json: DecodeJson(bytes: bytes)) is not JsonObject root) {
-            reason = $"{resolvedPath} does not hold a JSON object.";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
 
             return false;
         }
@@ -625,7 +528,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be a non-empty document name.";
 
                 return false;
             }
@@ -659,7 +562,7 @@ public static partial class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
 
                 return false;
             }
@@ -735,7 +638,7 @@ public static partial class WorldDefinitionFileSource {
                     options: WorldJsonContext.Default.Options
                 );
             } catch (JsonException exception) {
-                reason = $"'{WorldExports.MemberName}' in {resolvedPath} is malformed: {exception.Message}";
+                reason = $"'{WorldExports.MemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} is malformed: {exception.Message}";
 
                 return false;
             }
@@ -779,52 +682,28 @@ public static partial class WorldDefinitionFileSource {
     // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
     // admit or carry before the draw.
     internal static bool TryLoadParsed(string path, out WorldDefinition? definition, out string contentHash, out string reason,
-        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null) {
+        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null, string? displayName = null) {
+        // What a refusal calls the document: the name its caller gave it for display, or its path when it gave none.
+        var shown = (displayName ?? path);
+
         definition = null;
         contentHash = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
-        if (!File.Exists(path: path)) {
-            reason = $"no file at {path}";
+        if (!TryReadDocumentFile(
+            content: out var read,
+            countsFileRead: true,
+            documents: documents,
+            path: path,
+            reason: out var readReason,
+            shown: shown
+        )) {
+            reason = readReason;
 
             return false;
         }
 
-        byte[] bytes;
-
-        if (WorldDocumentName.IsSourceFile(path: path)) {
-            // A supplied source owns how a .puck root reads — it lowers to its document, named by the path without
-            // its suffix — so the pin below covers the document that source produces, not the file's raw bytes. Any
-            // other root is the file the caller named, read as it stands.
-            if (!TryReadDocument(
-                source: (documents ?? LocalDocuments),
-                content: out var read,
-                name: WorldDocumentName.OfSourceFile(path: Path.GetFullPath(path: path)),
-                reason: out var readReason,
-                referrerName: path,
-                resolvedName: out _
-            )) {
-                reason = $"cannot read {path}: {readReason.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            bytes = read!;
-        } else {
-            // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
-            // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
-            // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
-            // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
-            try {
-                bytes = File.ReadAllBytes(path: path);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
-        }
+        var bytes = read!;
 
         string json;
 
@@ -840,7 +719,7 @@ public static partial class WorldDefinitionFileSource {
 
             json = reader.ReadToEnd();
         } catch (Exception exception) {
-            reason = $"cannot decode {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot decode {shown}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -872,7 +751,7 @@ public static partial class WorldDefinitionFileSource {
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
             )) {
-                reason = $"{path} composition refused: {composeReason}";
+                reason = $"{shown} composition refused: {composeReason}";
 
                 return false;
             }
@@ -891,7 +770,7 @@ public static partial class WorldDefinitionFileSource {
                 definition: out var parsed,
                 json: json,
                 reason: out reason,
-                sourceName: path
+                sourceName: shown
             )) {
                 return false;
             }
@@ -904,7 +783,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) {
-            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{shown} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -917,7 +796,7 @@ public static partial class WorldDefinitionFileSource {
         alias = null;
 
         if (entry is not JsonObject entryObject) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {referrerPath} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<name>\"}} with an optional \"{WorldImport.AsMemberName}\".";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: referrerPath)} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<name>\"}} with an optional \"{WorldImport.AsMemberName}\".";
 
             return false;
         }
@@ -935,7 +814,7 @@ public static partial class WorldDefinitionFileSource {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} carries '{name}'; an entry carries only '{WorldImport.DocumentMemberName}' and '{WorldImport.AsMemberName}'.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {WorldDocumentLabel.Of(path: referrerPath)} carries '{name}'; an entry carries only '{WorldImport.DocumentMemberName}' and '{WorldImport.AsMemberName}'.";
 
                 return false;
             }
@@ -950,7 +829,7 @@ public static partial class WorldDefinitionFileSource {
             !documentValue.TryGetValue<string>(value: out var documentText) ||
             (documentText.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} must name a non-empty '{WorldImport.DocumentMemberName}' document.";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {WorldDocumentLabel.Of(path: referrerPath)} must name a non-empty '{WorldImport.DocumentMemberName}' document.";
 
             return false;
         }
@@ -968,7 +847,7 @@ public static partial class WorldDefinitionFileSource {
                 (aliasNode is not JsonValue aliasValue) ||
                 !aliasValue.TryGetValue<string>(value: out var aliasText)
             ) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: '{WorldImport.AsMemberName}' must be a string.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {WorldDocumentLabel.Of(path: referrerPath)}: '{WorldImport.AsMemberName}' must be a string.";
 
                 return false;
             }
@@ -977,7 +856,7 @@ public static partial class WorldDefinitionFileSource {
                 alias: aliasText,
                 reason: out var aliasReason
             )) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: {aliasReason}.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {WorldDocumentLabel.Of(path: referrerPath)}: {aliasReason}.";
 
                 return false;
             }
@@ -997,7 +876,7 @@ public static partial class WorldDefinitionFileSource {
             !value.TryGetValue<string>(value: out var name) ||
             (name.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {referrerPath} must be a non-empty document name.";
+            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: referrerPath)} must be a non-empty document name.";
 
             return false;
         }
@@ -1031,13 +910,13 @@ public static partial class WorldDefinitionFileSource {
 
         if (
             !source.ResolvesFiles ||
-            !ComposedDocuments.TryGetValue(
+            !TryFindComposedImage(source: source,
             key: CacheKey(
                 fingerprint: catalogFingerprint,
                 path: resolvedPath,
                 source: source
             ),
-            value: out var image
+            image: out var image
         )
         ) {
             return false;
@@ -1127,7 +1006,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var name) ||
                 (name.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {currentResolvedName} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: currentResolvedName)} must be a non-empty document name.";
 
                 return false;
             }
@@ -1149,16 +1028,16 @@ public static partial class WorldDefinitionFileSource {
                 value: resolvedName,
                 comparer: StringComparer.OrdinalIgnoreCase
             )) {
-                reason = $"basis chain cycles back to {resolvedName} (chain: {string.Join(
+                reason = $"basis chain cycles back to {WorldDocumentLabel.Of(path: resolvedName)} (chain: {string.Join(
                     separator: " -> ",
-                    values: visited
+                    values: visited.Select(selector: static link => WorldDocumentLabel.Of(path: link))
                 )}).";
 
                 return false;
             }
 
             if (visited.Count >= WorldDocumentBasis.MaxChainDepth) {
-                reason = $"basis chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedName}.";
+                reason = $"basis chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedName)}.";
 
                 return false;
             }
@@ -1172,7 +1051,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (nextObject is null) {
-                reason = $"basis document {resolvedName} does not hold a JSON object.";
+                reason = $"basis document {WorldDocumentLabel.Of(path: resolvedName)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1240,7 +1119,7 @@ public static partial class WorldDefinitionFileSource {
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
             documentPath = name;
             sourcePath = string.Empty;
-            reason = $"cannot resolve document '{name}' from {referrerName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot resolve document '{name}' from {WorldDocumentLabel.Of(path: referrerName)}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -1255,7 +1134,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         }
 
-        reason = $"{reason} (named by {referrerName})";
+        reason = $"{reason} (named by {WorldDocumentLabel.Of(path: referrerName)})";
 
         return false;
     }
@@ -1292,7 +1171,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            reason = $"cannot resolve document '{name}' in {directory}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot resolve document '{name}': {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1401,13 +1280,13 @@ public static partial class WorldDefinitionFileSource {
 
         if (
             string.IsNullOrEmpty(value: resolvedPath) ||
-            !ComposedDocuments.TryGetValue(
+            !TryFindComposedImage(source: source,
             key: CacheKey(
                 fingerprint: catalogFingerprint,
                 path: resolvedPath,
                 source: source
             ),
-            value: out var image
+            image: out var image
         ) ||
             !ImageStillStands(
             image: image,
@@ -1486,10 +1365,19 @@ public static partial class WorldDefinitionFileSource {
         tree = null;
 
         try {
-            var bytes = (content ?? File.ReadAllBytes(path: path));
+            var bytes = content;
+
+            if ((bytes is null) && !TryReadDocumentFile(
+                content: out bytes,
+                documents: documents,
+                path: path,
+                reason: out reason
+            )) {
+                return false;
+            }
 
             return TryComposeDocumentTreeCore(
-                bytes: bytes,
+                bytes: bytes!,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
                 source: (documents ?? LocalDocuments),
@@ -1499,7 +1387,7 @@ public static partial class WorldDefinitionFileSource {
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             tree = null;
-            reason = $"cannot compose {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot compose {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1515,7 +1403,7 @@ public static partial class WorldDefinitionFileSource {
     /// carrying one refuses by name through the same <see cref="TryComposeLayers"/> path a directory load runs.
     /// </summary>
     /// <param name="hostBytes">The host document's raw bytes (the basis the fragment composes under — e.g. an
-    /// official <c>standard.world.json</c> fetched by the caller).</param>
+    /// official <c>standard.puck</c> fetched by the caller).</param>
     /// <param name="fragmentBytes">The fragment's raw bytes (a district or game document carrying <c>exports</c>).</param>
     /// <param name="alias">The alias the fragment composes under — every row it declares appears in the result as
     /// <c>&lt;alias&gt;_&lt;name&gt;</c>.</param>
@@ -1597,7 +1485,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             stack = null;
-            reason = $"cannot compose {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot compose {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1607,26 +1495,37 @@ public static partial class WorldDefinitionFileSource {
     /// (basis/imports members excluded), from the deepest basis ancestor through every import to the file's own
     /// body last. A later entry's same key overrides an earlier one's (see <see cref="WorldDocumentBasis"/>'s
     /// remarks).</summary>
-    /// <param name="path">The document file to describe.</param>
+    /// <param name="path">The document or <c>.puck</c> source file to describe.</param>
     /// <param name="layers">Each layer in merge order on success — its resolved path, the alias it composed under
     /// (<see langword="null"/> for a basis link or an unaliased import), its own top-level keys, and the
     /// <c>exports</c> it authors as written (<see langword="null"/> when it authors none); empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
-    /// <paramref name="path"/>.</param>
-    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
-    /// <see cref="LocalDocuments"/>.</param>
+    /// <param name="content">The JSON document's bytes supplied by the caller, or <see langword="null"/> to read
+    /// <paramref name="path"/> through <see cref="TryReadDocumentFile"/>, lowering a source file to its document.</param>
+    /// <param name="documents">The source a <c>.puck</c> root and every basis and import resolve through, or
+    /// <see langword="null"/> for <see cref="LocalDocuments"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
     public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason, byte[]? content = null, IWorldDocumentSource? documents = null) {
         var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)>();
 
         try {
-            var bytes = (content ?? File.ReadAllBytes(path: path));
+            var bytes = content;
+
+            if ((bytes is null) && !TryReadDocumentFile(
+                content: out bytes,
+                documents: documents,
+                path: path,
+                reason: out reason
+            )) {
+                layers = collected;
+
+                return false;
+            }
 
             if (!TryDescribeLayers(
                 alias: null,
                 ancestors: [],
-                bytes: bytes,
+                bytes: bytes!,
                 layers: collected,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
@@ -1642,7 +1541,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             layers = collected;
-            reason = $"cannot describe {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot describe {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1734,7 +1633,7 @@ public static partial class WorldDefinitionFileSource {
             var json = File.ReadAllText(path: path);
 
             if (JsonNode.Parse(json: json) is not JsonObject root) {
-                reason = $"{path} does not hold a JSON object.";
+                reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1762,7 +1661,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
-            reason = $"cannot peek {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot peek {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1784,7 +1683,7 @@ public static partial class WorldDefinitionFileSource {
             var json = File.ReadAllText(path: path);
 
             if (JsonNode.Parse(json: json) is not JsonObject root) {
-                reason = $"{path} does not hold a JSON object.";
+                reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1799,7 +1698,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {path} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: path)} must be an array of import entries.";
 
                 return false;
             }
@@ -1834,7 +1733,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
-            reason = $"cannot peek {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot peek {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1861,7 +1760,7 @@ public static partial class WorldDefinitionFileSource {
         chain = [];
 
         if (!File.Exists(path: path)) {
-            reason = $"no file at {path}";
+            reason = $"no file at {WorldDocumentLabel.Of(path: path)}";
 
             return false;
         }
@@ -1871,7 +1770,7 @@ public static partial class WorldDefinitionFileSource {
         try {
             bytes = File.ReadAllBytes(path: path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot read {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1902,7 +1801,7 @@ public static partial class WorldDefinitionFileSource {
                     b: basisDirectory,
                     comparisonType: StringComparison.OrdinalIgnoreCase
                 )) {
-                    reason = $"'{links[index].ResolvedName}' does not live directly under '{basisDirectory}' — a pushed chain link must sit in the owned world's basis directory so its cloud key can never collide with another chain's link";
+                    reason = $"'{WorldDocumentLabel.Of(path: links[index].ResolvedName)}' does not live directly under the owned world's basis directory — a pushed chain link must sit there so its cloud key can never collide with another chain's link";
 
                     return false;
                 }
@@ -1930,7 +1829,6 @@ public static partial class WorldDefinitionFileSource {
     // rule: an image first composed at the top of a chain is offered to a reader deeper in one only while that
     // reader's own depth plus the reach still fits inside WorldDocumentBasis.MaxChainDepth, exactly as a fresh walk
     // of the same subtree would have had to.
-    private sealed record ComposedDocument(IReadOnlyList<ComposedDocumentLink> Chain, byte[] ComposedJson, int Reach);
 
     /// <summary>Gets the total bytes the held composed images occupy — each image's own composed tree as UTF-8
     /// JSON, plus the bytes of every file its composition read. A file's bytes are shared with every image whose
@@ -1979,7 +1877,7 @@ public static partial class WorldDefinitionFileSource {
                     return true;
                 default:
                     content = null;
-                    reason = $"'{name}' (named by {referrerName}) resolves to nothing — this composition is in-memory only and carries no further basis or imports beyond the fragment itself.";
+                    reason = $"'{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) resolves to nothing — this composition is in-memory only and carries no further basis or imports beyond the fragment itself.";
 
                     return false;
             }

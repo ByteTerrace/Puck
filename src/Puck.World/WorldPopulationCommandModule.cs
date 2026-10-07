@@ -18,7 +18,12 @@ namespace Puck.World;
 /// device. <c>world.budget</c> accepts an optional render probe: windowed composition fills its render figures,
 /// while headless composition still reports every authoritative cost and names the absent renderer.
 /// </summary>
-internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
+/// <param name="roster">The participants and their current device and seat bindings.</param>
+/// <param name="population">The authority's body population and bounded work census.</param>
+/// <param name="server">The authority whose current definition and cost report are read.</param>
+/// <param name="link">The existing query route to that authority.</param>
+/// <param name="renderProbe">The optional live presentation inventory; absent in a headless host.</param>
+public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
     // The live budget's reader and its text, reused by every world.budget.
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
@@ -87,6 +92,9 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         return (visibility, mesh);
     }
+    private string DescribeIndirectBudget() {
+        return WorldIndirectDiagnosticText.Describe(renderProbe);
+    }
     private string DescribeBudget() {
         var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
@@ -124,10 +132,18 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
         var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
-        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
+        // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
+        var atmosphere = server.Definition.Render.Atmosphere;
+        var fogDensity = ((atmosphere is null)
+            ? Puck.SignedDistance.SdfSky.DefaultFogDensity
+            : (atmosphere.Fog?.Density?.AuthoredValues().DefaultIfEmpty(defaultValue: Puck.SignedDistance.SdfSky.DefaultFogDensity).Min() ?? ((atmosphere.Fog is null) ? 0f : Puck.SignedDistance.SdfSky.DefaultFogDensity)));
+        // The atmosphere kinds the composite may evaluate at a pixel, each counted in its atmosphere detail row.
+        var atmosphereKinds = ((atmosphere is null)
+            ? 1
+            : ((((atmosphere.Fog is null) ? 0 : 1) + ((atmosphere.Haze is null) ? 0 : 1)) + ((atmosphere.Medium is null) ? 0 : 1)));
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
         var lattice = ((population.Fields is { } fields)
             ? fields.DescribeCost(
@@ -168,7 +184,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = server.CostReport.WorkBudget;
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()} | {DescribeIndirectBudget()} | {(renderProbe?.DescribeInfinityBudget() ?? "infinity unavailable: no renderer")}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
@@ -395,7 +411,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"

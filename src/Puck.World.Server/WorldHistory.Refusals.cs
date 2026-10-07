@@ -1,0 +1,124 @@
+using Puck.Commands;
+using Puck.World.Protocol;
+using Puck.World.Server;
+
+namespace Puck.World;
+
+public sealed partial class WorldHistory {
+    // The documents the current seek, diff, or replay-edit read and proved against their recorded hashes before
+    // anything moved, by the recorded entry that names them. The re-simulation installs these rather than reading the
+    // file again, so a file that changes mid-operation can never refuse from inside a step.
+    private readonly Dictionary<WorldReplayEntry.Rebuild, WorldDefinition> m_verifiedRebuilds = new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Checks a principal's authority over the shared timeline, the check every bindable form of
+    /// <c>world.history</c> runs at dispatch under the pressing seat's principal: <see cref="WorldCapability.Control"/>
+    /// over <see cref="GrantSubject.History"/>, held concretely or through the Control wildcard every seat and the
+    /// console are seeded with, and lost to another principal's exclusive reservation.</summary>
+    /// <param name="principal">The acting principal.</param>
+    /// <param name="refusal">The grant table's denial, naming the principal and the rule, when it is refused.</param>
+    /// <returns><see langword="true"/> when the principal may move the timeline.</returns>
+    public bool TryAuthorize(Principal principal, out string refusal) {
+        var verdict = m_server.GrantTable.Allows(
+            capability: WorldCapability.Control,
+            principal: principal,
+            subject: GrantSubject.History
+        );
+
+        refusal = (verdict.IsAllowed
+            ? string.Empty
+            : verdict.DescribeRefusal(
+                actor: principal,
+                subject: GrantSubject.History.Describe(),
+                verb: "control"
+            ));
+
+        return verdict.IsAllowed;
+    }
+
+    private string? UncapturableLiveState() {
+        if (m_server.AnyAddonEverPumped || (m_server.Addons is { MountedCount: > 0 })) {
+            return "addon guest state cannot be restored by a history keyframe";
+        }
+        if (m_server.AnyScreenOpEverApplied) {
+            return "screen or machine operations changed state outside the checkpoint inventory";
+        }
+        if (m_server.AnyMachineEverPumped && (m_server.Machines is not IWorldMachineCheckpointHost)) {
+            return "a stepped machine has no checkpoint support";
+        }
+        if (m_server.GrantTable.LiveSessionPrincipals().Count != 0) {
+            return "live session input and grants are not captured by authority checkpoints";
+        }
+        return m_server.Persistence.ReplayTimelineResetRefusal();
+    }
+    private static bool ChangesAddons(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => true,
+        WorldMutation.Batch batch => batch.Mutations.Any(predicate: ChangesAddons),
+        _ => false,
+    };
+    private string? RecordedEntryRefusal(WorldReplayEntry entry) {
+        if (Unrewindable(entry: entry) is { } external) {
+            return external;
+        }
+        if (entry is WorldReplayEntry.ScreenOp) {
+            return "a screen operation changes state outside the checkpoint inventory";
+        }
+        if ((entry is WorldReplayEntry.Mutation mutation) && ChangesAddons(mutation: mutation.Value)) {
+            return "an addon edit requires guest state that history cannot restore";
+        }
+        if (entry is not WorldReplayEntry.Rebuild { Kind: WorldRebuildKind.Load or WorldRebuildKind.Reload } rebuild) {
+            return null;
+        }
+        if (rebuild.Origin is WorldRebuildOrigin.Store store) {
+            return $"a hosted world's {rebuild.Kind.ToString().ToLowerInvariant()} is replayed from its store ('{store}'), which this history cannot read";
+        }
+        if (rebuild.Origin is not WorldRebuildOrigin.File { Path: var path }) {
+            return "the recorded rebuild has no content source";
+        }
+        if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
+            catalog: m_server.Machines.ValidationCatalog,
+            contentHash: out var contentHash,
+            documents: m_server.RebuildDocuments,
+            instanceIdentity: m_server.InstanceIdentity,
+            path: path,
+            proveNeighbours: false,
+            reason: out var reason
+        )) {
+            return $"the recorded rebuild's content cannot be read from '{path}': {reason}";
+        }
+        if (!string.Equals(a: contentHash, b: rebuild.ContentHash, comparisonType: StringComparison.Ordinal)) {
+            return $"the recorded rebuild's content changed at '{path}': expected {rebuild.ContentHash}, found {contentHash}";
+        }
+        if (admission!.Definition.Addons.Any(predicate: static addon => addon.Enabled)) {
+            return "the recorded rebuild mounts addon guests whose state history cannot restore";
+        }
+
+        m_verifiedRebuilds[rebuild] = admission.Definition;
+
+        return null;
+    }
+    private string? RecordedSpanRefusal(ulong from, ulong to) {
+        m_verifiedRebuilds.Clear();
+
+        foreach (var (tick, entry) in EntriesBetween(from: from, to: to)) {
+            if (RecordedEntryRefusal(entry: entry) is { } reason) {
+                return $"at tick {tick} {reason}";
+            }
+        }
+        return null;
+    }
+    // How a re-simulated rebuild re-applies: from the document the preflight verified, its pin holding by
+    // construction; a reset reads the restored base, which no file can change. A load or reload the preflight did not
+    // verify is a host defect, never a fresh read: the span's preflight is what makes every refusal precede the move.
+    private (WorldDefinition? Verified, string? Pin) VerifiedRebuild(WorldReplayEntry.Rebuild rebuild) {
+        if (rebuild.Kind == WorldRebuildKind.Reset) {
+            return (null, null);
+        }
+
+        if (!m_verifiedRebuilds.TryGetValue(key: rebuild, value: out var verified)) {
+            throw new InvalidOperationException(message: $"the recorded {rebuild.Kind} of '{rebuild.Origin}' re-applied without its span's preflight — a host defect");
+        }
+
+        return (verified, rebuild.ContentHash);
+    }
+}

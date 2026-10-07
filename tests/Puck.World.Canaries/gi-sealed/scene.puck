@@ -1,0 +1,135 @@
+schema: "puck.world.definition.v1"
+basis: "../gi-furnace/base"
+documentId: "gi-sealed-scene"
+render {
+  farDistance: 32
+}
+state {
+  world {
+    slot station = 0
+  }
+}
+prototypes {
+  prototype "planar" {
+    document {
+      schema: "puck.creation.v1"
+      name: "planar"
+      palette [{ color: "#000000", specular: 0, roughness: 1, fill: "#000000" }]
+      shape Box "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.525, 1.525, 1.525]
+      }
+      shape Box "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [1.5, 1.5, 1.5]
+      }
+    }
+  }
+  prototype "curved" {
+    document {
+      schema: "puck.creation.v1"
+      name: "curved"
+      palette [{ color: "#000000", specular: 0, roughness: 1, fill: "#000000" }]
+      shape Sphere "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.525, 1.525, 1.525]
+      }
+      shape Sphere "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [1.5, 1.5, 1.5]
+      }
+    }
+  }
+  prototype "receiver" {
+    document {
+      schema: "puck.creation.v1"
+      name: "receiver"
+      palette [{ color: "#FFFFFF", specular: 0, roughness: 1, fill: "#000000" }]
+      shape Box "floor" {
+        material: 0
+        position [0, -0.525, 0]
+        scale [0.5, 0.025, 0.5]
+      }
+    }
+  }
+  prototype "exterior" {
+    document {
+      schema: "puck.creation.v1"
+      name: "exterior"
+      palette [{ color: "#FFFFFF", emissive: 1, metal: 1, specular: 0, roughness: 1, fill: "#000000" }]
+      shape Sphere "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [12.2, 12.2, 12.2]
+      }
+      shape Sphere "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [12, 12, 12]
+      }
+    }
+  }
+}
+cameras [
+  {
+    name: "selected"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "selected"
+      version: "puck.camera.program.v1"
+      operations [selectProgram(cases: [
+          { program: "planar-camera", value: 0 }
+          { program: "curved-camera", value: 1 }
+        ], default: "planar-camera", key: "state.station"
+        )
+      ]
+    }
+  }
+  {
+    name: "planar-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "planar-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [-4, 0.3, 0.65]))
+        lookAt(subject: worldPoint(point: [-4, -0.5, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "curved-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "curved-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [4, 0.3, 0.65]))
+        lookAt(subject: worldPoint(point: [4, -0.5, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+views {
+  layout "physical" {
+    seatCount: 0
+    slots [{ camera: "selected", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}

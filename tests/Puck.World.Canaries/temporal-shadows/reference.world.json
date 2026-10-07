@@ -1,0 +1,91 @@
+{
+  "schema": "puck.world.definition.v1",
+  "basis": "fixture",
+  "documentId": "temporal-shadows-reference",
+  "render": {
+    "shadowAmortize": false
+  },
+  "captures": {
+    "rows": [
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "still-reference",
+        "instance": "world",
+        "ticks": [
+          63
+        ],
+        "converge": 8
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "occluder-reference",
+        "instance": "world",
+        "ticks": [
+          104
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "departure-reference",
+        "instance": "world",
+        "ticks": [
+          114
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "return-reference",
+        "instance": "world",
+        "ticks": [
+          124
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "light-reference",
+        "instance": "world",
+        "ticks": [
+          144
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "owner-reference",
+        "instance": "world",
+        "ticks": [
+          184
+        ]
+      }
+    ]
+  }
+}

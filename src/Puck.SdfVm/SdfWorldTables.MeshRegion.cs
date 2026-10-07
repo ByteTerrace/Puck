@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 
 // The mesh region: the frame's mesh draws (SdfFrame.MeshDraws) laid out by SdfMeshRegion in one GpuRegion, created like
 // every other table (SdfWorldTables.Regions.cs) and copied with them in the upload. A frame whose draw list is the one
-// last packed, at the revision last packed (SdfFrame.MeshDrawsRevision), repacks nothing; any other is packed into the
+// last packed, at the revision and program composability last packed, repacks nothing; any other is packed into the
 // host copy and owes only the words that changed. The region is created with the tables, one draw record long so every
 // set that binds it binds a buffer, and grows, once the device is idle, like program capacity; a frame without draws
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material. A textured mesh's
@@ -16,6 +16,9 @@ public sealed partial class SdfWorldTables {
     // The draw list last packed, the words it packed into and their layout.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
     private long m_meshDrawsRevision;
+
+    private bool m_meshIndirectInstancesComposable = true;
+
     private SdfMeshRegionLayout m_meshLayout;
     private GpuRegion m_meshRegion;
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
@@ -38,8 +41,11 @@ public sealed partial class SdfWorldTables {
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
+    // One more for every new draw list the region packs, which the view's cadence signature follows.
+    internal long MeshRevision => m_meshRevision;
+    internal bool MeshIndirectInstancesComposable => m_meshIndirectInstancesComposable;
 
-    // Packs a new draw list, or the list at a new revision, into the region, growing it first when the list needs more
+    // Packs new draws, a new revision or changed field participation, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (
@@ -47,9 +53,11 @@ public sealed partial class SdfWorldTables {
                 objA: draws,
                 objB: m_meshDraws
             ) ||
-            (revision != m_meshDrawsRevision)
+            (revision != m_meshDrawsRevision) ||
+            (m_meshIndirectInstancesComposable != m_liveProgram.IndirectInstancesComposable)
         ) {
             var atlas = StageMeshAtlas(draws: draws);
+            var impostors = StageImpostorAtlas(draws: draws);
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
                 meshes: m_meshPlacements
@@ -69,6 +77,8 @@ public sealed partial class SdfWorldTables {
                     atlas: atlas,
                     destination: words,
                     draws: draws,
+                    impostors: impostors,
+                    indirectInstancesComposable: m_liveProgram.IndirectInstancesComposable,
                     layout: layout,
                     meshes: m_meshPlacements
                 );
@@ -89,11 +99,13 @@ public sealed partial class SdfWorldTables {
 
             m_meshDraws = draws;
             m_meshDrawsRevision = revision;
+            m_meshIndirectInstancesComposable = m_liveProgram.IndirectInstancesComposable;
             m_meshLayout = layout;
             m_meshRevision++;
         }
 
         m_meshDrawCount = ((uint)draws.Count);
+        StageIndirectMeshes(draws: draws);
     }
     // Replaces the region with one grown by half again (or to the need, if larger), once the device is idle, since every
     // view's mesh pass reads it. The replacement starts owing every word, so the next write sends the whole packed list,

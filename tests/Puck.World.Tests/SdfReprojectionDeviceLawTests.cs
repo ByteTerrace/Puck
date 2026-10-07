@@ -14,6 +14,7 @@ namespace Puck.World.Tests;
 /// nonuniformly scaled mesh. Source identity deliberately differs from the rigid slot. Invalid history, background,
 /// and a point behind the prior camera are refused. Both hardware backends read the shipped shader module.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfReprojectionDeviceLawTests {
     private const string Kernel = "sdf-reprojection.comp";
     private const uint Width = 320;

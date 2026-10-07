@@ -14,7 +14,7 @@ public enum CycleOutput : byte {
     /// steps — an int cell.</summary>
     Step,
     /// <summary>The rotation as a fraction of one turn, <c>⌊step · 2^16 / order⌋</c> in raw <c>FixedQ4816</c> bits, so
-    /// the value wraps once per loop the way <c>render.cycle</c> keys read a row — a fixed cell.</summary>
+    /// the value wraps once per loop the way a state clock reads its row — a fixed cell.</summary>
     Turns,
     /// <summary>The unit rotation's cosine, the real part of the order's root of unity at the step — a fixed cell.</summary>
     Cos,
@@ -65,11 +65,23 @@ public enum CycleOutput : byte {
 /// <param name="TicksPerStep">The server ticks one step lasts; refused at zero or below.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateCycle(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null,
+    IReadOnlyList<int>? Word = null,
     int Power = 1,
     CycleOutput Output = CycleOutput.Step,
     long TicksPerStep = 1
 ) {
+    /// <summary>The generator as a word of reflections — mirror nodes, one to eight, applied first to last — or <see
+    /// langword="null"/> for the lattice's own cycle. A word that moves no node is refused: it loops nothing.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<int>? Word { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Word);
+    /// <summary>How many applications of the generator one step is; nonzero, and smaller in magnitude than the
+    /// generator's order, since a power reduces modulo the order and a multiple of it would be the identity.</summary>
+    public int Power { get; init; } = Power;
+    /// <summary>What the cell reads; must suit the carrying row's <see cref="CellKind"/>.</summary>
+    public CycleOutput Output { get; init; } = Output;
+    /// <summary>The server ticks one step lasts; refused at zero or below.</summary>
+    public long TicksPerStep { get; init; } = TicksPerStep;
+
     // The baked generator and the word it was baked from, resolved on first use; a pure function of Word, so it
     // never enters equality, and a `with` copy that swaps the word re-bakes rather than answering from the copy.
     private SymmetryWord? m_generator;

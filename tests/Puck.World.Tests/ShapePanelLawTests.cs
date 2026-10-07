@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: <see cref="ShapePanelDocument"/> — a shape's second-material inset face region — is refused by name
-/// wherever its one-deep field scope has nowhere to nest (a Plane, a domain-folded shape, a grouped shape, or a
+/// outside the panel recipe's supported emission paths (a Plane, a domain-folded shape, a grouped shape, or a
 /// creation that already needs a scope of its own), clamped by name against the shape's own local half-extents, and
 /// otherwise renders as two shape instructions composed in the shape's own field scope on BOTH emission paths, the
 /// copy from its own transform chain, the authored depth exact whatever the inset — never reaching the deterministic

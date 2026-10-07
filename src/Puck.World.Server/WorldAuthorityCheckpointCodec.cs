@@ -13,7 +13,7 @@ namespace Puck.World.Server;
 /// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
 /// external submissions retain the live actor restriction. Every embedded document (the definition, the base definition, an escrow lease's destination definition)
 /// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
-/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the
+/// document itself — and a base byte-identical to the definition is written once, behind a flag. Every read is bounded; every decoder — the outer envelope, the body, and each of the
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
 /// refuses by name at the scope that actually owns the leftover bytes.</summary>
 public static partial class WorldAuthorityCheckpointCodec {
@@ -21,6 +21,8 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const uint Magic = 0x504B4350U;
     private const int MaxCollectionCount = 1_000_000;
     private const int MaxHashChars = 128;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     // Version 5 bounded the complete body, including the server section and every other section, to MaxSectionBytes.
     // Version 6 adds at most one arena's MaxBytes-charged key ledger: its two bytes per UTF-16 code unit plus four
@@ -32,8 +34,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 15 carries the grant table's retired session epochs.
-    public const ushort SupportedVersion = 15;
+    // The version is a name, never a counter: the shape fingerprint FormatShapes carries tells layouts apart.
+    public const ushort SupportedVersion = 1;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -65,6 +67,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt16(
             value: SupportedVersion
         );
+        // The shape fingerprint puck formats records for this codec's source: the version above cannot tell two layouts
+        // apart once it stops moving, so the blob names the shape it was written under and the reader refuses any other.
+        writer.WriteString(value: FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion);
         // A whole-body content pin, over everything the envelope frames — the per-section decoders below also pin
         // the definition specifically (by its own sha256-64), but a corruption landing outside the definition bytes
         // (a section's own field, a length prefix, a discriminant) has no other structural reason to be caught, so
@@ -79,8 +84,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="bytes">The encoded blob.</param>
     /// <param name="checkpoint">The decoded checkpoint on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="documentDirectory">The captured definition's asset directory, when its paths are relative.</param>
     /// <returns><see langword="true"/> when the blob decoded exactly.</returns>
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) {
         checkpoint = null;
 
         var reader = new WireReader(bytes: bytes);
@@ -104,6 +110,25 @@ public static partial class WorldAuthorityCheckpointCodec {
         ) {
             reader.Fail(
                 detail: $"checkpoint version {version} is not the supported version {SupportedVersion}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var shape = reader.ReadRequiredString(
+            field: "shape fingerprint",
+            maxBytes: MaxFingerprintChars
+        );
+
+        if (
+            !reader.Failed &&
+            !string.Equals(
+                a: shape,
+                b: FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            reader.Fail(
+                detail: $"checkpoint shape fingerprint {shape}, expected {FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
@@ -202,17 +227,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        WorldDefinition definition;
-
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+            _ = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: server.DefinitionJson);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or NotSupportedException)) {
             reason = $"server section: definition failed to parse — {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
-        var defaults = definition.PlayerDefaults;
 
         if (!TryDecodePopulation(
             bytes: populationBytes,
@@ -230,7 +252,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeEscrow(
             bytes: escrowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var escrow
         )) {
@@ -259,7 +280,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeHostRow(
             bytes: hostRowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var hostRow
         )) {

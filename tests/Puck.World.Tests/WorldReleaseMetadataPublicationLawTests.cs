@@ -632,7 +632,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             if (tail) {
                 Assert.True(condition: (await scenario.Store.AppendJournalAsync(
                 scenario.Identity,
-                new WorldMutationJournalEntry(
+                new WorldAuthorityJournalEntry(
                     (checkpoint.Server.LastCompletedTick + 1),
                     (checkpoint.Server.LastCompletedEngineTicks + 1),
                     "uncheckpointed tail"u8.ToArray()

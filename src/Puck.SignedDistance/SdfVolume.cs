@@ -19,11 +19,18 @@ public readonly record struct SdfDensityStop(float Density, Vector3 Color);
 /// noise-cell size. Ramp contains one to four ascending density stops, evaluated at each sample before integration.
 /// PulseAmplitude is in [0, 1]; PulseFrequency is cycles per second. IntensityLane selects [0, 3], or null
 /// for constant gain. An authored lane on a static volume reads zero. Seed preserves all 32 bits.
-/// Coverage is in [0, 1]; Softness is the cloud density transition width in (0, 1].</summary>
+/// Coverage is in [0, 1]; Softness is the cloud density transition width in (0, 1]. Scatter, in [0, 1], is the
+/// share of each sample's extinction that scatters the light-casting bodies' light toward the eye (its single-scattering
+/// albedo, by the phase of <see cref="ScatterAnisotropy"/>, through the sky block's air lights); zero scatters none, and
+/// the medium shows only its ramp's emission.</summary>
 public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Quaternion Rotation, Vector3 HalfExtent,
     int DynamicSlot, float Axis, float Width, float Speed, uint Seed, int Steps, IReadOnlyList<SdfDensityStop> Ramp,
     float Intensity, float Extinction, float PulseAmplitude = 0f, float PulseFrequency = 0f, int? IntensityLane = null,
-    float Coverage = 0.55f, float Softness = 0.18f) {
+    float Coverage = 0.55f, float Softness = 0.18f, float Scatter = 0f) {
+    /// <summary>The Henyey-Greenstein anisotropy a bounded medium scatters the bodies' light by: mildly forward, as a
+    /// cloud's droplets scatter. KEEP IN SYNC with <c>SdfVolumeScatterAnisotropy</c> in
+    /// <c>shade/shade-volumes.hlsli</c>.</summary>
+    public const float ScatterAnisotropy = 0.3f;
     /// <summary>The lattice period, in noise cells, of the time-advected noise the bounded media and the sky's cloud layer
     /// read: their lattice cells wrap to it before they are hashed (<c>SDF_NOISE_PERIOD_CELLS</c>), so an advection
     /// offset reduced by it joins without a seam however long the clock runs.</summary>
@@ -71,7 +78,9 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
             (Coverage > 1f) ||
             !NonNegative(v: Softness) ||
             (Softness == 0f) ||
-            (Softness > 1f)
+            (Softness > 1f) ||
+            !NonNegative(v: Scatter) ||
+            (Scatter > 1f)
         ) {
             throw new ArgumentOutOfRangeException(
                 nameof(SdfVolume),

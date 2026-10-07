@@ -87,6 +87,8 @@ public static class AutomaticIntegerSequenceCodec {
             throw new InvalidDataException(message: "the automatic-sequence artifact version is unsupported");
         }
 
+        reader.ExpectShape(shape: FormatShapes.AutomaticIntegerSequenceCodecVersion);
+
         try {
             var kind = ((IntegerNumerationKind)reader.ReadByte());
             IntegerNumerationSystem numeration;
@@ -173,6 +175,7 @@ public static class AutomaticIntegerSequenceCodec {
 
         writer.Write(value: Magic);
         writer.WriteByte(value: Version);
+        writer.WriteShape(shape: FormatShapes.AutomaticIntegerSequenceCodecVersion);
         writer.WriteByte(value: ((byte)sequence.Numeration.Kind));
 
         if (sequence.Numeration.Kind == IntegerNumerationKind.Positional) {

@@ -82,8 +82,10 @@ and resource flags vary), and `DirectXTextures.CreateCommitted` (a single-mip,
 single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
 and `InitialStateOf` give an image the flags, clear value and initial state its
-declared `GpuImageUsage` needs: `DirectXGpuImage`, `DirectXGpuExportableImage`
-and the surface upload's texture all go through them. A depth attachment's
+declared `GpuImageUsage` needs, and `DirectXGpuImage` takes both from them.
+`DirectXGpuExportableImage` states its own flags (simultaneous access, and a
+render target or storage image by its access) and the surface upload its own copy-destination
+state to `CreateCommitted`. A depth attachment's
 texture is created from its attachment (`IGpuImageFactory.CreateDepth`) with
 that attachment's `GpuDepthAttachment.ClearDepth` as its optimized clear value,
 so a render pass clearing it takes the fast path and the debug layer reports no
@@ -140,8 +142,7 @@ var adapterApi = new DirectXNativeAdapterApi();
 var deviceApi = new DirectXNativeDeviceApi();
 
 foreach (var adapter in adapterApi.EnumerateAdapters()) {
-    var maxLevel = deviceApi.ProbeMaxFeatureLevel(adapterLuid: adapter.AdapterLuid);
-    // adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware, maxLevel ...
+    // adapter.AdapterLuid, adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware ...
 }
 
 // WARP is always available — handy for headless/CI verification with no GPU.
@@ -156,7 +157,6 @@ it like any other Puck handle owner.
 | Concern | Interface | Native call(s) | Result |
 |---------|-----------|----------------|--------|
 | Adapter enumeration | `IDirectXAdapterApi` | `CreateDXGIFactory2`, `IDXGIFactory4::EnumAdapters1` | `IReadOnlyList<DirectXAdapterDescription>` |
-| Feature-level probe | `IDirectXDeviceApi` | `D3D12CreateDevice` (null device) | `DirectXFeatureLevel?` |
 | Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
 | Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
@@ -178,7 +178,7 @@ everything created with it, so the context's next use creates the device again.
 
 When `DirectXDeviceContext` creates its device it reads the device's memory
 profile beside its identity (`IDirectXDeviceApi.GetMemoryProfile`) and reports
-it as `IGpuDeviceContext.MemoryProfile`. `DirectXNativeDeviceApi.MemoryProfile`
+it as `IGpuDeviceContext.MemoryProfile`. `DirectXFeatureReads.MemoryProfile`
 fills it from three native structures:
 
 - `D3D12_FEATURE_DATA_ARCHITECTURE`: `UMA` with `CacheCoherentUMA` is coherent
@@ -299,6 +299,20 @@ output at the host's paper-white level once, and writes the source image through
 tables, which `DirectXCommandListRecorder` binds at the group's `ViewTableIndex`
 and `SamplerTableIndex`. A CPU surface reaches the encode through the device's
 `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+The upload refuses a width or height past the two-dimensional texture limit,
+`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, with an `ArgumentOutOfRangeException` before it
+touches its texture, because the device creates a larger texture and refuses only
+the copy recorded into it. A recording that fails leaves its command list open, so
+the next upload replaces the allocator and the list before it records.
+A rebuild for a new extent or format creates the replacement texture and staging
+buffer before it retires the current ones and their image view, so a creation the
+device refuses leaves the current texture and view in place.
+Each upload first waits for the queue to finish the previous submission, even when its
+wait failed, before it writes staging memory, reuses or replaces its command
+allocator, or releases a replaced texture; the rebuild publishes its replacement
+texture, buffer, view and extent together, and releases the replaced texture and
+buffer only after the queue's fence passes the work submitted before it, because
+another consumer's submission may still read them.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through
@@ -449,7 +463,7 @@ teardown's memory entries and the shader-visible heaps
 (`DirectXShaderVisibleHeapsLawTests`).
 Driver behavior is verified by running the engine on Direct3D 12 and by
 `puck parity`, which boots the authored parity world
-(`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives
+(`tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
 each of the world's scheduled captures three verdicts: its content gate, its
 exact `stateHash`, and per-tile pixels under the contract versioned beside
 the world:

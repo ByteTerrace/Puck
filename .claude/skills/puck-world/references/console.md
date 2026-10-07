@@ -42,9 +42,22 @@ while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
 safe only because the desktop's authority always resolves boot.
 
-Two definition factories, plus two `Puck.World` wrappers over them. A sweep that
-stops at the two factories MISSES most registration sites — the wrappers carry
-~69 of them.
+`world.explain` is an Immediate observational one-shot request on the acting
+seat or pane's existing GPU picker. It suspends that picker's ordinary hover
+demand until the exact surfaced answer's fence completes, and settles on route
+loss, supersession or shutdown. It evaluates the captured publication's CPU
+reference once. Windowed and offscreen hosts tick the same feed after camera
+and pane composition. A Console `world.view.pointer <x> <y>` override also
+selects a published whole-display view without a seat or visible HUD cursor;
+it never injects a hardware press. True headless presentation still refuses.
+Inspector and echo use the same cached indirect formatter;
+the HUD never evaluates a reference. `world.lighting` qualifies the retained
+fenced census separately from its live host allocation inventory. None of these
+reads infers GPU classifications from host schedule counts. The application
+README's presentation inspection section owns the user contract.
+
+Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
+stops at the two factories MISSES the wrapper's registration sites.
 
 - `CommandDefinition.Verb(...)` — bare no-arg verb (the bound-input shape).
   Takes `valueKind`, so a bound row may carry a constant (F1..F4 hand
@@ -58,10 +71,9 @@ stops at the two factories MISSES most registration sites — the wrappers carry
   (`Axis1D`), or `BindingVocabularyCheck` sees a mismatch — see the
   recompose trap below.
 - `WorldCommandDefinition.Simulation(name, description, handler)` — an
-  unbindable Simulation-routed wire verb.
-- `WorldCommandDefinition.Row<T>(name, description, info, toMutation, link)` —
-  a whole-row document upsert: inline-JSON parse plus submission. The general
-  `world.row.set`/`world.row.remove` door generalizes exactly this shape.
+  unbindable Simulation-routed wire verb. The whole-row document upsert the
+  general `world.row.set`/`world.row.remove` door generalizes has no factory of
+  its own.
 
 `Bindability` is required (`Unspecified` throws at construction). The
 description IS the help text — `help` prints `name - description` for every
@@ -198,6 +210,11 @@ expansions, extracted paths, and capacity refusals. A bounded sample is not glob
 neighbors, and a headless work count is not an FPS measurement. None of these
 verbs mutates the field.
 
+The windowed budget also lists each binder root's admitted infinity views against
+its cap and named fallbacks. Cameras sharing that root share one planned count;
+retiring the root withdraws its plan. Those scene counts are separate from the
+ordinary live render budget's actual GPU allocations and completed dispatches.
+
 Body command targets use the world's authored local-seat prefix, not the host's
 four-seat ceiling. A zero-seat world can address peer body 0 through the same
 designation and control verbs as any other active peer.
@@ -218,6 +235,15 @@ on every failure — that is what makes quiet safe. `wire.errors [reset]`
 reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
+
+`world.wait indirect <seconds>` uses the existing session hold to await a newer
+produced frame and every active shared indirect cache's current-source fence.
+Its stderr settlement names the actual residency/allocation/epoch/generation/
+stamp/source identities once. It proves shared-cache completion, not each
+view's independent receiver admission. Pause simulation while warming, then
+resume for fixed input ticks; never replace the fence with guessed warm ticks.
+A deadline's not-settled verdict is diagnostic evidence and cannot qualify a
+counter observation.
 
 Silo row retirement disposes its `TextCommandSession`, refusing work still
 queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`
@@ -254,8 +280,10 @@ read-after-write across ticks (e.g. asserting motion after input).
 
 **The release is exact.** `FixedStepPump` runs the host's console drain
 (`TextCommandSource.Collect`, then the buffered-output flush) before EVERY
-step, including each step of a catch-up burst (`FixedStepPump.CreateHosted`
-wires it for the windowed, headless, and offscreen hosts alike). The line after
+step, including each step of a windowed or headless catch-up burst
+(`FixedStepPump.CreateHosted` wires it for the windowed, headless, and
+offscreen hosts alike; the offscreen host never bursts, since it steps one tick
+per produced frame). The line after
 a wait releasing at R therefore runs after tick R completes and before tick
 R+1 steps: an `Immediate` read observes the state at R, and a `Simulation`
 line applies in tick R+1, because the administrative stdin session is
@@ -341,13 +369,24 @@ the whole truth, and a script reading only one of them reads a half-answer:
   `[capture] world -> <path>` (the world's instance did, as the root when
   nothing is drawn over the world). THIS is
   the line that says a file exists.
-- stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
-  still pending when the run ended … NO FILE WAS WRITTEN`
-  (`WorldPostBuildWiring`'s `ApplicationStopped` drain).
+- stderr, when no frame serves it: `[capture] refused <path>: <reason>`. A
+  capture still pending when the run ends is refused as `the run ended before
+  any frame served it (armed after tick A, last completed tick T)` before the
+  render root is disposed (`WorldCaptureScheduler.Drain`).
+
+The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so both rendered
+hosts hold their clock for it exactly as for a scheduled capture: no tick past
+the one it was armed after runs until a frame serves it or a hold budget
+refuses it, and a `world.wait <ticks>` after it has the capture behind it.
 
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:
-the render graph admits one pending request at a time. A mutation barrier orders command
+the render graph admits one pending request at a time.
+`world.screenshot <path.png> crossing [player]` instead waits for the first completed
+frame that seat presents after its route moves, kept apart from an ordinary capture so
+another may be armed and land before the crossing. A destination still rebuilding keeps
+the request pending; a refusal, a hidden seat or another route change fails it instead
+of capturing the departed image or a later arrival. A mutation barrier orders command
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 
@@ -679,3 +718,9 @@ pixels with the origin at the bottom-left; clocks and feedback remain
 presentation state.
 See [the World workflow](../../../../src/Puck.World/README.md#shader-pipelines)
 and [the pipeline contract](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development).
+
+The independent sky field lever is `world.sky-field-scale 1|0.5`. It is an
+admitted render session lever, echoed with no arguments and folded by save
+into `render.skyFieldScale`; quality presets author `skyFieldScale`. It moves
+only the field dispatch and composite grid. Scene resolution and retained
+field allocation capacity stay unchanged.

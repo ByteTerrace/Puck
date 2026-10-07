@@ -1,0 +1,63 @@
+{
+  "schema": "puck.world.definition.v1",
+  "basis": "../../src/Puck.World/Assets/worlds/moth-courtyard",
+  "documentId": "counters-courtyard",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "height": 1080,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "targetHertz": 0,
+    "width": 1920
+  },
+  "cameras": [
+    {
+      "name": "counters-cam",
+      "anchor": null,
+      "renderHeight": 1080,
+      "renderWidth": 1920,
+      "rig": {
+        "version": "puck.camera.program.v1",
+        "name": "counters-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": { "$type": "worldPoint", "point": [0, 2.5, 7] }
+          },
+          {
+            "$type": "lookAt",
+            "subject": { "$type": "worldPoint", "point": [0, 0.8, 0] }
+          },
+          { "$type": "fieldOfView", "fieldOfViewRadians": 0.9 }
+        ]
+      }
+    }
+  ],
+  "render": {
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "temporal": false,
+      "dynamicResolution": false,
+      "renderScale": 0.70980394
+    }
+  },
+  "simulation": { "rateHz": 30 },
+  "views": {
+    "layouts": [
+      { "$replace": true },
+      {
+        "name": "counters",
+        "seatCount": 0,
+        "slots": [
+          { "camera": "counters-cam", "height": 1, "width": 1, "x": 0, "y": 0 }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      }
+    ]
+  }
+}

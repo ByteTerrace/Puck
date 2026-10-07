@@ -56,7 +56,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
@@ -87,7 +87,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.state",
-            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>, and, for a screen declaring memory bindings, memory=0x<addr>:R|W=<value|none> per binding (the value each Read binding last mirrored into its cell, or each Write binding last poked into the machine — none before its first observed value). A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
+            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -104,14 +104,18 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.nesting",
+            description: "Lists every level of nested worlds the presentation shows: world.nesting — the nesting depth (the boot world's views.nestingDepth), then each world a seat is presented in (routed$<digest> depth 0 world <authority>, the digest 16 hex characters of the authority identity's SHA-256) and each session view at every depth by name (session$<screen>, then one $<screen> more a level), with its depth, its destination, the residency it renders through (endpoint:<authority>, the one every seat and fully disclosed window presenting that world shares, or own), and what each of its world's screens shows: <index>:<instance> naming a session view one level deeper, a shared source instance (source$<producer>$<digest>), a fallback colour's source instance past the depth (source$color$<digest>), or none. No argument. A query — its listing always echoes, even under wire.ack quiet.",
+            handler: NestingHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.view-refresh",
             description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh [1..8]. 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",
             handler: ViewRefreshHandler
         );
     }
-    // The declared screens row at the engine screen-surface index, or null when undeclared — screen.state's own
-    // memory-binding segment reads the DECLARED bindings (screens[].memory) rather than anything the machine host
-    // itself tracks, since a binding is document authoring, not live machine state.
+    // The declared screens row at the engine screen-surface index, or null when undeclared.
     private WorldScreen? DeclaredScreen(int index) {
         var screens = m_server.Definition.Screens;
 
@@ -546,7 +550,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     // one position by the inserted <kind> token.
     private CommandResult SourceHandler(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Error(output: "[screen.source: expected <index> <kind> [args…] — kind is camera | capture | desktop | qr | view]");
+            return CommandResult.Error(output: "[screen.source: expected <index> <kind> [args…] — kind is camera | capture | desktop | probe | qr | view | row]");
         }
 
         if (!args.TryInt(
@@ -630,7 +634,32 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             );
         }
 
-        return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, qr, or view]");
+        if (args.Is(
+            index: 1,
+            value: "row"
+        )) {
+            return SourceRow(
+                args: in args,
+                index: index
+            );
+        }
+
+        return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, probe, qr, view, or row]");
+    }
+    private CommandResult SourceRow(int index, in WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[screen.source: row takes no arguments]");
+        }
+
+        var (ok, message) = m_binder.TryShowRow(index: index);
+
+        return (ok
+            ? Success(
+                args: in args,
+                message: $"[screen.source: {message}]"
+            )
+            : CommandResult.Error(output: $"[screen.source: {message}]")
+        );
     }
     private CommandResult SourceProbe(int index, Principal principal, in WireArgs args) {
         if (args.Count != 3) {
@@ -817,37 +846,6 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             );
         }
 
-        if (DeclaredScreen(index: index)?.Memory is { Count: > 0 } bindings) {
-            _ = builder.Append(value: " memory=");
-
-            for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
-                var binding = bindings[bindingIndex];
-
-                if (bindingIndex > 0) {
-                    _ = builder.Append(value: ',');
-                }
-
-                var tag = ((binding.Direction == WorldScreenMemoryDirection.Write)
-                    ? 'W'
-                    : 'R'
-                );
-                var text = (m_server.TryMachineMemoryObserved(
-                    screen: index,
-                    address: binding.Address,
-                    direction: binding.Direction,
-                    value: out var value
-                )
-                    ? value.ToString(provider: CultureInfo.InvariantCulture)
-                    : "none"
-                );
-
-                _ = builder.Append(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"0x{binding.Address:X4}:{tag}={text}"
-                );
-            }
-        }
-
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
     // A side-effecting verb's success echo, gated on the ack mode: a quiet flood drops it (CommandResult.None).
@@ -878,7 +876,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in Commands()) {
-            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines" or "world.screens" or "world.view-refresh")
+            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines" or "world.screens" or "world.nesting" or "world.view-refresh")
                 ? command
                 : command with { Routing = CommandRouting.Simulation }
             );

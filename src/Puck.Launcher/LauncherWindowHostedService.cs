@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
@@ -39,6 +38,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
+    private readonly TimeProvider m_time;
     private readonly INativeWindowFactory m_windowFactory;
 
     public LauncherWindowHostedService(
@@ -61,9 +61,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
         INativeWindowFactory windowFactory,
-        IEnumerable<GpuCreationFaults> faults
+        IEnumerable<GpuCreationFaults> faults,
+        TimeProvider time
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
@@ -110,6 +112,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_rootHostContext = rootHostContext;
         m_registry = registry;
         m_textSource = textSource;
+        m_time = time;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
             name: nameof(IFixedStepSimulation),
@@ -220,12 +223,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 window.Show();
 
-                var clock = TickClock.Start();
+                var clock = TickClock.Start(time: m_time);
                 // The shared fixed-step accumulator (Puck.Launcher.FixedStepPump) — null when no simulation is
                 // registered (a composition root that drives no fixed-step sim at all), mirroring the ORIGINAL
                 // m_simulation/m_inputRouter pairing check the constructor already enforces.
                 var pump = FixedStepPump.CreateHosted(
-                    holdsClock: false,
+                    holdsClock: true,
                     inputBacklog: m_inputBacklog,
                     inputClock: m_inputClock,
                     inputRouter: m_inputRouter,
@@ -236,7 +239,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     textSource: m_textSource
                 );
                 var hostFrame = 0UL;
-                var frequency = Stopwatch.Frequency;
+                var frequency = m_time.TimestampFrequency;
                 var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
                 // Display-aware presentation pacing. Active signal timing and explicit VRR capabilities are independent
                 // facts; the host never turns selectable fixed modes into a fictional VRR range. Re-resolve only when the
@@ -303,7 +306,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     requestedHertz: m_presentPacing.TargetHertz
                 );
                 var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
-                var startTimestamp = Stopwatch.GetTimestamp();
+                var startTimestamp = m_time.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
                 var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                     ? (startTimestamp + ((long)(exitAfter.TotalSeconds * frequency)))
@@ -313,6 +316,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     logger: m_logger,
                     root: m_root,
                     rootHostContext: m_rootHostContext,
+                    sleep: duration => LauncherHostLoop.WaitUntil(
+                        deadlineTimestamp: (m_time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
+                        precisionWaiter: precisionWaiter,
+                        spinThreshold: spinThreshold,
+                        time: m_time
+                    ),
+                    time: m_time,
                     writeLine: m_bufferedOutput.WriteErrorLine
                 );
 
@@ -366,7 +376,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     if (
                         (displayTimingInfo is not null) &&
                         (displayTimingRetryAttemptsRemaining > 0) &&
-                        (Stopwatch.GetTimestamp() >= nextDisplayTimingRetryTimestamp)
+                        (m_time.GetTimestamp() >= nextDisplayTimingRetryTimestamp)
                     ) {
                         var requeriedTiming = displayTimingInfo.QueryDisplayTiming();
 
@@ -381,7 +391,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         if (requeriedTiming.IsKnown) {
                             displayTimingRetryAttemptsRemaining = 0;
                         } else {
-                            nextDisplayTimingRetryTimestamp = (Stopwatch.GetTimestamp() + (frequency / 10L));
+                            nextDisplayTimingRetryTimestamp = (m_time.GetTimestamp() + (frequency / 10L));
                         }
                     }
 
@@ -510,7 +520,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                     if (
                         (exitAfterTimestamp is { } deadline) &&
-                        (Stopwatch.GetTimestamp() >= deadline)
+                        (m_time.GetTimestamp() >= deadline)
                     ) {
                         m_terminal.RequestExit();
                     }
@@ -567,7 +577,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 TargetHeight: height,
                                 TargetWidth: width
                             );
-                            var surface = m_root.ProduceFrame(context: in frameContext);
+                            // A windowed display presents whatever the root has, rendered for this frame or not.
+                            var surface = m_root.ProduceFrame(context: in frameContext).Surface;
 
                             m_capture?.Capture(
                                 context: in frameContext,
@@ -663,7 +674,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             renderPeriod: renderPeriod
                         );
 
-                        var nowTimestamp = Stopwatch.GetTimestamp();
+                        var nowTimestamp = m_time.GetTimestamp();
 
                         // CATCH-UP: a frame that overran its slot (GPU-bound, or a one-off hitch) is already more than a
                         // full slot past the next grid point. Re-origin the grid at now — jump to the next slot — instead
@@ -674,9 +685,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         } else {
                             LauncherHostLoop.WaitUntil(
                                 deadlineTimestamp: nextRenderDeadline,
-                                frequency: frequency,
                                 precisionWaiter: precisionWaiter,
-                                spinThreshold: spinThreshold
+                                spinThreshold: spinThreshold,
+                                time: m_time
                             );
                         }
                     }

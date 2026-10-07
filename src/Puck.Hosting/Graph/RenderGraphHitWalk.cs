@@ -57,9 +57,11 @@ public readonly record struct RenderGraphHitStep(int Instance, int Placement, So
 /// <see langword="null"/>.</param>
 public sealed record RenderGraphHitPath(IReadOnlyList<RenderGraphHitStep> Steps, RenderGraphHitEnd End, int Instance, FixedVector3? Surface = null);
 /// <summary>Follows a hit through nested render-graph instances: a hit on a rendered source continues as a ray through
-/// the producing instance's camera from the hit's source coordinate, into that instance's world, recursively, up to a
-/// depth limit such as <see cref="RenderGraphInstanceSet.NestingDepth"/>, and a ray that meets no placement ends on the
-/// surface the scene finds along it in that world. Every step maps in fixed point through
+/// the producing instance's camera from the hit's source coordinate, into that instance's world, recursively, through at
+/// most a depth limit of screens such as <see cref="RenderGraphInstanceSet.NestingDepth"/>, each world tested against
+/// its own placements (<see cref="IRenderGraphHitScene.Placements"/>), and a ray that meets no placement ends on the
+/// surface the scene finds along it in that world. A display pane is no screen: the walk from the display into the view
+/// a pane shows passes through no level of the limit. Every step maps in fixed point through
 /// <see cref="SourceMapping.MapRay"/>, so the same set, scene and ray walk the same path on every run.</summary>
 public static class RenderGraphHitWalk {
     private static bool Reads(RenderGraphInstanceSet set, int consumer, int producer) {
@@ -77,7 +79,7 @@ public static class RenderGraphHitWalk {
     /// <param name="scene">What each instance shows.</param>
     /// <param name="instance">The index of the instance the ray is cast into.</param>
     /// <param name="ray">The ray, in that instance's world.</param>
-    /// <param name="maxDepth">The most times the walk continues into another instance; non-negative.</param>
+    /// <param name="maxDepth">The most screens the walk continues through into another instance; non-negative.</param>
     /// <returns>The path.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="scene"/> is
     /// <see langword="null"/>.</exception>
@@ -185,8 +187,8 @@ public static class RenderGraphHitWalk {
     /// <param name="point">The point, in display pixels from the display's top-left corner.</param>
     /// <param name="displayWidth">The display's width, in pixels; positive.</param>
     /// <param name="displayHeight">The display's height, in pixels; positive.</param>
-    /// <param name="maxDepth">The most times the walk continues into an instance's world, counting the continuation
-    /// from the pane; non-negative.</param>
+    /// <param name="maxDepth">The most screens the walk continues through once it has entered the pane's instance;
+    /// non-negative. The continuation from the pane into its instance is no screen and counts nothing.</param>
     /// <returns>The path, whose first step is the pane with an <see cref="RenderGraphHitStep.Instance"/> of -1 (and a
     /// <see cref="RenderGraphHitStep.Placement"/> of -1 for <paramref name="display"/>), or no steps with
     /// <see cref="RenderGraphHitEnd.World"/> and an instance of -1 when neither a pane nor the display's view holds the
@@ -227,13 +229,14 @@ public static class RenderGraphHitWalk {
                 Mapping: mapping,
                 Placement: index
             );
+            // The pane is no screen: entering its instance spends no level of the limit.
             var end = Continue(
                 camera: out var camera,
                 current: -1,
                 depth: 0,
                 hit: hit,
                 mapping: mapping,
-                maxDepth: maxDepth,
+                maxDepth: 1,
                 producer: out var producer,
                 scene: scene,
                 set: set
@@ -249,7 +252,7 @@ public static class RenderGraphHitWalk {
 
             var inner = Walk(
                 instance: producer,
-                maxDepth: (maxDepth - 1),
+                maxDepth: maxDepth,
                 ray: SourceRay.Through(
                     camera: camera,
                     image: new FixedVector2(

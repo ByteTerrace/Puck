@@ -1,4 +1,5 @@
 using Puck.Cli.Shaders;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -14,27 +15,23 @@ namespace Puck.Cli.Tests;
 public sealed class ShadersCompareLawTests {
     // Two trees, each written from its own files, compared by the verb.
     private static (int ExitCode, string Output, string Error) Compare(Dictionary<string, byte[]> expected, Dictionary<string, byte[]> actual) {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-compare-");
+        using var root = new TemporaryDirectory(prefix: "puck-shaders-compare-");
 
-        try {
-            foreach (var (tree, files) in ((ReadOnlySpan<(string, Dictionary<string, byte[]>)>)[("expected", expected), ("actual", actual)])) {
-                foreach (var (path, bytes) in files) {
-                    var full = Path.Combine(path1: root.FullName, path2: tree, path3: path);
+        foreach (var (tree, files) in ((ReadOnlySpan<(string, Dictionary<string, byte[]>)>)[("expected", expected), ("actual", actual)])) {
+            foreach (var (path, bytes) in files) {
+                var full = Path.Combine(path1: root.RootPath, path2: tree, path3: path);
 
-                    _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
-                    File.WriteAllBytes(bytes: bytes, path: full);
-                }
-
-                _ = Directory.CreateDirectory(path: Path.Combine(path1: root.FullName, path2: tree));
+                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+                File.WriteAllBytes(bytes: bytes, path: full);
             }
 
-            return ConsoleCapture.RunSplit(run: () => CompareCommand.Run(
-                actualRoot: Path.Combine(path1: root.FullName, path2: "actual"),
-                expectedRoot: Path.Combine(path1: root.FullName, path2: "expected")
-            ));
-        } finally {
-            root.Delete(recursive: true);
+            _ = Directory.CreateDirectory(path: Path.Combine(path1: root.RootPath, path2: tree));
         }
+
+        return ConsoleCapture.RunSplit(run: () => CompareCommand.Run(
+            actualRoot: Path.Combine(path1: root.RootPath, path2: "actual"),
+            expectedRoot: Path.Combine(path1: root.RootPath, path2: "expected")
+        ));
     }
     private static Dictionary<string, byte[]> Tree(params (string Path, byte[] Bytes)[] files) => files.ToDictionary(
         comparer: StringComparer.Ordinal,
@@ -106,31 +103,27 @@ public sealed class ShadersCompareLawTests {
     }
     [Fact]
     public void ACollectedTreeMatchesTheCheckoutItCameFrom() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-collect-");
+        using var root = new TemporaryDirectory(prefix: "puck-shaders-collect-");
 
-        try {
-            var checkout = Path.Combine(path1: root.FullName, path2: "checkout");
-            var collected = Path.Combine(path1: root.FullName, path2: "collected");
+        var checkout = Path.Combine(path1: root.RootPath, path2: "checkout");
+        var collected = Path.Combine(path1: root.RootPath, path2: "collected");
 
-            foreach (var (path, bytes) in ((ReadOnlySpan<(string, byte[])>)[("src/A/Assets/Shaders/k.comp.spv", [1, 2]), ("tests/B/p.frag.dxil", [3]), ("src/A/bin/Release/k.comp.spv", [9]), ("artifacts/world/k.comp.spv", [9]), ("src/A/k.hlsl", [0])])) {
-                var full = Path.Combine(path1: checkout, path2: path);
+        foreach (var (path, bytes) in ((ReadOnlySpan<(string, byte[])>)[("src/A/Assets/Shaders/k.comp.spv", [1, 2]), ("tests/B/p.frag.dxil", [3]), ("src/A/bin/Release/k.comp.spv", [9]), ("artifacts/world/k.comp.spv", [9]), ("src/A/k.hlsl", [0])])) {
+            var full = Path.Combine(path1: checkout, path2: path);
 
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
-                File.WriteAllBytes(bytes: bytes, path: full);
-            }
-
-            var (exitCode, _, _) = ConsoleCapture.RunSplit(run: () => CompareCommand.Collect(destination: collected, root: checkout));
-
-            Assert.Equal(actual: exitCode, expected: 0);
-            Assert.Equal(
-                actual: CompareCommand.Bytecode(root: collected).Keys,
-                expected: ["src/A/Assets/Shaders/k.comp.spv", "tests/B/p.frag.dxil"]
-            );
-            Assert.Equal(expected: 0, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Run(actualRoot: checkout, expectedRoot: collected)).ExitCode);
-            Assert.Equal(expected: 2, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Collect(destination: collected, root: Path.Combine(path1: checkout, path2: "missing"))).ExitCode);
-        } finally {
-            root.Delete(recursive: true);
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+            File.WriteAllBytes(bytes: bytes, path: full);
         }
+
+        var (exitCode, _, _) = ConsoleCapture.RunSplit(run: () => CompareCommand.Collect(destination: collected, root: checkout));
+
+        Assert.Equal(actual: exitCode, expected: 0);
+        Assert.Equal(
+            actual: CompareCommand.Bytecode(root: collected).Keys,
+            expected: ["src/A/Assets/Shaders/k.comp.spv", "tests/B/p.frag.dxil"]
+        );
+        Assert.Equal(expected: 0, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Run(actualRoot: checkout, expectedRoot: collected)).ExitCode);
+        Assert.Equal(expected: 2, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Collect(destination: collected, root: Path.Combine(path1: checkout, path2: "missing"))).ExitCode);
     }
 
     // The tracked files a pattern matches outside experimental/, repository-relative with forward slashes.
@@ -150,9 +143,9 @@ public sealed class ShadersCompareLawTests {
         var projects = Tracked(pattern: "*.csproj", repositoryRoot: repositoryRoot);
         var owners = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
-        // A stage source belongs to the deepest tracked project whose directory holds it. A canary's fixture sources
-        // are compiled by the World the canary hands them to (a world.shaders.reload tree), never by a build.
-        foreach (var source in ((string[])["*.comp.hlsl", "*.vert.hlsl", "*.frag.hlsl"]).SelectMany(selector: pattern => Tracked(pattern: pattern, repositoryRoot: repositoryRoot)).Where(predicate: static source => !source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.World.Canaries/"))) {
+        // A stage source belongs to the deepest tracked project whose directory holds it. Canary and counters fixture
+        // sources are compiled by the World they are handed to (a world.shaders.reload tree), never by a build.
+        foreach (var source in ((string[])["*.comp.hlsl", "*.vert.hlsl", "*.frag.hlsl"]).SelectMany(selector: pattern => Tracked(pattern: pattern, repositoryRoot: repositoryRoot)).Where(predicate: static source => !(source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.World.Canaries/") || source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.Counters/")))) {
             var owner = projects
                 .Where(predicate: project => source.StartsWith(comparisonType: StringComparison.Ordinal, value: (project[..(project.LastIndexOf(value: '/') + 1)])))
                 .MaxBy(keySelector: static project => project.Length);

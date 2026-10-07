@@ -108,7 +108,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
-        if (!m_slots.ContainsKey(key: index)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -118,15 +121,15 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
         // Demand resolves at the next publish (ReconcileCameraDemand reads the camera each screen shows) — one produced
         // frame's seam between this bind and the seat's device/feed appearing live.
-        ShowLive(
-            index: index,
-            source: WorldImageProducerSettings.SourceOf(
+        Rebind(
+            live: WorldImageProducerSettings.SourceOf(
                 id: WorldImageProducerSettings.CameraId,
                 settings: new WorldCameraSettings(
                     Seat: seat,
                     Sensor: sensor
                 )
-            )
+            ),
+            slot: slot
         );
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
@@ -396,6 +399,11 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         return true;
     }
 
+    FrameRender IWorldSeatCameras.Answer(int seat, WorldCameraSensor sensor) =>
+        ((m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId) &&
+            m_cameraFeeds.TryGetValue(key: (deviceId, sensor), value: out var feed))
+            ? feed.Answer
+            : FrameRender.Waiting(reason: "camera awaiting a sensor"));
     GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -767,7 +775,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 format: stream.TargetFormat,
                 height: stream.Height,
                 images: out var images,
-                importedViews: out var views,
+                importedSurfaces: out var surfaces,
                 imports: out var imports,
                 sharedFence: true,
                 width: stream.Width
@@ -782,7 +790,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             var targets = new SharedTargetRing(
                 fence: fence,
                 images: images,
-                importedViews: views,
+                importedSurfaces: surfaces,
                 imports: imports,
                 ring: stream,
                 targetDevice: m_cameraTargetDevice
@@ -821,11 +829,11 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     // writes on the GPU (a camera stream) gets a shared fence beside its targets; a probe output, whose kernel waits on
     // the CPU for its readings, gets none.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out SharedRingFence? fence, out string fault) {
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, GpuPixelFormat format, int width, int height, bool sharedFence, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out GpuImportedSurface[]? importedSurfaces, out SharedRingFence? fence, out string fault) {
         var allocated = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
-        nint[]? createdViews = null;
+        GpuImportedSurface[]? createdSurfaces = null;
         SharedRingFence? createdFence = null;
 
         try {
@@ -859,16 +867,16 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 var transfers = deviceContext.Services.SurfaceTransferFactory;
 
                 createdImports = new IGpuSurfaceImport[allocated.Length];
-                createdViews = new nint[allocated.Length];
+                createdSurfaces = new GpuImportedSurface[allocated.Length];
 
                 for (var index = 0; (index < allocated.Length); index++) {
                     createdImports[index] = transfers.CreateImport();
-                    createdViews[index] = createdImports[index].Import(
+                    createdSurfaces[index] = createdImports[index].Import(
                         format: format,
                         height: checked((uint)height),
                         sharedHandle: handles[index],
                         width: checked((uint)width)
-                    ).ImageViewHandle;
+                    );
                 }
             }
 
@@ -882,7 +890,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
             images = allocated;
             imports = createdImports;
-            importedViews = createdViews;
+            importedSurfaces = createdSurfaces;
             fence = createdFence;
             fault = "";
 
@@ -902,7 +910,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
             images = [];
             imports = null;
-            importedViews = null;
+            importedSurfaces = null;
             fence = null;
             fault = exception.Message;
 
@@ -936,6 +944,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         var version = stream.Version;
 
         if (version == feed.LastFrameVersion) {
+            _ = feed.Pixels.Retry(context: in context, runtime: Runtime);
             NoteCameraStarvation(
                 device: device,
                 feed: feed
@@ -961,9 +970,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             surface: in surface
         );
 
-        _ = TryConvert(
+        _ = feed.Pixels.TryConvert(
+            color: ImageColorEncoding.Srgb,
             context: in context,
-            pixels: feed.Pixels,
+            runtime: Runtime,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;
@@ -1468,6 +1478,21 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ? (checked((uint)shared.Width), checked((uint)shared.Height))
             : (Pixels.Extent ?? (OutputWidth, OutputHeight))
         );
+        public FrameRender Answer {
+            get {
+                if (!Live) {
+                    return FrameRender.Waiting(reason: (Fault ?? "camera awaiting a first frame"));
+                }
+
+                var render = ((SharedStream is not null)
+                    ? FrameRender.Waiting(reason: "camera awaiting a first frame")
+                    : Pixels.Render);
+
+                return (((render.Completion != FrameCompletion.Refused) && (Handle() != 0))
+                    ? FrameRender.Rendered
+                    : render);
+            }
+        }
 
         public GpuImageLease AcquireFrame() {
             if (
@@ -1494,6 +1519,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             Fault = null;
             LastFrameVersion = -1L;
             Live = false;
+            Pixels.Forget();
             StarvedPulls = 0;
             m_cadence.Rearm();
         }
@@ -1504,6 +1530,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             Fault = fault;
             LastFrameVersion = -1L;
             Live = false;
+            Pixels.Forget();
             StarvedPulls = 0;
             m_cadence.Rearm();
         }
@@ -1549,7 +1576,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
     private sealed class SharedTargetRing {
         private readonly SharedRingFence? m_fence;
         private readonly IReadOnlyList<IGpuExportableImage> m_images;
-        private readonly nint[]? m_importedViews;
+        private readonly GpuImportedSurface[]? m_importedSurfaces;
         private readonly IGpuSurfaceImport[]? m_imports;
         private readonly Action<int> m_release;
         private readonly nint[] m_sharedHandles;
@@ -1572,10 +1599,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         /// has none).</summary>
         public string FenceRefusal => (m_fence?.Refusal ?? "");
 
-        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
+        public SharedTargetRing(IReadOnlyList<IGpuExportableImage> images, GpuImportedSurface[]? importedSurfaces, IGpuSurfaceImport[]? imports, SharedRingFence? fence, ISharedSlotRing ring, DisposeAfterDependents<IDisposable>? targetDevice) {
             m_fence = fence;
             m_images = images;
-            m_importedViews = importedViews;
+            m_importedSurfaces = importedSurfaces;
             m_imports = imports;
             m_stream = ring;
             m_release = Release;
@@ -1629,8 +1656,8 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 return 0;
             }
 
-            return (((m_importedViews is { } views) && (slot < views.Length))
-                ? views[slot]
+            return (((m_importedSurfaces is { } surfaces) && (slot < surfaces.Length))
+                ? surfaces[slot].ImageViewHandle
                 : m_images[slot].ImageViewHandle
             );
         }
@@ -1647,12 +1674,22 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 DisposeResources();
             }
         }
-        public bool TryAcquire(out GpuImageLease frame) {
+        public bool TryAcquire(out GpuImageLease frame) => TryAcquire(
+            frame: out frame,
+            image: out _
+        );
+        // Acquires the latest published slot as TryAcquire(out GpuImageLease) does, with the slot's image when the render
+        // device made it (the Direct3D 12 host's ring, whose images it owns), so a pass on that device can read it, or null
+        // for an imported ring's slot, which has no image of the render device's own.
+        public bool TryAcquire(out GpuImageLease frame, out IGpuImage? image) {
+            image = null;
+
             if (
                 m_retired ||
                 !m_stream.TryAcquireLatest(
                     fenceValue: out var fenceValue,
-                    slot: out var slot
+                    slot: out var slot,
+                    version: out var version
                 )
             ) {
                 frame = default;
@@ -1674,16 +1711,26 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
 
             var handle = Handle(slot: slot);
 
+            image = ((m_imports is null)
+                ? m_images[slot]
+                : null);
+
             // The producer published the value its write signals; the submission that samples this lease waits for it
             // on the GPU. Zero means the write finished before publication.
             frame = new GpuImageLease(
                 ImageViewHandle: handle,
+                Publication: new GpuImagePublication(Owner: m_stream, Sequence: version),
                 Release: m_release,
                 ReleaseToken: slot,
                 Wait: ((0UL != fenceValue)
                     ? m_fence!.WaitFor(value: fenceValue)
                     : default)
-            );
+            ) {
+                Image = Surface.SameDeviceImage(
+                    imageHandle: ((m_importedSurfaces is { } surfaces) ? surfaces[slot].ImageHandle : m_images[slot].ImageHandle),
+                    imageViewHandle: handle, width: m_images[slot].Width, height: m_images[slot].Height,
+                    format: m_images[slot].Format),
+            };
 
             return true;
         }

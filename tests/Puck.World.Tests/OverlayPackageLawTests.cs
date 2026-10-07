@@ -62,12 +62,9 @@ public sealed partial class OverlayPackageLawTests {
     private static Surface ProduceUntilPublished(ShaderPipelineRenderNode node) {
         var surface = default(Surface);
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => !(surface = node.ProduceFrame(context: default)).IsEmpty,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The overlay instance never published a frame."
+        TestLiveness.Until(
+            reason: () => "The overlay instance never published a frame.",
+            step: () => !(surface = node.ProduceFrame(context: default)).IsEmpty
         );
 
         return surface;
@@ -400,7 +397,7 @@ public sealed partial class OverlayPackageLawTests {
     }
     // A HUD binding resolver that resolves nothing, for a HUD whose elements bind no value.
     private sealed class NoHudBindings : IHudBindingResolver {
-        public bool TryResolve(string binding, int seat, out float fraction, out string text) {
+        public bool TryResolve(string binding, int seat, out float fraction, out ReadOnlySpan<char> text) {
             fraction = 0f;
             text = string.Empty;
 

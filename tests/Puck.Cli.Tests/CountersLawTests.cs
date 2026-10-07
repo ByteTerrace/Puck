@@ -3,6 +3,7 @@ using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Counters;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -17,11 +18,11 @@ namespace Puck.Cli.Tests;
 /// agrees, exit 1 naming the kind, pass and node of each difference, pacing never compared, an allocation reading
 /// compared only as zero or not zero, and exit 2 for a file that is not a report.
 /// </summary>
-public sealed class CountersLawTests {
+public sealed partial class CountersLawTests {
     private const string Reading = """
         {"sources":[{"name":"state.arena","counts":{"state.arena.visits":12}}],
          "gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},
-                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","class":"per-backend-deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"mask","class":"deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"sky","class":"deterministic","state":"skipped"}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
+                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","class":"per-backend-deterministic","state":"executed","details":[],"counts":{"gpu.dispatches":1}},{"label":"mask","class":"deterministic","state":"executed","details":[],"counts":{"gpu.dispatches":1}},{"label":"sky","class":"deterministic","state":"skipped","details":[]}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
          "allocation":{"gcMode":"workstation, concurrent","windows":{"world.counters.read":0}},
          "kinds":{"state.arena.visits":{"unit":"lanes","class":"deterministic"},"gpu.dispatches":{"unit":"count","class":"deterministic"},"gpu.command-buffers":{"unit":"count","class":"deterministic"},"gpu.created.pipelines":{"unit":"count","class":"per-backend-deterministic"}}}
         """;
@@ -61,34 +62,26 @@ public sealed class CountersLawTests {
         Workload: CountersCommand.WorldPath
     );
     private static (int ExitCode, string Output, string Error) Compare(WorldCountersReport left, WorldCountersReport right) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var leftPath = Path.Combine(path1: directory.FullName, path2: "left.json");
-            var rightPath = Path.Combine(path1: directory.FullName, path2: "right.json");
+        var leftPath = Path.Combine(path1: directory.RootPath, path2: "left.json");
+        var rightPath = Path.Combine(path1: directory.RootPath, path2: "right.json");
 
-            CountersCommand.WriteReport(path: leftPath, report: left);
-            CountersCommand.WriteReport(path: rightPath, report: right);
+        CountersCommand.WriteReport(path: leftPath, report: left);
+        CountersCommand.WriteReport(path: rightPath, report: right);
 
-            return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
     }
     private static (int ExitCode, string Output, string Error) CompareText(string leftText) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var leftPath = Path.Combine(path1: directory.FullName, path2: "left.json");
-            var rightPath = Path.Combine(path1: directory.FullName, path2: "right.json");
+        var leftPath = Path.Combine(path1: directory.RootPath, path2: "left.json");
+        var rightPath = Path.Combine(path1: directory.RootPath, path2: "right.json");
 
-            File.WriteAllText(contents: leftText, path: leftPath);
-            CountersCommand.WriteReport(path: rightPath, report: Report(vulkan: Run(backend: "vulkan")));
+        File.WriteAllText(contents: leftText, path: leftPath);
+        CountersCommand.WriteReport(path: rightPath, report: Report(vulkan: Run(backend: "vulkan")));
 
-            return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
     }
 
     [Fact]
@@ -193,7 +186,7 @@ public sealed class CountersLawTests {
         Assert.Equal(
             actual: differences,
             expected: [
-                "deterministic kind=gpu.dispatches pass=upload node=world source=gpu vulkan=1 directx=2",
+                "deterministic kind=gpu.dispatches pass=upload detail=- node=world source=gpu vulkan=1 directx=2",
                 "pass state node=world pass=sky vulkan=skipped directx=executed",
             ]
         );
@@ -210,14 +203,14 @@ public sealed class CountersLawTests {
         var (exitCode, output, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", dispatches: 3L)));
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Equal(actual: output.ReplaceLineEndings(replacementText: "\n"), expected: "counters: vulkan: deterministic kind=gpu.dispatches pass=upload node=world source=gpu left=1 right=3\n");
+        Assert.Equal(actual: output.ReplaceLineEndings(replacementText: "\n"), expected: "counters: vulkan: deterministic kind=gpu.dispatches pass=upload detail=- node=world source=gpu left=1 right=3\n");
     }
     [Fact]
     public void APerBackendCountIsHeldToItsOwnBackendAcrossReports() {
         var (exitCode, output, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", pipelines: 15L)));
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: output, expectedSubstring: "per-backend-deterministic kind=gpu.created.pipelines pass=- node=world");
+        Assert.Contains(actualString: output, expectedSubstring: "per-backend-deterministic kind=gpu.created.pipelines pass=- detail=- node=world");
     }
     [Fact]
     public void APacingOnlyDifferenceIsIgnored() {
@@ -231,7 +224,7 @@ public sealed class CountersLawTests {
         var (flipped, flippedOutput, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", allocated: 24L)));
 
         Assert.Equal(actual: flipped, expected: 1);
-        Assert.Contains(actualString: flippedOutput, expectedSubstring: "vulkan: allocation-zero-nonzero kind=world.counters.read pass=- node=- source=allocation left=0 right=24");
+        Assert.Contains(actualString: flippedOutput, expectedSubstring: "vulkan: allocation-zero-nonzero kind=world.counters.read pass=- detail=- node=- source=allocation left=0 right=24");
 
         var (resized, resizedOutput, _) = Compare(left: Report(vulkan: Run(backend: "vulkan", allocated: 24L)), right: Report(vulkan: Run(backend: "vulkan", allocated: 4096L)));
 
@@ -263,24 +256,38 @@ public sealed class CountersLawTests {
 
         Assert.Equal(actual: garbage, expected: 2);
     }
+    // A report carries the shape fingerprint the ledger records for its layout; the same schema under another shape is refused
+    // by the fingerprint's name and never compared.
+    [Fact]
+    public void AReportOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+        var recorded = FormatLedgerShapes.Of(id: "WorldCountersReport.SchemaVersion");
+        var written = JsonSerializer.Serialize(value: Report(vulkan: Run(backend: "vulkan")), jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport);
+
+        Assert.Contains(actualString: written, expectedSubstring: recorded);
+
+        var (control, _, _) = CompareText(leftText: written);
+
+        Assert.Equal(actual: control, expected: 0);
+
+        var (refused, _, error) = CompareText(leftText: written.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"0000000000000000\"", oldValue: $"\"{recorded}\""));
+
+        Assert.Equal(actual: refused, expected: 2);
+        Assert.Contains(actualString: error, expectedSubstring: "a report of another shape");
+    }
     [Fact]
     public void AWrittenReportReadsBackAsWritten() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "report.json");
-            var report = Report(vulkan: Run(backend: "vulkan"));
+        var path = Path.Combine(path1: directory.RootPath, path2: "report.json");
+        var report = Report(vulkan: Run(backend: "vulkan"));
 
-            CountersCommand.WriteReport(path: path, report: report);
+        CountersCommand.WriteReport(path: path, report: report);
 
-            Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var reason, report: out var read), userMessage: reason);
-            Assert.Equal(
-                actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport),
-                expected: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport)
-            );
-            Assert.Contains(expectedSubstring: "\"class\": \"per-backend-deterministic\"", actualString: File.ReadAllText(path: path, encoding: Encoding.UTF8));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var reason, report: out var read), userMessage: reason);
+        Assert.Equal(
+            actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport),
+            expected: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport)
+        );
+        Assert.Contains(expectedSubstring: "\"class\": \"per-backend-deterministic\"", actualString: File.ReadAllText(path: path, encoding: Encoding.UTF8));
     }
 }

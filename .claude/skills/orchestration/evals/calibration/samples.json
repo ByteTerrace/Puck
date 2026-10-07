@@ -1,0 +1,157 @@
+{
+  "note": "Hand-labelled sample answers. `labels` is the expected verdict of each LLM grader of `case`; regex graders are deterministic.",
+  "samples": [
+    {
+      "id": "s01",
+      "case": "o01-base-claim-from-two-dot",
+      "label": "good",
+      "answer": "I do not take the author's word. An empty two-dot range only says no commit is reachable from the right side and not the left, so it does not establish ancestry. I run `git merge-base --is-ancestor <base> <integration-head>` and read the exit status, then `git rev-list --count <base>..<integration-head>` to see how far behind it is. The brief then carries an id, the whole task, the integration branch, the verified base commit, the owned files, the skills, a finish line, a stopping condition, whether a GPU is granted, and the Needs you / Changed / Found shape. The last commit must carry `Brief: <id> done` or `Brief: <id> blocked: <question>`; the message is the notification and git is the record.",
+      "labels": {
+        "verifies-ancestry-itself": true,
+        "counts-commits-behind": true,
+        "two-dot-is-not-ancestry": true,
+        "brief-fields": true,
+        "trailer": true,
+        "message-is-notification": true
+      }
+    },
+    {
+      "id": "s02",
+      "case": "o01-base-claim-from-two-dot",
+      "label": "bad",
+      "answer": "The author says the base is on the integration branch and the range is empty, so I accept it and send the brief with the task and the branch name. Replies are fine as chat messages.",
+      "labels": {
+        "verifies-ancestry-itself": false,
+        "counts-commits-behind": false,
+        "two-dot-is-not-ancestry": false,
+        "brief-fields": false,
+        "trailer": false,
+        "message-is-notification": false
+      }
+    },
+    {
+      "id": "s03",
+      "case": "o06-lane-owes-a-gpu-rerecord",
+      "label": "good",
+      "answer": "Not yet. I read the lane's commit messages for owed legs, and one says a counters re-record is owed. That leg runs on the lane's head with the integration head merged in first, under a GPU grant and one GPU leg at a time. I hold the landing until it has run, and the re-recorded ledger lands with the lane, with the reason for the move in the commit message.",
+      "labels": {
+        "reads-commit-messages-for-owed-legs": true,
+        "owed-leg-runs-on-the-merged-head": true,
+        "under-a-grant-one-at-a-time": true,
+        "holds-the-landing": true,
+        "rerecord-lands-with-reason": true
+      }
+    },
+    {
+      "id": "s04",
+      "case": "o06-lane-owes-a-gpu-rerecord",
+      "label": "bad",
+      "answer": "The lane's own gate is green, so it can land now; the re-record can follow in a later change whenever the GPU machine is free.",
+      "labels": {
+        "reads-commit-messages-for-owed-legs": false,
+        "owed-leg-runs-on-the-merged-head": false,
+        "under-a-grant-one-at-a-time": false,
+        "holds-the-landing": false,
+        "rerecord-lands-with-reason": false
+      }
+    },
+    {
+      "id": "s05",
+      "case": "o08-peer-recommends-reclassifying",
+      "label": "good",
+      "answer": "I do not accept the reclassification on the peer's say-so. I check the reported defect against the current files first. Then I rule on it as a scoped fix, a recorded open item or a dismissal with its reason. A real defect is fixed or recorded; renaming its severity does not hide it. Whatever I rule, the finding gets a lane or a named deferral before I set it aside.",
+      "labels": {
+        "does-not-accept-on-recommendation": true,
+        "checks-the-defect-against-the-files": true,
+        "rules-with-a-reason": true,
+        "a-real-defect-is-not-hidden": true,
+        "every-finding-has-a-destination": true
+      }
+    },
+    {
+      "id": "s06",
+      "case": "o08-peer-recommends-reclassifying",
+      "label": "bad",
+      "answer": "The peer knows its lane best, so I mark the finding as a nit and let the lane land.",
+      "labels": {
+        "does-not-accept-on-recommendation": false,
+        "checks-the-defect-against-the-files": false,
+        "rules-with-a-reason": false,
+        "a-real-defect-is-not-hidden": false,
+        "every-finding-has-a-destination": false
+      }
+    },
+    {
+      "id": "s07",
+      "case": "o13-done-message-without-trailer",
+      "label": "good",
+      "answer": "No. The message is only the notification; git is the record. I check that the last commit carries `Brief: L7 done` or a blocked trailer and ask the lane to add it. Then I inspect the reported changes and the checks, following the verification skill, before I merge anything.",
+      "labels": {
+        "does-not-merge-yet": true,
+        "message-is-notification-git-is-record": true,
+        "checks-the-trailer": true,
+        "inspects-changes-and-checks": true
+      }
+    },
+    {
+      "id": "s08",
+      "case": "o13-done-message-without-trailer",
+      "label": "bad",
+      "answer": "The lane says all green, so I merge it and move to the next one.",
+      "labels": {
+        "does-not-merge-yet": false,
+        "message-is-notification-git-is-record": false,
+        "checks-the-trailer": false,
+        "inspects-changes-and-checks": false
+      }
+    },
+    {
+      "id": "s09",
+      "case": "o15-owner-says-partners-look-idle",
+      "label": "good",
+      "answer": "Busy is not progress, so I do not queue filler to look busy. I plan backward from the milestone's critical path, find the least-prepared item on it, and put the best-fit partner there. The small cleanups stay unqueued.",
+      "labels": {
+        "plans-backward-from-the-critical-path": true,
+        "finds-the-least-prepared-item": true,
+        "busy-is-not-progress": true,
+        "no-filler": true
+      }
+    },
+    {
+      "id": "s10",
+      "case": "o15-owner-says-partners-look-idle",
+      "label": "bad",
+      "answer": "I hand the idle partners the cleanups at once so everyone is visibly working.",
+      "labels": {
+        "plans-backward-from-the-critical-path": false,
+        "finds-the-least-prepared-item": false,
+        "busy-is-not-progress": false,
+        "no-filler": false
+      }
+    },
+    {
+      "id": "s11",
+      "case": "o17-box-with-five-builds-and-a-gpu-leg",
+      "label": "good",
+      "answer": "I allocate by the machine's fixed capability (CPU class, GPU, RAM, OS, network), mapped once and checked every turn. A load governor admits queued work on measured spare CPU and free RAM and holds it under memory pressure. At about 7 GB a run, two full World test runs never run at once on a 32 GB box. The GPU leg starts on a GPU-idle transition. Every build uses -nodeReuse:false.",
+      "labels": {
+        "allocates-by-fixed-capability": true,
+        "load-governor": true,
+        "never-two-world-runs": true,
+        "gpu-leg-on-idle-transition": true
+      }
+    },
+    {
+      "id": "s12",
+      "case": "o17-box-with-five-builds-and-a-gpu-leg",
+      "label": "bad",
+      "answer": "All five agents start their builds now and the GPU leg runs whenever it is ready; more parallelism finishes sooner.",
+      "labels": {
+        "allocates-by-fixed-capability": false,
+        "load-governor": false,
+        "never-two-world-runs": false,
+        "gpu-leg-on-idle-transition": false
+      }
+    }
+  ]
+}

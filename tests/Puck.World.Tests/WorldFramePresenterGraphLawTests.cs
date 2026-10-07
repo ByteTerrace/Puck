@@ -16,8 +16,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <see cref="WorldFramePresenter.PrepareGraph"/>, the presenter's half of every frame of a world
-/// whose views place graph instances, allocates nothing once its frame is steady: it reads the composed slots, places the
+/// CONTRACT UNDER TEST: <see cref="WorldFramePresenter.PrepareGraph"/> and the placement completed by the world's
+/// capture allocate nothing beyond the capture itself once steady: they read the composed slots, place the
 /// views and each instance's pane, pairs an instance with its camera, and hands its node the frame values, all over
 /// storage the host and presenter already hold. The presenter is the one an offscreen boot composes, resolved with its
 /// device sealed, over the counters world with one graph instance, the shipped ink pipeline, paired with the world's
@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// publishes the screens and declares the reads they make, so a screen retargeted to another camera's view reads that view
 /// on the frame of the change.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const float Delta = (StepTicks / 50400f);
     private const uint Display = 64;
@@ -32,7 +33,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const string Pane = "pane";
     private const string SecondCamera = "second";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
     // The shipped ink pipeline, relative to the counters world's directory.
     private const string InkPipeline = "../../src/Puck.World/Assets/pipelines/ink.graph.json";
 
@@ -98,10 +99,12 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         TargetHeight: Display,
         TargetWidth: Display
     );
-    // A frame as the host presents one: the presenter captures the frame, which composes the slots, then prepares the
-    // graph over them.
+    // A frame as the host presents one: prepare the graph's delivery, then capture the world and place its composition
+    // before the runtime schedules it.
     private static void Present(WorldFramePresenter presenter, ulong index) {
         var frame = Frame(index: index);
+
+        presenter.PrepareGraph(context: in frame);
 
         _ = presenter.CaptureFrame(
             deltaSeconds: Delta,
@@ -109,7 +112,6 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             interpolationAlpha: 1f,
             width: Display
         );
-        presenter.PrepareGraph(context: in frame);
     }
 
     public void Dispose() => m_stateDirectory.Dispose();
@@ -117,10 +119,10 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     [InlineData(true)]
     [Theory]
     public void PresenterPublishesTheExactProducerForSeatAndCameraOnlyLayouts(bool cameraOnly) {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck",
             edit: definition => definition with {
                 CamerasRaw = [.. definition.Cameras, Filming(name: FirstCamera)],
                 ViewsRaw = definition.Views with {
@@ -129,7 +131,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
                         : [new WorldViewSlot(Camera: FirstCamera, Width: 0.5f),
                             new WorldViewSlot(Width: 0.5f, X: 0.5f)]))],
                 },
-            }).Build();
+            }).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
         var frame = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
@@ -161,7 +163,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             inner: ((IWorldScreenPresenter)binder(arg: sp))
         ));
 
-        using var host = builder.Build();
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var index = 0UL;
@@ -217,7 +219,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             inner: ((IWorldScreenPresenter)binder(arg: sp))
         ));
 
-        using var host = builder.Build();
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         for (var index = 0UL; (index < 3UL); index++) {
@@ -248,14 +250,15 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var context = Frame(index: 3UL);
 
         presenter.PrepareGraph(context: in context);
+        _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
     }
     [Fact]
     public void ACameraExportExtentDoesNotResizeThePresentersDisplay() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         foreach (var (width, height) in new[] { (128U, 72U), (96U, 64U) }) {
@@ -282,12 +285,12 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             reason: "DXC is required to compile the pane's pipeline."
         );
 
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             edit: WithPane,
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         using var instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(
@@ -303,16 +306,13 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var index = 0UL;
 
         // Frames until the pane's pipeline has compiled and installed, then a few more so every frame after is steady.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Present(index: index++, presenter: presenter);
+        TestLiveness.Until(
+            reason: () => "The pane's pipeline never installed.",
+            step: () => {
+                Present(index: index++, presenter: presenter);
 
-                    return instances.Installed.Contains(item: Pane);
-                },
-                timeout: TimeSpan.FromSeconds(value: 60)
-            ),
-            userMessage: "The pane's pipeline never installed."
+                return instances.Installed.Contains(item: Pane);
+            }
         );
 
         for (var settle = 0; (settle < 4); settle++) {
@@ -320,17 +320,16 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         }
 
         var steady = Frame(index: index);
-
-        _ = presenter.CaptureFrame(
-            deltaSeconds: Delta,
-            height: Display,
-            interpolationAlpha: 1f,
-            width: Display
-        );
+        var captureBytes = AllocationWindow.Measure(window: () => {
+            _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+        });
 
         Assert.Equal(
-            actual: AllocationWindow.Least(window: () => presenter.PrepareGraph(context: in steady)),
-            expected: 0L
+            actual: AllocationWindow.Measure(window: () => {
+                presenter.PrepareGraph(context: in steady);
+                _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+            }),
+            expected: captureBytes
         );
         // The pane's node read its paired camera, so the steady frame covered the camera path.
         Assert.NotEqual(

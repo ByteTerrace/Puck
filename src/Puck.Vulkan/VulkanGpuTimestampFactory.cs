@@ -35,7 +35,7 @@ public sealed unsafe class VulkanGpuTimestampFactory(IVulkanDeviceContext device
         var period = *((float*)(deviceProperties.Properties + TimestampPeriodOffset));
         var info = new VkQueryPoolCreateInfo { QueryCount = count, QueryType = 2, SType = 11 };
 
-        logical.Commands.Timestamps.CreateQueryPool(logical.Commands.Handle, in info, 0, out var handle).ThrowIfFailed(operation: "vkCreateQueryPool");
+        logical.Commands.Timestamps.CreateQueryPool(logical.Commands.Handle, in info, 0, out var handle).ThrowIfFailed(device: logical.Commands, operation: "vkCreateQueryPool");
         naming.Name(handle: handle, kind: GpuObjectKind.TimestampPool, name: in name);
         return new Pool(bits: bits, device: logical, handle: handle, period: period);
     }

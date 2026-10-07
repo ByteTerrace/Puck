@@ -85,7 +85,7 @@ public static class CompiledWorld {
     }
 
     /// <summary>Returns the file a compiled world of the document at <paramref name="documentPath"/> sits in beside
-    /// it: <c>moth.puck</c> and <c>moth.world.json</c> both map to <c>moth.puckb</c>.</summary>
+    /// it: <c>moth.puck</c> maps to <c>moth.puckb</c>, and <c>puck.world.json</c> to <c>puck.puckb</c>.</summary>
     /// <param name="documentPath">The document's <c>.puck</c> source or <c>.world.json</c> file.</param>
     /// <returns>The absolute path of the compiled world beside it.</returns>
     public static string Beside(string documentPath) => WorldDocumentName.SidecarFile(
@@ -123,7 +123,10 @@ public static class CompiledWorld {
             chunks: chunks,
             formatVersion: FormatVersion,
             header: writer.WrittenSpan.ToArray()
-        ).Encode(magic: Magic);
+        ).Encode(
+            magic: Magic,
+            shape: FormatShapes.CompiledWorldFormatVersion
+        );
     }
     /// <summary>Returns the header a boot of <paramref name="authored"/> keys its compiled world by.</summary>
     /// <param name="authored">The parsed, composed, undrawn definition.</param>
@@ -202,7 +205,8 @@ public static class CompiledWorld {
         try {
             var decoded = ChunkContainer.Decode(
                 content: content,
-                magic: Magic
+                magic: Magic,
+                shape: FormatShapes.CompiledWorldFormatVersion
             );
 
             if (decoded.FormatVersion != FormatVersion) {

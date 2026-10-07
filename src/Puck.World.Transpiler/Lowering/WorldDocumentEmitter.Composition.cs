@@ -160,7 +160,7 @@ public static partial class WorldDocumentEmitter {
                     Refuse(message: $"World '{pending.Name}' cannot declare a different documentId; its declaration owns its identity.", node: pending.Declaration, scope: scope);
                 }
                 world["documentId"] = pending.Name;
-                if (world["schema"] is null) { world["schema"] = WorldDocumentVocabulary.Schema; }
+                if (world["schema"] is null) { world["schema"] = WorldDefinition.SchemaVersion; }
                 EmitStateFamilies(root: world, scope: pending.Scope);
                 if (scope.SourceMap is { } sourceMap) { pending.Map.Restore(snapshot: sourceMap.Snapshot()); }
             }

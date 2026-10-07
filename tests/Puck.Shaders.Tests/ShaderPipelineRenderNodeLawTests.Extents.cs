@@ -1,13 +1,85 @@
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// The node reads each pass's extent from its planned pass (<see cref="ShaderPipelinePlannedPass.ResolveExtent"/>) and
-/// has no rule of its own: every compute pass dispatches over the planned extent at the node's size, and again at the
-/// new size after a resize.
+/// The node reads each pass's extent from its planned pass (<see cref="ShaderPipelinePlannedPass.ResolveExtent"/>),
+/// including a package's independent buffer grid. Image exports bound the package ceiling by their output extent;
+/// every compute pass dispatches over its planned extent before and after a resize.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
+    [InlineData(ShaderPipelineResourceKind.Buffer, false)]
+    [InlineData(ShaderPipelineResourceKind.Image, false)]
+    [InlineData(ShaderPipelineResourceKind.Buffer, true)]
+    [Theory]
+    public void OnlyBufferExportsUseTheirPackageCeilingBeyondTheOutputGrid(ShaderPipelineResourceKind kind, bool mixed) {
+        const string Package = "test.native-grid";
+        var gpu = new FakePipelineGpu();
+        var factory = new NativeGridPackage();
+        var pipelines = new GpuPassPipelineCache();
+        var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(
+            kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }, pipelines: pipelines));
+
+        packages.Register(factory: factory, package: Package);
+        var port = ((kind == ShaderPipelineResourceKind.Buffer)
+            ? RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: null)
+            : RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite));
+        var catalog = new RenderGraphPackageCatalog(packages: [new(Id: Package, Members: [], Inputs: [],
+            Outputs: (mixed ? [port, RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)] : [port]),
+            Summary: "Records at a package-native grid.")]);
+        var output = ((kind == ShaderPipelineResourceKind.Buffer)
+            ? new ShaderPipelineResource(Name: "result", Kind: kind, SizeBytes: 256UL)
+            : Image(name: "result", format: "R8G8B8A8Unorm", dimensions: ShaderPipelineDimensions.Relative()));
+        var compiled = new RenderGraphCompiler(catalog).Compile(definition: new RenderGraphDefinition(
+            Name: "native-grid", Schema: RenderGraphSchemas.Graph,
+            Resources: (mixed ? [output, Image(name: "image", format: "R8G8B8A8Unorm", dimensions: ShaderPipelineDimensions.Relative())] : [output]),
+            Outputs: (mixed ? ["result", "image"] : ["result"]),
+            Packages: [new(Name: "record", Package: Package, Outputs: (mixed ? ["result", "image"] : ["result"]))]));
+        using var node = new ShaderPipelineRenderNode(deviceContext: gpu, width: 1, height: 1,
+            hostsOnDirectX: false, packages: packages, pipelines: pipelines, name: "native-grid");
+
+        node.Swap(pipeline: new CompiledShaderPipeline(plan: compiled.Pipeline, shaders: new Dictionary<string, CompiledShader>()));
+        TestLiveness.Until(step: () => {
+            _ = Produce(node: node);
+            return ((node.FrameCounter != 0) || (node.LastSwapError is not null));
+        }, reason: () => "The package ceiling was neither installed nor refused.");
+
+        if ((kind == ShaderPipelineResourceKind.Image) || mixed) {
+            Assert.Contains("outside its 1x1 ceiling", Assert.IsType<InvalidDataException>(@object: node.LastSwapError).Message);
+            Assert.Equal((0u, 0u), factory.Recorded);
+        } else {
+            Assert.Null(@object: node.LastSwapError);
+            Assert.Equal((1u, 1u), node.Extent);
+            Assert.Equal((512u, 512u), factory.Built);
+            Assert.Equal((512u, 512u), factory.Recorded);
+        }
+    }
+
+    private sealed class NativeGridPackage : IRenderGraphPackageFactory, IShaderPipelineRenderExtent {
+        public (uint Width, uint Height) Built { get; private set; }
+        public double Grid => 1;
+        public (uint Width, uint Height) Recorded { get; private set; }
+        public long Revision => 0;
+
+        public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => this;
+        public (uint Width, uint Height) CeilingAt(uint width, uint height) => (512, 512);
+        public (uint Width, uint Height) FrameAt(uint width, uint height) => (512, 512);
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+            Built = (context.Width, context.Height);
+            return ValueTask.FromResult<IDisposable?>(result: null);
+        }
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
+
+        private sealed class Recorder(NativeGridPackage owner) : IRenderGraphPackageRecorder {
+            public void Dispose() { }
+            public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+                owner.Recorded = (recording.Width, recording.Height);
+                return RenderGraphPackageOutcome.Drew;
+            }
+        }
+    }
+
     // A relative-size output, a fixed-size output, a pass whose output declares no dimensions (its input's), and a pass
     // that touches only buffers (the frame's).
     private static CompiledShaderPipeline Extents() {
@@ -88,16 +160,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             height: ResizedHeight,
             width: ResizedWidth
         );
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = Produce(node: node);
+        TestLiveness.Until(
+            reason: () => "The resized graph never installed.",
+            step: () => {
+                _ = Produce(node: node);
 
-                    return (node.Extent == (ResizedWidth, ResizedHeight));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The resized graph never installed."
+                return (node.Extent == (ResizedWidth, ResizedHeight));
+            }
         );
         Assert.Equal(
             actual: RecordedDispatches(gpu: gpu, node: node),

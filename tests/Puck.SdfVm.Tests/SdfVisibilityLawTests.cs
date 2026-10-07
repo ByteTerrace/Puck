@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 /// slot past them is refused by name. A record is current exactly inside its frame's dispatch box.
 /// </summary>
 public sealed partial class SdfVisibilityLawTests {
-    private static string Root => RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+    private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
 
     [Fact]
     public void EveryTableSlotSurvivesEachLaneThatCarriesIt() {
@@ -78,6 +78,69 @@ public sealed partial class SdfVisibilityLawTests {
         Assert.Contains(actualString: CodeOf(path: "frame/sdf-frame.hlsli"), expectedSubstring: "SDF_VISIBILITY_CURRENT(pixel, cullBounds)");
     }
     [Fact]
+    public void TheKernelsUnpackATransformSlotWordAsTheProgramPacksIt() {
+        var header = SdfIsaHlsl.Generate();
+
+        // The generated spelling is the C# pair: the static word, and the inverse written against the generated sentinel.
+        Assert.Matches(
+            actualString: header,
+            expectedRegexPattern: $@"#define SDF_TRANSFORM_SLOT_STATIC_WORD\s+{SdfProgram.StaticTransformSlotWord}u\n"
+        );
+        Assert.Contains(
+            actualString: header,
+            expectedSubstring: "#define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)\n"
+        );
+
+        // That inverse, evaluated as the kernels evaluate it, unpacks every word the program packs.
+        foreach (var slot in ((int[])[SdfProgram.NoDynamicTransformSlot, 0, 7, SdfProgram.MaxDynamicTransformSlot])) {
+            var word = SdfProgram.PackTransformSlot(slot: slot);
+
+            Assert.Equal(
+                actual: (((int)word) + SdfProgram.NoDynamicTransformSlot),
+                expected: SdfProgram.UnpackTransformSlot(word: word)
+            );
+        }
+    }
+    [Fact]
+    public void ACardPublishesItsTexelMaterialBeforePickingAndLightingReadTheRecord() {
+        var primary = CodeOf(path: "march/sdf-primary.hlsli");
+        // The card's entry must reach primary's winning material before it is stored, not be a private correction
+        // in the lighting pass. Picking copies that same V row. Deleting the card branch breaks this contract.
+        Assert.Matches(actualString: primary, expectedRegexPattern: @"(?s)if\s*\(sdfMeshIsImpostor\(meshHit\.draw\)\)\s*\{\s*material\s*\+=\s*sdfImpostorSurfaceAt\([^;]+\)\.material\s*;\s*\}.*visibility\.material\s*=\s*material\s*;.*sdfStoreVisibility\(");
+        Assert.DoesNotContain(expectedSubstring: "impostorSurface.material", actualString: CodeOf(path: "passes/sdf-light-stage.hlsli"));
+    }
+    [Fact]
+    public void AMeshCardSwitchIsAnIdentityChangeThatTheResolvesHistoryRejects() {
+        // A baked placement's mesh and card are two draws of the list, so the draw a view records after it switches names
+        // another visibility source, and the identity word the resolve compares is another word. The resolve accepts a
+        // history sample only where that word is equal, so a switch restarts the pixel's history like any identity change.
+        var mesh = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
+        SdfMeshDraw[] draws = [
+            new(Identity: "near", Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Lod = new SdfMeshLod(Center: Vector3.Zero, Far: false, Radius: 1f, SwitchPixels: 16f) },
+            new(Identity: "far", Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Lod = new SdfMeshLod(Center: Vector3.Zero, Far: true, Radius: 1f, SwitchPixels: 16f) },
+        ];
+        var selector = new SdfMeshLodSelector(work: new Puck.Abstractions.Counting.WorkCounterSet(kinds: SdfMeshLodSelector.ProcessWork.WorkKinds, name: SdfMeshLodSelector.SourceName));
+        var identities = new List<uint>();
+
+        foreach (var depth in new[] { 5f, 5000f }) {
+            var recorded = new bool[draws.Length];
+
+            selector.Select(cameraForward: Vector3.UnitZ, cameraPosition: new Vector3(x: 0f, y: 0f, z: -depth), draws: draws, impostorsAvailable: true, pixelsPerUnitDepth: 500f, recorded: recorded);
+            Assert.Single(collection: recorded, predicate: static chosen => chosen);
+            identities.Add(item: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)Array.IndexOf(array: recorded, value: true))));
+        }
+
+        Assert.NotEqual(actual: identities[1], expected: identities[0]);
+
+        var resolve = CodeOf(path: "passes/sdf-resolve.comp.hlsl");
+
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"hitIdentity\s*=\s*visibility\.identity\s*;");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"accepted\s*=\s*\(hit\s*\?\s*sdfHistoryReceiverMatches\(hitIdentity,\s*historyIdentity,");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @":\s*\(historyIdentity\s*==\s*hitIdentity\)\);");
+        Assert.Matches(actualString: CodeOf(path: "frame/sdf-reprojection.hlsli"), expectedRegexPattern: @"return\s*\(\(identity\s*==\s*previousIdentity\)\s*&&");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"historySurfaceRW\[word\]\s*=\s*hitIdentity\s*;");
+    }
+    [Fact]
     public void NoKernelSpellsTheIdentityFieldsOrTheSlotSentinelByHand() {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
@@ -93,8 +156,10 @@ public sealed partial class SdfVisibilityLawTests {
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
-    // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, or the
-    // identity's mask or shift written out.
-    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b")]
+    // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, the identity's
+    // mask or shift written out, or a packed transform-slot word (a rigid segment's plan.z, a part binding's binding.x)
+    // offset by one or compared with zero by hand rather than through SDF_TRANSFORM_SLOT_UNPACK and
+    // SDF_TRANSFORM_SLOT_STATIC_WORD.
+    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b|\b(?:plan\.z|binding\.x)\s*(?:[-+]\s*1u?\b|[=!]=\s*0u?\b)")]
     private static partial Regex HandSpelledPattern();
 }

@@ -1,4 +1,5 @@
 using Puck.Cli.Transpiler;
+using Puck.Testing;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Rewriting;
 using Xunit;
@@ -160,29 +161,19 @@ public sealed class PuckMigrationLawTests {
         comparisonType: StringComparison.Ordinal
     );
     private static string Formatted(string source) => PuckSourceText.Formatted(source: source);
-    private static string Fixture() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-migrate-law-{Guid.NewGuid():N}"
+    private static TemporaryDirectory Fixture() {
+        var scratch = new TemporaryDirectory(prefix: "puck-migrate-law-");
+
+        scratch.WriteText(
+            name: "world.puck",
+            text: Formatted(source: Root)
+        );
+        scratch.WriteText(
+            name: "shared.puck",
+            text: Formatted(source: Shared)
         );
 
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(
-            contents: Formatted(source: Root),
-            path: Path.Combine(
-                path1: directory,
-                path2: "world.puck"
-            )
-        );
-        File.WriteAllText(
-            contents: Formatted(source: Shared),
-            path: Path.Combine(
-                path1: directory,
-                path2: "shared.puck"
-            )
-        );
-
-        return directory;
+        return scratch;
     }
     private static int Migrate(string directory, string name = "rename-constant") => PuckMigrateCommand.Execute(
         check: false,
@@ -197,218 +188,182 @@ public sealed class PuckMigrationLawTests {
 
     [Fact]
     public void TheProofMigrationChangesTheConstantAndNothingElse() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            var expected = Formatted(source: Root).Replace(
-                comparisonType: StringComparison.Ordinal,
-                newValue: Renamed,
-                oldValue: Constant
-            );
-            var shared = Read(
+        var expected = Formatted(source: Root).Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: Renamed,
+            oldValue: Constant
+        );
+        var shared = Read(
+            directory: directory,
+            file: "shared.puck"
+        );
+
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
+
+        var migrated = Read(
+            directory: directory,
+            file: "world.puck"
+        );
+
+        // One substitution accounts for the whole file, so every comment, every blank line, and every line
+        // break came back exactly as its author wrote it.
+        Assert.Equal(
+            actual: migrated,
+            expected: expected
+        );
+        // A source the migration had nothing to do in is left as it was rather than reprinted.
+        Assert.Equal(
+            actual: Read(
                 directory: directory,
                 file: "shared.puck"
-            );
+            ),
+            expected: shared
+        );
 
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
-
-            var migrated = Read(
-                directory: directory,
-                file: "world.puck"
-            );
-
-            // One substitution accounts for the whole file, so every comment, every blank line, and every line
-            // break came back exactly as its author wrote it.
-            Assert.Equal(
-                actual: migrated,
-                expected: expected
-            );
-            // A source the migration had nothing to do in is left as it was rather than reprinted.
-            Assert.Equal(
-                actual: Read(
-                    directory: directory,
-                    file: "shared.puck"
-                ),
-                expected: shared
-            );
-
-            // The compile-time layer is still source: the rewrite ran on the tree, never on a lowered document.
-            foreach (var construct in new[] {
-                "let pace = 4",
-                "let lanes = [1, 2, 3]",
-                "import \"shared.puck\"",
-                "template lane(index, width = 2)",
-                "sql {",
-                "for index in lanes {",
-            }) {
-                Assert.Contains(
-                    actualString: migrated,
-                    expectedSubstring: construct
-                );
-            }
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
+        // The compile-time layer is still source: the rewrite ran on the tree, never on a lowered document.
+        foreach (var construct in new[] {
+            "let pace = 4",
+            "let lanes = [1, 2, 3]",
+            "import \"shared.puck\"",
+            "template lane(index, width = 2)",
+            "sql {",
+            "for index in lanes {",
+        }) {
+            Assert.Contains(
+                actualString: migrated,
+                expectedSubstring: construct
             );
         }
     }
     [Fact]
     public void TheProofMigrationRunTwiceIsAFixedPoint() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
 
-            var once = Read(
+        var once = Read(
+            directory: directory,
+            file: "world.puck"
+        );
+
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
+        Assert.Equal(
+            actual: Read(
                 directory: directory,
                 file: "world.puck"
-            );
-
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
-            Assert.Equal(
-                actual: Read(
-                    directory: directory,
-                    file: "world.puck"
-                ),
-                expected: once
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+            ),
+            expected: once
+        );
     }
     [Fact]
     public void ADeclaredMemberMayMove() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(
-                    directory: directory,
-                    name: "rename-and-declare"
-                ),
-                expected: 0
-            );
-            Assert.Contains(
-                actualString: Read(
-                    directory: directory,
-                    file: "world.puck"
-                ),
-                expectedSubstring: $"height: {ShortHeight}"
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(
+                directory: directory,
+                name: "rename-and-declare"
+            ),
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: Read(
+                directory: directory,
+                file: "world.puck"
+            ),
+            expectedSubstring: $"height: {ShortHeight}"
+        );
     }
     // A comment is not in the document, so the member declaration cannot speak for one and the member comparison
     // cannot see it go.
     [Fact]
     public void AnUndeclaredCommentChangeIsRefusedAndNothingIsWritten() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            var before = Read(
+        var before = Read(
+            directory: directory,
+            file: "world.puck"
+        );
+
+        Assert.Contains(
+            actualString: before,
+            expectedSubstring: "// inside a block"
+        );
+        Assert.Equal(
+            actual: Migrate(
+                directory: directory,
+                name: "drop-a-comment"
+            ),
+            expected: 2
+        );
+        Assert.Equal(
+            actual: Read(
                 directory: directory,
                 file: "world.puck"
-            );
-
-            Assert.Contains(
-                actualString: before,
-                expectedSubstring: "// inside a block"
-            );
-            Assert.Equal(
-                actual: Migrate(
-                    directory: directory,
-                    name: "drop-a-comment"
-                ),
-                expected: 2
-            );
-            Assert.Equal(
-                actual: Read(
-                    directory: directory,
-                    file: "world.puck"
-                ),
-                expected: before
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+            ),
+            expected: before
+        );
     }
     // The same rewrite, declaring it: the verdict is about the declaration, not about the edit.
     [Fact]
     public void ADeclaredCommentChangeMayLandDroppingTheComment() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(
-                    directory: directory,
-                    name: "drop-a-comment-declared"
-                ),
-                expected: 0
-            );
-            Assert.DoesNotContain(
-                actualString: Read(
-                    directory: directory,
-                    file: "world.puck"
-                ),
-                expectedSubstring: "// inside a block"
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(
+                directory: directory,
+                name: "drop-a-comment-declared"
+            ),
+            expected: 0
+        );
+        Assert.DoesNotContain(
+            actualString: Read(
+                directory: directory,
+                file: "world.puck"
+            ),
+            expectedSubstring: "// inside a block"
+        );
     }
     // The same rewrite, declaring nothing: the verdict is about the declaration, not about the edit.
     [Fact]
     public void AnUndeclaredMemberIsRefusedAndNothingIsWritten() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            var before = Read(
+        var before = Read(
+            directory: directory,
+            file: "world.puck"
+        );
+
+        Assert.Equal(
+            actual: Migrate(
+                directory: directory,
+                name: "rename-and-sneak"
+            ),
+            expected: 2
+        );
+        Assert.Equal(
+            actual: Read(
                 directory: directory,
                 file: "world.puck"
-            );
-
-            Assert.Equal(
-                actual: Migrate(
-                    directory: directory,
-                    name: "rename-and-sneak"
-                ),
-                expected: 2
-            );
-            Assert.Equal(
-                actual: Read(
-                    directory: directory,
-                    file: "world.puck"
-                ),
-                expected: before
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+            ),
+            expected: before
+        );
     }
 }

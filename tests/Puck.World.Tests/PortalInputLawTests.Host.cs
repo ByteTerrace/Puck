@@ -9,16 +9,13 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed partial class PortalInputLawTests {
-    private const string BeyondFixture = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
-    private const string PortalFixture = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
+    private const string BeyondFixture = "tests/Puck.World.Canaries/portal-window/beyond.puck";
+    private const string PortalFixture = "tests/Puck.World.Canaries/portal-window/fixture.puck";
     private const string XRow = "portalX";
 
     private static readonly ulong PortalStep = EngineTicks.PerRate(ratePerSecond: 30u);
 
-    private static WorldDefinition Load(string relative) => WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: Path.Combine(
-        path1: AuthoredGameFixtures.Root,
-        path2: relative
-    )));
+    private static WorldDefinition Load(string relative) => AuthoredGameFixtures.Load(relativePath: relative);
     // The boot row over a real file, so the destination it references resolves beside it.
     private static (WorldInstance Instance, TemporaryDirectory StateDirectory) FileBackedRow(string name, string path, WorldDefinition definition) {
         var machines = new WorldMachineHost(
@@ -318,6 +315,7 @@ public sealed partial class PortalInputLawTests {
             );
 
             m_steps = WorldServerStepShell.Step(
+                pacing: HostPacing.WallClock,
                 context: in context,
                 publishTick: static _ => { },
                 server: Boot.Server,

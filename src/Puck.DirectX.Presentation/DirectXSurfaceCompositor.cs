@@ -61,6 +61,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
+    private readonly PresentationWork m_presentation;
     private readonly double m_paperWhiteNits;
     private readonly GpuPixelFormat m_preferredFormat;
     private readonly DisplayColorSpace m_requestedColorSpace;
@@ -95,7 +96,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
-    private nint m_lastEncodedResource;
+    private nint m_lastEncodedView;
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
     // matching Present flag, both non-zero only for Immediate mode on a display that supports tearing.
     private uint m_presentFlags;
@@ -125,17 +126,21 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="presentationOptions">The neutral present-mode, surface-format, color-space and paper-white
     /// preferences.</param>
     /// <param name="pipelines">The composition's pass pipelines, which the display encode is an entry of.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/> or <paramref name="pipelines"/> is <see langword="null"/>.</exception>
+    /// <param name="presentation">The presentation counters a present with no swap chain records its skip in.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="pipelines"/> or <paramref name="presentation"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
-        GpuPassPipelineCache pipelines
+        GpuPassPipelineCache pipelines,
+        PresentationWork presentation
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(pipelines);
+        ArgumentNullException.ThrowIfNull(presentation);
 
         m_commandListRecorder = commandListRecorder;
+        m_presentation = presentation;
         m_pipelines = pipelines;
         m_paperWhiteNits = presentationOptions.PaperWhiteNits;
         m_presentMode = presentationOptions.PresentMode;
@@ -268,7 +273,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     }
     /// <summary>
     /// Encodes <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
-    /// GPU-resident surfaces (via <see cref="DirectXImageView"/> token), imported shared textures, and CPU pixel
+    /// GPU-resident surfaces (via a <see cref="DirectXImageViews"/> handle), imported shared textures, and CPU pixel
     /// surfaces (uploaded via <see cref="DirectXSurfaceUpload"/>). A no-op when the surface is empty.
     /// </summary>
     public void Blit(DirectXDeviceContext deviceContext, Surface surface) {
@@ -303,11 +308,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             throw new InvalidOperationException(message: "The surface has an unsupported payload kind.");
         }
 
-        var sourceResource = ((DirectXImageView)GCHandle.FromIntPtr(value: sourceView).Target!).ResourceHandle;
+        _ = (DirectXImageViews.Resolve(handle: sourceView) ?? throw new ObjectDisposedException(objectName: nameof(DirectXImageView), message: $"The surface names image view 0x{sourceView:X}, which has been destroyed."));
 
-        // Skip rewriting the set's source image when the source resource is unchanged (parity with the Vulkan
-        // compositor's last-written-view cache).
-        if (sourceResource != m_lastEncodedResource) {
+        // A resource's COM address can be reissued after destruction. The generational view handle identifies the
+        // allocation whose descriptor was written, even when its replacement has the same resource address.
+        if (sourceView != m_lastEncodedView) {
             // The set's view is consumed at command-list execution, so rewriting it while the other ring slot's frame
             // is still in flight would redirect that frame's read mid-execution.
             WaitForAllFrames();
@@ -318,7 +323,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 imageViewHandle: sourceView
             );
 
-            m_lastEncodedResource = sourceResource;
+            m_lastEncodedView = sourceView;
         }
 
         Present(
@@ -335,6 +340,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="drawCommands">The ordered list of draw commands to execute this frame.</param>
     public void Present(DirectXDeviceContext deviceContext, IReadOnlyList<DirectXDrawCommand> drawCommands) {
         if (m_swapChain == 0) {
+            // No swap chain this tick: no GPU work submitted. Counted as presentation.skipped, which world.counters reads.
+            m_presentation.RecordSkip();
+
             return;
         }
 
@@ -566,7 +574,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_bindings = null;
         m_encodeBlock?.Dispose();
         m_encodeBlock = null;
-        m_lastEncodedResource = 0;
+        m_lastEncodedView = 0;
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
 
@@ -920,7 +928,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             descriptorSetHandle: m_encodeSet
         );
         // A fresh set has no source written yet; the next Blit writes one.
-        m_lastEncodedResource = 0;
+        m_lastEncodedView = 0;
 
         return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_encodeSet).Target!);
     }

@@ -2,6 +2,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
 using Puck.World.Transpiler;
+using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
 using Puck.World;
 
@@ -11,6 +12,7 @@ internal static partial class CompileCommand {
     private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null, BakePackPlan? pack = null) {
         var compilation = WorldCompiler.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
         var diagnostics = compilation.Diagnostics;
+        var sourceCompilation = (compilation.Success ? WorldCompiledSource.From(compilation: compilation) : null);
         // One output per document name the source emits (WorldCompilation.DocumentNames): each world a composition
         // declares, or the one document an ordinary source lowers to, under its stem. A module library emits none.
         var outputs = compilation.DocumentNames(sourcePath: sourcePath).Select(selector: name => (compilation.Worlds.FirstOrDefault(predicate: world => string.Equals(a: world.Name, b: name, comparisonType: StringComparison.Ordinal))
@@ -22,7 +24,7 @@ internal static partial class CompileCommand {
 
             foreach (var output in outputs) {
                 if (WorldSemanticValidator.IsRootDocument(loweredJson: output.Json)) {
-                    WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint);
+                    WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
                 }
             }
         }
@@ -122,7 +124,7 @@ internal static partial class CompileCommand {
                     key: destination,
                     value: sourcePath
                 );
-                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{destination}'.");
+                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: destination)}'.");
             }
             // Each document's compiled world sits beside it, composed where its source sits, as a boot of the source
             // composes it.
@@ -134,6 +136,7 @@ internal static partial class CompileCommand {
                         path2: WorldDocumentName.DocumentFile(name: outputs[index].Name)
                     ),
                     document: composedDocuments[index],
+                    sourceCompilation: sourceCompilation,
                     pack: pack,
                     written: written
                 );

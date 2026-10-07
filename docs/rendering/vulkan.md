@@ -427,6 +427,22 @@ since a completed submission alone makes no device write visible to the host;
 
 ---
 
+## Required GPU features and shader capabilities
+
+The logical-device factory refuses a device, naming the feature, unless it reports
+`fragmentStoresAndAtomics` (the mesh pass's fragments count the texels they write),
+`shaderSampledImageArrayDynamicIndexing` (the SDF screen shading indexes its sources and samplers),
+`shaderStorageImageExtendedFormats` (incoming shadow visibility writes use R8 or R8G8 storage images)
+and `shaderDemoteToHelperInvocation` (a fragment `discard`, which DXC compiles to
+`OpDemoteToHelperInvocation`; the SDF impostor card uses it). Before a shader module is created,
+`VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses, naming the module
+and the capability, any capability outside `VulkanShaderCapabilities.Enabled`: Vulkan core's
+`Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required feature grants,
+including `StorageImageExtendedFormats` for those incoming-visibility formats.
+A kernel that needs a new feature-gated capability therefore fails at startup until the factory
+requires its feature and the list names it, and `VulkanShaderCapabilitiesLawTests` holds every
+module the World ships to that list.
+
 ## Optional GPU features
 
 The logical-device factory probes and enables these only when the device fully supports them;
@@ -436,6 +452,10 @@ callers still re-probe before relying on a path, and fall back otherwise:
   (compiled register counts, etc.); pixel-neutral read-back via `IVulkanPipelineStatisticsApi`.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
+- **Block-compressed textures**—`textureCompressionBC`, which a baked mesh's BC4, BC5,
+  BC6H and BC7 textures need; a device without it refuses their upload by name.
+- **Shader capability floor**—half-precision arithmetic, 16-bit storage and
+  subgroup-size control, enabled on a device that reports them for kernels that adopt them.
 - **External semaphores and timeline semaphores**—`VK_KHR_external_semaphore_win32` and the
   `timelineSemaphore` feature, which let the device wait on a Direct3D 12 shared fence.
   `IGpuSurfaceTransferFactory.TryImportFence` imports the fence's NT handle into a timeline
@@ -560,6 +580,16 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 
 ## Validation
 
+Device creation enables `VK_EXT_device_fault` when the physical device reports
+both the extension and its `deviceFault` feature. After `VK_ERROR_DEVICE_LOST`,
+the backend queries the driver for a fault description, typed GPU addresses
+with their precision, and vendor descriptions, codes and data. These details
+appear in the `DeviceLostException` message and on standard error. Presentation
+recovery and upload teardown also log the report when they handle a loss without
+throwing. The first query is retained for that device; an unavailable extension
+or failed query is reported without hiding the original loss. Vendor binary
+crash dumps are not enabled.
+
 `--debug-layers` creates the instance with `VK_LAYER_KHRONOS_validation`, and
 the same flag turns on the layer's synchronization validation: the create-info
 chains a `VkValidationFeaturesEXT` enabling
@@ -568,7 +598,14 @@ layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
 (`VulkanNativeInstanceApi.LinkCreateChain`). A missing barrier, or one whose
 stages or accesses do not cover a read-after-write, write-after-read or
 write-after-write, then prints a `[vulkan-debug] validation` line naming the
-`SYNC-HAZARD-*` it found. `VulkanInstanceCreateChainLawTests` holds the chain
+`SYNC-HAZARD-*` it found. An instance created with validation prints
+`[vulkan] validation layer live` once its debug messenger exists, or
+`[vulkan] validation layer requested but not live` when it has none, so a run
+with no message can be told from one the layer never watched. Both messengers
+(the one chained into `vkCreateInstance` and the standalone one) carry the
+instance's writer as their `pUserData` (`VulkanDebugOutput`): the
+`debugOutput` the instance factory is given, or the process's standard error
+when it is given none, as the Direct3D 12 context's `DebugOutput` does. `VulkanInstanceCreateChainLawTests` holds the chain
 and the extension without a loader.
 
 ## Debug names
@@ -609,7 +646,7 @@ staging and acceleration-structure buffers are created inside paths that also
 record device commands, so only their usage constants are checked. It creates
 no real instance or device. The backend itself is verified by running the engine on
 Vulkan and by `puck parity`, which boots the authored parity world
-(`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives
+(`tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
 each of the world's scheduled captures three verdicts: its content gate, its
 exact `stateHash`, and per-tile pixels under the contract versioned beside the
 world:

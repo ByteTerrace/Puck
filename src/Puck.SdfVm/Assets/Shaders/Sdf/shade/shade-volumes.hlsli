@@ -1,7 +1,18 @@
-// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldTables.PackVolumes, which bakes each medium's
-// motion from the frame's presented tick: no pass reads a clock.
+// Bounded flow/cloud volumes (Puck.SignedDistance.SdfVolume, a participating medium, never a distance-field shape):
+// sdfVolumes, eleven float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
+// the frame's presented tick, so no pass reads a clock. The composite pass alone integrates them, after the surface and
+// the sky, clipping the pixel's surface share at its surface and its sky share at the far distance. A medium with a
+// scatter scatters the light-casting bodies' light toward the eye, the sky block's air lights by a mildly forward phase
+// (sdf-atmosphere.hlsli), as the haze does.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
+#include "../field/sdf-noise.hlsli"
+#include "../field/sdf-quaternion.hlsli"
+#include "sdf-atmosphere.hlsli"
+// The table's capacity in volumes. KEEP IN SYNC with SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
+static const uint SdfVolumeCount = 64u;
+// The phase anisotropy a medium scatters the bodies' light by. KEEP IN SYNC with SdfVolume.ScatterAnisotropy.
+static const float SdfVolumeScatterAnisotropy = 0.3;
 struct SdfVolumeData {
     float3 position;
     int dynamicSlot;
@@ -21,6 +32,7 @@ struct SdfVolumeData {
     float advectionZ;   // a cloud's host-baked drift along Z, in noise cells
     float coverage;
     float softness;
+    float scatter;      // the share of each sample's extinction that scatters the bodies' light toward the eye
     float4 ramp[4];
 };
 SdfVolumeData sdfLoadVolume(uint index) {
@@ -37,7 +49,7 @@ SdfVolumeData sdfLoadVolume(uint index) {
     v.intensity = r4.x; v.extinction = r4.y; v.pulse = r4.z;
     float4 r5 = sdfVolumes[b + 5u];
     v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z; v.advectionZ = r5.w;
-    v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y;
+    v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y; v.scatter = sdfVolumes[b + 10u].z;
     [unroll] for (uint i = 0u; i < 4u; i++) v.ramp[i] = sdfVolumes[b + 6u + i];
     return v;
 }
@@ -118,8 +130,10 @@ float sdfCloudDensity(SdfVolumeData v, float3 p) {
         0.15 * sdfPeriodicNoise3(q * 4.0 - 3.7, v.seed + 53u));
     return envelope * smoothstep(1.0 - v.coverage - v.softness, 1.0 - v.coverage + v.softness, noise);
 }
+// `bodies` is the bodies' light the medium scatters toward the eye along the ray, by its phase, times its scatter: each
+// sample adds it by its extinction.
 void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirection, float tBegin, float tEnd,
-    float dither, out float3 radianceOut, out float transmissionOut) {
+    float dither, float3 bodies, out float3 radianceOut, out float transmissionOut) {
     int steps = (int)v.steps;
     float stepLength = (tEnd - tBegin) / (float)steps;
     float3 radiance = 0.0;
@@ -147,6 +161,7 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
             float heightLight = lerp(0.52, 1.0, saturate(0.5 + 0.5 * p.y / v.halfExtent.y));
             emission *= v.extinction * heightLight;
         }
+        emission += (bodies * extinction);
         float segment = exp(-extinction * stepLength);
         // The zero-absorption limit is stepLength, so pure emissive media remain visible.
         float integral = extinction > 1.0e-5 ? (1.0 - segment) / extinction : stepLength;
@@ -157,14 +172,25 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
-// Composites every bounded volume whose slab intersects the ray between `nearDistance`, the ray distance where it
-// crosses the camera's own near plane (worldNearDistance, zero for a camera whose image begins at its eye), and
-// `surfaceDistance`, so a volume never paints before the near plane or through solid geometry. Select the next
-// farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance
-// ordering (including index ties) without per-pixel arrays or an unrolled copy of the integrator for every capacity
-// slot. Overlapping media still composite as whole volumes; this is not a combined-density integral through their
-// overlap.
-float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel) {
+// Composites every bounded volume over a pixel's two shares, each clipped where its own rays end, so a volume never
+// paints before the near plane or through solid geometry: the surface share, premultiplied by its coverage
+// `surfaceCoverage`, between `nearDistance` (the ray distance where the ray crosses the camera's own near plane,
+// worldNearDistance, zero for a camera whose image begins at its eye) and `surfaceDistance`, and the sky share beside it,
+// premultiplied by the rest of the pixel, between `nearDistance` and `farDistance`. A volume composes over a share of
+// weight w as w times its radiance plus its transmission times the share. Select the next farthest intersecting volume,
+// integrate it, and composite immediately. This preserves the previous entry-distance ordering (including index ties)
+// without per-pixel arrays or an unrolled copy of the integrator for every capacity slot. A volume that ends before the
+// surface integrates once for both shares; one the surface clips integrates again over the surface share's span.
+// Overlapping media still composite as whole volumes; this is not a combined-density integral through their overlap.
+// `covered` is one where any volume composites over the ray's span. Nothing reads it: the composite alone integrates volumes,
+// after the views pass, and a temporal view's reactivity is written by the views pass only, so a covered volume is not reactive.
+float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance, float3 sky, float3 rayOrigin, float3 rayDirection, float nearDistance, float farDistance, uint2 pixel, out float covered) {
+    covered = 0.0;
+    bool surfaceShare = (surfaceCoverage > 0.0);
+    bool skyShare = (surfaceCoverage < 1.0);
+    float skyCoverage = (1.0 - surfaceCoverage);
+    // The span a volume is selected over: the farther share's.
+    float spanEnd = (skyShare ? farDistance : surfaceDistance);
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SdfVolumeCount;
@@ -178,7 +204,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
             float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
             float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
             float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
-            if (min(interval.y, surfaceDistance) <= max(interval.x, nearDistance)) continue;
+            if (min(interval.y, spanEnd) <= max(interval.x, nearDistance)) continue;
             bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
             bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
             if (beforeCursor && (selected == SdfVolumeCount || nearerChoice)) {
@@ -191,16 +217,29 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
         float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
         float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
         float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
+        float begin = max(interval.x, nearDistance);
+        float skyEnd = min(interval.y, farDistance);
+        float surfaceEnd = min(interval.y, surfaceDistance);
         v.intensity *= sdfVolumeIntensityScale(v);
-        float3 radiance; float transmission;
-        sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, nearDistance), min(interval.y, surfaceDistance),
-            dither, radiance, transmission);
-        color = radiance + transmission * color;
+        float3 bodies = ((v.scatter > 0.0) ? (v.scatter * sdfAirBodies(rayDirection, SdfVolumeScatterAnisotropy)) : float3(0.0, 0.0, 0.0));
+        float3 radiance = float3(0.0, 0.0, 0.0);
+        float transmission = 1.0;
+        if (skyShare) {
+            sdfIntegrateVolume(v, localOrigin, localDirection, begin, skyEnd, dither, bodies, radiance, transmission);
+            sky = ((skyCoverage * radiance) + (transmission * sky));
+        }
+        if (surfaceShare && (surfaceEnd > begin)) {
+            if (!skyShare || (surfaceEnd < skyEnd)) {
+                sdfIntegrateVolume(v, localOrigin, localDirection, begin, surfaceEnd, dither, bodies, radiance, transmission);
+            }
+            surface = ((surfaceCoverage * radiance) + (transmission * surface));
+        }
+        covered = 1.0;
         previousNear = selectedNear;
         previousIndex = selected;
     }
 
-    return color;
+    return (surface + sky);
 }
 
 #endif

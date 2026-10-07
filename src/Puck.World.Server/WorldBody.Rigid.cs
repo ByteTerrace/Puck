@@ -493,11 +493,14 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets a best-effort world-space linear velocity for a KINEMATIC body — the tangent planar velocity
     /// plus the vertical channel along the body's own up axis. Used only so a kinematic body pushing a rigid one
-    /// contributes its true closing speed to the impulse; a kinematic body never reads its own velocity from here.</summary>
-    internal FixedVector3 ApproximateWorldVelocity() => (IsRigid
+    /// contributes its true closing speed to the impulse; a kinematic body never reads its own velocity from here.
+    /// A rigid body's is its rigid velocity.</summary>
+    /// <returns>The body's world-space linear velocity.</returns>
+    public FixedVector3 ApproximateWorldVelocity() => (IsRigid
         ? m_rigidVelocity
-        : (m_planarVelocity + (m_up * m_verticalVelocity))
+        : ComposedVelocity()
     );
+
     /// <summary>Builds (or refreshes) this body's persistent <see cref="FixedRigidBody"/> handle — the vehicle
     /// <see cref="Puck.Physics.FixedTwoBodyKernel"/> reads/writes for dynamic-vs-dynamic contact
     /// (<see cref="WorldPopulation.ResolveDynamicContacts"/>). A rigid body's handle is dynamic (its own mass/inertia,
@@ -512,7 +515,15 @@ public sealed partial class WorldBody {
 
         handle.Orientation = m_orientation;
 
-        if (m_rigid is { } rigid) {
+        // A body whose sweep was refused this tick is immovable until the tick ends: its partner meets it as static.
+        if (m_sweepRefusedThisTick) {
+            handle.LinearVelocity = FixedVector3.Zero;
+            handle.AngularVelocity = FixedVector3.Zero;
+            handle.InverseMassRaw = 0L;
+            handle.InverseInertiaXX = 0L;
+            handle.InverseInertiaYY = 0L;
+            handle.InverseInertiaZZ = 0L;
+        } else if (m_rigid is { } rigid) {
             var scaledRigid = ScaleRigid(rigid: rigid);
 
             handle.LinearVelocity = m_rigidVelocity;
@@ -571,9 +582,13 @@ public sealed partial class WorldBody {
 
     /// <summary>Writes a rigid body's own <see cref="TwoBodyHandle"/>, after the kernel has applied an impulse to it,
     /// back onto this body's velocity state and wakes it. A no-op for a locomotion kit (its handle is a static
-    /// phantom — see <see cref="TwoBodyHandle"/> — and never receives a written impulse to commit).</summary>
+    /// phantom — see <see cref="TwoBodyHandle"/> — and never receives a written impulse to commit), and for a body
+    /// whose sweep was refused this tick, whose handle is static for the same reason.</summary>
     internal void CommitRigidHandle(FixedRigidBody handle) {
-        if (m_rigid is null) {
+        if (
+            (m_rigid is null) ||
+            m_sweepRefusedThisTick
+        ) {
             return;
         }
 
@@ -587,9 +602,13 @@ public sealed partial class WorldBody {
     /// and wakes it: a body another body's overlap has just physically displaced is no longer at rest, whatever its
     /// latched velocity said a moment ago. A no-op for zero correction, so a body already merely touching (never
     /// re-entering overlap once actually settled — see <see cref="Puck.Physics.FixedDynamicBodyContacts"/>) is never
-    /// woken by a call that does nothing.</summary>
+    /// woken by a call that does nothing. A no-op too for a body whose sweep was refused this tick
+    /// (<see cref="SweepRefusedThisTick"/>), which is immovable until the tick ends.</summary>
     internal void ApplyRigidPositionalCorrection(FixedVector3 correction) {
-        if (correction == FixedVector3.Zero) {
+        if (
+            (correction == FixedVector3.Zero) ||
+            m_sweepRefusedThisTick
+        ) {
             return;
         }
 
@@ -607,7 +626,8 @@ public sealed partial class WorldBody {
     /// <param name="policy">The authored, once-compiled rigid-contact tunables (rest thresholds/hold window, the
     /// substep travel fraction, and the substep ceiling <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
     /// bounds) — <see cref="RigidContactPolicy"/>.</param>
-    private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy) {
+    /// <param name="scratch">The caller's step scratch, which a refused substep restores the tick from.</param>
+    private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy, StepScratch scratch) {
         m_entityIndex = entityIndex;
 
         if (
@@ -630,6 +650,12 @@ public sealed partial class WorldBody {
             RigidStaticSubstepsThisTick = 0;
             return;
         }
+
+        // A refused sweep is a full block: the body does not move this tick (WorldBody.SweepRefusal.cs). The capture
+        // precedes damping and gravity, so a refused tick leaves the velocity it began with.
+        CaptureMotion(scratch: scratch);
+
+        m_sweepRefusal = ContactRefusal.None;
 
         // Every subsequent read of `rigid` in this call — including the reference ResolveRigidContact receives below
         // — is this body's live-Scale-consistent copy (see ScaleRigid's own remarks), never the kit-shared authored
@@ -727,6 +753,14 @@ public sealed partial class WorldBody {
                     velocity: ref velocity,
                     volumes: scaledColliderVolumes
                 );
+            }
+
+            // The substeps stop at a refusal, and every one before it is undone with the rest of the tick's motion.
+            if (resolution.Refusal != ContactRefusal.None) {
+                NoteSweepRefusal(refusal: resolution.Refusal);
+                RestoreMotion(scratch: scratch);
+
+                return;
             }
 
             m_position = bodyOrigin;

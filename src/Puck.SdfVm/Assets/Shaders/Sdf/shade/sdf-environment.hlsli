@@ -24,7 +24,6 @@ static const float CrtBloomGain = 0.5;
 static const float CrtBloomThreshold = 0.6;
 static const float CrtGlint = 0.0;           // fresnel rim brighten at glancing angles (0 = no glass glint)
 static const float CrtGlintPower = 3.0;
-static const float ScreenLightFalloff = 0.28; // the room glow's inverse-square softening
 // Rec.601 luma weights, for the bloom knee's brightness test.
 static const float3 CrtLumaWeights = float3(0.299, 0.587, 0.114);
 // The aperture grille's three phosphor stripes, 120 degrees apart (2pi/3, 4pi/3), so each channel peaks in its own
@@ -94,13 +93,6 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
     return lerp(background, sdfDecalUnpackRgb(c.z), coverage);
 }
 #endif
-
-// Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
-// sdfVolumes, an 11-float4-per-volume table. Stage 1 is the only kernel that shades, so it is the only one that reads it.
-// Decoded and integrated by shade-volumes.hlsli in the views stage and the sky prepass. KEEP IN SYNC with
-// SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
-static const uint SdfVolumeCount = 64u;
-#include "shade-volumes.hlsli"
 
 // Samples a screen's source through the sampler its row names. A descriptor array is indexed only by a dynamically
 // uniform value, so each pass of the loop takes the first active lane's screen, samples it for every lane showing that

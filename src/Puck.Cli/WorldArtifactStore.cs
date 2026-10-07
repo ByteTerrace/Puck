@@ -99,9 +99,11 @@ internal sealed class WorldArtifactStore(string root) {
     /// <param name="clock">The run's clock.</param>
     /// <param name="budget">How long the run may wait in total, measured on <paramref name="clock"/>.</param>
     /// <param name="waited">Whether another run held the right when this one first asked.</param>
+    /// <param name="waiting">Called synchronously on the acquiring thread once its first attempt finds another
+    /// holder, before waiting.</param>
     /// <returns>The held lock, which the caller disposes once the build is published or abandoned; or
     /// <see langword="null"/> when the budget ran out first.</returns>
-    public FileStream? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited) {
+    public FileStream? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited, Action? waiting = null) {
         _ = Directory.CreateDirectory(path: Root);
 
         var path = Sibling(
@@ -114,6 +116,9 @@ internal sealed class WorldArtifactStore(string root) {
         );
 
         waited = (first is null);
+        if (waited) {
+            waiting?.Invoke();
+        }
 
         return (first ?? Acquire(
             budget: budget,
@@ -191,7 +196,7 @@ internal sealed class WorldArtifactStore(string root) {
         if (Directory.Exists(path: entry)) {
             // The rename below never replaces a directory, so a key already published keeps the build every earlier
             // taker is running from, and this run's identical build is discarded.
-            CliScratchDirectories.TryDelete(path: staging);
+            RunDirectory.TryDelete(path: staging);
         } else {
             // A scanner can hold a just-written file open for a moment, and Windows refuses to rename a directory
             // while any file inside it is open.
@@ -272,7 +277,7 @@ internal sealed class WorldArtifactStore(string root) {
             ) {
                 try {
                     if ((DateTime.UtcNow - Directory.GetLastWriteTimeUtc(path: directory)) > AbandonedAge) {
-                        CliScratchDirectories.TryDelete(path: directory);
+                        RunDirectory.TryDelete(path: directory);
                     }
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                     // An unreadable leftover is retried by the next run.
@@ -333,7 +338,7 @@ internal sealed class WorldArtifactStore(string root) {
                     key: key,
                     suffix: ".used"
                 ));
-                CliScratchDirectories.TryDelete(path: pruned);
+                RunDirectory.TryDelete(path: pruned);
             }
 
             TryDeleteFile(path: leasePath);

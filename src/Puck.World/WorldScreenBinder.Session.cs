@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
@@ -46,6 +47,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         slot.Session = feed;
+        m_feedsMoved = true;
 
         if (m_viewPipelines is not null) {
             RegisterSessionView(feed: feed);
@@ -105,7 +107,7 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // The session the boot world's authority holds for a screen, when it holds one for this very source.
-    private WorldScreenSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
+    private WorldObservationSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
         instanceName: WorldInstanceHost.BootInstanceName,
         screenIndex: index
     ) is { } hosted) && (hosted.Source == source))
@@ -119,9 +121,10 @@ internal sealed partial class WorldScreenBinder {
     // per-slot teardown.
     private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
+            domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
-        );
+        ) { SkyLayers = SkyLayers };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,
             emitters: [emitter]
@@ -132,6 +135,11 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        emitter.Film = views => FilmFeed(
+            feed: feed,
+            views: views
+        );
+        emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed: feed, height: height, sky: sky, views: views, width: width);
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);
@@ -173,26 +181,27 @@ internal sealed partial class WorldScreenBinder {
     // authority's (WorldInstanceHost), which ends it when the screen is re-pointed or removed; the destination instance
     // leaves the render graph once no slot holds the feed.
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
+        if (feed.Nested is { } screens) {
+            _ = m_nestedOwners.Remove(key: screens);
+            screens.Close(sessions: NestedSessionsOf());
+            feed.Nested = null;
+        }
+
         feed.Dispose();
+        m_feedsMoved = true;
 
         Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{feed.Destination}' released ({reason})]");
     }
-    // The registered session feed a view instance name names, or null.
+    // The registered session feed a view instance name names, at any depth, or null.
     private SessionFeed? SessionFeedOf(string name) {
-        foreach (var slot in m_slots.Values) {
-            if (
-                (slot.Session is { FrameSource: not null } feed) &&
-                string.Equals(
-                    a: feed.RegistrationName,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return feed;
-            }
-        }
+        EnsureFeeds();
 
-        return null;
+        return ((m_feedsByName.TryGetValue(
+            key: name,
+            value: out var feed
+        ) && (feed.FrameSource is not null))
+            ? feed
+            : null);
     }
     // Drops a slot's session reference and releases its registration/lease — the symmetric half of
     // ApplySessionSource's acquire, run whenever the slot stops observing that destination (a source change away from
@@ -258,12 +267,6 @@ internal sealed partial class WorldScreenBinder {
             return null;
         }
 
-        WarnIfDestinationRecurses(
-            index: slot.Index,
-            destinationName: session.Destination,
-            destinationDefinition: hosted.Mirror.Definition
-        );
-
         var effectiveCamera = ResolveEffectiveCameraName(
             destinationDefinition: hosted.Mirror.Definition,
             requested: session.CameraName,
@@ -273,34 +276,44 @@ internal sealed partial class WorldScreenBinder {
 
         slot.DeclaredFault = null;
 
+        var index = slot.Index;
+
         return new SessionFeed(
+            depth: 1,
             destination: session.Destination,
             effectiveCamera: effectiveCamera,
             generationId: hosted.GenerationId,
             hosted: hosted,
             instanceName: instanceName,
             projection: session.Projection,
-            registrationName: WorldViewNames.Session(screen: slot.Index),
+            registrationName: WorldViewNames.Session(screen: index),
             requestedCamera: session.CameraName,
             resolution: session.Resolution,
-            screenIndex: slot.Index
-        );
-    }
-    // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the eye is the camera the
-    // frame renders its viewer with in this same frame (WorldSeatViewports.Viewer), the apertures the boot document's face and the
-    // counterpart the destination's mirror declares, and the glass the row ReconcileScreens last applied.
-    private Func<CameraSnapshot?>? FitWindow(SessionFeed feed) => ((m_viewports is { } viewports)
-        ? WorldWindowFrustumFit.FitFrom(
-            destination: () => feed.Mirror.Definition,
-            local: () => (m_instanceHost.TryGet(
-                instance: out var boot,
-                name: WorldInstanceHost.BootInstanceName
-            )
-                ? boot?.Server.Definition
+            screenIndex: index
+        ) {
+            Eye = () => ((m_viewports is { } viewports)
+                ? WorldWindowFrustumFit.ViewerEye(viewports: viewports)
                 : null),
-            screen: () => RowOf(screen: feed.ScreenIndex),
-            viewports: viewports
-        )
+            Local = BootDefinition,
+            Row = () => RowOf(screen: index),
+        };
+    }
+    // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the eye is the camera the view
+    // of the world the glass stands in renders with in this same frame (the boot world's viewer, the first seat presented
+    // in a routed world, or the camera of the window one level up), the apertures that world's face and the counterpart
+    // the destination's mirror declares, and the glass that world's row.
+    private static Func<CameraSnapshot?> FitWindow(SessionFeed feed) => WorldWindowFrustumFit.FitFrom(
+        destination: () => feed.Mirror.Definition,
+        eye: feed.Eye,
+        local: feed.Local,
+        screen: feed.Row
+    );
+    // The boot world's definition, as its authority holds it.
+    private WorldDefinition? BootDefinition() => (m_instanceHost.TryGet(
+        instance: out var boot,
+        name: WorldInstanceHost.BootInstanceName
+    )
+        ? boot?.Server.Definition
         : null);
     // Settles every WINDOW session's route for the frame being prepared, before the presenter latches its views: a
     // session delivered everything its destination holds joins that destination's endpoint scene, any other renders its
@@ -313,8 +326,10 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is not { Projection: WorldScreenProjection.Window } feed) {
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if (feed.Projection != WorldScreenProjection.Window) {
                 continue;
             }
 
@@ -338,9 +353,9 @@ internal sealed partial class WorldScreenBinder {
     // own capture has resolved this frame's seat cameras: its fit at a session screen's quality, or the scene's default
     // projection while the fit has no answer.
     private void FitRoutedWindows(WorldRoutedScene scene) {
-        foreach (var slot in m_slots.Values) {
+        foreach (var feed in m_feeds) {
             if (
-                (slot.Session is not { WindowRoute.Window: { } window } feed) ||
+                (feed.WindowRoute.Window is not { } window) ||
                 !ReferenceEquals(
                     objA: window.Scene,
                     objB: scene
@@ -357,6 +372,16 @@ internal sealed partial class WorldScreenBinder {
                     Quality = WorldSessionSceneEmitter.ReducedQuality,
                 }
                 : null);
+            // The fitted camera and the default-projection fallback take the same named policy.
+            var width = ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth));
+            var height = ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight));
+
+            if (window.View is { } view) {
+                window.View = ResolveResolution(view, feed.RegistrationName, width, height);
+            }
+            window.FallbackResolution ??= (fallback => ResolveResolution(fallback, feed.RegistrationName,
+                ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)),
+                ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight))));
         }
     }
     // The routed window a session view renders through this frame, once the presenter's latch includes it.
@@ -386,41 +411,6 @@ internal sealed partial class WorldScreenBinder {
         }
 
         return null;
-    }
-    // A session mirror never processes a destination's own screens/faces at all (WorldSessionSceneEmitter renders
-    // static placement geometry only), so recursion is impossible by construction regardless of this check — this
-    // narrates the policy loudly when it would otherwise have mattered, so the refusal is observable rather than
-    // merely true.
-    private static void WarnIfDestinationRecurses(int index, string destinationName, WorldDefinition destinationDefinition) {
-        var recurses = false;
-
-        foreach (var screen in destinationDefinition.Screens) {
-            if (screen.Source is WorldScreenSource.Session) {
-                recurses = true;
-
-                break;
-            }
-        }
-
-        if (!recurses) {
-            foreach (var placement in destinationDefinition.Placements) {
-                foreach (var face in (placement.FaceSources ?? [])) {
-                    if (face.Source is WorldScreenSource.Session) {
-                        recurses = true;
-
-                        break;
-                    }
-                }
-
-                if (recurses) {
-                    break;
-                }
-            }
-        }
-
-        if (recurses) {
-            Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{destinationName}' authors its own session screen(s) — recursion refused at depth 1 (a session mirror renders static geometry only and never processes a destination's own screens)]");
-        }
     }
 
     /// <summary>Reads back a screen index's session projection state, when it carries one.</summary>
@@ -488,8 +478,26 @@ internal sealed partial class WorldScreenBinder {
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
     // rather than mutating this one — see ApplySessionSource).
-    private sealed class SessionFeed(string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldScreenSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
+    private sealed class SessionFeed(int depth, string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldObservationSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
+        // How many screens deep the destination is seen: 1 for a boot or routed world's own screen, one more a level.
+        public int Depth { get; } = depth;
         public string Destination { get; } = destination;
+
+        // The view whose world the screen stands in, or null for a screen of a world the display shows directly.
+        public SessionFeed? ParentFeed { get; init; }
+        // The infinity scene whose physical screen this is, when it has no parent session feed.
+        public InfinityEntry? ParentInfinity { get; init; }
+        // The routed world whose own screen this is, or null.
+        public WorldRoutedScene? RootScene { get; init; }
+
+        // The eye a window fits to, the world its glass stands in, and its glass's row, each read as the view dresses.
+        public Func<Vector3?> Eye { get; init; } = static () => null;
+        public Func<WorldDefinition?> Local { get; init; } = static () => null;
+        public Func<WorldScreen?> Row { get; init; } = static () => null;
+
+        // The destination's own screens as this view shows them, one level deeper.
+        public WorldNestedScreens<SessionFeed>? Nested { get; set; }
+
         // The screen the session shows on.
         public int ScreenIndex { get; } = screenIndex;
         public string? RequestedCamera { get; } = requestedCamera;
@@ -497,7 +505,7 @@ internal sealed partial class WorldScreenBinder {
         public string InstanceName { get; } = instanceName;
         public ulong GenerationId { get; } = generationId;
         // The authority's session this feed renders: its mirror, and the observation it currently holds.
-        public WorldScreenSession Hosted { get; } = hosted;
+        public WorldObservationSession Hosted { get; } = hosted;
 
         public WorldSessionMirror Mirror => Hosted.Mirror;
 
@@ -532,6 +540,7 @@ internal sealed partial class WorldScreenBinder {
         // Releases the envelope and window registrations; the session is the authority's, and the session's instance
         // leaves the render graph once no slot holds the feed.
         public void Dispose() {
+            Emitter?.Dispose();
             WindowRoute.Dispose();
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;

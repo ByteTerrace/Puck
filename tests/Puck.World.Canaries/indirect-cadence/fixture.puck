@@ -1,0 +1,117 @@
+schema: "puck.world.definition.v1"
+documentId: "indirect-cadence"
+host {
+  backend: auto
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  exitAfterSeconds: 0
+  presentation: offscreen
+  width: 128
+  height: 128
+  targetHertz: 0
+  presentMode: Immediate
+}
+simulation {
+  rateHz: 30
+}
+state {
+  world {
+    slot cameraPose = 0
+  }
+}
+cameras [{
+    name: "cache-cam"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-cam"
+      version: "puck.camera.program.v1"
+      operations [
+        selectProgram(cases: [
+          { program: "cache-base", value: 0 }
+          { program: "cache-pan", value: 1 }
+          { program: "cache-translated", value: 2 }
+        ], default: "cache-base", key: "state.cameraPose"
+        )
+      ]
+    }
+  }
+  {
+    name: "cache-base"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-base"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+  {
+    name: "cache-pan"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-pan"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0.3, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+  {
+    name: "cache-translated"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "cache-translated"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [96, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+]
+placements {
+  placement "block" {
+    prototype: "block"
+    position [0, 0, 0]
+  }
+  placement "distant" {
+    prototype: "block"
+    position [96, 0, 0]
+  }
+}
+prototypes {
+  prototype "block" {
+    document {
+      schema: "puck.creation.v1"
+      name: "block"
+      palette [{ color: "#8C7A5D" }]
+      shape Box "base" {
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+    }
+  }
+}
+views {
+  layout "cache" {
+    seatCount: 0
+    slots [{ camera: "cache-cam", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}

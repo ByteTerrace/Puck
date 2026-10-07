@@ -1,0 +1,637 @@
+using System.Buffers.Binary;
+using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
+
+namespace Puck.Shaders;
+
+/// <summary>Whether an image's dimensions follow the output extent, the package render extent, or fixed pixels.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineDimensionMode>))]
+public enum ShaderPipelineDimensionMode {
+    /// <summary>Dimensions are a scale of the frame extent.</summary>
+    Relative,
+    /// <summary>Dimensions are absolute pixels.</summary>
+    Absolute,
+    /// <summary>Dimensions scale the package's render extent inside its output.</summary>
+    Render,
+}
+/// <summary>How a resource is made valid before its first read.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderPipelineInitialization>))]
+public enum ShaderPipelineInitialization {
+    /// <summary>No initial contents. A first-frame read is refused.</summary>
+    Undefined,
+    /// <summary>Clear the resource to zero before the first pass.</summary>
+    Zero,
+    /// <summary>The resource is supplied by the host.</summary>
+    External,
+    /// <summary>The resource is a fixed-size buffer the host writes, a host buffer port: the node running the graph owns
+    /// its region (<c>ShaderPipelineRenderNode.BindRegion</c>), and its copy sets are reserved when the graph is
+    /// admitted.</summary>
+    Host,
+}
+/// <summary>Dimensions for an image resource.</summary>
+public sealed record ShaderPipelineDimensions(
+    ShaderPipelineDimensionMode Mode,
+    double Width,
+    double Height
+) {
+    private static uint ResolveExtent(double value, string name) {
+        if (
+            !double.IsFinite(d: value) ||
+            (value <= 0) ||
+            (value > uint.MaxValue)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "Resolved shader pipeline extent must be finite, positive, and fit in UInt32.",
+                paramName: name
+            );
+        }
+
+        return Math.Max(
+            val1: 1u,
+            val2: checked((uint)Math.Round(
+                mode: MidpointRounding.ToEven,
+                value: value
+            ))
+        );
+    }
+
+    /// <summary>Creates fixed pixel dimensions.</summary>
+    public static ShaderPipelineDimensions Absolute(double width, double height) =>
+        new(
+            Height: height,
+            Mode: ShaderPipelineDimensionMode.Absolute,
+            Width: width
+        );
+    /// <summary>Creates frame-relative dimensions.</summary>
+    public static ShaderPipelineDimensions Relative(double width = 1, double height = 1) =>
+        new(
+            Height: height,
+            Mode: ShaderPipelineDimensionMode.Relative,
+            Width: width
+        );
+    /// <summary>Creates dimensions relative to the package's render extent.</summary>
+    public static ShaderPipelineDimensions Render(double width = 1, double height = 1) =>
+        new(Height: height, Mode: ShaderPipelineDimensionMode.Render, Width: width);
+    /// <summary>Resolves the declaration against output and render extents, clamping positive extents to one pixel.</summary>
+    /// <param name="frameWidth">The output width.</param>
+    /// <param name="frameHeight">The output height.</param>
+    /// <param name="renderWidth">The render width, or zero to use the output width.</param>
+    /// <param name="renderHeight">The render height, or zero to use the output height.</param>
+    /// <returns>The resolved pixel extent.</returns>
+    public (uint Width, uint Height) Resolve(uint frameWidth, uint frameHeight, uint renderWidth = 0, uint renderHeight = 0) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: frameWidth);
+        ArgumentOutOfRangeException.ThrowIfZero(value: frameHeight);
+        var width = Mode switch {
+            ShaderPipelineDimensionMode.Relative => (frameWidth * Width),
+            ShaderPipelineDimensionMode.Render => (((renderWidth == 0) ? frameWidth : renderWidth) * Width),
+            _ => Width,
+        };
+        var height = Mode switch {
+            ShaderPipelineDimensionMode.Relative => (frameHeight * Height),
+            ShaderPipelineDimensionMode.Render => (((renderHeight == 0) ? frameHeight : renderHeight) * Height),
+            _ => Height,
+        };
+
+        return (ResolveExtent(
+            value: width,
+            nameof(Width)
+        ), ResolveExtent(
+            value: height,
+            nameof(Height)
+        ));
+    }
+}
+/// <summary>A pass's reference to one resource version: which version it reads or writes, which frame's instance, and
+/// the identifier its source reads it by. Where it binds follows from the pass's interface
+/// (<see cref="ShaderPipelinePassPorts"/>), never from the document.</summary>
+/// <param name="Name">The version name.</param>
+/// <param name="PreviousFrame">Reads the contents the previous frame left rather than this frame's. Only a pass input
+/// sets it, and only for a version declared <see cref="ShaderPipelineResource.History"/>.</param>
+/// <param name="As">The HLSL identifier the pass's source reads the port by, or <see langword="null"/> for the
+/// version's name in camel case (<see cref="ShaderPipelinePassPorts.Identifier"/>). A source that several passes bind to
+/// differently named versions names each port the same way with it.</param>
+public sealed record ResourceReference(
+    string Name,
+    bool PreviousFrame = false,
+    string? As = null
+) {
+    /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
+    public static implicit operator ResourceReference(string name) => new(Name: name);
+}
+/// <summary>One resource version declared by a <c>RenderGraphDefinition</c>. Each version has exactly one
+/// writer. A version that names <see cref="From"/> forwards that predecessor: its writer continues the predecessor's
+/// storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.</summary>
+/// <param name="Name">The unique version name.</param>
+/// <param name="Kind">Image, buffer, or depth resource.</param>
+/// <param name="Format">The backend-neutral format spelling. Required for images and depth resources.</param>
+/// <param name="Dimensions">Image dimensions; omitted for buffers.</param>
+/// <param name="History">Retains this version's contents into the next frame, where a pass input reads them with
+/// <see cref="ResourceReference.PreviousFrame"/>. Only the last version of a forwarding chain can be history, because a
+/// forward would overwrite what is retained.</param>
+/// <param name="Initialization">How the first frame obtains valid contents. Only a version that forwards nothing
+/// declares it; a forwarded version's contents come from its predecessor.</param>
+/// <param name="SizeBytes">A fixed buffer's capacity in bytes, a multiple of four and of <paramref name="StrideBytes"/>, or
+/// <see langword="null"/> for an image or a counted buffer. A buffer without a stride is a raw buffer of 32-bit words,
+/// read and written by byte address.</param>
+/// <param name="From">The predecessor version this one forwards, or <see langword="null"/> for a version whose writer
+/// starts from discarded contents. A predecessor has at most one successor, and its kind, format, extent and sample
+/// count equal this version's.</param>
+/// <param name="Samples">The sample count of an image. Only single-sampled images are executable, so any other count is
+/// refused by name.</param>
+/// <param name="StrideBytes">A structured buffer's element stride in bytes, a positive multiple of four, or
+/// <see langword="null"/> for a raw buffer. Only a package pass reaches a structured buffer.</param>
+/// <param name="Count">A counted buffer's size in elements, a sum of terms that each scale with a product of counts the
+/// host resolves, in place of <paramref name="SizeBytes"/>. Only a package pass reaches a counted buffer.</param>
+/// <param name="Transient">Whether the storage is frame-transient: every frame writes it from discarded contents before
+/// anything reads it, and nothing reads it across frames, so it is allocated once rather than once per frame slot and
+/// successive frames' uses of the one allocation are ordered on the queue by the planned barrier of each frame's first
+/// use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized
+/// or a public output.</param>
+/// <param name="Retained">Whether one queue-ordered allocation preserves an intermediate across frames so an unchanged
+/// package pass can stand. Only the chain root declares it; history, external, transient and public-output storage
+/// cannot be retained.</param>
+/// <param name="PreservesPredecessor">Whether this forwarding version's package writer preserves every field owned by
+/// its predecessor, so those predecessor contents remain valid for a standing pass on later frames. The writer must
+/// replace only its own fields idempotently. This contract is legal only on a retained forwarding chain.</param>
+/// <param name="ClearDepth">The depth a depth resource's writer clears it to, in [0, 1], or <see langword="null"/> for
+/// <see cref="GpuDepthAttachment.DefaultClearDepth"/>: its render pass's <see cref="GpuDepthAttachment.ClearDepth"/>.
+/// A pass that keeps greater depths (<see cref="ShaderPipelineDepthCompare.Greater"/>) tests against a depth cleared to
+/// 0. Only a depth resource that forwards nothing declares it, because a forwarded version's writer loads what its
+/// predecessor left.</param>
+public sealed record ShaderPipelineResource(
+    string Name,
+    ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
+    string? Format = null,
+    ShaderPipelineDimensions? Dimensions = null,
+    bool History = false,
+    ShaderPipelineInitialization Initialization = ShaderPipelineInitialization.Undefined,
+    ulong? SizeBytes = null,
+    string? From = null,
+    uint Samples = 1,
+    uint? StrideBytes = null,
+    IReadOnlyList<ShaderPipelineCountTerm>? Count = null,
+    bool Transient = false,
+    float? ClearDepth = null,
+    bool Retained = false,
+    bool PreservesPredecessor = false
+) {
+    /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
+    [JsonIgnore]
+    public bool IsExternal => (Initialization is ShaderPipelineInitialization.External or ShaderPipelineInitialization.Host);
+    /// <summary>Gets whether the resource is a host buffer port (<see cref="ShaderPipelineInitialization.Host"/>).</summary>
+    [JsonIgnore]
+    public bool IsHostBuffer => (Initialization == ShaderPipelineInitialization.Host);
+    /// <summary>Gets the bytes of one buffer element: a structured buffer's stride, or one 32-bit word of a raw
+    /// buffer.</summary>
+    [JsonIgnore]
+    public uint ElementBytes => (StrideBytes ?? 4U);
+    /// <summary>Gets whether only a package pass can reach the buffer: it is structured or counted, and the pipeline
+    /// node binds raw buffers of fixed size.</summary>
+    [JsonIgnore]
+    public bool IsPackageStorage => ((StrideBytes is not null) || (Count is not null));
+
+    /// <summary>Resolves a buffer's capacity: its fixed <see cref="SizeBytes"/>, or its <see cref="Count"/> of elements
+    /// against the host's counts. A term whose bases resolve to zero units adds nothing; a counted buffer whose terms
+    /// all resolve to zero is refused by name, because a zero-byte buffer cannot be bound.</summary>
+    /// <param name="counts">The counts a counted buffer scales with.</param>
+    /// <returns>The capacity in bytes.</returns>
+    /// <exception cref="InvalidOperationException">The resource is not a buffer, or declares neither size.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="counts"/> resolves every term of the buffer's
+    /// count to zero units, which would size it at zero bytes.</exception>
+    /// <exception cref="OverflowException">The capacity does not fit in 64 bits.</exception>
+    public ulong ResolveSizeBytes(ShaderPipelineStorageCounts counts) {
+        if (Kind != ShaderPipelineResourceKind.Buffer) {
+            throw new InvalidOperationException(message: $"Resource '{Name}' is not a buffer.");
+        }
+        if (SizeBytes is { } fixedBytes) {
+            return fixedBytes;
+        }
+        if (Count is not { } count) {
+            throw new InvalidOperationException(message: $"Buffer '{Name}' declares neither sizeBytes nor a count.");
+        }
+
+        var elements = 0UL;
+
+        foreach (var term in count) {
+            var product = term.Elements;
+
+            foreach (var basis in term.Per) {
+                product = checked((product * counts.UnitsOf(basis: basis)));
+            }
+
+            elements = checked((elements + product));
+        }
+
+        if (elements == 0) {
+            var bases = string.Join(
+                separator: " + ",
+                values: count.Select(selector: static term => string.Join(
+                    separator: " * ",
+                    values: term.Per
+                ))
+            );
+
+            throw new ArgumentOutOfRangeException(
+                actualValue: counts,
+                message: $"Buffer '{Name}' counts by {bases}, and the counts resolve every term to zero units, so it would hold zero bytes.",
+                paramName: nameof(counts)
+            );
+        }
+
+        return checked((((ulong)ElementBytes) * elements));
+    }
+}
+/// <summary>One term of a counted buffer's size: <see cref="Elements"/> elements per unit of the product of the bases
+/// in <see cref="Per"/>, each element <see cref="ShaderPipelineResource.ElementBytes"/> long. A buffer's count is the
+/// sum of its terms.</summary>
+/// <param name="Per">The bases whose units multiply, at least one, each at most once.</param>
+/// <param name="Elements">The elements per unit of the product, at least one.</param>
+public sealed record ShaderPipelineCountTerm(
+    IReadOnlyList<ShaderPipelineCountBasis> Per,
+    ulong Elements = 1
+) {
+    /// <summary>Returns whether two counts are the same terms in the same order, or both absent.</summary>
+    /// <param name="left">The first count.</param>
+    /// <param name="right">The second count.</param>
+    /// <returns>Whether the counts are equal.</returns>
+    public static bool SameCount(IReadOnlyList<ShaderPipelineCountTerm>? left, IReadOnlyList<ShaderPipelineCountTerm>? right) => (
+        ReferenceEquals(
+            objA: left,
+            objB: right
+        ) ||
+        ((left is not null) && (right is not null) && left.SequenceEqual(second: right))
+    );
+    /// <summary>Returns whether another term scales with the same bases, in the same order, by the same elements.</summary>
+    /// <param name="other">The term to compare.</param>
+    /// <returns>Whether the terms are equal.</returns>
+    public bool Equals(ShaderPipelineCountTerm? other) => (
+        (other is not null) &&
+        (Elements == other.Elements) &&
+        Per.SequenceEqual(second: other.Per)
+    );
+    /// <inheritdoc/>
+    public override int GetHashCode() {
+        var hash = new HashCode();
+
+        hash.Add(value: Elements);
+
+        foreach (var basis in Per) {
+            hash.Add(value: basis);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+/// <summary>The counts a host resolves counted buffers against. A basis the host leaves at zero zeroes every term that
+/// scales with it, and a counted buffer whose terms all resolve to zero is refused.</summary>
+/// <param name="Width">The frame extent's width in pixels.</param>
+/// <param name="Height">The frame extent's height in pixels.</param>
+public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Height) {
+    /// <summary>Gets the allocated render width, or zero when it equals the output width.</summary>
+    public uint RenderWidth { get; init; }
+    /// <summary>Gets the allocated render height, or zero when it equals the output height.</summary>
+    public uint RenderHeight { get; init; }
+    /// <summary>Gets the instances of the program the host renders.</summary>
+    public ulong Instances { get; init; }
+    /// <summary>Gets the words of the program the host renders.</summary>
+    public ulong ProgramWords { get; init; }
+    /// <summary>Gets the viewports the host renders into one frame.</summary>
+    public ulong Viewports { get; init; }
+    /// <summary>Gets the tiles of one viewport, at the host's tile size.</summary>
+    public ulong Tiles { get; init; }
+    /// <summary>Gets the dynamic transforms the host provisions.</summary>
+    public ulong DynamicTransforms { get; init; }
+    /// <summary>Gets the words of one tile's instance mask, which the host derives from its instances.</summary>
+    public ulong InstanceMaskWords { get; init; }
+    /// <summary>Gets the words of one tile's certified segment tape and its slab workspace.</summary>
+    public ulong SegmentTapeWords { get; init; }
+    /// <summary>Gets the words of the instance grid, which the host derives from its instances.</summary>
+    public ulong InstanceGridWords { get; init; }
+    /// <summary>Gets the voxels of the SDF brick pool the host provisions for its world.</summary>
+    public ulong BrickPoolVoxels { get; init; }
+
+    /// <summary>Returns the units a basis counts.</summary>
+    /// <param name="basis">The basis.</param>
+    /// <returns>The pixels of the extent, or the count the basis names.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="basis"/> is not a declared basis.</exception>
+    public ulong UnitsOf(ShaderPipelineCountBasis basis) => basis switch {
+        ShaderPipelineCountBasis.Extent => (((ulong)Width) * Height),
+        ShaderPipelineCountBasis.RenderExtent => (((ulong)((RenderWidth == 0) ? Width : RenderWidth)) * ((RenderHeight == 0) ? Height : RenderHeight)),
+        ShaderPipelineCountBasis.Instances => Instances,
+        ShaderPipelineCountBasis.ProgramWords => ProgramWords,
+        ShaderPipelineCountBasis.Viewports => Viewports,
+        ShaderPipelineCountBasis.Tiles => Tiles,
+        ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
+        ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
+        ShaderPipelineCountBasis.SegmentTapeWords => SegmentTapeWords,
+        ShaderPipelineCountBasis.InstanceGridWords => InstanceGridWords,
+        ShaderPipelineCountBasis.BrickPoolVoxels => BrickPoolVoxels,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: basis,
+            message: "Unknown count basis.",
+            paramName: nameof(basis)
+        ),
+    };
+}
+/// <summary>How a compute or package pass chooses its workgroup counts.</summary>
+/// <param name="Kind">The dispatch shape.</param>
+/// <param name="GroupCountX">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in x, otherwise
+/// one.</param>
+/// <param name="GroupCountY">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in y, otherwise
+/// one.</param>
+/// <param name="GroupCountZ">A <see cref="ShaderPipelineDispatchKind.Groups"/> dispatch's group count in z, otherwise
+/// one.</param>
+/// <param name="Arguments">An <see cref="ShaderPipelineDispatchKind.Indirect"/> dispatch's buffer version, which the
+/// pass reaches in the indirect-argument state and names in neither its inputs nor its outputs; otherwise
+/// <see langword="null"/>.</param>
+/// <param name="ArgumentsOffsetBytes">The byte offset of the three group-count words in <paramref name="Arguments"/>, a
+/// multiple of four.</param>
+public sealed record ShaderPipelineDispatch(
+    ShaderPipelineDispatchKind Kind,
+    uint GroupCountX = 1,
+    uint GroupCountY = 1,
+    uint GroupCountZ = 1,
+    string? Arguments = null,
+    ulong ArgumentsOffsetBytes = 0
+) {
+    /// <summary>The bytes an indirect dispatch reads: three 32-bit group counts.</summary>
+    public const ulong ArgumentBytes = 12;
+
+    /// <summary>Creates a dispatch of fixed group counts.</summary>
+    /// <param name="x">The group count in x.</param>
+    /// <param name="y">The group count in y.</param>
+    /// <param name="z">The group count in z.</param>
+    /// <returns>The dispatch.</returns>
+    public static ShaderPipelineDispatch Groups(uint x, uint y = 1, uint z = 1) => new(
+        GroupCountX: x,
+        GroupCountY: y,
+        GroupCountZ: z,
+        Kind: ShaderPipelineDispatchKind.Groups
+    );
+    /// <summary>Creates a dispatch whose group counts a buffer version holds.</summary>
+    /// <param name="arguments">The buffer version.</param>
+    /// <param name="offsetBytes">The byte offset of the group counts.</param>
+    /// <returns>The dispatch.</returns>
+    public static ShaderPipelineDispatch Indirect(string arguments, ulong offsetBytes = 0) => new(
+        Arguments: arguments,
+        ArgumentsOffsetBytes: offsetBytes,
+        Kind: ShaderPipelineDispatchKind.Indirect
+    );
+}
+/// <summary>One attribute of a geometry pass's vertices. The vertex stage reads attribute <c>n</c> as the
+/// <c>POSITION{n}</c> semantic, the <c>n</c>th input it declares.</summary>
+/// <param name="Location">The attribute's input location, equal to its position in the attribute list.</param>
+/// <param name="Format">The attribute's format, spelled as a <see cref="GpuVertexFormat"/> name.</param>
+/// <param name="OffsetBytes">The attribute's byte offset within one vertex, a multiple of four.</param>
+public sealed record ShaderPipelineVertexAttribute(
+    uint Location,
+    string Format,
+    uint OffsetBytes = 0
+);
+/// <summary>The indexed triangle list a geometry pass draws, with the layout its vertex stage reads. The vertices are
+/// 32-bit floats, each vertex <see cref="StrideBytes"/> long; every three indices name one triangle, drawn in index
+/// order.</summary>
+/// <param name="VertexEntryPoint">The vertex stage's entry point in the pass's source, which also holds the fragment
+/// stage's <see cref="ShaderPipelinePass.EntryPoint"/>. The vertex stage receives no parameters: the pass's parameter
+/// block reaches only the fragment stage.</param>
+/// <param name="StrideBytes">The bytes of one vertex, a positive multiple of four.</param>
+/// <param name="Attributes">The vertex attributes, one per location from zero.</param>
+/// <param name="Vertices">The vertex data as 32-bit floats, a whole number of vertices.</param>
+/// <param name="Indices">The triangle list's indices, three per triangle, each naming a declared vertex.</param>
+/// <param name="IndexFormat">The width of each index; a 16-bit index is at most 65535.</param>
+public sealed record ShaderPipelineGeometry(
+    string VertexEntryPoint,
+    uint StrideBytes,
+    IReadOnlyList<ShaderPipelineVertexAttribute> Attributes,
+    IReadOnlyList<float> Vertices,
+    IReadOnlyList<uint> Indices,
+    ShaderPipelineIndexFormat IndexFormat = ShaderPipelineIndexFormat.UInt16
+) {
+    /// <summary>Gets the bytes of one index.</summary>
+    [JsonIgnore]
+    public uint IndexBytes => ((IndexFormat == ShaderPipelineIndexFormat.UInt32)
+        ? 4U
+        : 2U);
+    /// <summary>Gets the number of whole vertices the data holds.</summary>
+    [JsonIgnore]
+    public uint VertexCount => ((StrideBytes == 0)
+        ? 0U
+        : ((uint)((((ulong)Vertices.Count) * 4UL) / StrideBytes)));
+    /// <summary>Gets the bytes of the vertex data, which a geometry buffer holds ahead of the indices.</summary>
+    [JsonIgnore]
+    public ulong VertexBytes => (((ulong)Vertices.Count) * 4UL);
+    /// <summary>Gets the bytes of the geometry buffer: the vertex data, then the indices.</summary>
+    [JsonIgnore]
+    public ulong SizeBytes => (VertexBytes + (((ulong)Indices.Count) * IndexBytes));
+
+    /// <summary>Returns the bytes a geometry buffer holds: the vertices as little-endian 32-bit floats, then the
+    /// indices at their declared width, in declared order, starting at <see cref="VertexBytes"/>.</summary>
+    /// <returns>The <see cref="SizeBytes"/> bytes.</returns>
+    public byte[] BufferData() {
+        var data = new byte[SizeBytes];
+        var span = data.AsSpan();
+
+        for (var index = 0; (index < Vertices.Count); index++) {
+            BinaryPrimitives.WriteSingleLittleEndian(
+                destination: span[(index * 4)..],
+                value: Vertices[index]
+            );
+        }
+
+        var indices = span[((int)VertexBytes)..];
+
+        for (var position = 0; (position < Indices.Count); position++) {
+            if (IndexFormat == ShaderPipelineIndexFormat.UInt16) {
+                BinaryPrimitives.WriteUInt16LittleEndian(
+                    destination: indices[(position * 2)..],
+                    value: checked((ushort)Indices[position])
+                );
+            } else {
+                BinaryPrimitives.WriteUInt32LittleEndian(
+                    destination: indices[(position * 4)..],
+                    value: Indices[position]
+                );
+            }
+        }
+
+        return data;
+    }
+}
+/// <summary>One shader pass of a graph.</summary>
+/// <param name="Name">The unique pass name.</param>
+/// <param name="Source">The HLSL source's path, relative to the graph document.</param>
+/// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
+/// pass's fragment stage.</param>
+/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a
+/// graph declares as a <c>RenderGraphPackagePass</c>.</param>
+/// <param name="Inputs">The versions the pass reads, each a port of its interface. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
+/// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
+/// at most one depth version.</param>
+/// <param name="Config">Optional config fields, using the shared shader-set config vocabulary.</param>
+/// <param name="GroupSizeX">Compute workgroup width; ignored for graphics passes.</param>
+/// <param name="GroupSizeY">Compute workgroup height; ignored for graphics passes.</param>
+/// <param name="GroupSizeZ">Compute workgroup depth; ignored for graphics passes.</param>
+/// <param name="Vertex">How a fullscreen pass's vertex stage obtains the triangle's corners;
+/// <see langword="null"/> means <see cref="ShaderPipelineVertexInput.VertexId"/>. Only a fullscreen pass declares
+/// it.</param>
+/// <param name="Geometry">A geometry pass's vertices, indices and vertex layout. Only a geometry pass declares it, and
+/// it must.</param>
+/// <param name="DepthCompare">A geometry pass's depth test, which it declares exactly when it writes a depth version;
+/// <see langword="null"/> there means <see cref="ShaderPipelineDepthCompare.Less"/>. A passing fragment writes its
+/// depth.</param>
+/// <param name="Blend">A graphics pass's blend policy; <see langword="null"/> means
+/// <see cref="ShaderPipelineBlend.Opaque"/>, the only policy the planner admits.</param>
+/// <param name="AlphaTest">An alpha-test cutoff. The planner refuses every value by name.</param>
+/// <param name="Dispatch">A compute or package pass's dispatch shape; <see langword="null"/> means
+/// <see cref="ShaderPipelineDispatchKind.Extent"/>. A graphics pass declares none.</param>
+/// <param name="Arrays">Optional arrays in the World group, each an element type and a length, which a world binds to
+/// whole state rows (<see cref="ShaderArrayField"/>).</param>
+public sealed record ShaderPipelinePass(
+    string Name,
+    string Source,
+    string EntryPoint,
+    ShaderPipelineDocumentPassKind Kind,
+    IReadOnlyList<ResourceReference>? Inputs = null,
+    IReadOnlyList<ResourceReference>? Outputs = null,
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
+    uint GroupSizeX = 8,
+    uint GroupSizeY = 8,
+    uint GroupSizeZ = 1,
+    ShaderPipelineVertexInput? Vertex = null,
+    ShaderPipelineGeometry? Geometry = null,
+    ShaderPipelineDepthCompare? DepthCompare = null,
+    ShaderPipelineBlend? Blend = null,
+    double? AlphaTest = null,
+    ShaderPipelineDispatch? Dispatch = null,
+    IReadOnlyDictionary<string, ShaderArrayField>? Arrays = null
+) {
+    /// <summary>Gets the version an indirect dispatch reads its group counts from, or <see langword="null"/>.</summary>
+    [JsonIgnore]
+    public string? DispatchArguments => ((Dispatch?.Kind == ShaderPipelineDispatchKind.Indirect)
+        ? Dispatch.Arguments
+        : null);
+    /// <summary>Gets whether the pass draws through a render pass rather than dispatching.</summary>
+    [JsonIgnore]
+    public bool IsGraphics => (Kind is ShaderPipelineDocumentPassKind.Fullscreen or ShaderPipelineDocumentPassKind.Geometry);
+    /// <summary>Gets an immutable empty input list when no resources are read.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ResourceReference> InputReferences => (Inputs ?? Array.Empty<ResourceReference>());
+    /// <summary>Gets an immutable empty output list when no resources are written.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ResourceReference> OutputReferences => (Outputs ?? Array.Empty<ResourceReference>());
+}
+/// <summary>One pass of engine package work, as a frame graph hands it to the planner: the one way package work enters
+/// planning, since a graph's package passes reach the planner only through the graph compiler. The planner orders and
+/// versions it by what it reads and writes, and plans each port's barrier and layout from the stage and access the port
+/// declares (<see cref="RenderGraphPortAccess"/>) exactly as it plans a shader pass's, so the package records no barrier
+/// of its own. Its planned pass carries <see cref="ShaderPipelinePassKind.Package"/> and a
+/// <c>ShaderPipelinePackageStep</c> in place of a declaration. The package records its own work and binds its
+/// own descriptors.</summary>
+/// <param name="Name">The unique pass name.</param>
+/// <param name="Package">The package id.</param>
+/// <param name="Inputs">The versions it reads.</param>
+/// <param name="Outputs">The versions it writes.</param>
+/// <param name="InputAccesses">How it reads each of <paramref name="Inputs"/>, one read access per input in order. A
+/// package states every access; there is no default.</param>
+/// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output in
+/// order.</param>
+/// <param name="Members">The pass-group members its package declares (<see cref="RenderGraphPackage.Members"/>), which the
+/// planner lays out after its extent and config.</param>
+/// <param name="Dispatch">Its dispatch shape; <see langword="null"/> means
+/// <see cref="ShaderPipelineDispatchKind.Extent"/>.</param>
+/// <param name="Config">The package's config schema with each field defaulting to the pass's bound value, which lays out
+/// its frame block after the frame members; <see langword="null"/> when the package takes no config.</param>
+/// <param name="PushesIndex">Whether its package's pipelines push one 4-byte index
+/// (<see cref="RenderGraphPackage.PushesIndex"/>), which its interface declares.</param>
+/// <param name="Part">The fragment pass it runs (<see cref="RenderGraphFragmentPass.Name"/>), or <see langword="null"/>
+/// for a package that runs as one pass.</param>
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).</param>
+public sealed record ShaderPipelinePackagePass(
+    string Name,
+    string Package,
+    IReadOnlyList<ResourceReference> Inputs,
+    IReadOnlyList<ResourceReference> Outputs,
+    IReadOnlyList<RenderGraphPortAccess> InputAccesses,
+    IReadOnlyList<RenderGraphPortAccess> OutputAccesses,
+    IReadOnlyList<ShaderInterfaceMember> Members,
+    ShaderPipelineDispatch? Dispatch = null,
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
+    bool PushesIndex = false,
+    string? Part = null,
+    bool CountsKernelWork = false
+) {
+    /// <summary>Gets whether each port access is declared once per reference, reads on the inputs and writes on the
+    /// outputs, including declared buffer transfers.</summary>
+    public bool HasValidAccesses => (
+        (Members is not null) &&
+        (InputAccesses is not null) &&
+        (OutputAccesses is not null) &&
+        (InputAccesses.Count == Inputs.Count) &&
+        InputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeRead or RenderGraphPortAccess.FragmentSampled or RenderGraphPortAccess.ComputeReadWrite or RenderGraphPortAccess.TransferRead)) &&
+        (OutputAccesses.Count == Outputs.Count) &&
+        OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite or RenderGraphPortAccess.TransferWrite))
+    );
+
+    /// <summary>Returns how the pass reaches the version at an input position.</summary>
+    /// <param name="index">The input's position.</param>
+    /// <returns>The access.</returns>
+    public RenderGraphPortAccess InputAccess(int index) => InputAccesses[index];
+    /// <summary>Returns how the pass reaches the version at an output position.</summary>
+    /// <param name="index">The output's position.</param>
+    /// <returns>The access.</returns>
+    public RenderGraphPortAccess OutputAccess(int index) => OutputAccesses[index];
+    /// <summary>Returns the compute-shaped pass the planner orders it as; nothing compiles its empty entry point, and its
+    /// accesses come from its ports, never from this shape's kind.</summary>
+    /// <returns>The pass shape.</returns>
+    public ShaderPipelinePass Shape() => new(
+        Config: Config,
+        Dispatch: Dispatch,
+        EntryPoint: string.Empty,
+        Inputs: Inputs,
+        Kind: ShaderPipelineDocumentPassKind.Compute,
+        Name: Name,
+        Outputs: Outputs,
+        Source: Package
+    );
+}
+/// <summary>Limits applied while compiling an execution plan. <c>MaxPassBlockBytes</c> bounds a pass's pass block, its
+/// extent, config and declared values, which it binds as a constant buffer: 16384 bytes is the uniform-buffer range every
+/// Vulkan device guarantees.</summary>
+public sealed record ShaderPipelineLimits(
+    int MaxResources = 128,
+    int MaxPasses = 128,
+    int MaxInputsPerPass = 32,
+    int MaxOutputsPerPass = 8,
+    uint MaxPassBlockBytes = 16384,
+    uint MaxComputeWorkGroupSizeX = 128,
+    uint MaxComputeWorkGroupSizeY = 128,
+    uint MaxComputeWorkGroupSizeZ = 64,
+    uint MaxComputeWorkGroupInvocations = 128,
+    int MaxVertexAttributes = 8,
+    ulong MaxGeometryBytes = (1UL << 20)
+);
+/// <summary>A planner diagnostic with an actionable code and optional pass/resource name.</summary>
+public sealed record ShaderPipelineDiagnostic(
+    string Code,
+    string Message,
+    string? Name = null
+);
+/// <summary>Thrown when a pipeline cannot be made into a valid immutable execution plan.</summary>
+public sealed class ShaderPipelineCompilationException : Exception {
+    /// <summary>Initializes an exception with the planner's complete diagnostic set.</summary>
+    public ShaderPipelineCompilationException(IReadOnlyList<ShaderPipelineDiagnostic> diagnostics)
+        : base(message: string.Join(
+        separator: Environment.NewLine,
+        values: diagnostics.Select(selector: static diagnostic => $"[{diagnostic.Code}] {diagnostic.Message}")
+    )) {
+        Diagnostics = new ReadOnlyCollection<ShaderPipelineDiagnostic>(list: diagnostics.ToList());
+    }
+
+    /// <summary>Gets all diagnostics collected before planning stopped.</summary>
+    public IReadOnlyList<ShaderPipelineDiagnostic> Diagnostics { get; }
+}

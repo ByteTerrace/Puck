@@ -13,10 +13,20 @@ every determinism knob explicit (fuel on, threads/SIMD off, NaN canonicalization
 fixed optimization level), no floating point ever crosses the boundary, and a runaway module halts
 at a fuel-deterministic point rather than a wall-clock one.
 
+The engine also turns Wasmtime's signal-based traps off, so Wasmtime installs no signal handlers in
+the host process. Addons share the World process with its managed code. With Wasmtime's handlers
+installed, a hardware fault in that code on a thread that never ran a guest, such as an integer
+division fault, runs .NET's exception dispatch on the thread's small alternate signal stack, and
+the process aborts with "Stack overflow." With signal-based traps off, Wasmtime checks memory
+bounds, division and stack depth explicitly in the code it generates. Traps keep their kinds, and
+guest memory accesses each pay an explicit bounds check. The binding has no setter for the option,
+so `WasmtimeSignals` sets it on the native config, and `AddonGuestLawTests` holds it with a child
+test host that runs a guest and then raises a division fault on other threads.
+
 ```text
 namespace Puck.Scripting
 target     net10.0
-deps       Puck.Assets, Puck.Maths + Wasmtime [44.0.0] (exact pin)
+deps       Puck.Assets, Puck.Maths + Wasmtime [48.0.2] (exact pin)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
@@ -24,9 +34,9 @@ Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neut
 verdict, subject-kind, channel-kind, cell-kind, and channel-value-shape sets, and its own
 capability-mask bits, all defined independently of any consumer enum. A channel act carries no
 phase: it is per-tick and declarative, and the two low verb bits are required-zero. The World-lane vocabulary seam (`WorldAddonChannelResolver`'s world-document channel
-table) lives in `Puck.World`, which is also where authority decisions live; `Puck.World.Addons`'
-`AddonSimulationPump` still owns the vocabulary layer between the core's structural decode and the
-World's authority checks.
+table) lives in `Puck.World.Addons`, over `Puck.World.Schema`'s `WorldChannelTable`; authority
+decisions live in `Puck.World.Server`. `Puck.World.Addons`' `AddonSimulationPump` owns the
+vocabulary layer between the core's structural decode and the World's authority checks.
 
 The `Wasmtime` package version **is** the native engine version, and fuel accounting is
 Cranelift-codegen-dependent (basic-block granularity, upstream #4109). The pin is exact on purpose:
@@ -76,7 +86,7 @@ host.Add(descriptor: new AddonDescriptor(
 // below for the exact ordering.
 ```
 
-`channelResolver` is the caller's `IAddonChannelResolver`—in this repository, `Puck.World`'s
+`channelResolver` is the caller's `IAddonChannelResolver`—in this repository, `Puck.World.Addons`'
 `WorldAddonChannelResolver` constructed over the boot world document's compiled channel table.
 
 ---
@@ -89,8 +99,8 @@ host.Add(descriptor: new AddonDescriptor(
 | `AddonAbiRustPort` | `static class` | Emits the generated Rust mirror of every closed set and layout constant below, read from the live types by reflection (the `puck wasm-stdlib` verb). |
 | `ScriptingEngineOptions` | `readonly record struct` | The pinned deterministic config values (`Deterministic` preset). |
 | `ScriptingEngine` | `sealed class` | Owns the one configured `Wasmtime.Engine`; asserts the pinned version. |
-| `WasmModuleLoader` | `sealed class` | Path → bytes (`IAssetSource`) → `\0asm`/WAT → hash → LRU of compiled `Module`. |
-| `ScriptingModuleInfo` | `sealed record` | The immutable load result: path, content hash, byte length, compiled module. |
+| `WasmModuleLoader` | `sealed class` | Path → bytes (`IAssetSource`) → `\0asm`/WAT (converted to binary) → hash → declarations read from the binary → LRU of compiled `Module` beside its memory declarations. |
+| `ScriptingModuleInfo` | `sealed record` | The immutable load result: path, content hash, byte length, compiled module, and every linear memory the binary declares. |
 | `AddonModuleValidator` | `static class` | Static export-shape and zero-import check against the ABI before instantiation. |
 | `AddonDescriptor` | `readonly record struct` | A neutral mount request (keeps the consumer's document model out of the deps). |
 | `AddonChannelKind` | `enum : byte` | The channel kind wire values: `Input`/`Request`/`Response`. |
@@ -118,12 +128,16 @@ little-endian; every fixed-point value is `FixedQ4816` raw `i64` bits (`One = 0x
 `AddonAbi.AbiVersion` is `1`, permanently—a **shape-identity token, not a sequence**. There is
 one addon ABI; this host speaks exactly that shape, and a guest reporting any other value faults
 `AbiMismatch` loudly at mount and never ticks. A breaking change re-keys the artifacts (the module
-regenerates, the hash pins move) while the token stays `1`—staleness is caught by the export
-pre-flight and the content-hash pin, not by counting.
+regenerates, the hash pins move) while the token stays `1`. What tells two layouts apart is the shape
+fingerprint `puck formats` records for the host's side of the ABI (`AddonAbi.AbiShapeFingerprint`): every
+guest returns it, as one word, from `puck_abi_shape`, and a guest of another shape faults `AbiMismatch`
+naming both. The generated Rust constants (`ABI_SHAPE`) move with it, so a guest built before the ABI changed
+is refused at mount, and `puck wasm build` plus the fixture rebuilds are owed after any change to the
+host's ABI source.
 
 ### Guest exports
 
-Memory plus eight functions—seven required, `puck_init` optional. Region pointers and capacities
+Memory plus nine functions—eight required, `puck_init` optional. Region pointers and capacities
 are nullary getters called once at mount and cached. **Batch lengths are call values, never
 framing in guest memory**: the host tells the guest how many cells it wrote, and the guest tells the
 host how many it wrote back.
@@ -132,6 +146,7 @@ host how many it wrote back.
 |--------|-----------|----------|---------|
 | `memory` | memory | yes | The guest linear memory the host reads and writes. |
 | `puck_abi_version` | `() -> i32` | yes | Returns `AddonAbi.AbiVersion`. Exact match or `AbiMismatch`. |
+| `puck_abi_shape` | `() -> i64` | yes | Returns `AddonAbi.AbiShape`, the ledger's ABI shape fingerprint as one word. Exact match or `AbiMismatch`. |
 | `puck_out_ptr` | `() -> i32` | yes | Byte offset of the guest→host output ring. |
 | `puck_out_cap` | `() -> i32` | yes | Output ring capacity in cells, `0..=MaxOutCells`. |
 | `puck_in_ptr` | `() -> i32` | yes | Byte offset of the host→guest input ring. |
@@ -578,12 +593,12 @@ consumer-agnostic:
 |---|---|---|
 | Core | **Structure**—cell kinds, channel bounds, reserved-must-be-zero, descriptor shape, table pairing, channel-name table shape | `Puck.Scripting` (`AddonOutCellReader`, `AddonChannelTableReader`, `AddonChannelNameTableReader`) |
 | Adapter | **Vocabulary**—verb ranges, payload domains, `Ask` rules—through one sealed writer | `Puck.World.Addons` (`AddonSimulationPump`) |
-| World | **Authority and the channel table**—grants, wildcards, reservations, attenuation, quota, and what a channel name resolves to | `Puck.World` |
+| World | **Authority and the channel table**—grants, wildcards, reservations, attenuation, quota, and what a channel name resolves to | `Puck.World.Server` decides; `Puck.World.Schema` declares the grant vocabulary and `WorldChannelTable` |
 
-The wire enums live in the core. The `GrantVerdict`/`GrantSubjectKind`/`WorldCapability` mappings,
-and the channel-name table itself (`WorldAddonChannelResolver`, the ONE `IAddonChannelResolver`
-implementation), can only live where those types are visible, which is `Puck.World`—the adapter
-cannot name them. Unlike the source vocabulary this replaced, resolution failure here is never a
+The wire enums live in the core. The `GrantVerdict`/`GrantSubjectKind`/`WorldCapability` mappings
+(`WorldAddonWire`), and the channel-name table's resolver (`WorldAddonChannelResolver`, the ONE
+`IAddonChannelResolver` implementation), live in `Puck.World.Addons`, the one project that sees both
+the core's wire enums and the World types; the core cannot name them. Unlike the source vocabulary this replaced, resolution failure here is never a
 refusal the adapter or core has to enforce—it is host-reported data, decided entirely by which
 table `WorldAddonChannelResolver` is constructed over.
 
@@ -592,9 +607,10 @@ table `WorldAddonChannelResolver` is constructed over.
 ## Loading, ticking, faulting
 
 `WasmModuleLoader.Load` mirrors `ShaderModuleLoader`: read bytes through the `IAssetSource`, treat a
-leading `\0asm` as binary wasm else compile the WAT text via `Module.FromText`, compute the
-`AssetContentHash`, and cache the compiled `Module` in a content-addressed LRU so two documents
-naming the same bytes compile once.
+leading `\0asm` as binary wasm else convert the WAT text to binary with `Module.ConvertText`, compute
+the `AssetContentHash`, read the binary's declarations (`WasmModuleDeclarations`), and cache the
+compiled `Module` beside its memory declarations in a content-addressed LRU so two documents naming
+the same bytes compile once.
 
 `AddonInstance` never allocates per tick and never desyncs. It zeroes the output ring, writes the
 input batch, sets the per-tick fuel budget, calls `puck_on_tick` once with the batch length, derives
@@ -614,17 +630,25 @@ deliberately carries no span.
 - **One `Store`/`Instance` per addon, single sim-tick thread only** (Wasmtime store thread affinity,
   issue #331). `GC.KeepAlive(store)` follows every guest invoke (wasmtime-dotnet finalizer-hazard
   discipline).
-- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling (256 pages) plus a
-  load-time region-bounds pre-flight; `memory.grow` is fuel-charged.
+- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling of 256 pages for each
+  linear memory, plus a load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A guest
+  that declares any memory past the ceiling, exported or not, is refused as `MemoryLimit` before a
+  store exists. The loader reads every defined and imported memory's limits from the binary
+  (`WasmModuleDeclarations` in `Puck.Assets`; WAT is converted to its binary first) before Wasmtime
+  compiles it, so a guest declaring four gibibytes allocates none of them. A malformed import,
+  memory or export section is refused by the loader with the section and entry named, and the
+  host reports it as `BadExport`. A `memory.grow` past the ceiling returns -1 to the guest, which
+  faults only if the guest traps on it.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
-| `AbiMismatch` | `puck_abi_version` returned anything but `AddonAbi.AbiVersion`—a stale committed artifact. |
+| `AbiMismatch` | `puck_abi_version` returned anything but `AddonAbi.AbiVersion`, or `puck_abi_shape` anything but `AddonAbi.AbiShape`—a stale committed artifact. |
 | `BadExport` | A missing or wrong-shaped export, a declared import, an out-of-range region, or a refused descriptor/source table. |
 | `DecodeError` | A malformed output batch—structural or vocabulary. |
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
+| `MemoryLimit` | One of the guest's memories, exported or not, declares more than the 256-page ceiling, read from the binary and refused before instantiation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
@@ -638,7 +662,7 @@ addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 
 **Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
 misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`
-—Puck.World drives this as an addon-row revision change through
+—the World server drives this as an addon-row revision change through
 `WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../../src/Puck.World.Addons/README.md)).
 A declared `moduleHash` pin is enforced at every load: a content mismatch loads the instance
 straight into a sticky `HashMismatch` fault naming the reason, at boot and re-prepare alike.
@@ -652,11 +676,11 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   `i64` bits. Do not hand an `f32` across and re-derive fixed-point guest-side—that reintroduces
   the one non-determinism this ABI exists to remove.
 - **Puck.Scripting stays consumer-agnostic.** It stops at a structurally decoded cell. The adapter
-  owns vocabulary and `Puck.World` owns authority; this project never references `Puck.World` and
+  owns vocabulary and the World server owns authority; this project never references a `Puck.World.*` project and
   never maps a channel name to gameplay itself.
 - **The channel table is host-owned, and it enters through a seam.** The core validates and resolves
   declared names through the injected `IAddonChannelResolver`, but a resolution MISS is never something the core (or the adapter) refuses; it decodes to
-  a sentinel and crosses as data. `Puck.World`'s one implementation, `WorldAddonChannelResolver`, is
+  a sentinel and crosses as data. `Puck.World.Addons`' one implementation, `WorldAddonChannelResolver`, is
   constructed over the boot world document's compiled `WorldChannelTable`; a different world's
   channels section produces a different table through the SAME class, never a second
   `IAddonChannelResolver`.
@@ -669,7 +693,7 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table)—a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. Nothing in the
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[48.0.2]`. Nothing in the
   build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
@@ -689,7 +713,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
 
 `ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
 `Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
-`[44.0.0]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
+`[48.0.2]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
 no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
 depend on it for the addon host and reference the wire vocabulary this file defines.
 

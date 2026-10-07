@@ -1,25 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
         <IsPackable>false</IsPackable>
         <IsAotCompatible>false</IsAotCompatible>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
         <PackageReference Include="Parlot" Version="[1.5.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />
-        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
-        <Compile Include="..\Shared\SpellingLaws.cs" Link="SpellingLaws.cs" />
-        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/SpellingLaws.cs" Link="SpellingLaws.cs" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Transpiler\Puck.Transpiler.csproj" />
-        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
-        <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="../../src/Puck.Transpiler/Puck.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />
     </ItemGroup>
 </Project>

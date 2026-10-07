@@ -292,7 +292,7 @@ public sealed class WorldStateMirrorLawTests {
             value: 0
         )]);
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
-        var rig = WorldCameraRigCompiler.Compile(
+        var rig = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: definition,
             mirror: mirror,
             program: new WorldCameraProgram(

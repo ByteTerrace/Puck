@@ -121,7 +121,7 @@ the near plane and falling toward 0, so a nearer surface always has the
 greater depth. The pass block carries the camera's own near plane
 (`CameraSnapshot.Near`, zero when its image begins at the eye) as
 `nearDistance`, and the bounded volumes composite from it. Surfaces render
-from that plane but never nearer than `SdfFrameBlock.MinimumNear`
+from that plane but never nearer than `SdfWorldPackage.MinimumNear`
 (`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
 march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
 up and a view's UV origin is its top-left corner. Ordinary rendering samples
@@ -154,11 +154,14 @@ sample again, and the Nth counted sample, the one captured, is at index N − 1
 however many such frames come first.
 A capture can request up to 256 samples; zero retains ordinary capture behavior.
 The `temporal-jitter` canary checks the center and offset samples repeating
-after eight renders on each backend. Color reconstruction is not enabled yet.
+after eight renders on each backend. A view whose quality asks for it resolves
+its samples into color over its history
+([temporal reconstruction](frame-rendering.md#temporal-reconstruction)).
 
 Each instance keeps its own history epoch. A camera cut, resolved-view change
 (including a follow in place), output extent or render ceiling change, debug
-mode change or sampling switch resets the sample count, and so do previous
+mode change, sampling switch, or the instance being shown again after the
+render graph parked it resets the sample count, and so do previous
 transform tables that no longer hold the poses of the instance's preceding
 render, as when another view of the same residency moved a pose between two of
 its renders. Frames the instance stood through break nothing. Resetting changes
@@ -167,7 +170,9 @@ CPU state without clearing or reallocating GPU storage.
 Cadence lets a view stand only while a render taken now would feed its passes
 the temporal inputs its standing render was given
 (`SdfTemporalHistory.Stands`): the same jitter and, for the `motion` debug
-view, the same previous view and previous poses. A still view that rendered a
+view, the same previous view and previous poses. A temporally resolved view instead
+stands once its history holds one period of samples and it has rendered a period
+since its inputs last changed. A still view that rendered a
 converging capture's last sample renders once more at the pixel center when
 the capture ends, then stands; the `motion` view renders until its previous
 view and poses settle, then stands on the stationary motion.
@@ -192,6 +197,8 @@ another world as a view instance (`WorldViewInstances`).
   last filmed from. Its first frame uses the rig at the default anchor when
   that anchor is unresolved, or the world origin when there is no rig.
   It films an already-lit world and contributes no light of its own.
+  Its render scale stays native until a `world.render-scale <camera>` lever or a
+  `views.quality` row names it.
   Each instance records at its requested extent. The presenter's own cameras
   and viewports use the display extent, so a larger probe export does not
   change their aspect ratios or pointer mapping.
@@ -204,17 +211,35 @@ another world as a view instance (`WorldViewInstances`).
   the eye would see through the door, and the image parallaxes as the eye
   moves. The glass shows the image edge to edge, with no bezel. The frustum's
   shear rides the camera (`CameraSnapshot.FrustumOffset`), and so does its near
-  plane, the mapped glass's own plane (`CameraSnapshot.Near`): the view pass
-  starts every ray on the glass and a hit through the image starts its ray
-  there, so the window shows only what lies beyond the aperture, never the
-  destination's geometry between the mapped eye and the glass. The far
-  distance still counts from the mapped eye, so a pick through the window
-  reaches exactly as far as the window renders.
+  plane, at the mapped glass and advanced past the counterpart face's own glass
+  when it seats a screen (`CameraSnapshot.Near`): the view pass starts every ray there and a hit
+  through the image starts its ray there, so the window shows only what lies
+  beyond the aperture, never the destination's geometry between the mapped eye
+  and the glass, nor the glass of the face it looks through. The far distance
+  still counts from the mapped eye, so a pick through the window reaches
+  exactly as far as the window renders.
+- **Nesting.** The world a session view renders draws its own screens, so a
+  portal inside it shows its own destination, recursively, to the
+  presentation's nesting depth (`views.nestingDepth`, 3 by default). Each level
+  is a view instance of its own (`session$<screen>$<screen>…`, or
+  `routed$<digest>$<screen>…`, the digest naming the authority beneath a world a seat is presented in), fitted
+  to the eye of the view one level up, so two portals facing each other end at
+  the depth; a face at the depth shows its session's `fallback` colour. One
+  world seen at several levels shares its endpoint's residency while its
+  sessions disclose everything, and each view of that residency binds the
+  screens of its own level (`ISdfScreenSources.ReadOf` takes the view). Every
+  other screen of that world shows its own source: its machines from its own
+  host, its text through its own fonts, and its cameras as further views of the
+  residency it renders through (`<level>$camera$<camera>`), filmed after its own
+  views and reading each other at their previous frame.
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the
 world's view, or a HUD frame or a probe export, which the display shows
-directly. It renders at most once a frame however many screens show it, at the
+directly. A session's footprint holds only while its consumer's last camera
+sees the slab it shows on (`WorldPortalVisibility`). The test covers the slab's
+front, back and sides, which all sample the screen image; a slab wholly outside
+the frustum renders nothing beneath it. It renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its
@@ -238,11 +263,12 @@ other's screens each show the other's previous frame, never a same-frame loop.
 ```
 
 A hit on a screen showing a view continues through that view's camera into
-the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth. A
-hit on a portal's window continues through the camera the window last rendered
-from into the destination, where no screen stands (a projected destination's
-screens bind dark), and ends on the surface its ray meets among the
-destination's static placements (`RenderGraphHitPath.Surface`).
+the world it films (`RenderGraphHitWalk`), through at most the graph's nesting
+depth of screens. A hit on a portal's window continues through the camera the
+window last rendered from into the destination, through any portal it meets
+there, each world tested against its own screens, and ends on the surface its
+ray meets among the last world's static placements
+(`RenderGraphHitPath.Surface`).
 
 ## View transitions move regions and switch content
 

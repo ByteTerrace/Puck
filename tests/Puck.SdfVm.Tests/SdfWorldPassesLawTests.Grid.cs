@@ -29,12 +29,12 @@ public sealed partial class SdfWorldPassesLawTests {
         using var gate = new ManualResetEventSlim(initialState: false);
         var context = GridContext(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
+        TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
-        var passes = ((ceiling < 1f) ? 11 : 10);
+        var passes = ((ceiling < 1f) ? 13 : 12);
 
-        SdfTestPipelines.ProduceUntil(frame: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
             reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
         _ = view.Produce(context: in context);
         var buffers = gpu.BufferBytes;
@@ -61,7 +61,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 // Every pass of the frame records the one grid of the graph that renders it: the native graph its
                 // output, the reconstructing graph the dipped grid.
                 Assert.Equal(expected: passes, actual: node.Plan!.Passes.Count);
-                Assert.Equal(expected: [((passes == 11) ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu, passes: passes));
+                Assert.Equal(expected: [((passes == 13) ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu, passes: passes));
                 Assert.Equal(expected: (buffers, pools, owned, revision, created), actual: (gpu.BufferBytes, gpu.PoolsCreated.Count, node.OwnedBytes, node.WorkRevision, CreatedPipelines(pipelines: pipelines)));
             }
             Assert.False(condition: node.IsBuildingCandidate);
@@ -84,15 +84,15 @@ public sealed partial class SdfWorldPassesLawTests {
             kernels: SdfTestPipelines.Kernels().With(bytecode: container, kernel: SdfKernel.Resolve));
         var context = GridContext(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == 11) &&
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == 13) &&
             !view.Runtime.Node(instance: 0).IsBuildingCandidate), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         Assert.Null(@object: view.Runtime.Node(instance: 0).LastSwapError);
-        Assert.EndsWith(expectedEndString: "$resolve", actualString: view.Runtime.Node(instance: 0).Plan!.Passes[^1].Name);
+        Assert.Contains(collection: view.Runtime.Node(instance: 0).Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
     }
 
     private static SdfTestView GridView(UploadModelGpu gpu, SdfWorldPipelineCatalog pipelines, Func<SdfFrame> capture, SdfKernelSet? kernels = null) =>
-        new(device: gpu, extent: Extent, pipelines: pipelines,
+        new(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: capture), height: Extent,
                 kernels: (kernels ?? SdfTestPipelines.Kernels()), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
     private static FrameContext GridContext(UploadModelGpu gpu) => new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
@@ -105,7 +105,10 @@ public sealed partial class SdfWorldPassesLawTests {
 
         return [.. sets.Select(selector: (set, index) => {
             var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: set));
-            var layout = (((passes == 11) && (index == (sets.Length - 1))) ? SdfWorldInterfaces.ResolveParameters : SdfWorldInterfaces.WorldParameters);
+            // The frame ends with the sky and the composite, which bind the sky interface, after the resolve in a
+            // reconstructing graph; every pass before them binds the world interface.
+            var fromEnd = (sets.Length - index);
+            var layout = ((fromEnd <= 2) ? SdfWorldInterfaces.SkyParameters : (((passes == 13) && (fromEnd == 3)) ? SdfWorldInterfaces.ResolveParameters : SdfWorldInterfaces.WorldParameters));
 
             return BitConverter.ToUInt32(value: block, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent)));
         }).Distinct()];

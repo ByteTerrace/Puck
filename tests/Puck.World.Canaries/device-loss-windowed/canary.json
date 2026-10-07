@@ -7,7 +7,7 @@
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "positive": {
-    "world": "tests/Puck.World.Canaries/post-pass/plain.world.json",
+    "world": "tests/Puck.World.Canaries/post-pass/plain.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -32,7 +32,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/post-pass/plain.world.json",
+    "world": "tests/Puck.World.Canaries/post-pass/plain.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },

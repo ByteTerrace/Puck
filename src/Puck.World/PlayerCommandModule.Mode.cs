@@ -6,8 +6,7 @@ namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
     // The population placement id backing seat <paramref name="slot"/>'s camera body. A camera-capable world
-    // authors one inhabited placement per local seat it wants Free Cam over (standard.world.json's
-    // "camera-seat-<n>" rows); WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
+    // authors one inhabited placement per local seat it wants Free Cam over; WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
     // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
     // ReconcileInhabitants placed it this boot.
     private static string CameraPlacementId(int slot) => $"{WorldSeatModeState.CameraPlacementIdPrefix}{slot}";

@@ -9,10 +9,6 @@ namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Validates lowered world definitions against engine semantic rules and maps errors to source spans.</summary>
 public static class WorldSemanticValidator {
-    /// <summary>The schema identifier a document declares to state that it is a whole world rather than a
-    /// fragment.</summary>
-    public const string RootSchemaId = "puck.world.definition.v1";
-
     // The source map indexes the source's own lowered document; a refusal's path indexes the composed one, whose
     // lists a basis or an import may have lengthened or reordered, so the path is traced back into the source's own
     // document first (WorldDocumentBasis.TraceToLayer), and a node only a basis or an import contributes has no span.
@@ -69,7 +65,7 @@ public static class WorldSemanticValidator {
 
     /// <summary>Returns a value indicating whether <paramref name="loweredJson"/> is a ROOT — a whole world that
     /// stands on its own or on a basis chain — rather than a MODULE, a fragment some other root imports.</summary>
-    /// <remarks>A root declares <see cref="RootSchemaId"/>, a <c>basis</c>, or both; every other document is a
+    /// <remarks>A root declares <see cref="WorldDefinition.SchemaVersion"/>, a <c>basis</c>, or both; every other document is a
     /// module. Only a root is worth validating as a world (a module reports as missing every field its importer
     /// supplies) and only a root's unresolvable names are real findings. <c>imports</c> alone does not make a root:
     /// a module may itself import sibling modules.</remarks>
@@ -82,7 +78,7 @@ public static class WorldSemanticValidator {
             (loweredJson["basis"] is not null) ||
             string.Equals(
             a: loweredJson["schema"]?.ToString(),
-            b: RootSchemaId,
+            b: WorldDefinition.SchemaVersion,
             comparisonType: StringComparison.Ordinal
         )
         );
@@ -99,14 +95,16 @@ public static class WorldSemanticValidator {
     /// resolve relative to its directory.</param>
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns>True if the composed world passed semantic validation without errors.</returns>
-    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") =>
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) =>
         (TryComposeWorld(
             catalogFingerprint: catalogFingerprint,
             composed: out var composed,
             diagnostics: diagnostics,
             loweredJson: loweredJson,
             machines: machines,
+            sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
         ) && ValidateWorld(
@@ -130,8 +128,9 @@ public static class WorldSemanticValidator {
     /// basis nor imports.</param>
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the graph composed.</returns>
-    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "") {
+    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -151,6 +150,7 @@ public static class WorldSemanticValidator {
             composed: out var chain,
             reason: out var composeReason,
             rootBytes: rootBytes,
+            sourceCompilation: sourceCompilation,
             rootResolvedPath: sourcePath
         )) {
             var span = (((sourceMap is not null) && sourceMap.TryGetSpan(

@@ -1,0 +1,137 @@
+schema: "puck.world.definition.v1"
+basis: "../gi-furnace/base"
+documentId: "indirect-sky"
+render {
+  farDistance: 40
+  indirect {
+    sources {
+      emission: 0
+      sky: 1
+    }
+  }
+  environment {
+    ambient: 1
+    reflection: 0
+  }
+  sky {
+    layers [gradient(stops: [
+        { elevation: -1, color: "#FFFFFF" }
+        { elevation: 1, color: "#FFFFFF" }
+      ]
+      )
+    ]
+  }
+}
+state {
+  world {
+    slot station = 0
+  }
+}
+prototypes {
+  prototype "room" {
+    document {
+      schema: "puck.creation.v1"
+      name: "room"
+      palette [{ color: "#000000", specular: 0, roughness: 1, fill: "#000000" }]
+      shape Box "outer" {
+        material: 0
+        position [0, 1.5, 0]
+        scale [2.1, 1.6, 2.1]
+      }
+      shape Box "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 1.5, 0]
+        scale [2, 1.5, 2]
+      }
+      shape Box "window" {
+        material: 0
+        blend: Subtraction
+        position [0, 1.5, 2]
+        scale [0.5, 0.5, 0.2]
+      }
+    }
+  }
+  prototype "receiver" {
+    document {
+      schema: "puck.creation.v1"
+      name: "receiver"
+      palette [{ color: "#FFFFFF", specular: 0, roughness: 1, fill: "#000000" }]
+      shape Box "floor" {
+        material: 0
+        position [0, 0.025, 0]
+        scale [1.5, 0.025, 1.5]
+      }
+    }
+  }
+}
+placements {
+  placement "room" {
+    prototype: "room"
+    position [0, 0, 0]
+  }
+  placement "inside" {
+    prototype: "receiver"
+    position [0, 0, 0]
+  }
+  placement "terrace" {
+    prototype: "receiver"
+    position [16, 0, 0]
+  }
+}
+cameras [
+  {
+    name: "selected"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "selected"
+      version: "puck.camera.program.v1"
+      operations [selectProgram(cases: [
+          { program: "room-camera", value: 0 }
+          { program: "terrace-camera", value: 1 }
+        ], default: "room-camera", key: "state.station"
+        )
+      ]
+    }
+  }
+  {
+    name: "room-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "room-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 1, 1.2]))
+        lookAt(subject: worldPoint(point: [0, 0.05, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "terrace-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "terrace-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [16, 1, 1.2]))
+        lookAt(subject: worldPoint(point: [16, 0.05, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+views {
+  layout "physical" {
+    seatCount: 0
+    slots [{ camera: "selected", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}

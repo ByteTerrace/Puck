@@ -11,7 +11,7 @@
     "tint.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-package/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-package/fixture.puck",
     "script": "positive.script.txt",
     "package": { "source": "tint.graph.json", "output": "tint" },
     "commands": [
@@ -81,7 +81,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-package/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-package/fixture.puck",
     "script": "discriminating.script.txt",
     "package": { "source": "tint.graph.json", "output": "tint", "alter": "tint.hlsl" },
     "commands": [

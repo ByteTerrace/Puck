@@ -7,9 +7,9 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// The divergence tick separates two failures a tail-hash comparison folds together. Diverging at tick 0 means the
-/// starting state differs — the fresh world rebuilds from the definition's boot image, so a capture armed after the
-/// live session had already moved cannot reproduce it. Diverging later means the starting state matched and the
-/// trajectory drifted afterwards, which is a genuine determinism defect rather than a capture-boundary artifact.
+/// starting state differs — the boot image or the start checkpoint the fresh world restored is not where the live
+/// session stood when the capture armed. Diverging later means the starting state matched and the trajectory drifted
+/// afterwards, which is a genuine determinism defect rather than a capture-boundary artifact.
 /// </remarks>
 /// <param name="Ticks">The number of recorded ticks compared.</param>
 /// <param name="Recorded">The LIVE session's tail hash — the state the running world actually reached.</param>

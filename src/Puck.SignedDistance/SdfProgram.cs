@@ -10,7 +10,7 @@ namespace Puck.SignedDistance;
 //   [materialOffset ..) = material layers, 20 uint4 per entry; see PackMaterials and sdfMaterialLoad.
 //   [materialOffset + 20*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
-//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
+//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, tapeOffset) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
 //                         first, end) — the chain-level skip map()'s outer loop walks. The header's .y lane (float
 //                         bits) is the per-PROGRAM Lipschitz STEP SCALE (1/L, AnalyzeLipschitz): mapCore multiplies
@@ -18,7 +18,7 @@ namespace Puck.SignedDistance;
 //                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program, so its
 //                         scenes stay byte-identical. Both tables' offsets derive from word[0]'s existing lanes, so
 //                         the header is unchanged. See PackBounds.
-//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, 0)
+//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, tapeTokens)
 //                         header uvec4, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float
 //                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
 //                         the SEGMENT directory above (not raw instructions): every segment in that range is
@@ -47,6 +47,8 @@ namespace Puck.SignedDistance;
 //                         Repeat, RepeatLimited): its leaf is flagged folded and the NEXT slot holds the pose before the
 //                         folds (position + first fold instruction, quaternion, fold count). A zero leaf count retains the
 //                         full interpreter for that segment.
+//   [.. after rigid leaves ..) = one tape certificate uvec4 per instruction: three float bounds and a flag byte,
+//                         with the compact ShapeBlend/PopField token index in the upper 24 bits of the last word.
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldTables and
@@ -83,6 +85,7 @@ public sealed partial class SdfProgram {
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
     private const int SweepCurveVectorsPerEntry = 3;
+
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
@@ -93,7 +96,8 @@ public sealed partial class SdfProgram {
     /// within 20 decades of it. Needs no shader change: the existing cull arithmetic already always admits it, and it is
     /// non-negative so neither the parked-slot skip in <c>collectInstanceMaskWord</c> nor the one in
     /// <c>sdfNextVisibleInstanceRange</c> misfires.</para></summary>
-    private const float UnmaskableBoundRadius = 1.0e30f;
+    public const float UnmaskableBoundRadius = 1.0e30f;
+
     private const int WordsPerVector = 4;
 
     private readonly bool m_buildInstanceGrid;
@@ -179,13 +183,16 @@ public sealed partial class SdfProgram {
             m_convexPolygonProfiles[profileIndex] = (profile.InstructionIndex, ((Vector2[])[.. profile.Vertices]));
         }
 
-        SdfMaterial[] materialTable = [.. materials];
+        var materialTable = SnapshotMaterials(materials: materials);
+
+        m_materialsView = Array.AsReadOnly(array: materialTable);
 
         m_instancesView = Array.AsReadOnly(array: m_instances);
         m_instructionsView = Array.AsReadOnly(array: m_instructions);
         m_screenSurfacesView = Array.AsReadOnly(array: m_screenSurfaces);
 
         ValidateIsa();
+        BakeLogSphereFrames();
 
         if (m_instances.Length > SdfProgramBuilder.MaxInstances) {
             throw new ArgumentException(
@@ -212,15 +219,16 @@ public sealed partial class SdfProgram {
             screenSurfacesParamName: nameof(screenSurfaces)
         );
 
+        IndirectInstancesComposable = CanTracePartsIndependently();
+
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
             instances: m_instances,
             instructions: m_instructions
         );
 
-        // The Lipschitz pass runs BEFORE any packing because it PATCHES scoped PopField instructions in place (their
-        // Data1.y gains the scope's 1/L candidate scale) — the packed words and the typed stream must describe the
-        // same program. Exactly 1.0f for a warp-free, seam-free program, so isometric scenes stay
-        // byte-identical; a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale in the shader).
+        // The Lipschitz pass PATCHES scoped PopField instructions in place (Data1.y gains the scope's 1/L candidate
+        // scale), so it runs before packing: the packed words and the typed stream describe one program. A warp-free,
+        // seam-free program gets exactly 1.0f, and a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale).
         var stepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, sweepCurves: m_sweepCurves);
 
         FieldScopeClamps = ReadFieldScopeClamps(instructionOwners: instructionOwners);
@@ -321,7 +329,8 @@ public sealed partial class SdfProgram {
         var worldSegmentOffsetVectors = ((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * m_instances.Length));
         var gridOffsetVectors = ((worldSegmentOffsetVectors + DirectoryHeaderVectors) + worldSegmentCount);
         var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
-        var convexPolygonOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
+        var tapeOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
+        var convexPolygonOffsetVectors = (tapeOffsetVectors + instructionCount);
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
         var convexPolygonWords = 0;
 
@@ -469,6 +478,7 @@ public sealed partial class SdfProgram {
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
+        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: pathOffsetVectors);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);
@@ -559,111 +569,6 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the packed 32-bit words uploaded to the GPU.</summary>
     public ReadOnlySpan<uint> Words => m_words;
 
-    // HOST-BAKED bounding-sphere skip data (programs build once, shapes evaluate millions of times per frame): for
-    // every plain-Union shape reachable through a RIGID transform chain, a conservative world-space bounding sphere
-    // lets map() skip work outright when the sphere's lower-bound distance cannot beat the running union minimum —
-    // mathematically EXACT for Union (the skipped candidate's true distance is >= the bound, so the min, the
-    // material winner, and every pixel are unchanged; a skip decision may even DIFFER between backends without any
-    // pixel differing, because either path produces the identical result). Non-Union blends, unbounded/approximate
-    // shapes (plane, ellipsoid), and chains through Scale/Repeat/symmetry/wallpaper/warp/elongate ops evaluate
-    // fully, as today — no bound is always correct; a wrong bound is a rendering bug.
-    //
-    // Two levels:
-    // - The SEGMENT DIRECTORY partitions the stream at ResetPoints into chain segments, each with one combined
-    //   sphere over all its shapes; map()'s OUTER loop tests it and skips the whole chain — transforms included,
-    //   which is where the per-step dynamic quaternion rotate cost lives. A skipped segment's transform state is
-    //   provably dead (every later segment begins with the ResetPoint the split was made at). Directory iteration is
-    //   also what keeps the skip fast: the outer loop's counter never depends on a loaded value, so the per-segment
-    //   sphere loads pipeline instead of serializing. A segment with any non-rigid op, field op (Onion/Dilate — a
-    //   skip must never jump one), non-Union shape, unbounded shape, or mixed static/dynamic spheres gets mode 0:
-    //   always evaluated.
-    // - The per-SHAPE table carries each qualifying shape's own (tighter) sphere, tested only inside an evaluated
-    //   segment right before the shape evaluates — always sound, because shape ops never mutate chain state.
-    //
-    // A STATIC sphere's center is world-space. A DYNAMIC sphere (a single TransformDynamic in the chain, no rotation
-    // before it) stores the chain's pre-dynamic translation as its center and the entity slot: the shader adds the
-    // slot's per-frame position — center = offset + dynPos, NO quaternion rotate — with the post-dynamic local
-    // geometry folded into the radius, which is the whole win for far-away moving entities.
-    private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds(int[] instructionOwners) {
-        var segments = new List<BoundRecord>();
-        var shapeBounds = new List<BoundRecord>();
-        var segmentStart = 0;
-
-        // O(instructions + instances) lookups replacing the per-instruction linear scans of m_instances the segment
-        // walk below would otherwise do (a boundary test per instruction, an owner resolve per segment — together
-        // O(instructions x instances)). The owner map arrives from ValidatePackedContract, which already built it for
-        // the field-scope walk over the same stream.
-        var instanceBoundaries = BuildInstanceBoundaries();
-
-        // Segments split BEFORE each ResetPoint AND at every instance boundary (m_instances' First/End): a segment
-        // never straddles two instances (or an instance and the WORLD set), so the instance table below can express
-        // "this instance owns segments [a, b)" as a plain contiguous directory range. The next segment's leading
-        // ResetPoint rebuilds every piece of chain state a segment skip leaves stale.
-        while (segmentStart < m_instructions.Length) {
-            var segmentEnd = segmentStart;
-
-            while (
-                ((segmentEnd + 1) < m_instructions.Length) &&
-                (m_instructions[(segmentEnd + 1)].Op != SdfOp.ResetPoint) &&
-                !instanceBoundaries.Contains(item: (segmentEnd + 1))
-            ) {
-                segmentEnd++;
-            }
-
-            segments.Add(item: AnalyzeSegment(
-                segmentStart: segmentStart,
-                segmentEnd: segmentEnd,
-                instanceIndex: instructionOwners[segmentStart],
-                shapeBounds: shapeBounds
-            ));
-
-            segmentStart = (segmentEnd + 1);
-        }
-
-        // Merge consecutive skippable segments into fewer, wider directory entries — every map() call pays one test
-        // per entry, so co-located chains (a stand's pedestal/screen/slot/housing, a shelf of brackets, a d-pad's two
-        // crossed boxes) should cost ONE test when the whole cluster is far. Exactness is untouched (a merged sphere
-        // still contains every member shape); the trade is only that a FAILED merged test evaluates every member
-        // chain (their per-shape spheres still gate the shape evaluations). Two flavours:
-        // - DYNAMIC + DYNAMIC on the SAME entity slot: always merged (they move together).
-        // - STATIC + STATIC: merged when the enclosing sphere stays within the members' summed radii — co-located
-        //   clusters merge, well-separated ones (e.g. two different stands) stay individual so a wide sphere never
-        //   erases a productive skip.
-        // NEVER merges across an instance boundary (InstanceIndex differs) — the instance table's segment range must
-        // stay contiguous and exclusive to its owner.
-        //
-        // A right-to-left COMPACTION pass, not a right-to-left scan with an in-place RemoveAt per merge: the scan
-        // order and every merge decision are unchanged (TryMergeAdjacentSegments below is the same test, same
-        // branches, same float ops the inline version used), but the result is built by APPENDING finished entries to
-        // a second list instead of shifting `segments`' own suffix down by one on every merge — O(segments) total
-        // instead of O(segments x merges). `accumulator` plays the role the old loop's `next` played: the up-to-date
-        // (possibly already-merged) entry immediately to the right of the index under test.
-        if (segments.Count > 1) {
-            var compacted = new List<BoundRecord>(capacity: segments.Count);
-            var accumulator = segments[^1];
-
-            for (var index = (segments.Count - 2); (index >= 0); index--) {
-                var candidate = segments[index];
-
-                if (TryMergeAdjacentSegments(
-                    current: in candidate,
-                    merged: out var mergedRecord,
-                    next: in accumulator
-                )) {
-                    accumulator = mergedRecord;
-                } else {
-                    compacted.Add(item: accumulator);
-                    accumulator = candidate;
-                }
-            }
-
-            compacted.Add(item: accumulator);
-            compacted.Reverse();
-            segments = compacted;
-        }
-
-        return (shapeBounds, segments);
-    }
     /// <summary>The Lipschitz bound of ONE <c>blendShape</c> composition (field/sdf-blend.hlsli), given the bounds of the running
     /// accumulator and the incoming candidate.</summary>
     /// <param name="current">The accumulator's Lipschitz bound.</param>
@@ -697,189 +602,6 @@ public sealed partial class SdfProgram {
             : bound
         );
     }
-    // Walks one segment maintaining the FORWARD rigid transform (local shape space -> world) the chain's point ops
-    // invert, appending per-shape records as it goes, and returns the segment's directory record (mode 0 when any
-    // instruction disqualifies the whole-chain skip).
-    private BoundRecord AnalyzeSegment(int segmentStart, int segmentEnd, int instanceIndex, List<BoundRecord> shapeBounds) {
-        var chainBoundable = true;
-        var dynamicOffset = Vector3.Zero;
-        var dynamicSlot = NoDynamicTransformSlot;
-        var position = Vector3.Zero;
-        var rotation = Quaternion.Identity;
-        var segmentEligible = true;
-        var firstShapeBound = shapeBounds.Count;
-
-        for (var index = segmentStart; (index <= segmentEnd); index++) {
-            var instruction = m_instructions[index];
-
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
-                        // Only ever the segment's first instruction (segments split before each ResetPoint) — the walk's
-                        // initial state IS the reset state.
-                        break;
-                    }
-                case SdfOp.Translate: {
-                        position += Vector3.Transform(
-                            value: new Vector3(
-                                x: instruction.Data0.X,
-                                y: instruction.Data0.Y,
-                                z: instruction.Data0.Z
-                            ),
-                            rotation: rotation
-                        );
-                        break;
-                    }
-                case SdfOp.Rotate: {
-                        rotation = Quaternion.Concatenate(
-                            value1: new Quaternion(
-                                w: instruction.Data0.W,
-                                x: instruction.Data0.X,
-                                y: instruction.Data0.Y,
-                                z: instruction.Data0.Z
-                            ),
-                            value2: rotation
-                        );
-                        break;
-                    }
-                case SdfOp.TransformDynamic: {
-                        // One dynamic per chain, and NO rotation before it — otherwise the shader-side center would need
-                        // the very quaternion rotate the skip exists to avoid; be conservative and evaluate fully.
-                        if (
-                            (dynamicSlot != NoDynamicTransformSlot) ||
-                            !rotation.IsIdentity
-                        ) {
-                            chainBoundable = false;
-                            segmentEligible = false;
-                        } else {
-                            dynamicOffset = position;
-                            dynamicSlot = ((int)instruction.Data0.X);
-                            position = Vector3.Zero;
-                        }
-
-                        break;
-                    }
-                case SdfOp.ShapeBlend: {
-                        if (
-                            chainBoundable &&
-                            (((uint)SdfBlendOp.Union) == instruction.Blend) &&
-                            TryGetLocalBound(
-                            center: out var localCenter,
-                            convexPolygonProfiles: m_convexPolygonProfiles,
-                            instruction: instruction,
-                            instructionIndex: index,
-                            radius: out var localRadius,
-                            sweepCurves: m_sweepCurves
-                        )
-                        ) {
-                            var chainCenter = (position + Vector3.Transform(
-                                rotation: rotation,
-                                value: localCenter
-                            ));
-
-                            // Dynamic: the post-dynamic local geometry folds into the radius, so the entity's orientation
-                            // can never move the shape outside offset + dynPos ± radius — rotation-free in the shader.
-                            shapeBounds.Add(item: ((dynamicSlot == NoDynamicTransformSlot)
-                                ? new BoundRecord(
-                                    Center: chainCenter,
-                                    End: (index + 1),
-                                    Instruction: index,
-                                    Mode: BoundModeStatic,
-                                    Radius: localRadius,
-                                    Slot: 0
-                                )
-                                : new BoundRecord(
-                                    Center: dynamicOffset,
-                                    End: (index + 1),
-                                    Instruction: index,
-                                    Mode: BoundModeDynamic,
-                                    Radius: (chainCenter.Length() + localRadius),
-                                    Slot: dynamicSlot
-                                )));
-                        } else {
-                            segmentEligible = false;
-                        }
-
-                        break;
-                    }
-                case SdfOp.PushField:
-                case SdfOp.PopField: {
-                        // A scope boundary op mutates the FIELD (the running accumulator), not the point/transform, so the
-                        // chain's world-space sphere stays sound — chainBoundable is left TRUE, and any Union shape after the
-                        // Push in this SAME chain still earns its per-shape cull bound (the accumulator-plan correction: the
-                        // default arm's chainBoundable = false would suppress those bounds, a real cull regression). But a
-                        // whole-segment skip must NEVER jump a Push (savedDistance would be unset) or a Pop (the parent
-                        // compose would be lost), so the segment holding one is always evaluated.
-                        segmentEligible = false;
-
-                        break;
-                    }
-                default: {
-                        // Scale (distance rescale), Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
-                        // (space folding), Twist/Bend/Elongate/DomainWarp/AxialProfile/Shear/GaussianPush(Data) (non-isometries),
-                        // Onion/Dilate/Displace/NoiseDisplace (field ops a skip must never jump over):
-                        // no world-space sphere is sound past this point, and the segment cannot be skipped whole.
-                        chainBoundable = false;
-                        segmentEligible = false;
-
-                        break;
-                    }
-            }
-        }
-
-        var alwaysEvaluate = new BoundRecord(
-            Center: Vector3.Zero,
-            End: (segmentEnd + 1),
-            InstanceIndex: instanceIndex,
-            Instruction: segmentStart,
-            Mode: BoundModeNone,
-            Radius: 0f,
-            Slot: 0
-        );
-
-        // The segment sphere: every instruction qualified AND the shape spheres are homogeneous (all static, or all
-        // dynamic on the chain's one slot — a mixed segment would need two centers in one entry).
-        if (
-            !segmentEligible ||
-            (shapeBounds.Count == firstShapeBound)
-        ) {
-            return alwaysEvaluate;
-        }
-
-        var segmentMode = shapeBounds[firstShapeBound].Mode;
-
-        for (var index = (firstShapeBound + 1); (index < shapeBounds.Count); index++) {
-            if (shapeBounds[index].Mode != segmentMode) {
-                return alwaysEvaluate;
-            }
-        }
-
-        // Combined sphere: anchored on the first shape's center (dynamic entries all share the pre-dynamic offset,
-        // so the max simply widens the radius).
-        var segmentCenter = shapeBounds[firstShapeBound].Center;
-        var segmentRadius = shapeBounds[firstShapeBound].Radius;
-
-        for (var index = (firstShapeBound + 1); (index < shapeBounds.Count); index++) {
-            segmentRadius = MathF.Max(
-                x: segmentRadius,
-                y: (Vector3.Distance(
-                    value1: shapeBounds[index].Center,
-                    value2: segmentCenter
-                ) + shapeBounds[index].Radius)
-            );
-        }
-
-        return new BoundRecord(
-            Center: segmentCenter,
-            End: (segmentEnd + 1),
-            InstanceIndex: instanceIndex,
-            Instruction: segmentStart,
-            Mode: segmentMode,
-            Radius: segmentRadius,
-            Slot: ((BoundModeDynamic == segmentMode)
-            ? dynamicSlot
-            : 0)
-        );
-    }
     // A coordinate-keyed plane rotation's Jacobian is an orthonormal rotation R times (I + a·n·mᵀ) — a rank-1 shear of
     // magnitude a = |rate| * rho. Its largest singular value depends on the angle between the shear direction n and the
     // key direction m, which is decided by whether the KEYED coordinate lies inside the ROTATED plane:
@@ -895,20 +617,6 @@ public sealed partial class SdfProgram {
     // Both return exactly 1.0f at a == 0 (zero rate, or zero reach), so a warp-free program's stepScale stays 1.0f to
     // the bit and its scene renders byte-identically.
     private static float BendOperatorNorm(float a) => (1.0f + a);
-    // The set of instruction indices that force a segment split: the FIRST instruction of some instance's range, or the
-    // first instruction AFTER some instance's range ends (the second because the ended instance's last segment must not
-    // swallow the next, unowned/differently-owned instruction). Built once, O(instances); the segment walk tests
-    // membership per instruction, so a per-test linear scan of m_instances was O(instructions x instances).
-    private HashSet<int> BuildInstanceBoundaries() {
-        var boundaries = new HashSet<int>(capacity: (m_instances.Length * 2));
-
-        foreach (var range in m_instances) {
-            boundaries.Add(item: range.First);
-            boundaries.Add(item: range.End);
-        }
-
-        return boundaries;
-    }
     // A dense per-instruction owner map: owners[i] is the instance whose [First, End) range contains instruction i, or
     // -1 for the WORLD set. Called once per construction, from ValidatePackedContract, which hands the array on to the
     // field-scope walk and to AnalyzeBounds; O(instructions + instances) total, because the constructor refuses
@@ -1056,10 +764,7 @@ public sealed partial class SdfProgram {
 
         for (var index = 0; (index < m_instances.Length); index++) {
             var instance = m_instances[index];
-            var unmaskable = HasUnmaskableInfluence(
-                first: instance.First,
-                end: instance.End
-            );
+            var unmaskable = IsUnmaskable(instance: instance);
 
             if (
                 unmaskable &&
@@ -1204,90 +909,6 @@ public sealed partial class SdfProgram {
 
         return (1.0f + (amplitude * frequency));
     }
-    // The minimal sphere containing two spheres: one containing the other wins outright; otherwise the classic
-    // segment-spanning enclosure.
-    private static (Vector3 Center, float Radius) EncloseSpheres(Vector3 centerA, float radiusA, Vector3 centerB, float radiusB) {
-        var distance = Vector3.Distance(
-            value1: centerA,
-            value2: centerB
-        );
-
-        if ((distance + radiusB) <= radiusA) {
-            return (centerA, radiusA);
-        }
-
-        if ((distance + radiusA) <= radiusB) {
-            return (centerB, radiusB);
-        }
-
-        var radius = (0.5f * ((distance + radiusA) + radiusB));
-
-        return ((centerA + (Vector3.Normalize(value: (centerB - centerA)) * (radius - radiusA))), radius);
-    }
-    // AnalyzeBounds' merge test/production, extracted so its compaction pass can call it without shifting a list on
-    // every attempt. `current` is the earlier (lower-index) segment, `next` the one immediately after it — the same
-    // roles the inline version tested, so the accepted pairs and the merged record's fields (which side's Center
-    // survives, which side's End wins) are unchanged.
-    private static bool TryMergeAdjacentSegments(in BoundRecord current, in BoundRecord next, out BoundRecord merged) {
-        if (
-            (current.Mode != next.Mode) ||
-            (current.InstanceIndex != next.InstanceIndex)
-        ) {
-            merged = default;
-
-            return false;
-        }
-
-        if (BoundModeDynamic == current.Mode) {
-            if (current.Slot != next.Slot) {
-                merged = default;
-
-                return false;
-            }
-
-            // Anchored on the first segment's center (the shared pre-dynamic offset); the enclosing max keeps it
-            // conservative even if the offsets differ.
-            merged = current with {
-                End = next.End,
-                Radius = MathF.Max(
-                    x: current.Radius,
-                    y: (Vector3.Distance(
-                        value1: next.Center,
-                        value2: current.Center
-                    ) + next.Radius)
-                ),
-            };
-
-            return true;
-        }
-
-        if (BoundModeStatic == current.Mode) {
-            var (mergedCenter, mergedRadius) = EncloseSpheres(
-                centerA: current.Center,
-                radiusA: current.Radius,
-                centerB: next.Center,
-                radiusB: next.Radius
-            );
-
-            if (mergedRadius > (current.Radius + next.Radius)) {
-                merged = default;
-
-                return false;
-            }
-
-            merged = current with {
-                Center = mergedCenter,
-                End = next.End,
-                Radius = mergedRadius,
-            };
-
-            return true;
-        }
-
-        merged = default;
-
-        return false;
-    }
     // The product of a chain's CellJitter boundary step factors, folded at chain-close against the chain's FINAL max
     // shape reach (mirrors chainLogSphereProduct's role, but reach-DEPENDENT on the shapes that follow the fold, so it
     // cannot be accumulated inline — the shape reach is only known once the whole chain has been walked). Compounds as a
@@ -1380,6 +1001,15 @@ public sealed partial class SdfProgram {
     /// hole) lives strictly inside the union hull — inside any covering bound — so masking an Xor instance with a
     /// covering, union-margin bound is exactly as safe as masking a union member (see MaxSmoothBlendRadius's sizing
     /// note).</para>
+    /// <para>The folds with no edge. A point fold whose lattice is unbounded (<see cref="SdfWallpaperFold.IsUnbounded"/>, an
+    /// infinite <see cref="SdfOp.Repeat"/>, a <see cref="SdfOp.RepeatLimited"/> at <see cref="SdfDomainOps.UnboundedRepeatLimit"/>)
+    /// puts copies of every shape after it at every distance until the next <see cref="SdfOp.ResetPoint"/>, so such a shape is an
+    /// unbounded operand. Inside a scope the operands compose through <see cref="SdfBoundAlgebra"/>: intersected with a
+    /// finite shape it is bounded by that shape, subtracted from one it is bounded by it, and only a union with it, or
+    /// the scope's whole field, leaves the scope unbounded. An unbounded scope is an unbounded instance. At depth 0 each
+    /// shape is its own operand of the world's field, so an unbounded one is an unbounded instance. An instance begins at
+    /// the world point (<see cref="RequireSegmentsStartAtTheWorldPoint"/> refuses a stream that moves the point across
+    /// its start), so a fold never reaches it from outside.</para>
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
@@ -1389,6 +1019,15 @@ public sealed partial class SdfProgram {
     /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>
     internal bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
+        // A point fold with no edge (an unbounded wallpaper or repeat) makes every shape after it unbounded until the
+        // next ResetPoint. A scope touches only the field, so it never ends one. A slice starts from the world point:
+        // the program refuses a stream that may carry a moved point into a segment that reads it
+        // (RequireSegmentsStartAtTheWorldPoint), so no fold is inherited.
+        var foldUnbounded = false;
+        // Each open field keeps its bound (0 for finite, Unbounded for none) and whether an operand joined it.
+        Span<(float Bound, bool HasShape)> scopes = stackalloc (float, bool)[SdfProgramBuilder.MaxFieldScopeDepth];
+        var scopeBound = 0f;
+        var scopeHasShape = false;
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
@@ -1400,13 +1039,28 @@ public sealed partial class SdfProgram {
                 return true;
             }
 
+            if (instruction.Op == SdfOp.ResetPoint) {
+                foldUnbounded = false;
+
+                continue;
+            }
+
+            // A fold whose lattice has no edge repeats what follows at every distance, whatever scope it stands in.
+            if (OpensUnboundedFold(instruction: instruction)) {
+                foldUnbounded = true;
+
+                continue;
+            }
+
             // A PushField reseeds the accumulator, so an accumulator-reading op INSIDE the scope (scopeDepth > 0) reads
             // only the scope's own field — it does NOT make the instance unmaskable. That is the scoped-accumulator
             // payoff: a scoped Onion/Dilate/intersection hands the instance a finite, cullable bound back, instead of
             // the flat model's 1e30 always-evaluated sentinel. Only the POP's OWN compose blend, acting at the parent
             // depth, can be unmaskable (an intersection-family compose composes the whole scope against the parent).
             if (instruction.Op == SdfOp.PushField) {
-                scopeDepth++;
+                scopes[scopeDepth++] = (scopeBound, scopeHasShape);
+                scopeBound = 0f;
+                scopeHasShape = false;
 
                 continue;
             }
@@ -1419,24 +1073,53 @@ public sealed partial class SdfProgram {
                     throw new InvalidOperationException(message: $"Unbalanced PopField at instruction {index} in the instance range [{first}, {end}): a PopField with no open PushField scope. The builder emits balanced Push/Pop pairs, so this indicates a corrupt instruction stream.");
                 }
 
-                scopeDepth--;
+                var childBound = scopeBound;
 
+                (scopeBound, scopeHasShape) = scopes[--scopeDepth];
+
+                // The closed scope composes into the instance as one operand: unbounded if the scope's own field is.
+                // Union and subtraction composes both leave the influence where the scope's field is, so an unbounded
+                // scope is an unbounded instance; an intersection compose reads the parent accumulator outright.
                 if (
                     (scopeDepth == 0) &&
                     (
-                        (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
+                        SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend)) ||
+                        SdfBoundAlgebra.IsUnbounded(bound: childBound)
                     )
                 ) {
                     return true;
                 }
 
+                if (scopeDepth > 0) {
+                    scopeBound = (scopeHasShape
+                        ? SdfBoundAlgebra.Compose(scopeBound, childBound, ((SdfBlendOp)instruction.Blend))
+                        : childBound);
+                    scopeHasShape = true;
+                }
+
                 continue;
             }
 
-            // Ops nested in a scope are already handled by the scope's own compose (above): skip them.
+            // Ops nested in a scope are handled by the scope's own compose, which bounds them as a field: a shape joins
+            // the scope's field by its blend, so the scope is as bounded as SdfBoundAlgebra says its operands leave it.
             if (scopeDepth > 0) {
+                if (instruction.Op == SdfOp.ShapeBlend) {
+                    var operand = (foldUnbounded
+                        ? SdfBoundAlgebra.Unbounded
+                        : 0f
+                    );
+
+                    scopeBound = (scopeHasShape
+                        ? SdfBoundAlgebra.Compose(
+                            accumulated: scopeBound,
+                            blend: ((SdfBlendOp)instruction.Blend),
+                            operand: operand
+                        )
+                        : operand
+                    );
+                    scopeHasShape = true;
+                }
+
                 continue;
             }
 
@@ -1456,17 +1139,27 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            if (
-                (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
-            ) {
+            if (SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend))) {
+                return true;
+            }
+
+            // At depth 0 every shape is its own operand of the world's field: one with no edge leaves the instance none.
+            if (foldUnbounded) {
                 return true;
             }
         }
 
         return false;
     }
+    // Whether an instance is classified as having no bound: it declares none (SdfBoundAlgebra.Unbounded, the authoring
+    // stamper's composed answer), or its instructions leave it none (HasUnmaskableInfluence). The one test every reader
+    // of an instance's bound asks, so a declared bound and the tree it covers cannot disagree.
+    internal bool IsUnmaskable(SdfInstanceRange instance) =>
+        (SdfBoundAlgebra.IsUnbounded(bound: instance.Radius) ||
+        HasUnmaskableInfluence(
+            first: instance.First,
+            end: instance.End
+        ));
 
     /// <summary>Returns whether an instance is shadow-transparent: omitting it from a soft-shadow march can only make
     /// the field more solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow
@@ -1563,8 +1256,8 @@ public sealed partial class SdfProgram {
     /// <c>[-1, 1]</c>: reach grows by <c>|a|</c> (<c>Data0.y</c>).</description></item>
     /// </list>
     /// Field ops compound within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
-    /// sum inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
-    /// sibling scopes union, so a max over scopes is a sound conservative cover). An unscoped field op never contributes
+    /// sum inside a scope, including later parent operations on a child field. Sibling scopes take the maximum;
+    /// nested fields additionally cover every level and cumulative distance rescale. An unscoped field op never contributes
     /// here — it makes the whole instance unmaskable, so the sentinel bound already covers it. 0 for an instance with no
     /// scoped field op, so its bound is byte-identical.</summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
@@ -1574,13 +1267,14 @@ public sealed partial class SdfProgram {
         var margin = 0.0f;
         var scopeDepth = 0;
         var scopeReach = 0.0f;
+        Span<float> parents = stackalloc float[SdfProgramBuilder.MaxFieldScopeDepth];
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
 
             if (instruction.Op == SdfOp.PushField) {
-                scopeDepth++;
-                scopeReach = 0.0f; // depth is capped at 1, so a Push always opens a fresh (empty) scope
+                parents[scopeDepth++] = scopeReach;
+                scopeReach = 0.0f;
 
                 continue;
             }
@@ -1591,9 +1285,9 @@ public sealed partial class SdfProgram {
                     y: scopeReach
                 );
 
-                if (scopeDepth > 0) {
-                    scopeDepth--;
-                }
+                // Sibling fields join by their widest reach; subsequent parent modifiers can grow that field again.
+                scopeReach = MathF.Max(x: scopeReach, y: parents[--scopeDepth]);
+                if (scopeDepth == 0) { scopeReach = 0f; }
 
                 continue;
             }
@@ -1614,7 +1308,7 @@ public sealed partial class SdfProgram {
             };
         }
 
-        return margin;
+        return (margin * NestedFieldMarginScale(end: end, first: first));
     }
     /// <summary>Returns the coupling halo an instance's soft blends need on top of their geometry bound: past it,
     /// evaluating the member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see
@@ -1662,6 +1356,17 @@ public sealed partial class SdfProgram {
 
             var radius = MathF.Abs(x: instruction.Data1.X);
 
+            // A scope's field joins its parent divided by its own Lipschitz factor L (PopField.Data1.Y = 1/L, patched by
+            // AnalyzeLipschitz before the bounds are classified), so a soft compose blends wherever that quotient is within
+            // the radius of the parent: out to L times the radius beyond the scope's geometry. The halo is measured in the
+            // scope's own units, as the rescale leaves the scope's zero set where it was.
+            if (
+                (instruction.Op == SdfOp.PopField) &&
+                (instruction.Data1.Y > 0f)
+            ) {
+                radius /= instruction.Data1.Y;
+            }
+
             if (
                 (instruction.Blend == ((uint)SdfBlendOp.SmoothUnion)) ||
                 (instruction.Blend == ((uint)SdfBlendOp.SmoothSubtraction)) ||
@@ -1683,7 +1388,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        return margin;
+        return (margin * NestedFieldMarginScale(end: end, first: first));
     }
     // Packs the analysis into the two word-stream tables: the per-shape table (2 uvec4 per INSTRUCTION, only shape
     // records populated) and the segment directory (a count header, then 2 uvec4 per segment).
@@ -1780,7 +1485,7 @@ public sealed partial class SdfProgram {
                 val2: 0
             ));
 
-            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its two high bits (InstanceFlagsOf);
+            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its four high bits (InstanceFlagsOf);
             // mapCore masks them off before using the lane as a range.
             var segmentEndPacked = ((uint)Math.Max(
                 val1: segmentEnd[instanceIndex],

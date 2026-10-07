@@ -18,7 +18,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
 
     // The regions construction creates, by the part their objects are named under: the host-written tables, then the
     // brick staging.
-    private static readonly string[] RegionParts = ["program", "dynamic-transforms", "instance-grid", "screen-surfaces", "screen-lights", "volumes", "decals", "screen-mappings", "mesh-region", "brick-staging"];
+    private static readonly string[] RegionParts = ["program", "dynamic-transforms", "instance-grid", "screen-surfaces", "volumes", "decals", "screen-mappings", "mesh-region", "brick-staging"];
 
     private static IReadOnlyList<string> NamesOfOneConstruction(bool naming) {
         var recording = new RecordingGpuObjectNaming(isEnabled: naming);
@@ -44,6 +44,10 @@ public sealed class SdfWorldTablesObjectNameLawTests {
             device: gpu,
             ledger: ledger
         );
+        using var impostorRaster = SdfTestPipelines.ImpostorRaster(
+            device: gpu,
+            ledger: ledger
+        );
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             includeBrickPipelines: true,
@@ -59,6 +63,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
+            impostorRaster: impostorRaster,
             meshRaster: meshRaster,
             regionCopy: regionCopy.Compute!
         );
@@ -78,11 +83,20 @@ public sealed class SdfWorldTablesObjectNameLawTests {
         );
         Assert.Contains(collection: names, expected: "Buffer sdf.world/brick-pool");
         Assert.Contains(collection: names, expected: "Buffer sdf.world/unused-member");
+        Assert.Contains(collection: names, expected: "Buffer sdf.world/screen-emission");
         Assert.Contains(collection: names, expected: "Image sdf.world/sampled-filler");
         Assert.Contains(collection: names, expected: "Image sdf.world/storage-filler");
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
         Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/tables/world group[0]");
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
+        // The tables own the sky map and coefficients; the graph owns their recording sets and kernel counters.
+        Assert.Equal(
+            actual: names.Where(predicate: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: " sdf.world/sky-environment")),
+            expected: [
+                "Buffer sdf.world/sky-environment/coefficients",
+                "Buffer sdf.world/sky-environment/map",
+            ]
+        );
         Assert.Contains(
             collection: names,
             filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Pipeline gpu.pass-pipelines/sdf-beam/")

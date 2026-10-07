@@ -1,0 +1,66 @@
+// A four-cell strip whose judge refuses any move onto cell 3, with the board bound to Return enforcement: the
+// determinism manifest writes moves into it so the engine's board-enforcement latch takes each verdict edge.
+
+schema: "puck.world.definition.v1"
+
+placements {
+  placement "board" {
+    prototype: "token"
+    board {
+      enforcement: "Return"
+      move: "move"
+      occupancy: "cells"
+      topology: "strip"
+      turn: "turn"
+      verdict: "verdict"
+    }
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "token" {
+    document {
+      name: "token"
+      palette [
+        {
+          color: "#F2ECDD"
+          roughness: 0.55
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "body" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.2, 0.2, 0.2]
+      }
+    }
+  }
+}
+
+rule "board-judge" {
+  verdict = (move[to] == 3) ? 0 : 1
+}
+
+state {
+  lattices [
+    grid(cellSize: 2, depth: 1, name: "strip", origin: [0, 0, 0], width: 4)
+  ]
+
+  world {
+    row {
+      domain: cellsOf(topology: strip)
+      kind: "Int"
+      name: "cells"
+    }
+
+    slot verdict = 1 bounds(0..1)
+    slot turn = 0 bounds(0..1)
+
+    table move bounds(-1..3) {
+      from = -1
+      to = -1
+    }
+  }
+}

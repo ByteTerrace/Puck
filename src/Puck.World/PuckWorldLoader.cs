@@ -26,7 +26,7 @@ internal static class PuckWorldLoader {
     // entry from there. The directory is the source's alone and is restaged whole on every boot, so a world the
     // source no longer declares cannot be reached.
     private static bool TryBootComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? named, out WorldDefinitionSource source, out string failure, string catalogFingerprint,
-        IMachineValidationCatalog? catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches) {
+        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches) {
         source = null!;
 
         var directory = Path.Combine(
@@ -37,6 +37,7 @@ internal static class PuckWorldLoader {
         var sourceDirectory = (Path.GetDirectoryName(path: path) ?? ".");
 
         if (!WorldStaging.TryStageComposition(
+            catalog: catalog,
             directory: directory,
             entry: named,
             entryName: out var entryName,
@@ -109,7 +110,7 @@ internal static class PuckWorldLoader {
     /// overrides nothing the document carries.</param>
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
-    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
+    public static bool TryResolveWorld(string? explicitPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
         Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null) {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
         string path;
@@ -211,6 +212,7 @@ internal static class PuckWorldLoader {
             catalogFingerprint: catalogFingerprint,
             compiled: compiledWorld,
             document: compiled.Document!,
+            sourceCompilation: compiled,
             overrides: overrides,
             path: path,
             reason: out var loadReason

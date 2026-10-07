@@ -1,0 +1,5 @@
+world.cadence off
+world.wait ready 25
+world.wait 4
+world.screenshot {run}/off-reference.png
+world.wait captures 5

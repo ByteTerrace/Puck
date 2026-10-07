@@ -9,10 +9,17 @@ namespace Puck.Hosting;
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
 /// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
 /// order alike, and a read whose kind is not what its producer's output carries is refused naming both. An external
-/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads only images, so its buffer read is refused by name;
-/// it may read its own output and any instance's previous frame, and any instance may read an external producer's
-/// previous frame.</summary>
+/// package may read buffers when its runtime runs a graph fragment; a producer that hands out images is validated by
+/// the runtime that resolves its factory. An instance may read its own output and any instance's previous frame, and any instance may read an external producer's
+/// previous frame. The set declares how deep its views nest (<see cref="NestingDepth"/>), which the reads never
+/// decide.</summary>
 public sealed class RenderGraphInstanceSet {
+    /// <summary>The nesting depth a set declares when its caller names none.</summary>
+    public const int DefaultNestingDepth = 3;
+    /// <summary>The deepest nesting a set may declare: past it a set is refused
+    /// (<see cref="RenderGraphInstanceRefusalCode.NestingDepthInvalid"/>).</summary>
+    public const int MaxNestingDepth = 8;
+
     private readonly Dictionary<string, int> m_indexByName;
 
     private RenderGraphInstanceSet(IReadOnlyList<RenderGraphInstance> instances, Dictionary<string, int> indexByName, IReadOnlyList<IReadOnlyList<RenderGraphEdge>> reads, IReadOnlyList<int> order, int nestingDepth) {
@@ -25,10 +32,11 @@ public sealed class RenderGraphInstanceSet {
 
     /// <summary>Gets the instances in declaration order.</summary>
     public IReadOnlyList<RenderGraphInstance> Instances { get; }
-    /// <summary>Gets the graph's nesting depth: the most same-frame reads chained one after another, such as 2 for a
-    /// main view showing a screen that shows a nested world, and 0 when no instance reads another within the frame. A
-    /// hit on a rendered source continues into the producer's camera at most this many times through
-    /// <see cref="RenderGraphHitWalk"/> when the caller passes it as the limit.</summary>
+    /// <summary>Gets the graph's declared nesting depth, from 0 through <see cref="MaxNestingDepth"/>: the most screens
+    /// deep a view of a world shows another view, so a portal seen through a portal renders recursively to this many
+    /// levels and a face past it draws its fallback, and the most screens a hit on a rendered source continues through
+    /// <see cref="RenderGraphHitWalk"/> when the caller passes it as the limit. It is declared, by the world that composes
+    /// the set, and never derived from the reads, so two portals facing each other end at it.</summary>
     public int NestingDepth { get; }
     /// <summary>Gets the render order as indices into <see cref="Instances"/>: every same-frame producer precedes its
     /// consumers, and instances the reads leave unordered keep declaration order.</summary>
@@ -105,30 +113,6 @@ public sealed class RenderGraphInstanceSet {
             return false;
         }
     }
-    // The longest chain of same-frame reads, counted in reads, walked in render order so every producer's depth is
-    // final before a consumer reads it.
-    private static int LongestSameFrameChain(IReadOnlyList<IReadOnlyList<RenderGraphEdge>> reads, int[] order) {
-        var depth = new int[reads.Count];
-        var deepest = 0;
-
-        foreach (var consumer in order) {
-            foreach (var edge in reads[consumer]) {
-                if (!edge.PreviousFrame) {
-                    depth[consumer] = Math.Max(
-                        val1: depth[consumer],
-                        val2: (depth[edge.Producer] + 1)
-                    );
-                }
-            }
-
-            deepest = Math.Max(
-                val1: deepest,
-                val2: depth[consumer]
-            );
-        }
-
-        return deepest;
-    }
     private static int[] RenderOrder(IReadOnlyList<IReadOnlyList<RenderGraphEdge>> reads) {
         var count = reads.Count;
         var remaining = new int[count];
@@ -174,15 +158,30 @@ public sealed class RenderGraphInstanceSet {
     /// <summary>Validates <paramref name="instances"/> and orders them.</summary>
     /// <param name="instances">The instances, in declaration order.</param>
     /// <param name="set">The validated set, when this returns <see langword="true"/>.</param>
-    /// <param name="refusal">The first refusal, when this returns <see langword="false"/>. Shape refusals are reported
-    /// in declaration order before any cycle.</param>
+    /// <param name="refusal">The first refusal, when this returns <see langword="false"/>. A nesting depth outside its
+    /// range is reported first, then shape refusals in declaration order, then any cycle.</param>
+    /// <param name="nestingDepth">The set's declared nesting depth (<see cref="NestingDepth"/>), from 0 through
+    /// <see cref="MaxNestingDepth"/>.</param>
     /// <returns><see langword="true"/> when the instances form a valid set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instances"/> or one of its entries is
     /// <see langword="null"/>.</exception>
-    public static bool TryCreate(IReadOnlyList<RenderGraphInstance> instances, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, [NotNullWhen(returnValue: false)] out RenderGraphInstanceRefusal? refusal) {
+    public static bool TryCreate(IReadOnlyList<RenderGraphInstance> instances, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, [NotNullWhen(returnValue: false)] out RenderGraphInstanceRefusal? refusal, int nestingDepth = DefaultNestingDepth) {
         ArgumentNullException.ThrowIfNull(argument: instances);
 
         set = null;
+
+        if (
+            (nestingDepth < 0) ||
+            (nestingDepth > MaxNestingDepth)
+        ) {
+            refusal = Refuse(
+                code: RenderGraphInstanceRefusalCode.NestingDepthInvalid,
+                message: $"Render-graph instances nest {nestingDepth} deep; a set nests from 0 through {MaxNestingDepth} deep."
+            );
+
+            return false;
+        }
+
         var indexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < instances.Count); index++) {
@@ -227,18 +226,6 @@ public sealed class RenderGraphInstanceSet {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.PassesInvalid,
                     $"Render-graph instance '{instance.Name}' records {instance.Passes} passes; a render records at least one.",
-                    instance.Name
-                );
-
-                return false;
-            }
-            if (
-                (instance.Kind == RenderGraphInstanceKind.External) &&
-                (instance.Reads ?? []).Any(predicate: static read => (read.Kind != ShaderPipelineResourceKind.Image))
-            ) {
-                refusal = Refuse(
-                    RenderGraphInstanceRefusalCode.ExternalReads,
-                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which is handed only images, but it declares a buffer read.",
                     instance.Name
                 );
 
@@ -331,10 +318,7 @@ public sealed class RenderGraphInstanceSet {
         set = new RenderGraphInstanceSet(
             indexByName: indexByName,
             instances: new ReadOnlyCollection<RenderGraphInstance>(list: [.. instances]),
-            nestingDepth: LongestSameFrameChain(
-                order: order,
-                reads: reads
-            ),
+            nestingDepth: nestingDepth,
             order: Array.AsReadOnly(array: order),
             reads: Array.AsReadOnly(array: reads)
         );

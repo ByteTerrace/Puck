@@ -172,13 +172,14 @@ public static class WorldSourceDiagnostics {
 
         var compilation = diagnosis.Compilation!;
         var sourcePath = diagnosis.SourcePath;
+        var sourceCompilation = Composition.WorldCompiledSource.From(compilation: compilation);
 
         if (compilation.Worlds.Count > 0) {
             foreach (var output in compilation.Worlds) {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (sourcePath is not null) {
-                    if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint)) {
+                    if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint, sourceCompilation: sourceCompilation)) {
                         WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json);
                         PuckLinter.LintReferences(catalogFingerprint: catalogFingerprint, composed: composedWorld, diagnostics: diagnostics, document: output.Json, machines: machines, sourceMap: output.SourceMap, sourcePath: sourcePath);
                     }
@@ -215,6 +216,7 @@ public static class WorldSourceDiagnostics {
             diagnostics: diagnostics,
             loweredJson: json,
             machines: machines,
+            sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
         )) {

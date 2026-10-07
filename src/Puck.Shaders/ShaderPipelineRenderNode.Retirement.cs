@@ -11,16 +11,18 @@ namespace Puck.Shaders;
 // submissions in order, so the replaced objects retire once that submission has completed: at once when it already has,
 // which is always true of a paused node whose last frame finished, so replacements made while paused never pile up.
 //
-// A downstream consumer reads only a surface the node published: the latest one, or, one frame late, the one before it.
-// The image behind each of those two surfaces is taken out of the replaced objects and held, alone, while it is still
-// one of them. A newer publication displaces it; it then retires once the node's second submission after that has
-// completed, because every reader that could still sample it submitted its work before then.
+// A downstream consumer reads a published surface or named buffer: the latest frame, or, one frame late, the one before
+// it. Each owned allocation behind those publications is taken out of the replaced objects and held, alone, while it
+// is still one of them. A newer publication displaces it; it then retires once the node's second submission after that has
+// completed, because every reader that could still sample it submitted its work before then. A graph runtime can instead
+// supply the actual final submission after every reader of a displaced borrowed buffer, so a standing producer needs no
+// further work to release its old package owner.
 public sealed partial class ShaderPipelineRenderNode {
-    // How many of the node's own submissions after an image stops being published precede the one whose completion
+    // How many of the node's own submissions after an output stops being published precede the one whose completion
     // retires it. A host replacing a whole node retires it by the same count of its successor's submissions.
     internal const long RetirementLag = 2;
 
-    private readonly List<HeldImage> m_held = [];
+    private readonly List<HeldResource> m_held = [];
     private readonly List<RetiredGraph> m_retired = [];
 
     private IGpuSubmissionFence? m_lastSubmissionFence;
@@ -54,11 +56,12 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
-    /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
-    /// buffer the capture readback holds once a capture has been served, plus optional timestamp readback buffers.</summary>
+    /// objects waiting for the GPU to finish with them, published images and buffers held from a replaced graph, finite read-epoch
+    /// copies, and the staging
+    /// buffer the capture readback holds once a capture has been served, plus package and timestamp readback buffers.</summary>
     public ulong OwnedBytes {
         get {
-            var bytes = checked(((AllocationBytes + m_readbackBytes) + TimingReadbackBytes));
+            var bytes = checked((((AllocationBytes + m_readbackBytes) + TimingReadbackBytes) + PackageReadbackBytes(passes: m_passes)));
 
             foreach (var retired in m_retired) {
                 bytes = checked((bytes + retired.Bytes));
@@ -82,7 +85,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
     private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
-        var bytes = (preview?.LiveBytes() ?? 0UL);
+        var bytes = checked(((preview?.LiveBytes() ?? 0UL) + PackageReadbackBytes(passes: passes)));
 
         foreach (var pass in passes) {
             if (pass?.GeometryBuffer is { } geometry) {
@@ -123,7 +126,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
-            if (resource.Buffers is { } buffers) {
+            if (!resource.Borrowed && (resource.Buffers is { } buffers)) {
                 foreach (var buffer in buffers) {
                     if (buffer is not null) {
                         bytes = checked((bytes + buffer.SizeBytes));
@@ -148,7 +151,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         foreach (var held in m_held) {
-            if (held.Handle == imageHandle) {
+            if ((held.Kind != ShaderPipelineResourceKind.Buffer) && (held.Handle == imageHandle)) {
                 return;
             }
         }
@@ -162,14 +165,14 @@ public sealed partial class ShaderPipelineRenderNode {
                 for (var slot = 0; (slot < images.Length); slot++) {
                     if ((images[slot] is { } image) && (image.ImageHandle == imageHandle)) {
                         images[slot] = null!;
-                        m_held.Add(item: new HeldImage(
+                        m_held.Add(item: new HeldResource(
                             Bytes: ImageBytes(
                                 format: resource.Spec.Format,
                                 height: image.Height,
                                 width: image.Width
                             ),
                             Handle: imageHandle,
-                            Image: image
+                            Resource: image
                         ));
 
                         return;
@@ -179,15 +182,98 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         if (preview?.TakeTarget(imageHandle: imageHandle) is { } previewTarget) {
-            m_held.Add(item: new HeldImage(
+            m_held.Add(item: new HeldResource(
                 Bytes: ((((ulong)previewTarget.Width) * previewTarget.Height) * 4UL),
                 Handle: imageHandle,
-                Image: previewTarget
+                Resource: previewTarget
             ));
         }
     }
-    // Makes a surface the published one. The surface it displaces stays published as the one before it; a held image
-    // that is now neither retires once every reader that could still sample it has submitted.
+    private bool IsPublishedBuffer(nint handle) {
+        foreach (var output in m_publishedBuffers) {
+            if (output.Buffer?.BufferHandle == handle) { return true; }
+        }
+        foreach (var output in m_previousBuffers) {
+            if (output.Buffer?.BufferHandle == handle) { return true; }
+        }
+        return false;
+    }
+    private IGpuBuffer[] PublishedBorrowedBuffersOf(RuntimeResource[] resources) {
+        var published = new List<IGpuBuffer>();
+
+        foreach (var resource in resources) {
+            if (resource is not { Borrowed: true, Buffers: { } buffers }) { continue; }
+            foreach (var buffer in buffers) {
+                if ((buffer is not null) && IsPublishedBuffer(handle: buffer.BufferHandle) &&
+                    !published.Contains(buffer, ReferenceEqualityComparer.Instance)) { published.Add(item: buffer); }
+            }
+        }
+        return [.. published];
+    }
+    // A matching external handle conveys no ownership. Only an installed package-borrowed allocation has a
+    // recorder/build that retains this exact buffer's owner under the BorrowedBuffer contract.
+    private bool InstalledRetainsBorrowedBuffer(IGpuBuffer buffer) {
+        foreach (var resource in m_resources) {
+            if (resource is not { Borrowed: true, Buffers: { } buffers }) { continue; }
+            foreach (var installed in buffers) {
+                if (ReferenceEquals(objA: installed, objB: buffer)) { return true; }
+            }
+        }
+        return false;
+    }
+    // Detaches an owned published ring slot once, even when several output names share the same allocation.
+    // Borrowed buffers remain the package owner's responsibility and never enter node-owned held bytes.
+    private void HoldBuffers(RuntimeResource[] resources) {
+        foreach (var resource in resources) {
+            if ((resource is null) || resource.Borrowed || (resource.Buffers is not { } buffers)) { continue; }
+            for (var slot = 0; (slot < buffers.Length); slot++) {
+                if ((buffers[slot] is not { } buffer) || !IsPublishedBuffer(handle: buffer.BufferHandle)) { continue; }
+                var handle = buffer.BufferHandle;
+                var heldAlready = false;
+
+                foreach (var held in m_held) {
+                    if ((held.Kind == ShaderPipelineResourceKind.Buffer) && (held.Handle == handle)) { heldAlready = true; break; }
+                }
+                buffers[slot] = null!;
+                if (!heldAlready) {
+                    m_held.Add(item: new HeldResource(Handle: handle, Resource: buffer, Bytes: buffer.SizeBytes,
+                        Kind: ShaderPipelineResourceKind.Buffer));
+                }
+            }
+        }
+    }
+    // Holds a published image another instance owns (a package that drew nothing stands for it) under a lease of the
+    // node's own while it is the image the node publishes: however the owner
+    // retires, a capture the node serves from it without rendering reads a live image.
+    private void HoldPublication(in Surface surface) {
+        if (
+            (m_publishedBinding is null) ||
+            (m_images is null) ||
+            (surface.ImageHandle == 0)
+        ) {
+            return;
+        }
+
+        foreach (var held in m_held) {
+            if ((held.Kind != ShaderPipelineResourceKind.Buffer) && (held.Handle == surface.ImageHandle)) {
+                return;
+            }
+        }
+
+        if (m_images.TryLease(
+            imageHandle: surface.ImageHandle,
+            lease: out var lease
+        )) {
+            m_held.Add(item: new HeldResource(
+                Bytes: 0UL,
+                Handle: surface.ImageHandle,
+                Resource: new HeldBindingRetirement(lease: lease),
+                Leased: true
+            ));
+        }
+    }
+    // Makes a surface the published one. Image and buffer publications advance together for rendered frames; an owned
+    // allocation outside both completed publications retires once every reader could have submitted.
     private void Publish(Surface surface) {
         if (surface.ImageHandle != m_lastSurface.ImageHandle) {
             m_previousSurface = m_lastSurface;
@@ -196,27 +282,43 @@ public sealed partial class ShaderPipelineRenderNode {
         m_lastSurface = surface;
         // A render publishes, and a reset owes its own initialization frame, so neither is still missing a lost image.
         m_publicationLost = false;
+        HoldPublication(surface: in surface);
 
         for (var index = (m_held.Count - 1); (index >= 0); index--) {
             var held = m_held[index];
 
-            if (IsPublished(imageHandle: held.Handle)) {
+            // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
+            // while it is the one the node publishes now, which a capture it serves without rendering reads.
+            if ((held.Epoch is { IsActive: true }) || (held.Leased
+                ? (held.Handle == m_lastSurface.ImageHandle)
+                : ((held.Kind == ShaderPipelineResourceKind.Buffer)
+                    ? IsPublishedBuffer(handle: held.Handle) : IsPublished(imageHandle: held.Handle)))) {
                 continue;
             }
 
             m_held.RemoveAt(index: index);
+
+            if (held.Leased) {
+                // Every submission that reads this image holds its own lease, including this node's. Dropping the
+                // publication needs no future submission, which a paused node may never make.
+                held.Resource.Dispose();
+
+                continue;
+            }
+
             m_retired.Add(item: new RetiredGraph(
                 afterSubmission: (m_submissions + RetirementLag),
                 bytes: held.Bytes,
                 fence: null,
-                image: held.Image,
+                allocation: held.Resource,
                 passes: [],
                 preview: null,
                 resources: []
             ));
         }
+        foreach (var retired in m_retired) { retired.ReleasePublication(node: this); }
     }
-    // Retires objects an install or a selection replaced: the images behind the published surfaces are held, and the
+    // Retires objects an install or a selection replaced: published images and owned buffer slots are held, and the
     // rest is disposed once the node's latest submission has completed, which may already be true.
     private void Retire(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
         if (
@@ -241,6 +343,12 @@ public sealed partial class ShaderPipelineRenderNode {
             resources: resources
         );
 
+        HoldBuffers(resources: resources);
+        // A borrowed allocation stays owned by its package. Keep the old recorder/build that retains that owner
+        // while a published frame still names it without an installed retaining owner. Actual displacement then
+        // retires through the same reader lag as detached owned slots.
+        var publishedBorrowedBuffers = PublishedBorrowedBuffersOf(resources: resources);
+        var holdsBorrowedPublication = publishedBorrowedBuffers.Any(predicate: buffer => !InstalledRetainsBorrowedBuffer(buffer: buffer));
         var retired = new RetiredGraph(
             afterSubmission: m_submissions,
             bytes: LiveBytes(
@@ -248,18 +356,57 @@ public sealed partial class ShaderPipelineRenderNode {
                 preview: preview,
                 resources: resources
             ),
-            fence: m_lastSubmissionFence,
-            image: null,
+            fence: (holdsBorrowedPublication ? null : m_lastSubmissionFence),
+            allocation: null,
             passes: passes,
             preview: preview,
-            resources: resources
+            resources: resources,
+            publishedBorrowedBuffers: (holdsBorrowedPublication ? publishedBorrowedBuffers : [])
         );
 
-        if (inFlight) {
+        if (inFlight || holdsBorrowedPublication) {
             m_retired.Add(item: retired);
         } else {
             retired.Dispose(node: this);
         }
+        foreach (var held in m_retired) { held.ReleasePublication(node: this); }
+    }
+
+    /// <summary>Gets whether the node holds anything of a graph: an installed or building graph's objects, its frame slots'
+    /// command buffers and fences, a preview, a readback or objects waiting to retire. A node that has never been demanded,
+    /// or whose graph <see cref="ReleaseUnnamed"/> released, holds none.</summary>
+    internal bool HoldsGraphObjects {
+        get {
+            foreach (var slot in m_slots) {
+                if (
+                    (slot.Fence is not null) ||
+                    (slot.Commands is not null)
+                ) {
+                    return true;
+                }
+            }
+
+            return (
+                m_build.IsPending ||
+                (m_preview is not null) ||
+                (m_readback is not null) ||
+                (m_encoder is not null) ||
+                (m_passes.Length != 0) ||
+                (m_resources.Length != 0) ||
+                (m_retired.Count != 0) ||
+                (m_held.Count != 0)
+            );
+        }
+    }
+
+    /// <summary>Releases the graph of a node nothing names any more: its targets, history, buffers, descriptor sets, frame
+    /// slots, preview and readback, and any build in flight. The host calls it only once the device has finished every
+    /// submission that may read them, the node's own and its consumers'. The node keeps its installed pipeline, the regions
+    /// and bindings its host gave it, and its region-copy pipeline, and rebuilds at the extent it is demanded at the next
+    /// time it renders, with fresh history, as after a device loss. A capture armed on it is left armed.</summary>
+    internal void ReleaseUnnamed() {
+        CancelBuilds();
+        ReleaseGraph();
     }
 
     /// <summary>Gets how many submissions the node has made.</summary>
@@ -286,16 +433,31 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = (m_retired.Count - 1); (index >= 0); index--) {
             var retired = m_retired[index];
 
-            if (retired.Fence is { IsSignaled: true }) {
+            if (retired.ReadersCompleted || (retired.Fence is { IsSignaled: true })) {
                 retired.Dispose(node: this);
                 m_retired.RemoveAt(index: index);
             }
         }
     }
+
+    /// <summary>Completes displaced borrowed publications against the runtime frame's final submission, ordered
+    /// after every reader. Called even when this producer stands. The submitter's slot owns the completion callback
+    /// until its fence has finished, so resetting or disposing that fence cannot erase the completion.</summary>
+    /// <param name="submitter">The last node that actually submitted this frame, or null when none did.</param>
+    internal void RetireAfterConsumers(ShaderPipelineRenderNode? submitter) {
+        foreach (var retired in m_retired) {
+            if (retired.AwaitingConsumers && (submitter is not null)) {
+                retired.ArmAfterConsumers(submitter: submitter);
+            }
+        }
+        RetireCompleted();
+    }
+
     // Arms every queued retirement whose retiring submission is the one just made with that submission's fence.
     private void ArmRetirements(IGpuSubmissionFence fence) {
         foreach (var retired in m_retired) {
             if (
+                !retired.HoldsBorrowedPublication &&
                 (retired.Fence is null) &&
                 (m_submissions >= retired.AfterSubmission)
             ) {
@@ -309,7 +471,7 @@ public sealed partial class ShaderPipelineRenderNode {
             retired.Dispose(node: this);
         }
         foreach (var held in m_held) {
-            held.Image.Dispose();
+            held.Resource.Dispose();
         }
 
         m_retired.Clear();
@@ -330,6 +492,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // Records that the node waited on, or found signaled, a slot's fence: when it is the first submission's, that
     // submission has completed.
     private void NoteWaited(IGpuSubmissionFence fence) {
+        CompleteRenderFence(fence: fence);
+
         if (ReferenceEquals(
             objA: fence,
             objB: m_firstSubmission
@@ -339,23 +503,57 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
-    // An image behind a published surface, taken out of the objects that replaced it.
-    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes);
-    // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
-    // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
-    // fence of the submission made RetirementLag submissions after it stopped being published.
-    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? image, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission) {
-        public long AfterSubmission { get; } = afterSubmission;
+    // An owned published allocation or image copy, detached from replaced objects. Leased marks an image another
+    // instance owns, held under the node's existing image lease. Buffers never take such a lease.
+    private readonly record struct HeldResource(nint Handle, IDisposable Resource, ulong Bytes, bool Leased = false,
+        RenderGraphReadEpoch? Epoch = null, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
+    // Objects replaced by an install or a selection, or a held allocation no longer published, waiting for the submission
+    // that retires them: the fence of the node's latest submission when replaced, or, for a published allocation, the
+    // fence of the submission made RetirementLag submissions after it stopped being published. The runtime may
+    // replace that lag for displaced borrowed buffers with an actual frame's last reader submission.
+    private sealed class RetiredGraph(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview, IDisposable? allocation, ulong bytes, IGpuSubmissionFence? fence, long afterSubmission, IGpuBuffer[]? publishedBorrowedBuffers = null) {
+        private readonly IGpuBuffer[] m_publishedBorrowedBuffers = (publishedBorrowedBuffers ?? []);
+
+        public long AfterSubmission { get; private set; } = afterSubmission;
         public ulong Bytes { get; } = bytes;
         public IGpuSubmissionFence? Fence { get; set; } = fence;
+        public bool HoldsBorrowedPublication { get; private set; } = (publishedBorrowedBuffers is { Length: > 0 });
 
+        public bool AwaitingConsumers { get; private set; }
+        public bool ReadersCompleted { get; private set; }
+
+        public void ArmAfterConsumers(ShaderPipelineRenderNode submitter) {
+            AwaitingConsumers = false;
+            Fence = submitter.LatestSubmission;
+            submitter.HoldUntilLatestSubmission(lease: new GpuImageLease(ImageViewHandle: 0, Release: CompleteReaders));
+        }
+
+        private void CompleteReaders(int _) {
+            ReadersCompleted = true;
+            Fence = null;
+        }
+
+        public void ReleasePublication(ShaderPipelineRenderNode node) {
+            if (!HoldsBorrowedPublication) { return; }
+            var allTransferred = true;
+
+            foreach (var buffer in m_publishedBorrowedBuffers) {
+                if (node.InstalledRetainsBorrowedBuffer(buffer: buffer)) { continue; }
+                allTransferred = false;
+                if (node.IsPublishedBuffer(handle: buffer.BufferHandle)) { return; }
+            }
+            HoldsBorrowedPublication = false;
+            AwaitingConsumers = !allTransferred;
+            AfterSubmission = (node.m_submissions + (allTransferred ? 0 : RetirementLag));
+            Fence = (allTransferred ? node.m_lastSubmissionFence : null);
+        }
         public void Dispose(ShaderPipelineRenderNode node) {
             node.DisposeGraph(
                 passes: passes,
                 resources: resources
             );
             preview?.Dispose();
-            image?.Dispose();
+            allocation?.Dispose();
         }
     }
 }

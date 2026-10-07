@@ -11,6 +11,11 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
+    /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's
+    /// graph-read leases. Empty means no fitted infinity image. The residency's authored sky remains shared.</summary>
+    public IReadOnlyList<SdfSkyViewBinding> SkyViews { get; init; } = [];
+
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
@@ -50,11 +55,33 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
 }
+/// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
+/// <param name="Layer">The infinity layer's unique authored name.</param>
+/// <param name="Parameters">The sampling basis and rectangle fitted to this consumer. The sky retains the
+/// authored fallback, intensity and coverage.</param>
+/// <param name="Producer">The instance whose completed output supplies the image, or null while the layer draws its fallback.</param>
+public readonly record struct SdfSkyViewBinding(string Layer, SdfSkyView Parameters, string? Producer);
 /// <summary>The quality levers one view renders with: each trades a shading term's cost against its fidelity. The
-/// default is full quality, every term on at full reach with its exact path. The pass block carries each under its own
-/// name (<see cref="SdfFrameBlock"/>), and the view's cadence signature folds it, so a change renders the view
-/// again.</summary>
+/// default is full quality, every term on at full reach with its exact path, and no temporal reconstruction. The pass
+/// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature
+/// folds it, so a change renders the view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
 public readonly record struct SdfViewQuality {
+    /// <summary>The per-view method used by the counted indirect comparison. The default uses the residency cache.
+    /// Quality restrictions retain the consumer's method; this selector changes no simulation or cache geometry.</summary>
+    public SdfIndirectMethod IndirectMethod { get; init; }
+    /// <summary>The sky field's grid fraction: one or one half; zero selects the full default.
+    /// It changes neither the scene render grid nor retained field allocation capacity.</summary>
+    public float SkyFieldScale { get; init; }
+    /// <summary>Gets the validated sky field fraction, with the default zero reading as one.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The field scale is neither zero, one nor one half.</exception>
+    public float SkyFieldFraction => SkyFieldScale switch {
+        0f or 1f => 1f,
+        .5f => .5f,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(SkyFieldScale)),
+    };
+    /// <summary>Publishes only geometry, with premultiplied color and its coverage in alpha, for a far sky layer.
+    /// The composite omits background sky and air on uncovered rays. Restrictions retain the consumer's output form.</summary>
+    public bool GeometryOnly { get; init; }
     /// <summary>Gets whether the view skips ambient occlusion: occlusion reads 1, so creases read brighter, and the
     /// ambient pass does not run. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
     public bool DisableAmbientOcclusion { get; init; }
@@ -81,13 +108,24 @@ public readonly record struct SdfViewQuality {
     /// and a sub-visible darkness early-out, instead of the exact 48-step path. The pass block carries it as
     /// <c>fastSoftShadowMarch</c>.</summary>
     public bool UseFastSoftShadowMarch { get; init; }
+    /// <summary>Gets whether the view asks for temporal reconstruction: it runs the temporal fragment
+    /// (<c>SdfWorldPackage.TemporalFragment</c>), jitters its samples and resolves them over its history into its
+    /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
+    /// barriers. The default asks for none.</summary>
+    public bool Temporal { get; init; }
+    /// <summary>Gets whether secondary stable shadow slots reuse valid history between quarter-grid marches.
+    /// Requires temporal reconstruction; slot zero and handoffs always march.</summary>
+    public bool ShadowAmortize { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
-    /// approximation either takes stays taken, and the shorter shadow reach holds. Neither can lift a restriction the
-    /// other set.</summary>
+    /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
+    /// when both ask. Neither can lift a restriction the other set.</summary>
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
+        IndirectMethod = IndirectMethod,
+        SkyFieldScale = MathF.Min(x: SkyFieldFraction, y: other.SkyFieldFraction),
+        GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableFarBound = (DisableFarBound || other.DisableFarBound),
         DisableSoftShadows = (DisableSoftShadows || other.DisableSoftShadows),
@@ -98,6 +136,8 @@ public readonly record struct SdfViewQuality {
         UseCameraTileShadowMask = (UseCameraTileShadowMask || other.UseCameraTileShadowMask),
         UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
+        Temporal = (Temporal && other.Temporal),
+        ShadowAmortize = (ShadowAmortize && other.ShadowAmortize),
     };
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
@@ -146,15 +186,18 @@ public sealed record SdfFrame(
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
     public long MeshDrawsRevision { get; init; }
 
-    /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
-    /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
-    public float AmbientScale { get; init; } = 1f;
-    /// <summary>A per-frame scale on the world path's sun (directional) term (default 1 = unchanged). Pairs with
-    /// <see cref="AmbientScale"/> to darken the room for the overworld mood.</summary>
-    public float SunScale { get; init; } = 1f;
-    /// <summary>The lit path's lights, stylization gains, and sky as one lane table. The default is the pinned sun
-    /// and hemisphere ambient an unauthored world renders.</summary>
-    public SdfEnvironment Environment { get; init; } = SdfEnvironment.Default();
+    /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
+    /// an unauthored world renders.</summary>
+    public SdfLights Lights { get; init; } = SdfLights.Default();
+
+    /// <summary>Gets the fade capacities reachable through authored policy rows. A residency also requests the live
+    /// <see cref="SdfShadowSlots.FadeCapacity"/> on first demand, including capacities introduced by session levers.</summary>
+    public SdfShadowFadeVariants ShadowFadeVariants { get; init; }
+
+    /// <summary>The sky: its open layer stack, fog and environment gains.
+    /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
+    /// data.</summary>
+    public SdfSky Sky { get; init; } = new();
     /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
     /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing
     /// proven" tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data
@@ -197,6 +240,24 @@ public sealed record SdfFrame(
     /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
     /// unaffected.</summary>
     public bool EnableCadenceGate { get; init; }
+    /// <summary>The residency's indirect-cache demand. Off allocates and schedules no cache work.</summary>
+    public SdfIndirectTier IndirectTier { get; init; }
+    /// <summary>The dynamic-instance default. Default receives at Medium and casts and receives at High; a placement's
+    /// explicit policy wins. Static instances retain their normal casting and receiving policy.</summary>
+    public SdfIndirectParticipation IndirectBodies { get; init; }
+
+    /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
+    /// require their captured source publications; the default admits all five categories.</summary>
+    public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
+    /// <summary>Gets the source gains captured by a finite solve. Zero also disables that category in authored frames.</summary>
+    public SdfIndirectGains IndirectGains { get; init; } = SdfIndirectGains.One;
+
+    /// <summary>Gets requested feedback sweeps after direct, capped by the actual tier. Null uses its layout limit.</summary>
+    public int? IndirectBounces { get; init; }
+
+    /// <summary>Gets receiver-only application controls, independent of the finite lighting source.</summary>
+    public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
+
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
     /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
     /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow
@@ -207,8 +268,8 @@ public sealed record SdfFrame(
     /// proxy stays off.</summary>
     public bool EnableShadowProxy { get; init; }
     /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
-    /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host
-    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>, the volume table), so no pass reads a raw tick. It comes from the
+    /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host (the sky
+    /// block, <see cref="SdfSkyBlock"/>, and the volume table), so no pass reads a raw tick. It comes from the
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }

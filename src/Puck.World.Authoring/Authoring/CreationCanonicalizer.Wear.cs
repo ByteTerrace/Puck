@@ -52,18 +52,19 @@ public static partial class CreationCanonicalizer {
             path: $"palette[{index}].soften"
         );
 
-        if (
-            (entry.Bounce is { } bounce) &&
-            !HexColor.TryParse(
-            rgb: out _,
-            value: bounce
-        ) &&
-            !HexColor.IsStateBinding(value: bounce)
-        ) {
+        if ((entry.Receive is { } receive) && (!float.IsFinite(f: receive) || (receive < 0f))) {
             errors.Add(item: new(
-                Message: "bounce must be #RRGGBB or a state.<row>[.<key>] binding.",
-                Path: $"palette[{index}].bounce"
+                Message: "receive must be finite and non-negative.",
+                Path: $"palette[{index}].receive"
             ));
+        }
+        Color(entry.Fill, "fill");
+        Color(entry.Bleed, "bleed");
+
+        void Color(string? value, string name) {
+            if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !HexColor.IsStateBinding(value: value)) {
+                errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
+            }
         }
     }
     // Per-shape lane-driven erosion: a defined lane, a finite from/to pair that differ (SdfProgramBuilder.LaneErode

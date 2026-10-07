@@ -7,7 +7,8 @@ re-drives a tape into the LIVE session at the recorded rate, and
 `replay.fork` fast-forwards a tape into the live session and keeps recording
 from there into a standalone child. Files (all in
 `src/Puck.World.Server/`, namespace `Puck.World`): `WorldReplayTape.cs` +
-`WorldReplayTape.Drive.cs` (the live drive), `WorldReplayTape.Extensions.cs`,
+`WorldReplayTape.Drive.cs` (the live drive), `WorldReplayTape.Capture.cs` (the
+per-tick capture the in-session history shares), `WorldReplayTape.Extensions.cs`,
 `WorldReplaySnapshot.cs`, `WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`, the
 read-back in `WorldReplayInspector.cs` + `WorldReplayEntryDescriber.cs`;
 `WorldReplayCodecException.cs` is in `src/Puck.World.Protocol/Codecs/`. The verb
@@ -24,6 +25,7 @@ surface.
 - Verify semantics
 - Inspect — reading a tape back
 - The live drive and forking
+- The in-session history
 - Rules for changes
 
 ## Format and development version
@@ -31,6 +33,10 @@ surface.
 - Extension `.puckreplay`, stored under the tape's injected `WorldStateRoot`, in `Replays`
   (so `--state-dir` isolates replays too).
 - `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken`.
+  The header names the recorded authority, its instance identity (the shadow
+  server is built under it, so instance-seeded draws reproduce), its document
+  directory and document path (a companion row's cabinets read content beside
+  its own document), and the companion tapes of a set.
   The current key includes authoritative state-system hashes, local flock
   perception state, full slot generations, and shared navigation trees/pending work.
   Shared tree nodes fold through canonical 64-cell block digests and a cached
@@ -53,7 +59,8 @@ surface.
   unchanged, absent local destinations bind on later exact-identity admission,
   and remote routes reconnect lazily from endpoint/definition seeds. No live
   streams or held-input lease IDs are captured. These are checkpointed routing
-  and transaction facts, not taped transfer handshakes.
+  and transaction facts, not taped transfer handshakes. The escrow section also
+  carries the crossing sequence, the watermark crossing-log recovery redoes from.
   Rule-latch hashing sorts
   into reusable scratch; storage layout is not part of the hash. Neighbor decision
   grids and diagnostic counters are derived, not persisted. The reconsideration
@@ -77,11 +84,20 @@ surface.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has ten members: shape
+- `ReplayRefusal` declares fourteen members. Thirteen are the `replay.tape`
+  door's: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
-  ticks, a tampered transfer content signature, and a recorded mutation
-  outcome disagreeing with what the replay's own apply pipeline produced.
+  ticks, a tampered transfer content signature, a recorded mutation
+  outcome disagreeing with what the replay's own apply pipeline produced, and a
+  recorded arrival the shadow's own escrow does not reproduce: its body indices,
+  each traveler's generation, or its rollback (`ArrivalRefused`), a
+  recorded departure or its rollback the shadow's own population does not
+  reproduce (`DepartureRefused`), and a recorded seat identity switch naming a
+  body that is no active local seat in the re-drive (`SeatSwitchRefused`).
+  The fourteenth is `replay.record`'s
+  `StartNotCheckpointable`: the world has stepped, so the tape would start from a
+  checkpoint of the live state, and that state is one no checkpoint captures.
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -108,14 +124,40 @@ Record-start state: the live `WorldDefinition` as canonical JSON
 (`WorldReplaySnapshot.DefinitionJson`), the mounted-addon receipts (name,
 module content hash, fuel/tick — copied from the instances that MOUNTED,
 never the document rows), and the active local seats with a pinned profile
-(`WorldReplayProfilePin(Name, MoveSpeed, TurnSpeed)`, raw fixed-point, never
-float accessors). There is no captured identity/profile catalog on the tape —
+(`WorldIdentityProjection`, including id, name, authored color, records and raw
+fixed-point movement rates). A recording armed after the world stepped (or after a
+guest or machine ran) also carries a start checkpoint
+(`WorldReplaySnapshot.StartCheckpoint`, an optional header block after the document
+path, `WorldReplayTape.Start.cs`): the authority checkpoint taken at the arm,
+passed through `WorldReplaySnapshot.ForTape`, which empties the owned-world section
+and the host row. The re-drive restores it (`WorldServer.FromCheckpoint` with
+`restoreOwnedIdentities: false`) instead of booting the definition and joining the
+seats, so its seats keep the projections the population checkpoint carries. Encode
+and `Read` both refuse a start checkpoint that holds an owned document or describes
+another document than the tape embeds; `ReplayStartPrivacyLawTests` searches a
+mid-run tape's bytes for an owned document's markers. Input the history's capture
+already held for the open tick at the arm reached the server before the checkpoint,
+so the recording's first tick leaves it out (`TrimStartSkip`). There is no captured identity/profile catalog on the tape —
 owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
-the tape's scope. `Drive(profiles, engines, addonHostFactory)` re-resolves each seat by pinned
-`Name` against the LIVE `WorldOwnedWorlds` catalog handed to it at replay
-time; the pin's own rates are what make that safe even when the live
-identity's rates have since moved (`ReportProfileDrift` reports, never
-silently substitutes, a drifted rate). The re-drive mounts its own guest set
+the tape's scope. An arrival entry is the exception for the travellers it lands: its
+leaf carries each landed profile's identity projection and nothing of its owned document, so a
+re-driven landing holds the same identity, owned records and facts the live one did.
+`Drive(profiles, engines, machineHostFactory, addonHostFactory)` reconstructs each seat from its
+recorded projection. The live `WorldOwnedWorlds` catalog supplies only the
+rate-drift report (`ReportProfileDrift` reports, never substitutes, a drifted
+rate). The shadow server holds a detached
+`WorldOwnedWorlds.CreateReplayCopy` of that catalog: session changes, facts and
+records change only the replay's identities, their saves perform no file I/O,
+and the copy narrates through the live catalog's hub. A re-driven home arrival
+(any `TryReland` with a recorded outcome) binds the projection the outcome
+records it bound to, facts and records included, in a detached identity that
+takes nothing from the live catalog and decides no adoption again, and
+`WorldReplaySnapshot.ReportAdoptionDrift` reports on
+`replay.profile`, as `ReportProfileDrift` does for a pin, where the owned
+identity as it stands now (read-only) differs from the taped projection: the
+name, either rate, and every differing fact in ordinal key order, including a
+taped fact the current identity's capacity refuses. The
+live drive refuses a tape that lands travelers. The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.
 
@@ -123,12 +165,28 @@ Per tick: ONE ordered authority/server-event list plus the intent list
 (`WorldReplayTickInput`). `WorldReplayEntry` discriminants:
 `Command` (0), `Grant(grant, actor)` (1), `Revoke(grant, actor)` (2),
 `PeerAdmitted` (3), `PeerDisconnected` (4), `Rebuild(kind,
-pathHint, force, contentHash, actor)` (5), `ScreenOp(op, contentSignature,
+origin, force, contentHash, actor)` (5), `ScreenOp(op, contentSignature,
 actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `RateLever(paused)` (9), `Transfer` (10),
 `Mutation(mutation, actor, outcome)` (11), `Undo(count, actor)` (12),
-`Composition(composition, actor)` (13), `Query(query, actor)` (14), and
-`LinkDelivery(adjacencyName)` (15). The
+`Composition(composition, actor)` (13), `Query(query, actor)` (14),
+`LinkDelivery(adjacencyName)` (15), the session events (16–18),
+`Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
+`FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21), and
+`SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
+of the tick it is recorded on). Every switch and every home adoption a re-drive binds under one identity id binds the
+escrow's one detached identity for that id (`WorldTransferEscrow.TryBindDetached`), for the whole re-drive and cleared
+only by a restore, as the live seats shared the catalog's one object; a slot the re-drive's population holds no active
+local seat at refuses by name (`SeatSwitchRefused`) when applied.
+`Departure` is one source body a crossing detached, or restored in a rollback,
+taped by `WorldServer.DepartureTap` inside the authority operation that did it,
+so it keeps the decision's own position however long the crossing then stays in
+doubt and whatever arrives meanwhile; the re-drive detaches and restores through
+the same `WorldServer.DetachForTransfer` and `RestoreDetachedForTransfer`.
+`Transfer` is the source's settled crossing: its target authority, whether that
+target is remote, and the slots whose departure it made final, as narration and
+for pairing; a re-drive changes nothing at it. It is taped for every source row,
+before an emptied source is reaped. The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
@@ -177,15 +235,16 @@ absent, or hashed content differs in either direction. Other screen ops carry
 no content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
-**Capture scope: every one of the 12 envelope payload kinds except `Lever`**
-(Command, Grant, Revoke, Session, Rebuild, ScreenOp,
-Designation, Mutation, Undo, Composition, Query), the two server-event kinds,
-plus the separate intent buffer. The boot instance's own schedule lever is
+**Capture scope: every one of the 13 envelope payload kinds except `Lever` and
+`Operation`** (Command, Grant, Revoke, Session, Rebuild, ScreenOp,
+Designation, Mutation, Undo, Composition, Query), the server-event kinds,
+plus the separate intent buffer. A generic named-machine `Operation` is not on
+the tape: `WorldServer.ApplyMachineOperation` refuses it while a recording is armed. The boot instance's own schedule lever is
 captured under its own `RateLever` entry instead of the payload leaf. All six `SessionRequest` variants are
 captured through the shared session leaf before apply and re-executed through
-`WorldServer.ApplySession` during the offline drive. The replay uses its captured
-player document to construct a detached profile catalog, so a replayed
-`SetPlayerSection` changes neither the live catalog nor persistent state.
+`WorldServer.ApplySession` during the offline drive. The replay applies them to its
+detached `WorldOwnedWorlds` copy, so a replayed `SetIdentity` changes neither the
+live catalog nor persistent state.
 `Mutation`/`Undo` re-enqueue through the ordinary buffered door
 (`EnqueueMutation`/`EnqueueUndo`, drained by the SAME tick's `DrainPendingOps`),
 so the whole apply pipeline (including an `UpsertAddon`/`RemoveAddon`'s own
@@ -204,6 +263,41 @@ through the same `WorldEventFeed.ObserveLinkDelivery` entry point at the same
 pre-step position, so staleness counts, edges, and rule firings reproduce. The
 delivered CONTENT (neighbour poses, definition revisions) is still absent: a
 replay reproduces WHEN a seam went dark, never what the neighbour showed.
+
+A destination tapes its arrivals. `WorldServer.ArrivalTap` hears each commit
+that landed at least one traveler, under the authority gate on the thread that
+carried it, at the commit's position among the authority's inputs; a step and
+its tape close hold the same gate (`WorldServerStepShell.Step`), so an arrival
+after a step joins the next tick. The tape records it as an `Arrival` carrying
+the same leaf the crossing log writes
+(`WorldAuthorityCheckpointCodec.EncodeCrossingArrival`) and the commit's
+`WorldArrivalOutcome`: each landed traveler's generation, whether the commit
+rolled the landings back (a refused member, or a record that could not be made
+durable), and, for a commit that stood, the projection each traveler coming home
+was bound to once its owned identity adopted what it carried, a partial adoption
+included, projected after every traveler of the arrival has adopted, since
+travelers coming home under one owned identity id bind the same object live. A
+re-drive binds travelers whose taped projections name one identity id to one
+shared detached identity, so they alias as they did live
+(`CrossingIdentityPrivacyLawTests.TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding`).
+Read refuses an arrival no commit could have decided: a malformed
+cohort, an outcome that does not fit it, or a handoff token arriving again after
+its commit stood. The re-drive decodes it against the recorded world's player
+defaults and lands it again through the shadow's own escrow
+(`WorldTransferEscrow.TryReland` with the outcome), under the lease the arrival
+bound rather than a second reservation; each traveler must land at its recorded
+body index and generation, and a recorded rollback stops at the same traveler.
+An arrival that does not reproduce refuses by name (`ArrivalRefused`). The
+admissions the landing makes are its own consequences, so they are not taped as
+separate server events. `WorldServer.FederatedIntentTap`
+hears, at the start of every step that holds any, the federated device images
+the step applies — a forwarded or federated traveler's input, which crosses no
+loopback — and the tape records the held set as `FederatedIntents`; the re-drive
+replaces the shadow's held images with that set
+(`WorldServer.ReplaceFederatedIntents`), and the shadow's own step applies them
+where the live step did. Adjacency continuations settle inside the authority's
+own step, so the shadow settles an adjacency arrival's continuum without a
+host.
 
 Structural exclusions: a mounted guest's DRIVING is never recorded — it is RE-DERIVED
 by re-running the pinned guests during the drive (the stronger property);
@@ -247,7 +341,7 @@ re-driven run's OWN base's canonical bytes (`WorldDefinitionSerialization.
 Serialize`), computed fresh at apply time — never the recorded document
 itself, and never the live session's base. On re-drive, `ApplyRebuild`
 resolves its candidate exactly as a live rebuild does (Reset: its own
-`m_base`; Load/Reload: a FRESH re-read of the tape's path hint — the tape
+`m_base`; Load/Reload: a FRESH re-read of the tape's file origin — the tape
 carries no embedded document, deliberately, so a moved file is caught rather
 than silently reproduced from a stored copy) and refuses BY NAME,
 `ReplayRefusal.RebuildContentMismatch`/`RebuildSourceUnavailable`, naming
@@ -266,7 +360,13 @@ diagnostic; the replay verdict instead compares
 named components (`WorldStateHashComposition.Authoritative`): poses, everything
 the state arena stores, the host-owned field cells, the state section's own
 declaration, the declared topologies, rule/interaction latches, rule-group
-progress, decision runtime, board enforcement, body action state, cached
+progress, decision runtime, board enforcement, body action state, every body's
+simulation continuation (the checkpoint's field codecs over a view of each
+live slot, excluding rendered color and rig, a seat's identity projection with
+its facts and records included; it allocates nothing, because the projection
+wire validates each facts row and serializes each records section once per
+instance and a projection with no fact reuses its empty row, so the scope
+is taken on every tick a replay records or a history captures), cached
 navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs
@@ -308,12 +408,18 @@ and fed the recorded ticks, with local seat input masked at the loopback.
 
 - `replay.record <name>` — in addition to bad args/name/already-recording,
   refuses while a drive is in progress (`replay.cancel` ends it; a fork is
-  the way to record from a drive), and after any addon has pumped, any
-  screen machine has stepped, or any authority-admitted screen operation has
-  reached host dispatch. The last gate includes host refusals because a
-  failed `Select` can still move its selector; authority denials return
-  before dispatch and do not latch it. Guest and machine accumulated state
-  and pre-arm screen operations are not in the record-start image. The
+  the way to record from a drive). Before the world's first step (and before
+  any guest or machine has run) the tape starts from the boot image, and it
+  refuses once any authority-admitted screen operation has reached host
+  dispatch. That gate includes host refusals because a failed `Select` can
+  still move its selector; authority denials return before dispatch and do not
+  latch it. Later the tape starts from a checkpoint taken at the arm, which
+  holds what the session reached: poses, cells, grants, latches, the machine
+  cores and binding memo a checkpoint host captures. A state no checkpoint
+  captures refuses by name with `StartNotCheckpointable`: a mounted or pumped
+  addon guest, a screen operation, a stepped machine without checkpoint
+  support, a coupled link or rewind history, a live session, an engagement in
+  flight, or an edit not yet applied. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
   and `WriteMask` included.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
@@ -335,14 +441,16 @@ and fed the recorded ticks, with local seat input masked at the loopback.
 
 ## Verify semantics
 
-`Verify` rehydrates a FRESH boot-image world: deserialize the embedded
+`Verify` rehydrates a FRESH world: deserialize the embedded
 definition → new population/server (fresh unconfigured render envelope reads
 as "fits") → rejoin the recorded seats with pinned profile rates (drift
-against the live catalog is printed, never thrown) → mount addons after
+against the live catalog is printed, never thrown), or, for a tape with a start
+checkpoint, restore that checkpoint into the fresh server instead
+(`WorldReplaySnapshot.CreateShadow`) → mount addons after
 seats, matching live composition order → `VerifyMountedAddons` → per tick:
 apply authority and peer-lifecycle entries in recorded order through the
 same population/grant doors, enqueue intents,
-`server.Step` (stepped at the tape's OWN recorded `SimulationRate` — 240 Hz
+`server.Step` (stepped at the tape's OWN recorded `SimulationRate` — 30 Hz
 for every world that authors no `simulation` section, or whatever rate the
 recorded world authored), hash.
 
@@ -371,14 +479,41 @@ recorded world authored), hash.
   what was actually a prepare/validate/authority divergence.
 - The comparison is LIVE-vs-replay: the recorded per-tick hash trace against
   the shadow drive's trace; the verdict names the first divergence.
-- **Tick 0 indicts the STARTING STATE** — a mid-session capture the
-  definition boot image cannot reproduce (the tape's start is the document
-  boot image plus document grants, the record-start player document, the active
-  seat list, and the permissive seed, not arbitrary live mid-session state;
-  pre-record mutations, grant edits, and session changes are not captured).
+- **Tick 0 indicts the STARTING STATE** — the boot image and seats, or the
+  start checkpoint, are not where the live session stood at the arm
+  (`ReplayArmingLawTests` doctors a tape with a checkpoint from the wrong tick
+  and reads MISMATCH at tick 0).
   **Any later tick means the start matched and the trajectory
   drifted — a genuine determinism defect.** `replay.stop` echoes exactly
   this reading.
+
+### Sets of tapes and crossings
+
+`replay.record` on a desktop arms the boot row's tape and, through
+`WorldInstanceHost.RecordCompanions`, a companion tape on every other row of the
+process; a row admitted while the recording runs is armed at its admission,
+from its own boot image. A row that cannot be taped is named on stderr
+(`[replay.tape: … records no companion tape for …]`). `replay.stop` stops every
+companion at the same boundary and writes them inside the boot tape's file.
+Verification (`WorldReplayTape.Verify`, and the post-persist drive) re-drives
+the tape and every companion a crossing involves against its own recorded world
+(a companion no crossing names adds no evidence and is not re-driven) and
+returns a `WorldReplaySetVerdict`: each re-driven authority's own verdict plus
+every crossing,
+paired by handoff token — a source tape's committed `Transfer` against the
+destination tape's `Arrival` whose commit stood, with the same source authority
+and transfer id.
+A crossing is verified only when both halves are on tapes in the set and both
+tapes match. Its other half on a remote authority, on a row nothing taped, or
+missing from the paired tape reports it `NOT VERIFIED (<why>)`. The set passes
+only when every authority matches and every crossing is verified, so
+`replay.verify` is an error for a tape that departs a traveler to a remote or
+untaped authority however exactly its own trajectory replays; `replay.stop`
+narrates the same verdict, reading an all-match set with an unverified crossing
+as "a crossing's other half is on no tape in this set". The verdict prints on
+one line: the tape's own verdict, then `authority '<instance>' …` per
+companion, then `crossing transfer=<id> '<source>' -> '<target>' verified|NOT
+VERIFIED (…)` per crossing.
 
 ## Inspect — reading a tape back
 
@@ -404,8 +539,9 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
   hold=2s by console`, `grant drive body:0 -> seat2 by console`, `mutation
   UpsertStateRow by console accepted`, `rebuild load '…' sha256-64/… by
   console`, `screen.insert 0 '…' content=… by console`, `session join
-  slot=1 identity=amber by seat2`, `rate paused`, `transfer #… -> '…' …
-  departed=[0]`, `link '…' delivered`). A `body.press` is a COMMAND entry,
+  slot=1 identity=amber by seat2`, `rate paused`, `transfer #… -> '<target>' '…' …
+  departed=[0]`, `arrival #… from '<source>' body:[…]`, `federated [body:…]`,
+  `link '…' delivered`). A `body.press` is a COMMAND entry,
   not an intent edge — the seat's own intent lane stays whatever the device
   held, and the server-side auto-release is not a tape event at all.
 - `--poses`: re-drives through the untouched `WorldReplaySnapshot.Drive`,
@@ -440,24 +576,37 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   `RateMismatch`/zero ticks/target out of range; refuse when the live joined
   player set differs from the tape's seat set (a seat cannot be respawned
   through the session door — `player.join`/`player.leave` to match first),
-  when the tape's world declares screens and a machine has stepped or a
-  screen op applied, when the tape pins addons and a guest has pumped (the
+  when a screen or machine operation has applied (including successful screen
+  memory access), when the tape's world declares screens and a machine has
+  stepped, when the tape pins addons and a guest has pumped (the
   rebuild door reuses an unchanged row's guest with its state), or when an
   engagement is in flight. Transfer transactions or mobility credentials,
   remote occupants, and
   host-owned queued/in-doubt transfers or forwarding history also refuse:
-  a single-authority tape cannot rewind another authority's obligations.
+  a single-authority tape cannot rewind another authority's obligations. A
+  tape that lands arrivals refuses too: driving it would embody travelers no
+  source released, so `replay.verify` lands them again offline instead.
   The ownership check and reset hold the same authority gate, preventing a
   network reservation between them. Then the boot image is installed through the
   server's own doors: a forced `world.load` of the embedded definition
   (`EnqueueRebuild` + `DrainAdministrative`, synchronous — solids, machines
   reconcile, addon plan, document grants, journal clear, base replace; the
   `[world.definition: world.load applied …]` line is the evidence, and the
-  boot document's path is the path hint so relative machine content keeps
+  boot document's path is the file origin so relative machine content keeps
   resolving), then the complete authority checkpoint a fresh server reaches
   after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
   `WorldServer.RestoreCheckpoint` resets clocks, decisions,
   rule latches, fields, grants, held input, events, and population together.
+  The replay boot restore keeps the pinned seat identities detached and leaves
+  the owned catalog unchanged; recovery's home-seat rebind does not run here.
+  A drive's end (`EndDriveCore`, a cancel or the target reached) runs `RebindOwnedSeats`:
+  each local seat whose carried identity is not the catalog's own but whose id and
+  mobility `WorldServer.HomeSeatIdentity` resolves to an owned identity rebinds to it, the
+  detached copy is discarded, and `ReportAdoptionDrift` reports the copy's
+  difference from the live identity on `replay.profile` first. A replay's identity effects are
+  never persisted; a seat the catalog does not own is untouched. A fork records one
+  `SeatIdentity` per rebound seat at the head of its first tick (`m_recordPrefix`), so the child's tape holds the
+  identity the fork continues with and its re-drive switches at the same step; its boot image keeps the parent's pins.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
   `Replaying`. The authority clock rewinds to the boot image. Hosts call
@@ -517,11 +666,113 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   reproducing the parent's hashes on the live server, the mask with its
   unmasked control, cancel abandoning a fork).
 
+## The in-session history
+
+`world.history` (`WorldHistory*.cs` in Server, `WorldHistoryCommandModule` in
+Console) is time travel over the running boot world; the mechanism is in
+[the server guide](../../../../src/Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs).
+The contracts a change must keep:
+
+- **One capture.** The tape's taps (`WorldReplayTape.Capture.cs`) attach while
+  a recording is armed or a history is on, never during a live drive, and never
+  while a history re-simulation suspends them. `NoteTick` closes one
+  `WorldReplayTickInput` and hands it to both; the recording's first tick alone
+  carries the arm-time session prefix. A new tap belongs in the capture, so the
+  history records it too; a new entry kind owes `ApplyRecordedTick` its arm and,
+  if its consequence lives at another authority, the history's unrewindable
+  list.
+- **Proof, not trust.** Every seek proves the restored keyframe against the hash
+  its tick recorded and every re-simulated tick against its recorded hash and
+  mutation outcomes. A disagreement is reported by tick and fails the verb.
+  Machine cores are outside the authoritative hash, so when the world has
+  stepped a machine the verdict says they were not compared
+  (`MachineCoresOutsideProof`); exact machine continuation is held by
+  `MachineBindingCheckpointLawTests`, not by the per-seek proof.
+- **Restore exactly.** In-place restore keeps the live base and journal by
+  identity only when the keyframe's fingerprint (base reference, journal
+  length and tail, solid revision) matches; otherwise the keyframe's document
+  goes through the forced load door first. Restore prepares an arena from the
+  captured definition and complete retained-key ledger, so relayout cannot
+  leave future keys behind. Each keyframe retains its asset directory, and
+  machine hosts restore over running machines. The named machine bindings'
+  on-change memo rides the server section and is replaced, never merged, on
+  every restore (seek, `FromCheckpoint`, a replay drive's boot image); state a
+  restore must leave behind belongs in the checkpoint, not in a field the
+  restore forgets to clear. Checkpoints preserve armed music
+  transitions as well as the music clock. Capture refuses a document whose score
+  differs from the still-running boot music plan.
+- **Deliver once.** A seek withholds every timeline delivery of its span
+  (`WorldOutputHub.WithholdsTimeline`, set and cleared in `TrySeek` beside
+  `EnterReplay`): the restore's definition, a load-door install, and each
+  re-simulated tick's state and snapshot reach no sink. `PresentRestoredTimeline`
+  then delivers one definition and one snapshot at the target, whichever door
+  restored and however many ticks were re-simulated, zero included
+  (`HistorySeekDeliveryLawTests`). Nothing downstream may rely on seeing a
+  re-simulated tick: a projection feed re-composes from that one definition.
+  A recorded composition the re-simulation re-applies is withheld as well (the
+  history does not rewind a presentation override); session levers have no
+  tape entry, so a seek never re-applies one.
+- **Refuse before moving; read once.** Every refusal precedes the first change
+  to the live world. A recorded reload is read once, by the preflight, and the
+  re-simulation installs those verified bytes, so a file changing mid-seek can
+  neither refuse from inside a step nor reach the world.
+- **Append only at the head.** A live tick behind the head cuts the future
+  before it appends, so no recorded entry lies ahead of the cursor that a seek
+  did not scan to get there; a seek scans only from where it starts.
+- **Refuse uncaptured state.** Seek checks under the authority gate for pending
+  input and provider contributions, live sessions, addon guests, screen
+  operations, unsupported machines and external obligations. Recorded spans
+  refuse external authority events, changed rebuild content, and a hosted
+  world's reload, which is replayed from its store and no history holds one. Seek retires
+  providers from the abandoned timeline and suppresses save effects while
+  re-simulating; only an explicit extension epoch admits fresh providers.
+- **Steady ticks allocate nothing.** Capture buffers are reused when only the
+  history records, spans are sized on the keyframe tick, and per-tick paths
+  avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.
+- **Branches go somewhere.** `switch <name>` (`WorldHistory.TrySwitch`) is a seek
+  to the branch's fork under the seek's own refusals plus the branch's own
+  entries. The displaced future is kept under the same name in its place, and
+  the branch's ticks are re-simulated through `StepRecorded` and appended as the
+  timeline that now stands, each proved against the hash the branch recorded. A
+  branch keeps its step widths for this. `save <name> <tape>` drafts a tape
+  (`TryBranchTape`) that starts from the keyframe checkpoint at or before the
+  fork, without its owned-world section, carries the timeline's ticks to the fork
+  and then the branch's, and names `ForkedFrom = ('world.history', ticks
+  copied)`. `WorldReplayTape.SaveDraft` re-drives it once for its pose trace,
+  writes it and returns the verdict; a tick whose step width differs from the
+  rate's refuses the save.
+- **Seats scrub under their own principal.** `step`, `scrub`, `resume` and
+  `branch` are bindable. Each is checked when it runs by
+  `WorldHistory.TryAuthorize`, which requires `Control` over
+  `GrantSubject.History`; the seeded `Control/all` covers it until revoked.
+  `row` answers anyone, and every other form answers the console only
+  (`WorldHistoryCommandModule.Seat.cs`). The scrubber row reads only what
+  `PublishRow` copies under its lock at the end of a closed tick, a seek, a
+  switch or a cleared window. `world.history row` echoes exactly that.
+  `world.history.drag` reads `WorldHistory.Pointer`, the row a presented host
+  attaches, which hit-tests the rectangle the overlay draws
+  (`HistoryRowWriter.Rect`). `HistoryScrubLawTests` drives all of it from a
+  seat's command session.
+- **Shadows for what-ifs.** `diff` and `replay-edit` run on a
+  `WorldHistoryShadow` (`FromCheckpoint`, its own machine host, a scratch
+  owned-world catalog), never on the live server.
+- **Verify.** `tests/Puck.World.Tests/InSessionHistoryLawTests.cs` covers seeks to
+  every tick across seeds and worlds, the wrong-keyframe and wrong-order red
+  legs, branch, diff, replay-edit, budget, and allocation. Live: `world.history
+  on`, `body.press forward 1 1 0`, `world.wait 90`, `world.history seek 30`
+  (matches, paused), `body.where 0`, `world.history step 40`, `world.history
+  diff 30 90`, `world.history resume`. `HistoryBoundaryLawTests.cs` covers
+  capture isolation, replay-edit placement, restore context and named refusals;
+  `HistoryRefusalLawTests.cs` the read-once rule for recorded reloads (the
+  preflight reads each file once and every run re-applies those verified
+  bytes), the append-at-head invariant, the replay-edit span and edit refusals, and the live
+  session and session event refusals apart from each other.
+
 ## Rules for changes
 
 - A change that moves simulation math is EXPECTED to change replay hashes;
   re-record any persisted tape it invalidates in the same change
-  (`CLAUDE.md` rule 4).
+  (`AGENTS.md` rule 4).
 - Tape byte-layout and semantic changes update the first format in place. Regenerate
   relevant verification recordings; do not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the

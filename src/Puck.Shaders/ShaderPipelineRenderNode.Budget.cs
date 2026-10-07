@@ -16,6 +16,8 @@ namespace Puck.Shaders;
 // readback is the node's, not a graph's: it creates its staging buffer on the first capture, sized to the published
 // surface, and OwnedBytes counts it from then on, so every later replacement's peak includes it. Like every other count
 // here it is the logical size, not the backend's allocation, which may pad rows.
+// Package readback rings belong to their installed recorder, are counted at their actual lazy allocation sizes, and
+// remain in a retired graph's LiveBytes until that recorder is disposed.
 public sealed partial class ShaderPipelineRenderNode {
     private const ulong FullscreenVertexBytes = (FullscreenTriangle.StrideBytes * FullscreenTriangle.VertexCount);
 
@@ -122,10 +124,11 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // The bytes a graph planned at the counts' frame extent owns, before its preview: every storage's instances, and
     // the geometry buffer of each pass that has one.
-    private static ulong GraphBytes(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, uint inFlight) {
+    private ulong GraphBytes(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, uint inFlight) {
         var bytes = 0UL;
 
         foreach (var storage in plan.Storages) {
+            if (m_packages.OwnsBuffer(plan: plan, storage: storage)) { continue; }
             bytes = checked((bytes + Footprint(
                 count: InstancesOf(
                     inFlight: inFlight,
@@ -203,6 +206,11 @@ public sealed partial class ShaderPipelineRenderNode {
             extent: preview,
             inFlight: m_inFlight
         )));
+
+        if (ReferenceEquals(objA: plan, objB: m_pipeline?.Plan) && (m_passes.Length > 0) && (m_passes[0].KernelCounters is { } counters)) {
+            steady = checked(((steady + counters.TotalBytes) - KernelCounterBytes(inFlight: m_inFlight, plan: plan)));
+        }
+        if (ReferenceEquals(objA: plan, objB: m_pipeline?.Plan)) { steady = checked((steady + PackageReadbackBytes(passes: m_passes))); }
         var carried = 0UL;
 
         foreach (var index in CarriedHistoryOf(
@@ -379,7 +387,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return new ShaderPipelineResourceStatus(
             resource.Spec.Name,
             resource.Spec.Kind,
-            bytes,
+            (resource.Borrowed ? 0UL : bytes),
             width,
             height,
             resource.Spec.IsExternal,

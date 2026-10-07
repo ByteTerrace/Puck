@@ -86,17 +86,32 @@ internal sealed class FakeGpuDevice :
 
     public long AdapterLuid => 0L;
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
+    /// <summary>Gets or sets optional observations of the actual direct dispatch group counts.</summary>
+    public Action<uint, uint, uint>? OnDispatch { get; set; }
+    /// <summary>Gets or sets optional observations of actual buffer copy handles and byte ranges.</summary>
+    public List<(nint Source, nint Destination, ulong Bytes, ulong SourceOffset, ulong DestinationOffset)>? BufferCopies { get; set; }
+    /// <summary>Gets or sets optional observations of the buffers and ranges cleared.</summary>
+    public List<(nint Buffer, ulong Bytes)>? BufferClears { get; set; }
+    /// <summary>Gets or sets optional observations of actual buffer access transitions.</summary>
+    public List<(nint Buffer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)>? BufferTransitions { get; set; }
     public Action<int>? OnReadback { get; set; }
 
-    public delegate void ReadbackWriter(Span<byte> destination);
+    public delegate void ReadbackWriter(GpuObjectName name, Span<byte> destination);
 
     public ReadbackWriter? WriteReadback { get; set; }
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
     /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
     public bool DistinctImages { get; set; }
+    /// <summary>Gets or sets whether buffers expose their unique tracked creation handles instead of the fixed
+    /// handle, so a law can associate actual published buffers with their disposal records. Requires object tracking.</summary>
+    public bool DistinctBuffers { get; set; }
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
     /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
     public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
+    /// <summary>Gets or sets a hook every graphics pipeline creation runs first, with the pipeline's description, on
+    /// whatever thread creates it — a law holds one graphics pipeline's build, such as the display encode's, by blocking
+    /// here.</summary>
+    public Action<GpuGraphicsPipelineDescription>? BeforeGraphicsPipeline { get; set; }
     /// <summary>Gets or sets what every service call does besides being counted, given the call's key (such as
     /// <c>IGpuBindings.WriteSampledImage</c>): a law throws from it to fail that call, as a lost device does.</summary>
     public Action<string>? OnCall { get; set; }
@@ -120,6 +135,8 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets the fence submitted last, as it reached the device.</summary>
     public IGpuSubmissionFence? LastSubmittedFence { get; private set; }
 
+    /// <summary>Gets every fence a submission has reached the device with.</summary>
+    public HashSet<Fence> SubmittedFences { get; } = [];
     /// <summary>Gets the device-local memory of the tracked images and device-local buffers: an image is its width times
     /// its height times four bytes, a buffer its size.</summary>
     public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
@@ -234,13 +251,20 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.SetScissor(nint commandBufferHandle, GpuPixelRect rect) => Hit(key: "IGpuRecorder.SetScissor");
     void IGpuRecorder.Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => Hit(key: "IGpuRecorder.Draw");
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) => Hit(key: "IGpuRecorder.DrawIndexed");
-    void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => Hit(key: "IGpuRecorder.Dispatch");
+    void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+        Hit(key: "IGpuRecorder.Dispatch");
+        OnDispatch?.Invoke(groupCountX, groupCountY, groupCountZ);
+    }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
-    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
+    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        BufferClears?.Add(item: (bufferHandle, sizeBytes));
+        Hit(key: "IGpuRecorder.ClearStorageBuffer");
+    }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
         OnBufferCopy?.Invoke(arg1: sourceOffsetBytes, arg2: sizeBytes);
+        BufferCopies?.Add(item: (sourceBufferHandle, destinationBufferHandle, sizeBytes, sourceOffsetBytes, destinationOffsetBytes));
         Hit(key: "IGpuRecorder.CopyBuffer");
     }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
@@ -248,7 +272,10 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuRecorder.TransitionImageLayout");
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
-    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.TransitionBuffer");
+    void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        BufferTransitions?.Add(item: (bufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask));
+        Hit(key: "IGpuRecorder.TransitionBuffer");
+    }
     IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) {
         Hit(key: "IGpuCommandPoolFactory.Create");
 
@@ -276,6 +303,7 @@ internal sealed class FakeGpuDevice :
         );
     }
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
+        BeforeGraphicsPipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
         return Named(
@@ -421,6 +449,7 @@ internal sealed class FakeGpuDevice :
         LastSubmittedFence = fence;
         // A backend accepts only its own fence type; a counting fence reaching here is a missed unwrap.
         ((Fence)fence).Arm();
+        _ = SubmittedFences.Add(item: ((Fence)fence));
         Submissions++;
         CarryWaits(
             commandBuffers: commandBufferHandles.Length,
@@ -525,6 +554,7 @@ internal sealed class FakeGpuDevice :
             resource: new Resource(
                 creation: Track(kind: "readback buffer"),
                 gpu: this,
+                readbackName: name,
                 sizeBytes: sizeBytes
             )
         );
@@ -729,7 +759,7 @@ internal sealed class FakeGpuDevice :
             ? ((nint)(20 + ordinal))
             : 0))]);
 
-    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null, nint imageHandle = 4, nint imageViewHandle = 5) :
+    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null, nint imageHandle = 4, nint imageViewHandle = 5, GpuObjectName readbackName = default) :
         IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
@@ -739,7 +769,7 @@ internal sealed class FakeGpuDevice :
         IGpuReadbackBuffer,
         IGpuShaderModule,
         IGpuStorageBuffer {
-        public nint BufferHandle => 3;
+        public nint BufferHandle => (gpu.DistinctBuffers ? (creation?.Handle ?? 3) : 3);
         public nint CommandBufferHandle => 2;
         public nint DescriptorSetLayoutHandle => 10;
         public IReadOnlyList<nint> GroupLayoutHandles => (groupLayouts ?? []);
@@ -766,7 +796,7 @@ internal sealed class FakeGpuDevice :
             gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
-            gpu.WriteReadback?.Invoke(destination: destination);
+            gpu.WriteReadback?.Invoke(name: readbackName, destination: destination);
         }
     }
     // Every upload lands on one fixed view handle.

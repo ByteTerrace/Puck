@@ -1,0 +1,20 @@
+# Same scene, two 960x1080 views, two held light slots, native temporal output.
+# Keep exactly one JSON response: the collector reads all scopes from this object.
+world.cadence on
+world.quality medium
+world.indirect medium
+world.indirect-method cache
+world.rate pause
+world.wait ready 180
+world.rate resume
+# Warm the same stationary cache before changing this leg's one input class.
+world.rate pause
+world.wait indirect 180
+world.rate resume
+world.state.cell.set cameraPose $value 1
+world.wait 120
+# Retain actual body participation and disjoint residency bytes beside this counter response.
+body.where 0
+world.looks
+world.budget
+world.counters --json

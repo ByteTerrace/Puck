@@ -5,6 +5,7 @@ world.cadence off
 # The floor tier: the world's own low preset (shadows off, ambient occlusion off, render scale half), so the one
 # 1920x1080 view renders at 1440x810, the extent the render-scale quantization rounds half to.
 world.quality low
+world.indirect off
 # The engine's pipeline set builds on the thread pool, and a cold driver cache can hold the first frame back for many
 # ticks, so the read waits on the engine being ready rather than on a tick count. The deadline names the build if it
 # never finishes. The simulation is paused meanwhile, so the ready tick, which differs by backend and cache, never

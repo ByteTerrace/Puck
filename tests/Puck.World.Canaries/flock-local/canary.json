@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/flock-local/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/flock-local/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -156,7 +156,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/flock-local/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/flock-local/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

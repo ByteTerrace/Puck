@@ -48,6 +48,25 @@ public static class AddonModuleValidator {
             (function.Results[0] == ValueKind.Int32)
         );
     }
+    private static bool RequireNullaryI64(IReadOnlyList<Export> exports, string name, out string error) {
+        var function = FindFunction(
+            exports: exports,
+            name: name
+        );
+
+        if (
+            (function is null) ||
+            (function.Parameters.Count != 0) ||
+            (function.Results.Count != 1) ||
+            (function.Results[0] != ValueKind.Int64)
+        ) {
+            error = $"export '{name}' missing or not ()->i64";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
     private static bool RequireNullaryI32(IReadOnlyList<Export> exports, string name, out string error) {
         var function = FindFunction(
             exports: exports,
@@ -134,6 +153,11 @@ public static class AddonModuleValidator {
             error: out error,
             exports: exports,
             name: AddonAbi.Exports.AbiVersion
+        ) ||
+            !RequireNullaryI64(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.AbiShape
         ) ||
             !RequireNullaryI32(
             error: out error,

@@ -8,37 +8,38 @@
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
+        <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, before they
+             compile (build/Shaders.targets compiles kernels after ResolveProjectReferences). -->
+        <ProjectReference Include="../Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
     </ItemGroup>
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive\PuckDirect3D11KernelBytecode.cs" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\..\build\ShaderRecipe.props" Pack="true" PackagePath="buildTransitive\ShaderRecipe.props" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)../../build/PuckCompileShaderBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckCompileShaderBytecode.cs" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)../../build/PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive/PuckShaderHashSidecars.cs" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)../../build/PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckDirect3D11KernelBytecode.cs" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)../../build/Shaders.targets" Pack="true" PackagePath="buildTransitive/ByteTerrace.Puck.Shaders.targets" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)../../build/ShaderRecipe.targets" Pack="true" PackagePath="buildTransitive/ShaderRecipe.targets" Visible="false" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The display encode (SurfaceEncoder): the fullscreen triangle and the encode every swapchain compositor, the
-             float preview and a capture of a float output draw with. -->
-        <VertexShaderSource Include="Assets\Runtime\display.vert.hlsl" />
-        <FragmentShaderSource Include="Assets\Runtime\display-encode.frag.hlsl" />
-        <Content Include="Assets\Runtime\display.vert.hlsl;Assets\Runtime\display-encode.frag.hlsl;Assets\Runtime\display.vert.spv;Assets\Runtime\display-encode.frag.spv;Assets\Runtime\display.vert.dxil;Assets\Runtime\display-encode.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy and the
-             graph's place package, compiled to SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode
-             target. -->
-        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
-        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
-        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
-        <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy, the
+             graph's place package, and the display encode under Runtime (SurfaceEncoder: the fullscreen triangle and the
+             encode every swapchain compositor, the float preview and a capture of a float output draw with), compiled to
+             SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode target behind its freshness gate. -->
+        <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
+        <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
+        <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
+        <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
+        <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
+        <ShaderInclude Include="Assets/Shaders/**/*.hlsli" />
     </ItemGroup>
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile
              to cs_5_0 DXBC at build (CompileDirect3D11Kernels in build/Shaders.targets), which ships beside them, because a
              kernel runs on its host's own Direct3D 11 device and compiles nothing there. -->
-        <Content Include="Assets\Probes\**" Exclude="Assets\Probes\**\*.dxbc" CopyToOutputDirectory="PreserveNewest" />
-        <Direct3D11KernelSource Include="Assets\Probes\average.hlsl;Assets\Probes\faerie.hlsl;Assets\Probes\ir-blob.hlsl;Assets\Probes\ir-marker.hlsl" Entries="accumulate;finalize" />
+        <Content Include="Assets/Probes/**" Exclude="Assets/Probes/**/*.dxbc" CopyToOutputDirectory="PreserveNewest" />
+        <Direct3D11KernelSource Include="Assets/Probes/average.hlsl;Assets/Probes/faerie.hlsl;Assets/Probes/ir-blob.hlsl;Assets/Probes/ir-marker.hlsl" Entries="accumulate;finalize" />
     </ItemGroup>
 </Project>

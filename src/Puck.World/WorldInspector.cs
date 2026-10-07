@@ -24,7 +24,6 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         viewport = view.Region;
         return (seats.InspectorEnabled(slot: slot) ? m_text[slot].Text : []);
     }
-    public bool Refused(int slot) => m_text[slot].Refused;
     public string Describe(int slot) {
         Refresh(slot: slot);
         return new string(value: m_text[slot].Text);
@@ -66,8 +65,11 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         var mirror = (route?.Endpoint.FollowState() ?? client.StateMirror);
         var pick = ((cursor.Status.Slot == slot) ? cursor.Pick : null);
         var snapshot = new WorldInspectorSnapshot {
+            Definition = (route?.Endpoint.Definition ?? client.Definition),
+            Mirror = mirror,
             Slot = slot,
             Pick = pick,
+            IndirectReference = cursor.ReferenceOf(pick: pick),
             Camera = (pick?.Sample?.Camera ?? viewports.Seat(slot: slot).Camera),
             Selection = seats.CurrentOf(slot: slot, world: (route?.Endpoint.Identity ?? WorldInstanceHost.BootInstanceName)),
             SimulationTick = mirror.Tick,
@@ -87,7 +89,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         var text = m_text[slot];
 
         text.Format(snapshot: in snapshot);
-        if (timing.Enabled && (probe.Root?.Runtime is { } runtime)) {
+        if (timing.ReadoutEnabled && (probe.Root?.Runtime is { } runtime)) {
             var observed = fps.Summarize();
 
             text.FrameRate(mean: observed.AverageFps, slowest: observed.WorstFps);

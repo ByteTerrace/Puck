@@ -59,7 +59,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
             request: request
         );
 
-        result.ThrowIfFailed(operation: "vkCreateFramebuffer");
+        result.ThrowIfFailed(device: device, operation: "vkCreateFramebuffer");
 
         if (0 == framebufferHandle) {
             throw new InvalidOperationException(message: "vkCreateFramebuffer returned success without a valid framebuffer handle.");
@@ -82,7 +82,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
             request: request
         );
 
-        result.ThrowIfFailed(operation: "vkCreateImageView");
+        result.ThrowIfFailed(device: device, operation: "vkCreateImageView");
 
         if (0 == imageViewHandle) {
             throw new InvalidOperationException(message: "vkCreateImageView returned success without a valid image-view handle.");

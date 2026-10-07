@@ -33,7 +33,7 @@ namespace Puck.Abstractions.Gpu;
 /// have grown to the configured pass count.
 /// </para>
 /// </summary>
-public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
+public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private const int Columns = GpuWork.SubmissionColumnCount;
 
     private readonly WorkCount[] m_lifetime = new WorkCount[GpuWork.LifetimeKindCount];
@@ -44,6 +44,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private int m_currentPass = -1;
     private WorkClass[] m_classes = [];
     private string[] m_labels = [];
+    private GpuWorkDetail[] m_details = [];
 
     private long m_lastSealed;
     private Record? m_open;
@@ -78,6 +79,19 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
     }
 
+    /// <summary>Gets whether a sealed submission waits on a fence that <see cref="Poll"/> would complete it by once the
+    /// fence signals.</summary>
+    public bool HasPending {
+        get {
+            foreach (var record in m_records) {
+                if ((record.State == RecordState.Sealed) && (record.Fence is { } fence) && (fence.ArmedSubmission == record.Submission)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
     /// <inheritdoc/>
     public string Name { get; }
     /// <inheritdoc/>
@@ -131,6 +145,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         m_labels = passLabels.ToArray();
+        m_details = [];
         m_classes = (passClasses.IsEmpty
             ? new WorkClass[passLabels.Length]
             : passClasses.ToArray()
@@ -202,15 +217,18 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <summary>Publishes the newest pending submission whose fence has signaled, without waiting. A node calls it
     /// once per produced frame, paused or not.</summary>
     public void Poll() {
-        foreach (var record in m_records) {
-            if (
-                (record.State == RecordState.Sealed) &&
-                (record.Fence is { } fence) &&
-                (fence.ArmedSubmission == record.Submission) &&
-                fence.IsSignaled
-            ) {
-                Complete(submission: record.Submission);
+        while (true) {
+            Record? next = null;
+
+            foreach (var record in m_records) {
+                if ((record.State == RecordState.Sealed) && (record.Fence is { } fence) &&
+                    (fence.ArmedSubmission == record.Submission) && fence.IsSignaled &&
+                    ((next is null) || (record.Submission < next.Submission))) { next = record; }
             }
+            if (next is null) { return; }
+            // Physical records wrap independently of submission order. Read every ready earlier slot before a
+            // newer completion retires it, as Complete does for an explicitly waited later submission.
+            Complete(submission: next.Submission);
         }
     }
     /// <summary>Names where the work being recorded leaves the counts its kernels write on the GPU: once the submission
@@ -306,12 +324,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         if (submission > m_published) {
             completed.Readback?.AddTo(
                 counts: completed.Counts.AsSpan(
-                    length: ((completed.Labels.Length + 1) * Columns),
+                    length: (((completed.Labels.Length + completed.Details.Length) + 1) * Columns),
                     start: 0
                 ),
-                passCount: completed.Labels.Length,
+                rowCount: (completed.Labels.Length + completed.Details.Length),
                 slot: completed.ReadbackSlot
             );
+            ReconcileDetails(record: completed);
             Publish(record: completed);
             m_published = submission;
         }
@@ -322,6 +341,16 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             }
         }
     }
+
+    /// <summary>Counts the CPU projection that decides whether the environment pass renders.</summary>
+    /// <param name="texels">The number of projected texels.</param>
+    /// <param name="skipped">Whether the changed candidate stayed below a display code.</param>
+    public void CountEnvironmentProjection(int texels, bool skipped) {
+        Count(amount: 1, column: GpuWork.EnvironmentProjectionsColumn);
+        Count(amount: texels, column: GpuWork.EnvironmentProjectionTexelsColumn);
+        if (skipped) { Count(amount: 1, column: GpuWork.EnvironmentSkippedColumn); }
+    }
+
     internal void Count(int column, long amount) {
         var record = OpenRecord();
 
@@ -375,6 +404,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             labels: m_labels,
             revision: m_revision
         );
+        chosen.BindDetails(details: m_details);
         m_open = chosen;
 
         return chosen;
@@ -383,9 +413,10 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         var passCount = record.Labels.Length;
 
         m_snapshots[((int)((m_version + 1L) & 1L))].Load(
+            details: record.Details,
             classes: record.Classes,
             counts: record.Counts.AsSpan(
-                length: ((passCount + 1) * Columns),
+                length: (((passCount + record.Details.Length) + 1) * Columns),
                 start: 0
             ),
             labels: record.Labels,
@@ -422,6 +453,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         public bool HasPassActivity;
 
         public string[] Labels = [];
+        public GpuWorkDetail[] Details = [];
 
         public IGpuWorkReadback? Readback;
         public int ReadbackSlot;
@@ -455,6 +487,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
         public void Rebind(string[] labels, WorkClass[] classes, long revision) {
+            Details = [];
             Classes = classes;
             var countLength = ((labels.Length + 1) * Columns);
 
@@ -482,6 +515,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Labels = labels;
             Revision = revision;
+        }
+        public void BindDetails(GpuWorkDetail[] details) {
+            var length = checked((((Labels.Length + details.Length) + 1) * Columns));
+
+            if (Counts.Length < length) { Array.Resize(array: ref Counts, newSize: length); }
+            Counts.AsSpan(start: ((Labels.Length + 1) * Columns), length: (details.Length * Columns)).Clear();
+            Details = details;
         }
     }
 }

@@ -1,12 +1,17 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
+using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 internal sealed partial class WorldInspectionCommandModule {
     private CommandResult Cost(CommandContext context, WireArgs args) {
+        if ((args.Count > 0) && args.Is(index: 0, value: "sky")) {
+            return ((args.Count == 1) ? SkyCost() : CommandResult.Usage(form: "sky", verb: "world.cost"));
+        }
         var residency = ((inspector is null) ? probe?.Residency : inspector.ResidencyOf(slot: context.Slot));
 
         if (residency?.Frame is not { } frame) {
@@ -42,5 +47,26 @@ internal sealed partial class WorldInspectionCommandModule {
         if (!top && (pointer is { } pixel) && ((pixel.Target as WorldPickTarget)?.Placement == placement)) { text.Append(handler: $"\npixel={pixel.X},{pixel.Y} steps={pixel.Steps} queries={pixel.Queries}"); }
         text.Append(value: ']');
         return new CommandResult(Output: text.ToString());
+    }
+    private CommandResult SkyCost() {
+        var nodes = new List<GpuWorkNode>();
+
+        (gpu ?? probe)?.CopyNodes(nodes: nodes);
+        var text = new StringBuilder(value: "[world.cost: sky\n");
+        var sample = new GpuWorkSample();
+        var found = false;
+
+        static bool IsSky(string pass) => ((pass == "environment") ||
+            (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Sky)) ||
+            (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Composite)));
+        foreach (var node in nodes) {
+            if (!node.Work.TryReadCompleted(sample: sample)) { continue; }
+            if (!sample.PassLabels.ToArray().Any(predicate: IsSky)) { continue; }
+            found = true;
+            text.Append(value: "node ").Append(value: node.Name).Append(value: ' ');
+            GpuWorkReport.AppendSample(builder: text, includePass: IsSky, sample: sample);
+        }
+        if (!found) { text.Append(value: "work unavailable: no sky submission has completed\n"); }
+        return new CommandResult(Output: text.Append(value: ']').ToString());
     }
 }

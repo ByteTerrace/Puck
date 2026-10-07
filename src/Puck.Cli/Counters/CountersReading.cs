@@ -18,7 +18,7 @@ namespace Puck.Cli.Counters;
 /// <see cref="WorkClass.Pacing"/> under <see cref="SubmissionKind"/> and <see cref="RevisionKind"/>, since which
 /// submission a read lands on depends on when it ran.
 /// </summary>
-internal static class CountersReading {
+internal static partial class CountersReading {
     /// <summary>The name a node's submission identity is recorded under.</summary>
     public const string SubmissionKind = "gpu.sample.submission";
     /// <summary>The name a node's revision identity is recorded under.</summary>
@@ -149,7 +149,7 @@ internal static class CountersReading {
 
         // A count reads its kind's class, loosened to its pass's: a deterministic kind in a per-backend-deterministic
         // pass, whose work follows the device, is per-backend-deterministic there.
-        void Add(string source, string? node, string? pass, JsonElement values, WorkClass passClass = WorkClass.Deterministic) {
+        void Add(string source, string? node, string? pass, JsonElement values, WorkClass passClass = WorkClass.Deterministic, string? detail = null) {
             foreach (var count in values.EnumerateObject()) {
                 if (!classes.TryGetValue(
                     key: count.Name,
@@ -162,6 +162,7 @@ internal static class CountersReading {
 
                 counts.Add(item: new WorldCount(
                     Class: ClassIn(kind: workClass, pass: passClass),
+                    Detail: detail,
                     Kind: count.Name,
                     Node: node,
                     Pass: pass,
@@ -258,7 +259,14 @@ internal static class CountersReading {
                         Label: label,
                         Node: name,
                         State: state
-                    ));
+                    ) { Details = [.. pass.GetProperty(propertyName: "details").EnumerateArray().Select(selector: static detail => detail.GetProperty(propertyName: "label").GetString()!)] });
+
+                    foreach (var detail in pass.GetProperty(propertyName: "details").EnumerateArray()) {
+                        if (detail.TryGetProperty(propertyName: "counts", value: out var detailCounts)) {
+                            Add(node: name, pass: label, passClass: passClass, source: GpuSection, values: detailCounts,
+                                detail: detail.GetProperty(propertyName: "label").GetString()!);
+                        }
+                    }
 
                     if (pass.TryGetProperty(
                         propertyName: "counts",

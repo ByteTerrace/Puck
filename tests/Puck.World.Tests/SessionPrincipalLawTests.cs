@@ -374,7 +374,7 @@ public sealed class SessionPrincipalLawTests {
             request: new WorldRebuildRequest(
                 Kind: WorldRebuildKind.Reset,
                 Definition: null,
-                PathHint: null,
+                Origin: null,
                 Force: false
             )
         );
@@ -520,7 +520,7 @@ public sealed class SessionPrincipalLawTests {
         }
 
         Assert.Equal(
-            actual: tape.Verify(name: name).DivergedAt,
+            actual: tape.Verify(name: name).Primary.DivergedAt,
             expected: -1
         );
     }

@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Text;
 using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Lowering;
 
@@ -91,6 +90,15 @@ public static class WorldSourceIndex {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
         }
+
+        return Declaration(content: content);
+    }
+    /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
+    /// those bytes.</summary>
+    /// <param name="content">The <c>.puck</c> source's bytes.</param>
+    /// <returns>The declaration, or <see langword="null"/> when the bytes do not parse.</returns>
+    public static WorldSourceDeclaration? Declaration(byte[] content) {
+        ArgumentNullException.ThrowIfNull(argument: content);
 
         var key = ContentPin.Compute(content: content).Hex;
 

@@ -1,0 +1,330 @@
+{
+  "id": "atmosphere",
+  "title": "Haze scatters toward the light-casting bodies: brighter toward a low sun than away from it, each kind's evaluations counted in the composite's atmosphere row and none with the haze off",
+  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, of a black sky with no geometry under render.atmosphere's haze alone (amount 0.5 over the far distance, anisotropy 0.6) and one white directional light of weight 1 low over the horizon, the light a sun-like body casts. Looking toward the sun, every pixel of the view's central box is the sky's black through the haze, which in-scatters the sun's light by the Henyey-Greenstein phase's forward lobe, about ten times the light, so the box saturates white; turned to face away from it, the box holds the back lobe's few percent, below 0.4. The composite counts one atmosphere evaluation for each sky pixel the haze crosses, in its atmosphere detail row, and every sky evaluation it counts is that row's. The discriminating leg turns the haze off with world.row.set render atmosphere.haze.amount 0: the box toward the sun shows the sky's black, so the toward observation turns red, the box away from it stays dim, and the composite's atmosphere row counts nothing, the off-switch's zero.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/atmosphere/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "haze-toward-the-low-sun-glows",
+        "capture": "toward.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.9,
+          0.9,
+          0.9,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "haze-away-from-the-sun-stays-dim",
+        "capture": "away.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.4,
+          0.4,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "response",
+        "name": "the-frames-counts",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "composite-sky",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite"
+          },
+          {
+            "name": "composite-atmosphere",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite detail=atmosphere"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "every-composite-sky-evaluation-is-the-atmospheres",
+        "operator": "equal",
+        "left": {
+          "value": "composite-sky",
+          "minus": "composite-atmosphere"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-haze-counts-its-sky-pixels",
+        "operator": "greater",
+        "left": {
+          "value": "composite-atmosphere"
+        },
+        "right": {
+          "literal": 0
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/atmosphere/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "haze-toward-the-low-sun-glows",
+        "capture": "toward.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.9,
+          0.9,
+          0.9,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "haze-away-from-the-sun-stays-dim",
+        "capture": "away.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.4,
+          0.4,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "response",
+        "name": "the-frames-counts",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "composite-sky",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite"
+          },
+          {
+            "name": "composite-atmosphere",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite detail=atmosphere"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "no-haze-counts-no-atmosphere",
+        "operator": "equal",
+        "left": {
+          "value": "composite-atmosphere"
+        },
+        "right": {
+          "literal": 0
+        }
+      }
+    ]
+  }
+}

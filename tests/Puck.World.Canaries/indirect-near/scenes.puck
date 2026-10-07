@@ -1,0 +1,239 @@
+schema: "puck.world.definition.v1"
+documentId: "indirect-near-scenes"
+
+host {
+  backend: auto
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentation: offscreen
+  width: 128
+  height: 128
+  exitAfterSeconds: 0
+  targetHertz: 0
+  presentMode: Immediate
+}
+simulation {
+  rateHz: 30
+}
+state {
+  world {
+    slot scene = 0
+  }
+}
+render {
+  shadows: High
+  shadowLights: 2
+  shadowFadeSlots: 0
+  shadowFadeTicks: 0
+  shadowOverflow: instant
+  ambientOcclusion: false
+  temporal: true
+  dynamicResolution: false
+  renderScale: 1
+  farDistance: 40
+  environment {
+    ambient: 0
+    reflection: 0
+  }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  sky {
+    layers [gradient(stops: [
+        { elevation: -1, color: "#000000" }
+        { elevation: 1, color: "#000000" }
+      ]
+      )
+    ]
+  }
+  lighting {
+    lights [
+      directional(name: "source-key", direction: [-1, 0, 0], color: "#FFFFFF", weight: 1, shadow: always, bounce: 1)
+    ]
+  }
+  medium {
+    shadows: High
+    shadowLights: 2
+    ambientOcclusion: false
+    temporal: true
+    dynamicResolution: false
+    renderScale: 1
+  }
+  high {
+    shadows: High
+    shadowLights: 2
+    ambientOcclusion: false
+    temporal: true
+    dynamicResolution: false
+    renderScale: 1
+  }
+}
+prototypes {
+  prototype "near-study" {
+    document {
+      schema: "puck.creation.v1"
+      name: "near-study"
+      palette [
+        { color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+        { color: "#FF0000", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 0 }
+      ]
+      shape Box "receiver" {
+        material: 0
+        position [0, -0.025, 0]
+        scale [0.6, 0.025, 0.6]
+      }
+      // Creation positions negate X/Z at emission: this face is at engine x=0.2.
+      shape Box "small-red-wall" {
+        material: 1
+        position [-0.21, 0.1, 0]
+        scale [0.01, 0.1, 0.1]
+      }
+      shape Sphere "small-red-object" {
+        material: 1
+        position [-0.3, 0.06, -0.25]
+        scale [0.06, 0.06, 0.06]
+      }
+    }
+  }
+  prototype "furnace" {
+    document {
+      schema: "puck.creation.v1"
+      name: "furnace"
+      palette [
+        { color: "#808080", emissive: 0.125, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+      ]
+      // The G1 shell construction, scaled so most continuations encounter a wall within 0.5m.
+      shape Sphere "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.32, 0.32, 0.32]
+      }
+      shape Sphere "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [0.3, 0.3, 0.3]
+      }
+    }
+  }
+  prototype "sealed-room" {
+    document {
+      schema: "puck.creation.v1"
+      name: "sealed-room"
+      palette [
+        { color: "#FFFFFF", emissive: 0, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+        { color: "#FFFFFF", emissive: 1, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 0 }
+      ]
+      // G1 Room: a box subtraction leaves a 0.025m closed wall, with a bright exterior source.
+      shape Box "outer" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.625, 0.375, 0.625]
+      }
+      shape Box "inner" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [0.6, 0.35, 0.6]
+      }
+      shape Sphere "receiver" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.08, 0.08, 0.08]
+      }
+      shape Sphere "exterior-emitter" {
+        material: 1
+        position [-1.1, 0, 0]
+        scale [0.2, 0.2, 0.2]
+      }
+    }
+  }
+}
+placements {
+  placement "near-study" {
+    prototype: "near-study"
+    position [0, 0, 0]
+  }
+  placement "furnace" {
+    prototype: "furnace"
+    position [4, 0.35, 0]
+  }
+  placement "sealed-room" {
+    prototype: "sealed-room"
+    position [8, 0.4, 0]
+  }
+}
+cameras [
+  {
+    name: "study-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "study-camera"
+      version: "puck.camera.program.v1"
+      operations [selectProgram(cases: [
+          { program: "near-camera", value: 0 }
+          { program: "furnace-camera", value: 1 }
+          { program: "sealed-camera", value: 2 }
+        ], default: "near-camera", key: "state.scene"
+        )
+      ]
+    }
+  }
+  {
+    name: "near-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "near-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0.45, 0.6]))
+        lookAt(subject: worldPoint(point: [0, 0, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "furnace-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "furnace-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [4, 0.35, 0.1]))
+        lookAt(subject: worldPoint(point: [4, 0.05, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+  {
+    name: "sealed-camera"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "sealed-camera"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [8, 0.6, 0.3]))
+        lookAt(subject: worldPoint(point: [8, 0.4, 0]))
+        fieldOfView(fieldOfViewRadians: 0.65)
+      ]
+    }
+  }
+]
+views {
+  layout "study" {
+    seatCount: 0
+    slots [{ camera: "study-camera", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+}

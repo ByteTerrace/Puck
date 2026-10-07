@@ -6,15 +6,39 @@ file is the decision/derivation prose the schema cannot state.
 
 ### `render` — the render defaults
 
-`WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
-inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
-`ambientOcclusion`, `renderScale`, `upscaleSharpness`, the `low`/`medium`/
-`high` presets) seed `WorldRenderSettings` once at boot and move only through
-their verbs afterwards; `world.save` folds a moved lever back into the section
-when the world authors one (`WorldSessionLevers.Fold`), and never writes a
-`render` section the world omits. Three members are read off the LIVE definition every frame instead,
+`render.indirect.tier` boots Medium when absent and accepts Off, Medium or High.
+The existing `world.indirect` session lever overrides it and `world.save` folds it
+back without changing source gains. Quality presets carry an optional `indirect`
+override; absent uses Off for Low, Medium for Medium and High for High. The one
+shipped `quality.puck` table authors all three explicitly.
+
+`render.indirect.sources` carries bindable `lights`, `emission`, `screens`, `sky`
+and `feedback` gains in [0, 1], each default one. Explicit screens=0 stays off
+even when an emitting image is bound. Structural `bounces` requests zero through
+four feedback sweeps after direct, capped by the active tier. `apply` holds bindable
+unit `intensity`, `tint` and `contact`; those receiver-only controls do not restart
+the solved cache. The ordinary generated document shape, scalar domains and
+environment binding path own validation, keys and state reads; add no separate
+indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+owns source and receiver semantics.
+
+`WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` carries the
+engine defaults, including Medium indirect. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
+`shadowFadeSlots`, `shadowFadeTicks`, `shadowOverflow`,
+`ambientOcclusion`, `renderScale`, `upscaleSharpness`, `temporal`,
+`dynamicResolution`, the `low`/`medium`/`high` presets, each also carrying a
+`renderScaleFloor` tier) seed `WorldRenderSettings` once at boot and move only
+through their verbs afterwards; `views.quality` rows (`WorldViewQuality`; [views.md](views.md) owns them) hold a
+render view's durable quality, each by instance `name` (or `*` for the player
+views' defaults): `renderScale` (a scalar ceiling), `renderScaleFloor` (the lowest
+dynamic-resolution tier) and `tier` (a quality preset), and a camera or session
+view takes only a row that names it. They override these boot levers for that
+view; session pins have no document member. `world.save` folds a moved lever back into the
+section when the world authors one (`WorldSessionLevers.Fold`), creates the
+section when the world omits it and the render-scale ceiling moved, and
+otherwise leaves an absent `render` section absent. Presentation fields are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
-`lighting`/`sky`/`cycle` (`WorldRenderCycleTrack`) and `farDistance`
+`lighting`/`sky`/`indirect` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40
@@ -23,7 +47,7 @@ before the field existed; an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
 within [1, 8192].` Geometry past it is never marched, so an infinite plane
-ends on a horizon curve at that depth unless `sky.fogDensity` has absorbed it
+ends on a horizon curve at that depth unless `render.atmosphere.fog.density` has absorbed it
 first. Read back with `world.row.set render` (the section's read arm) and
 `world.budget`, which quotes the far distance with its derived costs: the
 reach multiplier over the default, the horizon-ray step count per unit of
@@ -33,33 +57,86 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
-definition every frame, alongside `lighting`/`sky`/`cycle`; a `tonemap` change
+definition every frame, alongside `lighting`/`sky`; a `tonemap` change
 recomposes the synthesized root graph. `environment`
-carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
-`size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
-— analytic studio reflections a GGX specular lobe catches; absent (or an
-all-default section) contributes exactly 0, byte-identical to a world that
-never authored it. `tonemap` absent is `none` — the stylized shaded color,
+carries nonnegative bindable `ambient` and `reflection` gains, each defaulting
+to one. Zero skips the corresponding shading work. Ambient is the sky's
+second-order harmonic irradiance, multiplied by the existing AO; reflections
+read the shared map with analytic `panel` highlights. A panel is a repeatable
+sky layer with `direction`, `size` (angular half-width and half-height in
+radians), `color`, `intensity` and `blur`; its defaults are lighting
+visibility and add blending. Its colour, intensity and blur can be keyed;
+direction and size are structure. `tonemap` absent is `none` — the stylized shaded color,
 unchanged; `filmic` puts each view through an ACES-fit filmic curve (no gamma
 encode — the shading is already display-referred) as the root graph's place pass
 reconstructs it, so the letterbox color, a pane (display-referred, its shader's
 own tonemap included) and the HUD are never tonemapped, and nothing is
 tonemapped while a debug view is on.
 Read back with `world.lighting`.
-Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
-the tonemap is the root graph's view place passes, not an environment row.
+Renderer contract: `rendering` skill sync pairs, the sky block and layer table; the tonemap is the root graph's view place passes, not a sky
+record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
-`SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
-light by its slot and may not add, remove, or retype one) and `curvature`.
+`SdfLights.MaxLights` 8, in slot order, each optionally `name`d) and
+`curvature`. Each light also carries a nonnegative bindable `bounce`, default
+one, which scales its diffuse contribution to indirect transport independently
+of direct shading. Rim and attenuation-only lights have no diffuse term.
+Every value may be keyed on a `timeline` clock, and the section may
+be keyed whole (`clock`, `keys`): each key a partial record addressing a light
+by its `name`, of its own kind, stating values only (a light's `name` and
+`shadow` are structure and refused). The sky keys the same way, addressing a
+layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
+and `WorldKeyResolver` resolves them, for the validator with no live source and
+for the client through its state mirror. Ordered values (gradient stop
+elevations, the ink band) are judged by `JudgeAscending` over every phase of
+their one clock, between keys as well as at them. A projection carries the tick
+clocks, and each state clock a value keys on as an anchored clock
+(`WorldClock.Anchor`, refused in an authored document) whose phase the
+recipient predicts with `WorldClockAnchor.Predict`, the authority's own
+prediction; `WorldClockAnchorLedger` sends a new anchor at exactly the ticks
+that prediction misses, and a clock whose row the recipient may not read
+refuses the composition. See [the worlds manual](../../../../docs/architecture/worlds.md#observation-and-display).
+Every bindable presentation scalar's domain is one row of `WorldValueFields`
+(`WorldValueDomain.cs`), keyed by its model member: `JudgeScalar` judges a
+literal and each key against it, `ValidateBoundStarts` judges a bound row's
+starting value at a load only (`TryValidate`; `TryValidateLocally` never reads
+rows, so a stray live value never refuses a mutation, a replay or a snapshot).
+The starting value is the one the binding presents: its row's eased follower, or
+the stored value for a `.$target` binding. The presentation
+(`WorldEnvironmentResolve`, `WorldThemeResolve`, `WorldMarkerAlphas`, and every
+camera rig through `WorldCameraRigCompiler`) maps each resolved value through
+`WorldValueDomainGuard.Resolve` over `WorldValueDomain.Map`: a finite value
+beyond a closed end clamps to it, and a value that is not finite or lies at or
+beyond an open end holds the binding's last valid value (the field's engine
+default before it has presented one). The guard keeps that value per binding in
+its world (one entry per field, site and state binding of a `WorldStateMirror`).
+An entry lives while the installed document authors its binding, resolved or
+not: a document install that no longer binds the field to that state binding
+(`WorldPresentationManifest.Authors`, by document path and binding) releases it,
+so a removed binding that is added again starts fresh whatever else reads its
+row, and a hidden camera keeps its history. A different world in the mirror
+(`WorldStateMirror.BeginLifetime`; a session mirror publishes the lifetime in the
+same `WorldDeliveredDocument` snapshot as the document) and a restored timeline
+(`WorldValueDomainGuard.Restart(mirror)`, for that world only) start its bindings
+fresh, and so does the mirror's own disposal. The guard reports a binding when it leaves its domain and when it returns, never once per
+frame (`[world.value: …]`, wired in `WorldPostBuildWiring`), and does no counted
+work (`Checks`) while a binding's input is unchanged. A coupled threshold (a
+gradient's stop elevations, the curvature ink band) may not bind a row, so no end
+is ever clamped alone. The guard is a required, non-null parameter of every
+type that resolves a bound value, so a site cannot omit it. A new bindable scalar member needs its
+row, or `WorldValueDomainLawTests` fails. A domain a kernel depends on is closed
+at a floor the kernel is proved against, never open at zero (an open end holds,
+and a closed end's clamp target must survive a GPU's flush to zero): cloud
+softness, a sky layer's and a creation volume's (`VolumeDocument.SoftnessDomain`,
+judged by `CreationCanonicalizer`), is `[SdfSky.MinCloudSoftness, 1]`, and a
+camera's field of view is `[CameraSnapshot.MinFieldOfViewRadians, π)`.
 Each light's `$type` union:
 
 | `$type` | Carries |
 |---|---|
-| `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadows` — at most one shadowing light per world |
-| `hemisphere` | `color`, `base`, `gradient` |
+| `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadow` (`always`, `auto`, or `never`); `always` and `auto` require a unique `name` |
 | `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
-| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march, and refused alongside `render.cycle` (its position lane cannot ride the arc interpolation every other light's direction lane takes) |
+| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march |
 
 A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
 kind is refused by name): its position then rides that placement's — or, with
@@ -67,14 +144,73 @@ kind is refused by name): its position then rides that placement's — or, with
 frame instead of the authored `position`, so the light follows the placement.
 Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
 fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
-`SdfEnvironment` rows.
+lights table.
 
 `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
 surface illumination. It declares `position`, positive `radius`,
 `weight`, and an optional entity, entity-part, or placement `anchor`.
 Anchors resolve each frame; unavailable anchors give weight zero.
-Point and Occluder positions interpolate linearly through render cycles.
-`world.lighting` reads back the authored light definitions.
+Point and Occluder positions are `BindableVector3`: keyed, they blend linearly, never along an arc.
+`world.lighting` reads back the authored light definitions and the allocator's
+slots at this tick, naming each light and its selection reason (`always`, or
+`auto` with its rank). A shadow candidate is identified by its `name`, never
+its light-table index. `always` candidates rank first, then `auto` candidates
+by tick-state luminance. At equal priority, current holders precede non-holders;
+authored order breaks ties among non-holders and on a fresh selection. Selected
+names retain their slots when ranking or authored order changes. Reusing a
+table index for a different name produces an ordinary crossing.
+
+`WorldShadowSelection` reduces each complete delivered state into those bounded
+slots; it reads the mirror's current samples and delivered clock, not the
+frame's interpolation. On the boot client the ordinary tick notification follows
+the snapshot's field cells. `DeliverDefinition` supplies the new definition and
+revision with its notification, so a pure reorder is detected before the reset
+decision; its next snapshot installs the completed field samples with
+`completingDelivery: true`, resampling the same tick without another identity
+reset. A followed session observes structural reseeds and every completed
+delivery through a `WorldSessionMirror.ObserveDeliveredState` lease, even when no frame
+reads it, and the lease's `Work` source counts the shared observer samples.
+The callback mirror is borrowed only for that callback; the selection retains
+only bounded candidates and assignments. Disposing the lease ends callbacks
+synchronously, and the last observer retires its optional sample store.
+
+The boot render settings and each `WorldQualityPreset` carry `shadowLights`
+(K, 0..4), `shadowFadeSlots` (F, 0..2), `shadowFadeTicks` (nonnegative engine
+ticks), and `shadowOverflow` (`queue` or `instant`). The boot default is 1/0/0
+with `instant`, and the named pinned sun is an `always` candidate. A preset
+applies all four fields as one settings change. Validation checks the boot
+policy and every reachable preset,
+including `auto`: K > 0 with F = 0 and positive fade ticks, positive F with
+zero fade ticks, and a queue that cannot progress are refused by name. The
+shipped presets currently use K = 0/1/2 and F = 0 with zero fade ticks and
+`instant`; the final sky defaults remain the P18-14 decision.
+
+`WorldShadowAllocator` detects crossings on delivered ticks and derives fade
+progress only from the presented tick. Fixed current and prior handoff records
+hold integer crossing ticks and durations, 32 bytes each per fade slot for
+F <= 2. Active readouts give outgoing and incoming light indices, stable slot
+and progress; steady reads neither advance a handoff nor allocate. The full
+report includes active handoffs and queue targets. `queue` waits for a target
+slot's active handoff (`SlotInHandoff`), a desired identity participating in
+another handoff (`IdentityInUse`), or busy fade capacity (`FadeCapacity`).
+Only delivered boundaries recompute current targets; a still-needed crossing
+starts at the first delivered tick its blocker clears. Matching queued targets
+take free fade capacity before fresh crossings, oldest first, with slot index
+breaking equal-age ties. `instant` swaps
+atomically for overlap or exhausted capacity, releasing all old participants.
+F = 0 or zero fade duration also chooses instant behavior. Seek, reload,
+structural revision, backward delivery and policy changes install without fades,
+preserving the held slots of names still selected and filling freed slots in
+rank order.
+
+`MarchSlots` is stable count plus active handoff count, bounded by K + F.
+`SdfLights.ShadowSlots` carries that full selection to the counted GPU march.
+The K word holds four 8-bit stable visibilities. Active incoming marches use
+policy-sized transient storage, R8 at F = 1 and R8G8 at F = 2, absent at F = 0.
+Each light's own occlusion deficit fades out or in with progress, leaving its
+radiance unchanged; a light outside the slots shades unshadowed. The per-slot
+march counters and counted 16-byte handoff uploads follow the
+[P18-7 binding contract](../../../../docs/plans/rendering.md#p18--sky-and-atmosphere).
 
 `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
 array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a
@@ -98,7 +234,7 @@ Each surface supplies `color`, `roughness`, and `metal`.
 `paint`: 1..4 ascending radial `{radius,color}` stops with `softness`,
 `modulationAmplitude`, `modulationFrequency`, and `seed`.
 Inset coordinates use the winning dynamic frame, or world space for a
-static hit. `wrap`, `soften`, and `bounce` retain their shading roles.
+static hit. `wrap`, `soften`, and `fill` retain their shading roles.
 
 ### `dynamics` — the personality table
 
@@ -203,7 +339,7 @@ through the same closed mutation vocabulary as `pipeline.load`. The host
 (`WorldViewGraphHost`) reconciles only accepted document state into the render
 graph runtime's instance set. The runtime owns resources, history, background
 compilation and frame-boundary installation; none belongs in the schema. Use
-[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
+[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.puck)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the `puck.render.graph.v1` document contract a row's source is written in.
@@ -317,7 +453,7 @@ must leave at least 4096 instances under that ceiling, and `MaxShapesPerStamp` i
 floor; the scene emitter alone under-counts by the adjacency and field reservations, so only the
 composed figure governs. `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`
 enforces the floor and prints the current figures on its `world.budget probe:` output line (run it
-with `--logger "console;verbosity=detailed"`).
+with `--output Detailed`).
 Verify capacity with `WorldRenderEnvelopeLawTests` plus a real rendered world.
 
 `WorldStampPool` keeps fixed dynamic-transform addresses but emits only live
@@ -372,7 +508,7 @@ is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
 for the authored `collision.bodyContacts` rigid fields, and the
 [server](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 references for the mechanics. The shipped garden's `billiardsTray`/
-`bowlingLane`/`dominoes` placements are the worked example.
+`bowlingLane`/`dominoRun` placements are the worked example.
 
 ### `carry` and `tether` facets
 

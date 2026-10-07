@@ -18,14 +18,14 @@ namespace Puck.World.Tests;
 /// same copy of the shipped ink pipeline, so no law compiles a shader or needs a GPU.
 /// </summary>
 public sealed partial class PipelineOverrideLawTests : IDisposable {
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-pipeline-overrides-{Guid.NewGuid():N}"
+    // The servers a law boots may still hold a file here as they are disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-pipeline-overrides-"
     );
     private readonly List<WorldEditEcho> m_echoes = [];
 
     public PipelineOverrideLawTests() {
-        Directory.CreateDirectory(path: m_directory);
         File.Copy(
             destFileName: SourcePath,
             sourceFileName: Path.Combine(
@@ -36,7 +36,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
     }
 
     private string SourcePath => Path.Combine(
-        path1: m_directory,
+        path1: m_directory.RootPath,
         path2: "ink.graph.json"
     );
 
@@ -66,7 +66,7 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
     private WorldFixture Server() {
         var fixture = Fixtures.FreshServer(definition: Document());
 
-        fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory);
+        fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory.RootPath);
         fixture.Server.EchoTap = m_echoes.Add;
 
         return fixture;
@@ -122,21 +122,13 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
         actualString: m_echoes[^1].Message
     );
 
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void ACommittedOverrideSurvivesSaveAndReloadWhileTheSharedSourceKeepsItsDefault() {
         using var fixture = Server();
         var sourceBytes = File.ReadAllBytes(path: SourcePath);
         var saved = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "saved.world.json"
         );
 
@@ -335,14 +327,14 @@ public sealed partial class PipelineOverrideLawTests : IDisposable {
 
             using var fixture = Server();
             using var runtime = new WorldViewGraphHost(
-                documentDirectory: m_directory,
+                documentDirectory: m_directory.RootPath,
                 packager: new ShaderPackager(compiler: new ShaderCompiler(
                     cacheDirectory: Path.Combine(
-                        path1: m_directory,
+                        path1: m_directory.RootPath,
                         path2: "cache"
                     ),
                     toolchainDirectory: Path.Combine(
-                        path1: m_directory,
+                        path1: m_directory.RootPath,
                         path2: "no-tools"
                     )
                 ))

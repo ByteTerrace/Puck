@@ -38,6 +38,7 @@ public sealed partial class WorldFramePresenter {
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
         if (m_convergence is { Completion.IsCompleted: false }) {
             if (m_convergedFrame is { } frozen) {
+                PlaceComposedFrame();
                 return frozen with { ProgramChanged = false };
             }
             deltaSeconds = 0f;
@@ -60,13 +61,12 @@ public sealed partial class WorldFramePresenter {
         // server-correction offset, so above the fixed-step rate the crowd glides instead of stepping; a frame that banked zero
         // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every body.where
         // still reads the authoritative sim pose server-side.
+        if (PinsPresentation) { interpolationAlpha = 1f; }
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
         // Bound state presents at this frame's position between the last two ticks before anything reads it: the
         // program build, the transform pack (look lanes, drivers, poses, effectors, body scale), and the cameras,
         // markers and HUD the dress resolves.
-        m_client.StateMirror.Apply(fraction: (PinsStateFraction
-            ? 1f
-            : interpolationAlpha));
+        m_client.StateMirror.Apply(fraction: interpolationAlpha);
 
         // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
         // program itself never rebuilds for a timeline step), and latch the same delta for the scene's own
@@ -92,6 +92,7 @@ public sealed partial class WorldFramePresenter {
                 authoritativeTick: m_simulation.Tick,
                 transforms: m_transforms
             );
+            PlaceComposedFrame();
 
             if (m_convergence is { Completion.IsCompleted: false }) {
                 m_convergedFrame = frame;

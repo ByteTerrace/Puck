@@ -291,7 +291,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_buildKey = key;
         m_buildAdvance = m_advances;
-        m_build.Start(build: token => GraphBuild.Create(
+        m_build.Start(build: token => GraphBuild.CreateAsync(
             cancellationToken: token,
             request: request
         ));
@@ -410,9 +410,10 @@ public sealed partial class ShaderPipelineRenderNode {
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? RegionCopy { get; set; }
 
         // Builds every pass's modules and pipelines, then the preview's. Safe on any thread: it only creates objects on
-        // the device, counted through the node's wrapped services. The token is checked before each pass and the preview,
-        // and a build that fails or is canceled releases what it created.
-        public static GraphBuild Create(BuildRequest request, CancellationToken cancellationToken) {
+        // the device, counted through the node's wrapped services, and awaits every pipeline lease and package build, so
+        // it holds no thread while it waits. The token is checked before each pass and the preview, and a build that
+        // fails or is canceled releases what it created.
+        public static async Task<GraphBuild> CreateAsync(BuildRequest request, CancellationToken cancellationToken) {
             var pipeline = request.Key.Pipeline!;
             var plan = pipeline.Plan;
             var specs = VersionSpecs(plan: plan);
@@ -425,24 +426,24 @@ public sealed partial class ShaderPipelineRenderNode {
                     var objects = new PassObjects();
 
                     build.Passes[planned.Index] = objects;
-                    objects.Create(
+                    await objects.CreateAsync(
                         cancellationToken: cancellationToken,
                         compiled: pipeline.Shaders.GetValueOrDefault(key: planned.Name),
                         planned: planned,
                         request: request,
                         specs: specs
-                    );
+                    ).ConfigureAwait(continueOnCapturedContext: false);
                 }
 
-                build.StateRegions(
+                await build.StateRegionsAsync(
                     cancellationToken: cancellationToken,
                     plan: plan,
                     request: request
-                );
+                ).ConfigureAwait(continueOnCapturedContext: false);
 
                 if (request.Key.Preview is { } preview) {
                     cancellationToken.ThrowIfCancellationRequested();
-                    build.Preview = PreviewObjects.Create(
+                    build.Preview = await PreviewObjects.CreateAsync(
                         cancellationToken: cancellationToken,
                         device: request.Device,
                         owner: request.Instance,
@@ -452,7 +453,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         height: preview.Height,
                         inFlight: request.InFlight,
                         width: preview.Width
-                    );
+                    ).ConfigureAwait(continueOnCapturedContext: false);
                 }
             } catch {
                 build.Dispose();
@@ -477,7 +478,7 @@ public sealed partial class ShaderPipelineRenderNode {
         // States the graph's staged regions under the device's residency choice, its package regions', its row regions' and
         // its host buffer ports', and, when one stages, takes the region-copy pipeline ready, so the install on the frame
         // thread never waits for it.
-        private void StateRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+        private async Task StateRegionsAsync(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
             var staged = 0;
 
             foreach (var pass in Passes) {
@@ -510,7 +511,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 instance: request.Instance,
                 packages: request.Packages
             ).Acquire(device: request.Device);
-            CopyPipeline = RegionCopy.Wait(cancellationToken: cancellationToken).Compute;
+            CopyPipeline = (await RegionCopy.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).Compute;
         }
 
         // Takes the build's lease: the node's own when it holds none, and otherwise released, since both share the one
@@ -541,7 +542,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;
         public RenderGraphPackageRegion[]? Regions;
 
-        public void Create(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, CancellationToken cancellationToken) {
+        public async Task CreateAsync(ShaderPipelinePlannedPass planned, CompiledShader? compiled, BuildRequest request, IReadOnlyDictionary<string, ShaderPipelineResource> specs, CancellationToken cancellationToken) {
             // A package pass's objects are whatever its factory builds; its recorder binds its own descriptors.
             if (planned.Declaration is not { } declaration) {
                 var step = planned.Package!;
@@ -559,10 +560,10 @@ public sealed partial class ShaderPipelineRenderNode {
                     specs: specs
                 );
                 Regions = [.. PackageFactory.Regions(context: PackageContext)];
-                PackageBuilt = PackageFactory.Build(
+                PackageBuilt = await PackageFactory.BuildAsync(
                     cancellationToken: cancellationToken,
                     context: PackageContext
-                );
+                ).ConfigureAwait(continueOnCapturedContext: false);
 
                 return;
             }
@@ -661,7 +662,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 device: request.Device,
                 key: key
             );
-            _ = Pipeline.Wait(cancellationToken: cancellationToken);
+            _ = await Pipeline.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         }
 
         // A pass with a depth attachment tests by its declared comparison, less when it declares none; any other pass has

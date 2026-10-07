@@ -4,6 +4,11 @@ The world marcher combines conservative sphere-tracing steps with an
 auto-relaxed production path. The strict path remains the reference for
 correctness and parity diagnosis.
 
+Each primary field sample first multiplies the ray direction by its traveled
+distance, then adds the ray origin. Both operations retain separate rounding
+with contraction disabled. A fused product and sum can move a sample across the
+hit-acceptance boundary and change how many refinement steps it takes.
+
 ## Auto-relaxation
 
 Relaxation uses recent progress to enlarge steps when the field behaves
@@ -20,6 +25,13 @@ Domain folds require a bound on the next boundary crossing. Instance and
 segment bounds can also provide a safe distance to potentially relevant work.
 The step is the minimum of all applicable conservative limits after converting
 them to a common distance scale.
+
+A log-sphere fold's shell boundaries are crossed rather than bounded: a step
+that reaches one lands just past it and samples the other side, as
+[Lipschitz and field correctness](lipschitz-and-field-correctness.md#discontinuous-folds)
+describes. A crossing is a proven step, so the relaxed march validates nothing
+for it and restarts its relaxation from the landing, as it does after a
+teleport.
 
 ## Candidate acceleration techniques
 

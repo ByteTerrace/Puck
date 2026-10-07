@@ -70,7 +70,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     );
 
     /// <inheritdoc/>
-    public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
+    public async Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null) {
         return await AppendRootAsync(
             cancellationToken: cancellationToken,
             entry: entry,
@@ -139,7 +139,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         );
     }
     /// <inheritdoc/>
-    public async Task<WorldMutationJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
+    public async Task<WorldAuthorityJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
         var rooted = await LoadRecoveryAsync(
             cancellationToken: cancellationToken,
             identity: identity
@@ -151,7 +151,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             }
             return recovery.Journal;
         }
-        return new WorldMutationJournalTail(
+        return new WorldAuthorityJournalTail(
             CheckpointOrdinal: afterOrdinal,
             Entries: []
         );
@@ -956,7 +956,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             : (indexWrite, null, null)
         );
     }
-    private async Task<(IReadOnlyList<WorldMutationJournalEntry> Entries, string? Hash)> ReadJournalForRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
+    private async Task<(IReadOnlyList<WorldAuthorityJournalEntry> Entries, string? Hash)> ReadJournalForRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
         if (root.JournalHash is not { Length: > 0 } hash) {
             if (
                 (root.JournalEntryCount != 0) ||
@@ -1071,14 +1071,14 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         return new WorldAuthorityRecovery(
             rooted,
             checkpoint,
-            new WorldMutationJournalTail(
+            new WorldAuthorityJournalTail(
                 CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
                 Entries: journal.Entries
             )
         ) { Admission = admission };
     }
 
-    private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {
+    private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {
         var fence = await EnsureFenceAsync(
             cancellationToken: cancellationToken,
             identity: identity,
@@ -1122,7 +1122,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 detail: prepared.Outcome.Detail,
                 root: current
             );
-            var entries = new List<WorldMutationJournalEntry>(capacity: (existing.Entries.Count + 1));
+            var entries = new List<WorldAuthorityJournalEntry>(capacity: (existing.Entries.Count + 1));
 
             entries.AddRange(collection: existing.Entries); entries.Add(item: entry);
             var journalBytes = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: entries);

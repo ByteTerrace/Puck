@@ -5,7 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
+// volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
+// shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
@@ -17,22 +18,20 @@ public sealed partial class SdfWorldTables {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
     // The brick staging's index in the reserved copy pool, past the per-frame regions.
     private const int BrickStagingRegionIndex = RegionCount;
-    private const int DecalRegionIndex = 6;
+    private const int DecalRegionIndex = 5;
     private const int DynamicTransformRegionIndex = 1;
     private const int InstanceGridRegionIndex = 2;
-    private const int MeshRegionIndex = 8;
+    private const int MeshRegionIndex = 7;
     private const int ProgramRegionIndex = 0;
-    // The per-frame regions RegionAt names, the mesh region last.
-    private const int RegionCount = 9;
-    private const int ScreenLightRegionIndex = 4;
-    private const int ScreenMappingRegionIndex = 7;
+    // The per-frame regions RegionAt names.
+    private const int RegionCount = 12;
+    private const int ScreenMappingRegionIndex = 6;
     private const int ScreenSurfaceRegionIndex = 3;
-    private const int VolumeRegionIndex = 5;
+    private const int VolumeRegionIndex = 4;
 
     private readonly GpuRegion m_dynamicTransformRegion;
     private readonly GpuRegion m_screenSurfaceRegion;
     private readonly GpuRegion m_screenMappingRegion;
-    private readonly GpuRegion m_screenLightRegion;
     private readonly GpuRegion m_volumeRegion;
     // The glyph decal table (Stage 1 only): the leading per-screen descriptor band, then the shared cell region. All
     // zero (every descriptor's gridCols 0) is inert, so a program that declares no decal renders byte-identically.
@@ -47,8 +46,8 @@ public sealed partial class SdfWorldTables {
     private GpuRegion m_instanceGridRegion;
     // Whether the dynamic-transform region has been packed whole once: its first frame packs every slot.
     private bool m_dynamicTransformsPacked;
-    // One more whenever a dynamic-transform slot is packed: the cadence signature folds this in place of hashing the
-    // whole table.
+    // One more when packed transform contents or the active row count changes. Replacing a source collection with
+    // identical rows only reseeds motion history; the cadence signature does not treat that copy as a geometry edit.
     private ulong m_dynamicTransformRevision;
 
     // The moved set these tables last consumed transforms from, the serial of that frame, and the scratch the rows owed
@@ -103,6 +102,7 @@ public sealed partial class SdfWorldTables {
         }
 
         m_brickRegion?.Dispose();
+        m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
     }
     // The upload's copies: sends this ring slot, whose previous readers have finished, what it owes of every region, and
@@ -111,6 +111,7 @@ public sealed partial class SdfWorldTables {
     // per copied buffer so the views' passes read what it wrote. Every host write and copy of the regions is counted in
     // this pass. An upload owing nothing writes and records nothing.
     private void RecordRegionCopies() {
+        StageShadowHandoffs();
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is { } region) {
                 m_regionCopies.Record(
@@ -121,6 +122,12 @@ public sealed partial class SdfWorldTables {
             }
         }
 
+        if (m_indirect is { } indirect) {
+            foreach (var region in indirect.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
+            if (indirect.Lighting is { } lighting) {
+                foreach (var region in lighting.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
+            }
+        }
         var commandBuffer = m_regionCopies.Finish();
 
         if (commandBuffer != 0) {
@@ -144,7 +151,7 @@ public sealed partial class SdfWorldTables {
     /// pool. Read at the time asked, since a region grows by being replaced.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = new GpuMemoryBytes(DeviceLocal: (m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes), HostVisible: 0);
+            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0) + IndirectBytes);
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {
@@ -164,11 +171,14 @@ public sealed partial class SdfWorldTables {
         DynamicTransformRegionIndex => m_dynamicTransformRegion,
         InstanceGridRegionIndex => m_instanceGridRegion,
         ScreenSurfaceRegionIndex => m_screenSurfaceRegion,
-        ScreenLightRegionIndex => m_screenLightRegion,
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
         ScreenMappingRegionIndex => m_screenMappingRegion,
-        _ => m_meshRegion,
+        MeshRegionIndex => m_meshRegion,
+        LightRegionIndex => m_lightRegion,
+        SkyRegionIndex => m_skyRegion,
+        SkyLayerRegionIndex => m_skyLayerRegion,
+        _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
     private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
@@ -176,11 +186,14 @@ public sealed partial class SdfWorldTables {
         DynamicTransformRegionIndex => "dynamic-transforms",
         InstanceGridRegionIndex => "instance-grid",
         ScreenSurfaceRegionIndex => "screen-surfaces",
-        ScreenLightRegionIndex => "screen-lights",
         VolumeRegionIndex => "volumes",
         DecalRegionIndex => "decals",
         ScreenMappingRegionIndex => "screen-mappings",
         MeshRegionIndex => "mesh-region",
+        LightRegionIndex => "lights",
+        SkyRegionIndex => "sky",
+        SkyLayerRegionIndex => "sky-layers",
+        ShadowHandoffRegionIndex => "shadow-handoffs",
         _ => "brick-staging",
     });
     // Creates the one copy pool of every region the tables may create, the brick staging's with a brick pool, each

@@ -1,3 +1,5 @@
+using Puck.Testing;
+
 namespace Puck.Shaders.Tests;
 
 // A package instance whose counter moves: an sdf.world instance's counter moves when it resolves a residency its passes
@@ -30,17 +32,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var parts = SdfWorldPackage.NativeFragment.Passes.Count;
         var index = 0L;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 ProducePackageFrame(
                     frameIndex: index++,
                     runtime: runtime
                 );
 
                 return (view.Parts.Count >= parts);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
 
         var builds = view.Builds;
         var recorded = view.Parts.Count;
@@ -66,10 +67,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             // Every pass has rebuilt before the next frame, so the frames counted are the hold's own, not a slow
             // build's.
-            Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => ((view.Builds >= (builds + parts)) && !runtime.Node(instance: 0).IsBuildingCandidate),
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ));
+            TestLiveness.Until(
+                step: () => ((view.Builds >= (builds + parts)) && !runtime.Node(instance: 0).IsBuildingCandidate)
+            );
         }
 
         Assert.Equal(

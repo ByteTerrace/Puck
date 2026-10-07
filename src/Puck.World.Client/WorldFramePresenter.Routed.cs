@@ -82,6 +82,11 @@ public sealed partial class WorldFramePresenter {
 
         return SceneOf(endpoint: endpoint).Attach();
     }
+
+    /// <summary>Gets the scene of every world a seat is presented in or a window is attached to, as the last Dress left
+    /// them, enumerated without allocating.</summary>
+    public Dictionary<WorldAuthorityEndpoint, WorldRoutedScene>.ValueCollection RoutedScenes => m_routedScenes.Values;
+
     /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in or a window is
     /// attached to, as the last Dress latched it.</summary>
     /// <param name="scene">The scene.</param>
@@ -117,6 +122,7 @@ public sealed partial class WorldFramePresenter {
         }
         foreach (var scene in m_retiredScenes) {
             _ = m_routedScenes.Remove(key: scene.Endpoint);
+            scene.Dispose();
         }
 
         m_retiredScenes.Clear();
@@ -171,7 +177,10 @@ public sealed partial class WorldFramePresenter {
             endpoint: endpoint,
             index: index
         ),
+        domains: m_domains,
         endpoint: endpoint,
-        hostFrame: () => m_dressedFrame
+        hostFrame: () => m_dressedFrame,
+        skyLayers: m_settings.SkyLayers,
+        shadowSettings: () => m_settings.ShadowSlots
     );
 }

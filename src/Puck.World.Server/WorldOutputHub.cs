@@ -54,14 +54,17 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// <para><b>Exception isolation.</b> A typed subscriber that throws out of any <c>Deliver*</c> call is caught,
 /// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
 /// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
-/// not get a second chance to corrupt delivery to the healthy ones.</para></remarks>
+/// not get a second chance to corrupt delivery to the healthy ones. A sink whose ending is part of its contract (a full
+/// queue, a retired route) implements <see cref="IWorldDetachableSink"/> instead of throwing: it is detached after the
+/// delivery that set its reason, with that reason narrated as a detach rather than a fault.</para></remarks>
 public sealed partial class WorldOutputHub {
-    // One typed-lane slot. Active starts true and is flipped exactly once, either by the lease's own Dispose or by a
-    // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
-    // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
+    // One typed-lane slot. Active starts true and is flipped exactly once, by the lease's own Dispose, by a fault caught
+    // during delivery, or by the sink's own detach reason; every route is equivalent from the subscriber's point of
+    // view (detached, compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
     // this object; Dispose closes over it directly rather than needing a separate handle/index to invalidate.
     private sealed class Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) : IDisposable {
         public readonly IClientSink Sink = sink;
+        public readonly IWorldDetachableSink? Detachable = (sink as IWorldDetachableSink);
         public WorldSinkDisclosure Disclosure = disclosure;
         // Per-sink redaction scratch, grown once to the widest snapshot this sink ever saw. Never shared with the
         // server's own borrowed backing array, which the redacted delivery must not write into.
@@ -96,6 +99,13 @@ public sealed partial class WorldOutputHub {
     /// a detached-but-not-yet-compacted slot never counts.</summary>
     public bool HasTypedSubscribers => (m_activeCount > 0);
 
+    /// <summary>Gets or sets whether the timeline's deliveries (a definition, a state update, a tick's snapshot) and
+    /// the compositions a re-simulated tick re-applies reach no subscriber. A history seek withholds them for its whole
+    /// span, so neither its restore, nor a load-door install, nor any re-simulated tick reaches a viewer, and then
+    /// delivers the restored timeline once (<see cref="WorldTick.PresentRestoredTimeline"/>). A composition is a
+    /// presentation override the history does not rewind, so the viewer keeps the one it holds.</summary>
+    internal bool WithholdsTimeline { get; set; }
+
     // Physically drops every trailing slot a Deliver* pass did not write back (each inactive subscription, whether
     // detached before this pass started, mid-pass by its own lease, or mid-pass by a caught fault) — a single
     // RemoveRange rather than a second List.RemoveAll scan, folded into the SAME walk Deliver* already pays for.
@@ -107,22 +117,43 @@ public sealed partial class WorldOutputHub {
             );
         }
     }
-    // Narrates a faulting sink loudly (naming its concrete type, never swallowed silently) and detaches it — a
-    // broken observer never gets retried on a later tick. Shared by every Deliver* method's catch block. The Active
-    // guard is load-bearing, not defensive style: a sink that disposes its OWN lease and then throws has already
-    // decremented m_activeCount once through Dispose, and a second decrement here would drift the count low enough
-    // that HasTypedSubscribers reads false while healthy subscribers remain — silently starving them of every
-    // subsequent snapshot the server then skips building.
-    private void Detach(Subscription subscription, string callSite, Exception exception) {
-        Narrate(
-            channel: "world.output",
-            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
-        );
-
+    // Takes a subscription out of every later delivery, exactly once whichever route reaches it first: a sink that
+    // disposes its own lease (from inside its delivery, or from a narration sink called while it is being detached)
+    // has already decremented m_activeCount, and a second decrement would drift the count low enough that
+    // HasTypedSubscribers reads false while healthy subscribers remain, starving them of every snapshot the server
+    // then skips building. Every detach runs this before it narrates.
+    private void Deactivate(Subscription subscription) {
         if (subscription.Active) {
             subscription.Active = false;
             m_activeCount--;
         }
+    }
+    // Detaches a faulting sink and narrates it loudly (naming its concrete type, never swallowed silently) — a broken
+    // observer never gets retried on a later tick. Shared by every Deliver* method's catch block.
+    private void Detach(Subscription subscription, string callSite, Exception exception) {
+        Deactivate(subscription: subscription);
+        Narrate(
+            channel: "world.output",
+            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+        );
+    }
+    // Detaches a sink that ended its own subscription during the delivery just made, narrating its named reason as an
+    // ordinary detach, never as a fault.
+    private bool EndedBySink(Subscription subscription) {
+        if (subscription.Detachable?.DetachReason is not { } reason) {
+            return false;
+        }
+
+        Deactivate(subscription: subscription);
+
+        if (HasNarrationSink) {
+            Narrate(
+                channel: "world.output",
+                text: $"[world.output: {subscription.Sink.GetType().Name} detached: {reason}]"
+            );
+        }
+
+        return true;
     }
     private static WorldSnapshot Redact(Subscription subscription, in WorldSnapshot snapshot) =>
         Redact(
@@ -158,7 +189,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }
@@ -171,17 +205,26 @@ public sealed partial class WorldOutputHub {
     /// <summary>Fans an accepted live window-composition override out to every typed subscriber. A faulting sink is
     /// isolated and detached — see the class remarks.</summary>
     /// <param name="composition">The composition override.</param>
-    public void DeliverComposition(WorldComposition composition) =>
+    public void DeliverComposition(WorldComposition composition) {
+        if (WithholdsTimeline) {
+            return;
+        }
+
         Deliver(
             callSite: nameof(DeliverComposition),
             deliver: static (sink, payload) => sink.DeliverComposition(composition: payload),
             payload: composition
         );
+    }
     /// <summary>Fans the live world definition out to every typed subscriber (once per step with at least one applied
     /// edit, or a definition swap). A faulting sink is isolated and detached — see the class remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
     /// <param name="version">The version of <paramref name="definition"/>.</param>
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) =>
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        if (WithholdsTimeline) {
+            return;
+        }
+
         Deliver(
             callSite: nameof(DeliverDefinition),
             deliver: static (sink, payload) => sink.DeliverDefinition(
@@ -190,13 +233,18 @@ public sealed partial class WorldOutputHub {
             ),
             payload: (Definition: definition, Version: version)
         );
+    }
     /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
     /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
     /// remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
     /// <param name="version">The version of <paramref name="definition"/>.</param>
     /// <param name="stamp">The tick the values hold as of and the rows whose values moved.</param>
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) =>
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+        if (WithholdsTimeline) {
+            return;
+        }
+
         Deliver(
             callSite: nameof(DeliverState),
             deliver: static (sink, payload) => sink.DeliverState(
@@ -206,6 +254,7 @@ public sealed partial class WorldOutputHub {
             ),
             payload: (Definition: definition, Stamp: stamp, Version: version)
         );
+    }
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>
     /// <param name="lever">The accepted lever write.</param>
@@ -246,7 +295,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }
@@ -261,6 +313,10 @@ public sealed partial class WorldOutputHub {
     /// sink is isolated and detached — see the class remarks.</summary>
     /// <param name="snapshot">The tick snapshot.</param>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        if (WithholdsTimeline) {
+            return;
+        }
+
         m_deliveryDepth++;
 
         try {
@@ -293,7 +349,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }

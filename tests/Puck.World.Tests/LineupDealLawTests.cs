@@ -56,6 +56,7 @@ public sealed class LineupDealLawTests(ITestOutputHelper output) {
             recipient: recipient,
             revision: 1,
             tier: WorldDisclosureTier.Presentation,
+            time: fixture.Server.Time,
             version: default
         );
 

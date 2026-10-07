@@ -2,6 +2,7 @@ using Puck.Commands;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Puck.Maths;
+using Puck.Testing;
 using Puck.World.Agents.Harness;
 using Puck.World.Machines;
 using Puck.World.Protocol;
@@ -156,63 +157,59 @@ public sealed class WorldAgentBridgeTests {
     }
     [Fact]
     public async Task HarnessLoadsSkillsOnlyFromAnExplicitSource() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-agent-skills-");
+        using var root = new TemporaryDirectory(prefix: "puck-agent-skills-");
 
-        try {
-            var skillDirectory = Directory.CreateDirectory(path: Path.Combine(
-                path1: root.FullName,
-                path2: "engine-expert"
-            ));
+        var skillDirectory = Directory.CreateDirectory(path: Path.Combine(
+            path1: root.RootPath,
+            path2: "engine-expert"
+        ));
 
-            await File.WriteAllTextAsync(
-                path: Path.Combine(
-                    path1: skillDirectory.FullName,
-                    path2: "SKILL.md"
+        await File.WriteAllTextAsync(
+            path: Path.Combine(
+                path1: skillDirectory.FullName,
+                path2: "SKILL.md"
+            ),
+            contents: """
+                ---
+                name: engine-expert
+                description: Explains the engine's public simulation concepts.
+                ---
+                Treat Puck's protocol as authoritative.
+                """,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        using var skills = new AgentFileSkillsSource(skillPath: root.RootPath);
+        var chatClient = new RecordingChatClient();
+        var agent = WorldAgentHarness.Create(
+            bridge: Bridge(
+                link: new RecordingLink(),
+                principal: Principal.Peer(
+                    generation: 1,
+                    index: 4
                 ),
-                contents: """
-                    ---
-                    name: engine-expert
-                    description: Explains the engine's public simulation concepts.
-                    ---
-                    Treat Puck's protocol as authoritative.
-                    """,
-                cancellationToken: TestContext.Current.CancellationToken
-            );
-            using var skills = new AgentFileSkillsSource(skillPath: root.FullName);
-            var chatClient = new RecordingChatClient();
-            var agent = WorldAgentHarness.Create(
-                bridge: Bridge(
-                    link: new RecordingLink(),
-                    principal: Principal.Peer(
-                        generation: 1,
-                        index: 4
-                    ),
-                    bodyIndex: 4
-                ),
-                chatClient: chatClient,
-                options: new WorldAgentHarnessOptions {
-                    EnableOpenTelemetry = false,
-                    EnablePlanning = false,
-                    SkillsSource = skills,
-                }
-            );
-            var session = await agent.CreateSessionAsync(cancellationToken: TestContext.Current.CancellationToken);
+                bodyIndex: 4
+            ),
+            chatClient: chatClient,
+            options: new WorldAgentHarnessOptions {
+                EnableOpenTelemetry = false,
+                EnablePlanning = false,
+                SkillsSource = skills,
+            }
+        );
+        var session = await agent.CreateSessionAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            _ = await agent.RunAsync(
-                message: "Which skills are available?",
-                session: session,
-                cancellationToken: TestContext.Current.CancellationToken
-            );
+        _ = await agent.RunAsync(
+            message: "Which skills are available?",
+            session: session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-            var tools = Assert.IsAssignableFrom<IList<AITool>>(@object: chatClient.LastOptions?.Tools);
+        var tools = Assert.IsAssignableFrom<IList<AITool>>(@object: chatClient.LastOptions?.Tools);
 
-            Assert.Contains(
-                collection: tools,
-                filter: static tool => (tool.Name == AgentSkillsProvider.LoadSkillToolName)
-            );
-        } finally {
-            root.Delete(recursive: true);
-        }
+        Assert.Contains(
+            collection: tools,
+            filter: static tool => (tool.Name == AgentSkillsProvider.LoadSkillToolName)
+        );
     }
     [Fact]
     public async Task HarnessPublishesConstrainedToolsAndApprovalWrapsActions() {
@@ -309,8 +306,8 @@ public sealed class WorldAgentBridgeTests {
             )
         );
         var population = new WorldPopulation(definition: definition);
-        var stateDirectory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-agents-test-{Guid.NewGuid():N}");
-        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-agents-test-");
+        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory.RootPath, machineId: Guid.NewGuid());
         using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]), documentPath: null);
         var server = new WorldServer(
             definition: definition,

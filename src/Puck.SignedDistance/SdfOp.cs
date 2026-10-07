@@ -39,9 +39,9 @@ public enum SdfOp : uint {
     /// distances are preserved. Instruction lanes: Shape = <see cref="SdfWallpaperGroup"/>, Blend =
     /// <see cref="SdfPlane"/>, Material = the parity-material stride (the cell key — checker parity or hex
     /// 3-coloring — strides the material id of later shape wins in the chain; 0 keeps the fold purely geometric).
-    /// Data0.xy = cell extents (hex: pitch = x, y must equal it), Data1.xy = RepeatLimited-style cell limits,
-    /// Data1.z = the symmetry-LOD distance threshold (0 = off): past it the lattice keeps its copies but the in-cell
-    /// folds are skipped — upright copies, cheaper and shimmer-free at range.</summary>
+    /// Data0.xy = cell extents (hex: pitch = x), Data0.zw = their exact reciprocals (<see cref="SdfWallpaperFold.InverseCell"/>),
+    /// Data1.xy = the cell limits (<see cref="SdfWallpaperFold.LimitRefusal"/>: whole numbers on a square lattice,
+    /// unbounded on a hex lattice); Data1.zw are unused.</summary>
     WallpaperFold = 18,
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells by folding the
     /// radial log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform scaling
@@ -116,7 +116,7 @@ public enum SdfOp : uint {
     /// plane is folded onto itself.</summary>
     SymmetryPlane = 26,
     /// <summary>Opens a scoped field accumulator — the first half of the <see cref="PushField"/>/<see cref="PopField"/>
-    /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance into a one-deep slot
+    /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance onto a bounded stack
     /// and reseeds a fresh accumulator (<c>SDF_FAR_DISTANCE</c>), so every accumulator-reading op emitted until the
     /// matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/<see cref="Dilate"/>/
     /// <see cref="Displace"/> field ops — acts on this scope's field alone, not on everything emitted before it. That is

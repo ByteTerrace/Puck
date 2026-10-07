@@ -22,10 +22,11 @@ namespace Puck.World;
 /// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
 /// between a placement's field and its bake.
 /// </summary>
-internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
+public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<SdfWorldResidency, bool> m_indirectResidencies = new(comparer: ReferenceEqualityComparer.Instance);
 
     /// <summary>The <c>sdf.transforms</c> counters as <c>world.counters</c> reads them: registered with the probe before
     /// the frame presenter exists, and pointed at the presenter's moved set when the presenter is built, so reading the
@@ -36,6 +37,33 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         kinds: SdfMovedTransforms.Kinds,
         name: SdfMovedTransforms.SourceName
     );
+    /// <summary>The host's scheduled indirect work, summed once per active residency and retained after retirement.</summary>
+    public ForwardingWorkCounterSource Indirect { get; } = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
+
+    /// <summary>The residencies currently demanding an indirect cache, once each.</summary>
+    public IReadOnlyList<SdfWorldResidency> IndirectResidencies => m_indirectResidencies.Where(predicate: entry => entry.Value)
+        .Select(selector: entry => entry.Key).ToArray();
+    /// <summary>The active and retiring indirect allocations, once each. Read only on the console/frame owner
+    /// thread; inactive entries leave the inventory when their tables have released every cache byte.</summary>
+    public IReadOnlyList<SdfWorldResidency> IndirectAllocationResidencies {
+        get {
+            foreach (var entry in m_indirectResidencies.Where(predicate: entry => (!entry.Value &&
+                ((entry.Key.Tables?.IndirectBytes ?? default) == default))).ToArray()) {
+                m_indirectResidencies.Remove(key: entry.Key);
+            }
+            return m_indirectResidencies.Keys.ToArray();
+        }
+    }
+
+    /// <summary>Records the existing graph host's demand transition without losing an allocation still retiring.</summary>
+    /// <param name="residency">The unique residency registered by the host.</param>
+    /// <param name="active">Whether the host currently demands its cache.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="residency"/> is null.</exception>
+    public void RegisterIndirectResidency(SdfWorldResidency residency, bool active) {
+        ArgumentNullException.ThrowIfNull(residency);
+        residency.IndirectSubmissionLog = IndirectSubmissionLog;
+        m_indirectResidencies[residency] = active;
+    }
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }
@@ -105,7 +133,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     /// <remarks>The world's residency's uploads read as <c>sdf:world</c>, each render-graph instance that renders a graph
     /// by its instance name (an SDF view's passes, <c>sdf.world$sky</c> through <c>sdf.world$views</c>; the root's, its
-    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>.</remarks>
+    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>. A render-graph
+    /// instance's node also reports the bytes it owns (<see cref="ShaderPipelineRenderNode.OwnedBytes"/>).</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
 
@@ -128,6 +157,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
                 nodes.Add(item: new GpuWorkNode(
                     Lifetime: instance,
                     Name: runtime.Instances.Instances[index].Name,
+                    OwnedBytes: instance.OwnedBytes,
                     Work: instance
                 ));
             }

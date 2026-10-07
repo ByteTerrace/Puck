@@ -76,7 +76,13 @@ public sealed class SdfKernelSet {
     /// <returns>The stem, such as <c>sdf-world-primary</c>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.LightPrimary => "sdf-light-primary",
+        SdfKernel.LightDepth => "sdf-light-depth",
+        SdfKernel.IndirectClassify => "sdf-indirect-classify",
+        SdfKernel.IndirectTrace => "sdf-indirect-trace",
+        SdfKernel.IndirectShade => "sdf-indirect-shade",
         SdfKernel.Beam => "sdf-beam",
+        SdfKernel.Tape => "sdf-tape",
         SdfKernel.InstanceCull => "sdf-instance-cull",
         SdfKernel.CullArgs => "sdf-cull-args",
         SdfKernel.Primary => "sdf-world-primary",
@@ -86,21 +92,40 @@ public sealed class SdfKernelSet {
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsCore => "sdf-world-views-core",
         SdfKernel.ViewsFolds => "sdf-world-views-folds",
-        SdfKernel.Sky => "sdf-sky",
+        SdfKernel.Sky => "sdf-sky-runs",
+        SdfKernel.Composite => "sdf-composite",
+        SdfKernel.SkyEnvironment => "sdf-sky-environment",
+        SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
+        SdfKernel.ScreenEmission => "sdf-screen-emission",
         SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
+        SdfKernel.ShadowFade1 => "sdf-world-shadow-fade1",
+        SdfKernel.ShadowFade2 => "sdf-world-shadow-fade2",
+        SdfKernel.ViewsFade1 => "sdf-world-views-fade1",
+        SdfKernel.ViewsCoreFade1 => "sdf-world-views-core-fade1",
+        SdfKernel.ViewsFoldsFade1 => "sdf-world-views-folds-fade1",
+        SdfKernel.ViewsFade2 => "sdf-world-views-fade2",
+        SdfKernel.ViewsCoreFade2 => "sdf-world-views-core-fade2",
+        SdfKernel.ViewsFoldsFade2 => "sdf-world-views-folds-fade2",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
     /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
     /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
-    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), or every native per-view dispatch's
+    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
+    /// (<see cref="SdfWorldInterfaces.SkyParameters"/>), the environment map's and its reduction's
+    /// (<see cref="SdfWorldInterfaces.EnvironmentParameters"/>), or every native per-view dispatch's
     /// (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's instruction set.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <returns>The layout.</returns>
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
         kernel switch {
+            SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade => SdfWorldInterfaces.IndirectParameters.Layout,
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
+            SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
+            SdfKernel.ShadowFade1 or SdfKernel.ViewsFade1 or SdfKernel.ViewsCoreFade1 or SdfKernel.ViewsFoldsFade1 => SdfWorldInterfaces.WorldFadeParameters[1].Layout,
+            SdfKernel.ShadowFade2 or SdfKernel.ViewsFade2 or SdfKernel.ViewsCoreFade2 or SdfKernel.ViewsFoldsFade2 => SdfWorldInterfaces.WorldFadeParameters[2].Layout,
+            SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };
     /// <summary>Returns why a kernel's compiled bytecode reads something other than this host's interface, or

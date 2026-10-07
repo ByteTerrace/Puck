@@ -21,6 +21,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     private readonly List<RenderGraphRoot> m_roots = [];
 
     private long m_frame;
+    private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphRuntimeNode"/> class.</summary>
     /// <param name="runtime">The runtime, which the node owns and disposes.</param>
@@ -48,13 +49,22 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
     /// <summary>Gets how many frames the node has produced, the next frame's <see cref="RenderGraphFrame.Index"/>.</summary>
     public long FramesProduced => m_frame;
+    /// <summary>Gets or sets the callback invoked after a successful runtime frame production, before its root frame
+    /// is returned. It runs for standing rendered frames too, after graph preparation and scheduling have published
+    /// their state. A refused or not-yet-renderable frame does not invoke it; GPU completion still requires the
+    /// submission's fence.</summary>
+    public Action? FrameProduced { get; init; }
     /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
     /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
     /// dispose only after the device context is released here instead; its later disposal by the container is a
-    /// no-op.</summary>
+    /// no-op. Repeated root disposal releases neither the runtime nor these holdings again.</summary>
     public IReadOnlyList<IDisposable> Holdings { get; init; } = [];
     /// <inheritdoc/>
     public string? PendingCapturePath => Runtime.PendingCapturePath;
+    /// <summary>Gets or sets the instances the host names whether or not the display shows them this frame
+    /// (<see cref="RenderGraphFrame.Named"/>), or <see langword="null"/>, which names every instance, so the runtime
+    /// releases none.</summary>
+    public IReadOnlyList<string>? Named { get; set; }
     /// <summary>Gets or sets the callback that prepares each frame before the runtime schedules it, or
     /// <see langword="null"/> for a display whose roots and footprints never change.</summary>
     public RenderGraphFramePreparer? Prepare { get; set; }
@@ -66,6 +76,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
 
     /// <inheritdoc/>
     public void Dispose() {
+        if (m_disposed) { return; }
+        m_disposed = true;
         Runtime.Dispose();
 
         foreach (var holding in Holdings) {
@@ -75,7 +87,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void OnDeviceLost() => Runtime.OnDeviceLost();
     /// <inheritdoc/>
-    public Surface ProduceFrame(in FrameContext context) {
+    /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
+    /// the root's image shows this frame.</remarks>
+    public RootFrame ProduceFrame(in FrameContext context) {
         Prepare?.Invoke(context: in context);
         m_roots.Clear();
         m_roots.Add(item: new RenderGraphRoot(
@@ -96,7 +110,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
             }
         }
 
-        return Runtime.ProduceFrame(
+        var surface = Runtime.ProduceFrame(
             context: in context,
             frame: new RenderGraphFrame(
                 DisplayHeight: m_displayHeight,
@@ -104,11 +118,19 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 DisplayWidth: m_displayWidth,
                 Footprints: Footprints,
                 Index: m_frame++,
+                Named: Named,
                 Roots: m_roots,
                 Tick: ((context.StepTicks == 0UL)
                     ? 0L
                     : ((long)(context.ElapsedTicks / context.StepTicks)))
             )
+        );
+
+        if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
+
+        return new RootFrame(
+            Render: Runtime.Render,
+            Surface: surface
         );
     }
     /// <inheritdoc/>

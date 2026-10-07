@@ -1,0 +1,21 @@
+world.temporal on
+world.render-scale quarter
+world.ao off
+world.shadows off
+world.upscale-sharpness 0
+world.cadence on
+world.wait ready 45
+world.wait 30
+# Move only the camera's live yaw, preserving its program and graph; wait for completed outputs before sampling work.
+world.state.cell.set cameraYaw $value 0.07
+world.wait ready 45
+# Two reads inside the eight-sample convergence must advance.
+world.wait 1
+world.counters gpu
+world.wait 2
+world.counters gpu
+# A still camera finishes convergence, then its last output stands for later frames.
+world.wait 30
+world.counters gpu
+world.wait 30
+world.counters gpu

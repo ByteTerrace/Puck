@@ -16,6 +16,47 @@ public sealed partial class ShaderPipelineRenderNode {
     // hold on that producer (HoldBinding).
     private readonly Dictionary<string, GpuImageLease> m_bindingHolds = new(comparer: StringComparer.Ordinal);
 
+    // The table the node's images belong to and its publications of other instances' images are leased from, if any.
+    private readonly GpuImageLeases? m_images;
+
+    // The frame slot of the node's latest submission, whose lease list retires once that submission has finished.
+    private int m_latestSlot;
+
+    /// <summary>Moves leases into the lease list of the node's latest submission, which retires them once a fence wait
+    /// proves that submission finished: a host hands the node the leases of images another reader sampled before that
+    /// submission was made, on the one queue.</summary>
+    /// <param name="leases">The leases, moved out of their list.</param>
+    internal void HoldUntilLatestSubmission(LeaseRetireList leases) => leases.MoveTo(destination: m_slots[m_latestSlot].Leases);
+    /// <summary>Holds one lifetime notification until the latest submission completes. Its slot releases the
+    /// notification before its fence can be reused or disposed.</summary>
+    /// <param name="lease">The notification of a resource read before this submission.</param>
+    internal void HoldUntilLatestSubmission(in GpuImageLease lease) => m_slots[m_latestSlot].Leases.Hold(lease: in lease);
+
+    /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
+    /// installed graph samples when it renders.</summary>
+    /// <param name="name">The external resource's name.</param>
+    /// <returns><see langword="true"/> when an image or a buffer is bound for the name.</returns>
+    public bool IsBound(string name) => (
+        m_externalImages.ContainsKey(key: name) ||
+        m_externalBuffers.ContainsKey(key: name)
+    );
+    /// <summary>Returns the image a named external image is bound to now, the one the installed graph samples.</summary>
+    /// <param name="name">The name of a declared external image.</param>
+    /// <param name="image">The bound image, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the name is bound to an image.</returns>
+    public bool TryGetBoundImage(string name, out ShaderPipelineExternalImage image) => m_externalImages.TryGetValue(
+        key: name,
+        value: out image
+    );
+
+    /// <summary>Retires the leases of every submission the node made, once the host has drained the device, so every one of
+    /// them has finished.</summary>
+    internal void RetireDrainedLeases() {
+        foreach (var slot in m_slots) {
+            slot.Leases.RetireAll();
+        }
+    }
+
     // Resolves every leased binding this frame records against: its lease is held until the frame submits.
     private void HoldLeases() {
         foreach (var leased in m_leasedImages.Values) {
@@ -67,7 +108,8 @@ public sealed partial class ShaderPipelineRenderNode {
     /// frame only. The frame that records holds <paramref name="lease"/> and retires it once that submission's fence
     /// has signaled, on device loss or at disposal; a frame that records nothing retires it at once, and so does a
     /// newer binding of the same name made before any frame recorded. A frame recorded without a newer binding is
-    /// refused. The image must have the declared format and may have any extent.</summary>
+    /// refused. The image must have the declared format and may have any extent. Its publication comes from the same
+    /// acquisition as the lease, including when that acquisition needs no retirement.</summary>
     /// <param name="name">The name of a declared external image.</param>
     /// <param name="image">The image, in the layout its producer leaves it in, which the frame hands it back in.</param>
     /// <param name="lease">The producer's acquisition of the image; one that requires no retirement binds as
@@ -77,7 +119,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// image handle is zero.</exception>
     public void BindImage(string name, ShaderPipelineExternalImage image, GpuImageLease lease) {
         BindImage(
-            image: image,
+            image: image with { Publication = lease.Publication },
             name: name
         );
 
@@ -152,7 +194,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         ClearLease(name: name);
-        m_externalImages[name] = image;
+        m_externalImages[name] = image with { Publication = lease.Publication };
         HoldBinding(
             lease: lease,
             name: name
@@ -172,7 +214,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 afterSubmission: m_submissions,
                 bytes: 0UL,
                 fence: fence,
-                image: new HeldBindingRetirement(lease: lease),
+                allocation: new HeldBindingRetirement(lease: lease),
                 passes: [],
                 preview: null,
                 resources: []

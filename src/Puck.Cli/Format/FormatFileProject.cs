@@ -75,10 +75,11 @@ internal static class FormatFileProject {
                 );
                 // An MSBuild inline task (a RoslynCodeTaskFactory <Code Source=...> under build/) is compiled by no
                 // project: the factory compiles it against the running SDK's MSBuild assemblies, with no implicit usings
-                // and none of this repository's analyzers, and its disposable project does the same.
+                // and none of this repository's analyzers, and its disposable project does the same. Tasks such as
+                // Exec belong to Tasks.Core beside the Framework and Utilities.Core task APIs.
                 File.WriteAllText(
                     contents: (IsInlineTask(source: original)
-                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /></ItemGroup></Project>"
+                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll\" /></ItemGroup></Project>"
                         : "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType></PropertyGroup></Project>"
                     ),
                     path: project
@@ -121,10 +122,10 @@ internal static class FormatFileProject {
             document.Root!.Add(content: items);
             document.Root.Add(content: new XElement(
                 name: "PropertyGroup",
-                content: new XElement(
-                    content: "false",
-                    name: "PublishAot"
-                )
+                content: new object[] {
+                    new XElement(content: "false", name: "PublishAot"),
+                    new XElement(content: "false", name: "NuGetAudit"),
+                }
             ));
             document.Root.Add(content: new XElement(
                 name: "Target",
@@ -157,7 +158,7 @@ internal static class FormatFileProject {
 
             // An explicit target makes MSBuild report items as the build left them rather than as evaluated, so this
             // one build is also the closure evaluation the semantic passes would otherwise run.
-            Run(arguments: ["build", project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
+            Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
             var closures = new CompileClosures();
 
             closures.Record(
@@ -198,7 +199,7 @@ internal static class FormatFileProject {
                     a: original,
                     b: rewritten
                 )) {
-                    Run(arguments: ["build", project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
+                    Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
                     RewriteIo.WriteText(
                         file: file,
                         text: rewritten

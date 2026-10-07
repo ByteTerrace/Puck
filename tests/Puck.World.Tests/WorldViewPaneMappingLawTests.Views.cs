@@ -43,7 +43,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     );
     // Two screens showing the camera, and the camera as a view of the given demand at a quarter of the display.
     private WorldScreenMappingSet ShowCamera(WorldViewDemand demand) {
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var view = new WorldScreenSource.View(CameraName: ViewCamera);
 
         screens.Reconcile(
@@ -210,6 +210,100 @@ public sealed partial class WorldViewPaneMappingLawTests {
         Assert.Equal(expected: filmsWorld, actual: schedule.Renders.Contains(value: set.IndexOf(name: source)));
         Assert.Equal(expected: filmsWorld, actual: schedule.Renders.Contains(value: set.IndexOf(name: "session")));
     }
+    // A filming camera's demand of the views it films is the host's rooting of them, which goes with the camera's own
+    // root: once nothing shows the camera, nothing demands the views it filmed, so they stop rendering.
+    [Fact]
+    public void TheViewsAFilmingCameraRootsStopRenderingOnceTheCameraIsNoLongerShown() {
+        var screens = ShowCamera(demand: WorldViewDemand.Root);
+
+        screens.Reconcile(
+            cameras: [FilmingCamera()],
+            screens: [FacingScreen(index: 0, source: new WorldScreenSource.Probe(Id: "feed"))]
+        );
+        foreach (var demand in ((WorldViewDemand[])[WorldViewDemand.Root, WorldViewDemand.None, WorldViewDemand.Root])) {
+            var shown = (demand == WorldViewDemand.Root);
+
+            screens.ReconcileViews(views: WorldViewInstances.Of(views: [
+                new WorldView(Demand: demand, FilmsWorld: true, Height: 0.25, Name: ViewCamera, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.25),
+                new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: "session", Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5),
+            ]));
+            Prepare(pane: null);
+
+            var set = m_instances.Instances;
+            var source = Assert.Single(collection: screens.Sources.Instances).Name;
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: m_host.Footprints,
+                    Index: 0,
+                    Roots: m_host.Roots,
+                    Sources: [new RenderGraphSourceState(Cadence: ImageSourceCadence.Tick, Height: Display, Instance: source, Width: Display)]
+                ),
+                history: RenderGraphHistory.Empty(set: set),
+                schedule: schedule,
+                set: set
+            );
+
+            Assert.Equal(expected: shown, actual: schedule.Renders.Contains(value: set.IndexOf(name: ViewCamera)));
+            Assert.Equal(expected: shown, actual: schedule.Renders.Contains(value: set.IndexOf(name: "session")));
+            RenderGraphRoot[] rooted = (shown ? [new RenderGraphRoot(Height: 0.125, Instance: "session", Width: 0.125)] : []);
+
+            Assert.Equal(
+                expected: rooted,
+                actual: m_host.Roots.Where(predicate: static root => (root.Instance == "session")).ToArray()
+            );
+        }
+    }
+    // A filmed view renders no more often than the root camera filming it can consume it: with the world hidden, a window
+    // session refreshed every frame, filmed by a camera refreshed every third frame, renders once per the camera's
+    // period, as the camera's demand of it did before a previous-frame read stopped demanding anything.
+    [Fact]
+    public void AFilmedViewRendersOncePerTheRootCamerasRefreshPeriod() {
+        var screens = ShowCamera(demand: WorldViewDemand.Root);
+
+        screens.Reconcile(
+            cameras: [FilmingCamera()],
+            screens: [FacingScreen(index: 0, source: new WorldScreenSource.Probe(Id: "feed"))]
+        );
+        screens.ReconcileViews(views: WorldViewInstances.Of(views: [
+            new WorldView(Demand: WorldViewDemand.Root, FilmsWorld: true, Height: 0.25, Name: ViewCamera, Refresh: RenderGraphRefresh.Every(divisor: 3), Width: 0.25),
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: "session", Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5),
+        ]));
+        Prepare(pane: null);
+
+        var set = m_instances.Instances;
+        var source = Assert.Single(collection: screens.Sources.Instances).Name;
+        var history = RenderGraphHistory.Empty(set: set);
+
+        var (cameras, sessions) = (0, 0);
+
+        for (var frame = 0; (frame < 12); frame++) {
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: m_host.Footprints,
+                    Index: frame,
+                    Roots: m_host.Roots,
+                    Sources: [new RenderGraphSourceState(Cadence: ImageSourceCadence.Tick, Height: Display, Instance: source, Width: Display)]
+                ),
+                history: history,
+                schedule: schedule,
+                set: set
+            );
+            cameras += (schedule.Renders.Contains(value: set.IndexOf(name: ViewCamera)) ? 1 : 0);
+            sessions += (schedule.Renders.Contains(value: set.IndexOf(name: "session")) ? 1 : 0);
+            history = schedule.Next;
+        }
+        Assert.Equal(actual: (cameras, sessions), expected: (4, 4));
+    }
 
     private sealed record FixedViewScenes(CameraSnapshot Camera) : IWorldViewScenes {
         public bool TryCamera(string view, out CameraSnapshot camera) {
@@ -225,6 +319,16 @@ public sealed partial class WorldViewPaneMappingLawTests {
             point = default;
 
             return false;
+        }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return false;
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            glass = null;
+
+            return WorldPortalGlass.None;
         }
     }
 }

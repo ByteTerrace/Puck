@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 WORKDIR /source
-ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/linux_dxc_2026_07_29.x86_x64.tar.gz /tmp/dxc.tar.gz
-RUN echo '55665c87824051ed4774ff3280a79ccbbb7d39243b9736ca5e98222134112d54  /tmp/dxc.tar.gz' | sha256sum -c - \
+ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz /tmp/dxc.tar.gz
+RUN echo '96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1  /tmp/dxc.tar.gz' | sha256sum -c - \
     && tar -xzf /tmp/dxc.tar.gz -C /usr/local --strip-components=1 \
     && dxc --version
 COPY . .
@@ -16,7 +16,7 @@ RUN dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp \
     && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure
 
-FROM caddy:2.11.4 AS tls
+FROM caddy:2.11.6 AS tls
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
 RUN setcap -r /usr/bin/caddy
 

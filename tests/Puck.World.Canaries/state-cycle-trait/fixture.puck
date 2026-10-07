@@ -1,0 +1,127 @@
+schema: "puck.world.definition.v1"
+documentId: "state-cycle-trait-canary"
+
+simulation {
+  rateHz: 240
+}
+
+state {
+  world {
+    row {
+      name: "spin"
+      kind: "Int"
+      value: 0
+      cycle {
+        output: "Step"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "spinPhased"
+      kind: "Int"
+      value: 7
+      cycle {
+        output: "Step"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "spinTurns"
+      kind: "Fixed"
+      value: "0"
+      cycle {
+        output: "Turns"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "spinCos"
+      kind: "Fixed"
+      value: "0"
+      cycle {
+        power: 13
+        output: "Cos"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "orbit"
+      kind: "Int"
+      value: 5
+      cycle {
+        power: 7
+        output: "Node"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "orbitX"
+      kind: "Fixed"
+      value: "5"
+      cycle {
+        power: 7
+        output: "ProjectionX"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "dial"
+      kind: "Int"
+      value: 0
+      cycle {
+        word [
+          0
+          1
+          2
+          3
+          4
+          5
+        ]
+        output: "Step"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "dialNode"
+      kind: "Int"
+      value: 5
+      cycle {
+        word [
+          0
+          1
+          2
+          3
+          4
+          5
+        ]
+        output: "Node"
+        ticksPerStep: 20
+      }
+    }
+
+    row {
+      name: "dialRing"
+      kind: "Int"
+      value: 5
+      cycle {
+        word [
+          0
+          1
+          2
+          3
+          4
+          5
+        ]
+        output: "Ring"
+        ticksPerStep: 20
+      }
+    }
+  }
+}

@@ -1,6 +1,9 @@
 // The material table and the BRDF every shading path reads.
 #ifndef SHADE_SDF_MATERIAL_HLSLI
 #define SHADE_SDF_MATERIAL_HLSLI
+float sdfWrapDiffuse(float ndotl, float wrap) {
+    return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
+}
 // Generic material rows, paired with SdfProgram.Materials.cs.
 struct SdfMaterialData {
     float3 albedo;
@@ -12,11 +15,13 @@ struct SdfMaterialData {
     float coat;
     float wrap;
     float soften;
-    float3 bounce;
+    float3 fill;
+    float3 bleed;
+    float receive;
     float4 insetOriginDepth;
     float4 insetRotation;
     float4 paintControls; // ior, stop count, softness, modulation amplitude
-    float4 paintModulation; // frequency, seed bits, reserved
+    float4 paintModulation; // frequency, seed bits, bleed green/blue
     float4 paintStops[4]; // color, radius
     float4 weathering; // edge, lines, settle, reach
     float4 weatheringControls; // seed bits, scale, floor, lane
@@ -40,9 +45,10 @@ static const float SdfSheenFresnelExponent = 2.0;
 
 // The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
-    uint4 header = sdfWords[0];
+    uint4 header = sdfProgramWord(0);
     SdfMaterialData data = (SdfMaterialData)0;
-    if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))) {
+    if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))
+        || !sdfProgramRange(SDF_PROGRAM_MATERIAL_OFFSET(header), SDF_PROGRAM_MATERIAL_COUNT(header), SDF_MATERIAL_VECTORS_PER_ENTRY)) {
         data.albedo = float3(1.0, 0.0, 1.0);
         data.emissive = 4.0;
         data.roughness = 1.0;
@@ -61,11 +67,13 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.coat = m2.x;
     data.wrap = m2.y;
     data.soften = m2.z;
-    data.bounce = asfloat(sdfWords[materialBase + 3u]).rgb;
+    data.fill = asfloat(sdfWords[materialBase + 3u]).rgb;
+    data.receive = asfloat(sdfWords[materialBase + 3u]).w;
     data.insetOriginDepth = asfloat(sdfWords[materialBase + 4u]);
     data.insetRotation = asfloat(sdfWords[materialBase + 5u]);
     data.paintControls = asfloat(sdfWords[materialBase + 6u]);
     data.paintModulation = asfloat(sdfWords[materialBase + 7u]);
+    data.bleed = float3(m2.w, data.paintModulation.zw);
     [unroll] for (uint i = 0u; i < 4u; i++) data.paintStops[i] = asfloat(sdfWords[materialBase + 8u + i]);
     data.weathering = asfloat(sdfWords[materialBase + 12u]);
     data.weatheringControls = asfloat(sdfWords[materialBase + 13u]);
@@ -130,7 +138,7 @@ float3 sdfMaterialSpecular(SdfMaterialData material, float3 normal, float3 viewD
 // caller's own light direction, an emissive lift, and a fresnel sheen edge-lift. `diffuse` is the caller's
 // accumulated radiance (ambient + the sun + any colored screen/point lights — a float3 so colored lights tint the
 // surface); `lightScale` scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across
-// every caller (shade/sdf-light-stage.hlsli).
+// every caller (passes/sdf-light-stage.hlsli).
 float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
     float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
     float3 color = (diffuseAlbedo * diffuse);

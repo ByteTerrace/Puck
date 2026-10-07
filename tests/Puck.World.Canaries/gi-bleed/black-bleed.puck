@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+basis: "scene"
+documentId: "gi-black-bleed"
+prototypes {
+  prototype "wall" {
+    document {
+      schema: "puck.creation.v1"
+      name: "wall"
+      palette [{ color: "#FF0000", specular: 0, roughness: 1, fill: "#000000", bleed: "#000000" }]
+      shape Box "wall" {
+        material: 0
+        position [0, 1, 0]
+        scale [0.05, 1, 2]
+      }
+    }
+  }
+}

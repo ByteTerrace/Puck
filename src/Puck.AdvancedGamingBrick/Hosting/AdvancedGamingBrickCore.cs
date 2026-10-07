@@ -51,7 +51,7 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     public AdvancedGamingBrickCore(AgbMachineConfiguration configuration, string? savePath = null) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
-            FormattableString.Invariant(formattable: $"puck.agb.core.v1/{AgbMachineIdentity.CurrentVersion}/{configuration.Options.DisablePrefetch}/{configuration.Options.DisableRtc}"),
+            FormattableString.Invariant(formattable: $"puck.agb.core.v1/{FormatShapes.AgbMachineIdentityCurrentVersion}/{configuration.Options.DisablePrefetch}/{configuration.Options.DisableRtc}"),
             configuration.Bios.Span,
             configuration.Rom
         );

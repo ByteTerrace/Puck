@@ -10,6 +10,12 @@ using Puck.Launcher;
 using Puck.World;
 using Puck.World.Machines;
 
+// Narration, boot lines and every other write through Console.Out and Console.Error carry engine text with non-ASCII
+// characters (the em dash before a transfer's arrival pose, the degree sign in body.where). Without this the host
+// encodes those streams through the machine's console code page, which turns an em dash into '-' and a degree sign into
+// a byte that is not UTF-8, while the command echoes beside them are UTF-8, so the run's output differs by machine.
+// The setter suppresses the byte-order mark.
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 // The run's state root, resolved from --state-dir once the command line parses; the method recorder reads it at exit.
 Puck.World.Server.WorldStateRoot? stateRoot = null;
 WorldMethodRecorder.StartIfBuiltIn(stateRoot: () => stateRoot);
@@ -76,7 +82,7 @@ var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
 // hosts on. `puck canary --debug-layers` and `puck qualify` (its profile's debugLayers) pass it to the Worlds they start.
 var debugLayersOption = new Option<bool>(name: "--debug-layers") {
     DefaultValueFactory = static _ => false,
-    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
+    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Also writes synchronous [sdf-indirect] submission cost diagnostics to stderr. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
 };
 var unpacedOption = new Option<bool>(name: "--unpaced") {
     DefaultValueFactory = static _ => false,
@@ -322,7 +328,7 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
     }
 }
 // Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Absent —
-// no presentation; the standard windowed boot is authored in standard.world.json) overlaid by the nullable CLI flags.
+// no presentation; a world authors its windowed boot or inherits its basis's) overlaid by the nullable CLI flags.
 // Backend authority differs by source — a CLI
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
 var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(

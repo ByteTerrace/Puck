@@ -1,0 +1,10 @@
+schema: "puck.world.definition.v1"
+basis: "fixture"
+documentId: "indirect-sky-harmonic-only"
+render {
+  indirect {
+    sources {
+      sky: 0
+    }
+  }
+}

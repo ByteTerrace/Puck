@@ -6,6 +6,8 @@ namespace Puck.World.Client;
 // a seat presented elsewhere renders its routed world at the same quality it renders the boot world at.
 public sealed partial class WorldFramePresenter {
     private SdfViewQuality ViewQuality() => new() {
+        IndirectMethod = m_settings.IndirectMethod,
+        SkyFieldScale = m_settings.SkyFieldScale,
         // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the engine's 0
         // sentinel for full reach.
         DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
@@ -31,5 +33,7 @@ public sealed partial class WorldFramePresenter {
             AmbientOcclusionMode.Fast => true,
             _ => (m_client.ActivePeerCount >= 16),
         }),
+        Temporal = m_settings.Temporal,
+        ShadowAmortize = m_settings.ShadowAmortize,
     };
 }

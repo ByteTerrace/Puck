@@ -92,16 +92,9 @@ public sealed partial class SdfProgram {
             return false;
         }
 
-        // The direct evaluator discards the scope's final point/pose state. A following scope may save the parent
-        // field before ResetPoint, but no later instruction may observe the discarded point or carrier.
-        for (var next = instance.End; (next < m_instructions.Length); next++) {
-            if (m_instructions[next].Op == SdfOp.ResetPoint) {
-                break;
-            }
-            if (m_instructions[next].Op != SdfOp.PushField) {
-                return false;
-            }
-        }
+        // The direct evaluator discards the scope's final point/pose state. Nothing after the instance can observe it: the
+        // program refuses a stream whose next segment reads a point without a ResetPoint of its own
+        // (RequireSegmentsStartAtTheWorldPoint), so there is no tail to inspect here.
 
         var program = new List<PartLeafPlan>();
         var placement = new List<PartBinding>();
@@ -203,7 +196,8 @@ public sealed partial class SdfProgram {
             ));
             placement.Add(item: new PartBinding(
                 DynamicSlot: slot,
-                Material: shape.Material
+                Material: shape.Material,
+                ShapeInstruction: cursor
             ));
             cursor++;
         }
@@ -248,7 +242,7 @@ public sealed partial class SdfProgram {
                 }
             }
         }
-        // Scope validation already forbids nesting and crossing instance ownership, so each compiled scope
+        // Scope validation bounds nesting and forbids crossing instance ownership, so each compiled scope
         // is a complete root operand. Internal cuts and field modifiers remain inside their owning scope.
         return (depth == 0);
     }
@@ -259,7 +253,7 @@ public sealed partial class SdfProgram {
         m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
-        m_words[header] = ((uint)plan.CompiledCount) | (CanTracePartsIndependently()
+        m_words[header] = ((uint)plan.CompiledCount) | (IndirectInstancesComposable
             ? IndependentPartTracingFlag
             : 0u
         );
@@ -294,8 +288,9 @@ public sealed partial class SdfProgram {
             );
             m_words[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: placement.Scale);
             foreach (var binding in placement.Bindings) {
-                m_words[(cursor * WordsPerVector)] = ((uint)(binding.DynamicSlot + 1));
+                m_words[(cursor * WordsPerVector)] = PackTransformSlot(slot: binding.DynamicSlot);
                 m_words[((cursor * WordsPerVector) + 1)] = binding.Material;
+                m_words[((cursor * WordsPerVector) + 2)] = ((uint)binding.ShapeInstruction);
                 cursor++;
             }
         }
@@ -317,7 +312,7 @@ public sealed partial class SdfProgram {
         }
     }
     private readonly record struct PartLeafPlan(int ShapeInstruction, int DomainInstruction);
-    private readonly record struct PartBinding(int DynamicSlot, uint Material);
+    private readonly record struct PartBinding(int DynamicSlot, uint Material, int ShapeInstruction);
     private sealed record PartInstancePlan(int Asset, PartBinding[] Bindings, float Scale);
     private sealed record PartProgramPlan(List<PartLeafPlan[]> Assets, PartInstancePlan?[] Instances,
         int LeafCount, int BindingCount, int CompiledCount) {

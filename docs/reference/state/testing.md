@@ -105,7 +105,7 @@ with the sequence and the game's per-tick work budget. The baselines are
 evidence for review: after a change, you re-record them and read what moved.
 
 ```powershell
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~ShippedWorldStateBaselineTests"
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
 ```
 
 To re-record, run `puck baselines state`, and `puck baselines state --check`
@@ -152,9 +152,11 @@ A canary's script states its timing in ticks with `world.wait`. The World runs
 the lines before the first wait before its first tick, and the line after a
 wait runs before the next tick, so a busy machine doesn't change what a canary
 observes.
-Canaries run several World processes at once. On a machine too busy to finish
-a leg before its manifest's `timeoutSeconds`, the leg is killed and reported
-as a failure. Use `puck canary --jobs 1` to run the legs one at a time.
+Canaries run several World processes at once, and several legs on the GPU at
+once. On a machine too busy to finish a leg before its manifest's
+`timeoutSeconds`, the leg is killed and reported as a failure. Use
+`puck canary --jobs 1` to run the legs one at a time, or `--gpu-jobs 1` to
+keep one leg on the GPU at a time.
 
 ## Compare state hashes across backends
 

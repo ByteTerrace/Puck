@@ -1,4 +1,3 @@
-using Puck.Abstractions.Presentation;
 namespace Puck.Hosting;
 
 /// <summary>
@@ -7,11 +6,13 @@ namespace Puck.Hosting;
 /// instance of that graph, so a root hosts no children of its own.
 /// </summary>
 public interface IRenderRoot : IDisposable {
-    /// <summary>Renders one frame and returns the surface the host presents. The returned surface is valid until the next
-    /// call.</summary>
+    /// <summary>Renders one frame and returns the surface the host presents with whether it shows the frame asked for.
+    /// The returned surface is valid until the next call. The offscreen host steps no further tick until a frame is
+    /// <see cref="FrameCompletion.Rendered"/> or <see cref="FrameCompletion.Refused"/>; the windowed host presents
+    /// whatever surface it gets.</summary>
     /// <param name="context">The frame's fixed-step and presentation context.</param>
-    /// <returns>The frame's surface, or an empty surface when the root has nothing to present yet.</returns>
-    Surface ProduceFrame(in FrameContext context);
+    /// <returns>The frame's surface, empty when the root has nothing to present yet, and its completion.</returns>
+    RootFrame ProduceFrame(in FrameContext context);
     /// <summary>Releases the root's device-derived GPU resources after the graphics device was lost, so the next
     /// <see cref="ProduceFrame"/> rebuilds them against the replacement device. The default is a no-op (for a root that
     /// owns no device resources). A root that owns GPU resources releases them and clears any "resources built" latch

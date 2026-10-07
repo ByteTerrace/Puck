@@ -1,0 +1,84 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+basis: "phase-fixture"
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "all"
+  }
+]
+
+host {
+  exitAfterSeconds: 0
+  presentation: None
+}
+
+rule "verdict-wrong-guard-refused" {
+  mode: Level
+  if phase(passPhase) == 0 {
+    wrongGuardRefused[ok] = 1
+  } else {
+    wrongGuardRefused[ok] = 2
+  }
+  wrongGuardRefused[generation] = phase(passPhase)
+}
+
+"schedule" {
+  rows [
+    {
+      command: "world.state.transform {\"$type\":\"transfer\",\"from\":\"deck\",\"to\":\"hand\",\"selector\":\"First\"}"
+      principal: "seat1"
+      tick: 3
+    }
+    {
+      command: "world.state.act passPhase 7 {\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pass\",\"selector\":\"First\"}"
+      principal: "seat1"
+      tick: 6
+    }
+    {
+      command: "world.state.act passPhase 0 {\"$type\":\"transfer\",\"from\":\"missingHand\",\"to\":\"pass\",\"selector\":\"First\"}"
+      principal: "seat1"
+      tick: 8
+    }
+  ]
+  settleTicks: 6
+}
+
+simulation {
+  rateHz: 30
+}
+
+state {
+  world {
+    row {
+      cells [
+        {
+          key: "ok"
+          value: 0
+        }
+        {
+          key: "generation"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "wrongGuardRefused"
+      verdict {
+        gate: "a guarded transform naming generation 7 when passPhase stands at 0 is refused, so the generation never advances"
+        status: "ok"
+      }
+    }
+  }
+}

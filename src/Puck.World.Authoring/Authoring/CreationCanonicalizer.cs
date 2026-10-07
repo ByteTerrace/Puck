@@ -891,11 +891,10 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
-    // A panel needs its own one-deep field scope around [plate primitive, panel copy] (SdfProgramBuilder's
-    // MaxFieldScopeDepth is 1), so it is refused wherever that scope has nowhere to nest: a Plane (no meaningful
-    // face), a domain-folded shape (the fold already owns the point/field), a grouped shape (the animated pool's
-    // group scope leaves none spare for a member), and a creation that CreationStampEmitter.RequiresScope already
-    // scopes as a whole (the static path then shares one scope across every shape). The clamp checks (inset against
+    // Panel lowering owns [plate primitive, panel copy]. The creation emitter does not support that recipe for
+    // a Plane, a domain-folded shape, a grouped member, or a creation whose shapes share a creation-wide scope.
+    // The VM's extra scope level isolates complete text-bearing bodies; it does not change these authoring recipes.
+    // The clamp checks (inset against
     // the smallest local half-extent, depth against the full extent along face) reuse the same
     // SdfSolidGeometry.HalfExtent a valid panel's own emission reads, so a document that passes here emits cleanly.
     private static void ValidatePanel(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
@@ -910,10 +909,10 @@ public static partial class CreationCanonicalizer {
             errors.Add(item: new(Message: "a shape carrying domain operators folds the point before its own pose and its fold already owns the point/field, so a panel has no scope of its own to nest into.", Path: path));
         }
         if ((shape.Group ?? 0) != 0) {
-            errors.Add(item: new(Message: $"a panel on a grouped shape (group {shape.Group}) would need a field scope nested past the builder's depth-{SdfProgramBuilder.MaxFieldScopeDepth} cap; ungroup the shape or drop its panel.", Path: path));
+            errors.Add(item: new(Message: $"a panel on a grouped shape (group {shape.Group}) is not supported by grouped creation emission; ungroup the shape or drop its panel.", Path: path));
         }
         if (CreationStampEmitter.RequiresScope(document: document)) {
-            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a panel's scope cannot nest inside; remove the panel or the scope-forcing facet.", Path: path));
+            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), whose shared shape emission does not support panels; remove the panel or the scope-forcing facet.", Path: path));
         }
 
         var faceIsFinite = ((panel.Face is not { } face) || VectorFunctions.IsFinite(vector: face));
@@ -980,11 +979,8 @@ public static partial class CreationCanonicalizer {
         }
     }
     // A trim's own scope opens AFTER the host shape's own emission closes, so it never has to nest inside one the
-    // host's own emission already opened — but it is still ONE MORE depth-1 scope, refused wherever that scope would
-    // have nowhere to open: a domain-folded shape (its fold already owns the point/field, the same reason it refuses
-    // Swings/Slides/Parent/Panel), a grouped shape (the animated pool's group scope leaves none spare), and a
-    // creation CreationStampEmitter.RequiresScope already scopes as a whole (the static path then shares one scope
-    // across every shape, with none left for a trim). Mirrors ValidatePanel's own refusal set for the same reason.
+    // host's own emission already opened. Grouped and creation-wide shared emission do not lower independent trim
+    // copies, and domain folds own their point/field. Mirrors ValidatePanel's supported authoring recipes.
     private static void ValidateTrims(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         if (shape.Trims is not { Count: > 0 } trims) {
             return;
@@ -997,10 +993,10 @@ public static partial class CreationCanonicalizer {
             errors.Add(item: new(Message: "a shape carrying domain operators folds the point before its own pose and its fold already owns the point/field, so a trim has no scope of its own to open.", Path: path));
         }
         if ((shape.Group ?? 0) != 0) {
-            errors.Add(item: new(Message: $"a trim on a grouped shape (group {shape.Group}) would need a field scope nested past the builder's depth-{SdfProgramBuilder.MaxFieldScopeDepth} cap; ungroup the shape or drop its trims.", Path: path));
+            errors.Add(item: new(Message: $"a trim on a grouped shape (group {shape.Group}) is not supported by grouped creation emission; ungroup the shape or drop its trims.", Path: path));
         }
         if (CreationStampEmitter.RequiresScope(document: document)) {
-            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a trim's scope cannot nest inside; remove the trims or the scope-forcing facet.", Path: path));
+            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), whose shared shape emission does not support trims; remove the trims or the scope-forcing facet.", Path: path));
         }
 
         var shapes = (document.Shapes ?? []);
@@ -1105,11 +1101,9 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    // A NaN/infinite param would reach SdfProgramBuilder's own throwing guards at emission time (e.g.
-    // RequireDirection/RequireFinite), well past the point a document author could see a reason why — refused here
-    // instead, alongside the position/rotation/scale finite checks every other shape field already gets. Range clamps
-    // (spacing floors, non-negative limits, the enum fallbacks) are Normalize's job, mirroring NormalizeWallpaper's
-    // old clamp-not-refuse posture; only what Normalize cannot safely repair is refused here.
+    // A NaN/infinite param, or a wallpaper group SdfProgram would refuse, would reach the builder's own guards at
+    // emission, past the point an author could see why, so it is refused here. Range clamps (spacing floors, limits,
+    // the polar axis and wallpaper plane fallbacks) are Normalize's; only what Normalize cannot repair is refused.
     private static void ValidateDomain(IReadOnlyList<ShapeDomainOp>? domain, List<DocumentValidationError> errors, string path) {
         if (domain is not { Count: > 0 } ops) {
             return;
@@ -1159,12 +1153,12 @@ public static partial class CreationCanonicalizer {
                                     Path: $"{opPath}.limit"
                                 ));
                             } else if (
-                                (limit.X > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Y > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Z > ShapeDomainOp.Repeat.UnboundedLimit)
+                                (limit.X > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Y > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Z > SdfDomainOps.UnboundedRepeatLimit)
                             ) {
                                 errors.Add(item: new(
-                                    Message: $"limit exceeds {ShapeDomainOp.Repeat.UnboundedLimit}, which an absent limit already means.",
+                                    Message: $"limit exceeds {SdfDomainOps.UnboundedRepeatLimit}, which an absent limit already means.",
                                     Path: $"{opPath}.limit"
                                 ));
                             }
@@ -1212,28 +1206,10 @@ public static partial class CreationCanonicalizer {
                         break;
                     }
                 case ShapeDomainOp.Wallpaper wallpaper: {
-                        if (!Enum.IsDefined(value: wallpaper.Group)) {
+                        foreach (var (member, message) in wallpaper.Refusals()) {
                             errors.Add(item: new(
-                                Message: $"group '{wallpaper.Group}' is not recognized.",
-                                Path: $"{opPath}.group"
-                            ));
-                        }
-                        if (
-                            (wallpaper.Plane is { } plane) &&
-                            !Enum.IsDefined(value: plane)
-                        ) {
-                            errors.Add(item: new(
-                                Message: $"plane '{plane}' is not recognized.",
-                                Path: $"{opPath}.plane"
-                            ));
-                        }
-                        if (
-                            !float.IsFinite(f: wallpaper.Cell.X) ||
-                            !float.IsFinite(f: wallpaper.Cell.Y)
-                        ) {
-                            errors.Add(item: new(
-                                Message: "cell is non-finite.",
-                                Path: $"{opPath}.cell"
+                                Message: message,
+                                Path: $"{opPath}.{member}"
                             ));
                         }
 
@@ -1592,7 +1568,7 @@ public static partial class CreationCanonicalizer {
             source: source
         );
 
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document), options: CreationJsonContext.Document.Options);
     }
 
     // Absent stays absent so a creation authored without domain ops keeps its canonical bytes and hash; a present
@@ -1770,7 +1746,7 @@ public static partial class CreationCanonicalizer {
                 : 0f)
             ),
             ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
-                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit))),
                 Origin: NormalizeOptionalOrigin(value: repeat.Origin),
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
@@ -1788,14 +1764,11 @@ public static partial class CreationCanonicalizer {
                     x: Math.Max(val1: wallpaper.Cell.X, val2: 0.001f),
                     y: Math.Max(val1: wallpaper.Cell.Y, val2: 0.001f)
                 ),
-                Group: (Enum.IsDefined(value: wallpaper.Group)
-                ? wallpaper.Group
-                : SdfWallpaperGroup.P1),
+                Group: wallpaper.Group,
                 Limit: new Vector2(
-                    x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
-                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
+                    x: Math.Max(val1: (wallpaper.Limit?.X ?? SdfWallpaperFold.UnboundedLimit), val2: 0f),
+                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? SdfWallpaperFold.UnboundedLimit), val2: 0f)
                 ),
-                LodDistance: Math.Max(val1: (wallpaper.LodDistance ?? 0f), val2: 0f),
                 MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
                 Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfPlane.XZ))
                 ? (wallpaper.Plane ?? SdfPlane.XZ)
@@ -1810,7 +1783,7 @@ public static partial class CreationCanonicalizer {
             ? value
             : 0f),
             min: 0f,
-            max: ShapeDomainOp.Repeat.UnboundedLimit
+            max: SdfDomainOps.UnboundedRepeatLimit
         );
     private static Vector3 NormalizeCellLimit(Vector3 value) =>
         new(

@@ -11,8 +11,8 @@ namespace Puck.Cli.Tests;
 /// world's own export file is a valid export of a real tick, so the manifest's own account is the only thing that
 /// can tell a stopped run from a finished one.</remarks>
 public sealed class WorldScheduleTruncationLawTests {
-    private const string ScheduledWorld = "phase-advance.world.json";
-    private const string StoppedWorld = "phase-advance-stopped.world.json";
+    private const string ScheduledWorld = "phase-advance.puck";
+    private const string StoppedWorld = "phase-advance-stopped.puck";
 
     [Fact]
     public void ARunThatQuitsBeforeTheExportTickRecordsATruncatedRunAndItsUnreachedRows() {

@@ -5,6 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
+    private int m_packedTransformCount;
+
     // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
     // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — the table
     // SDF_OP_TRANSFORM_DYNAMIC indexes by slot; the region owes the words of each packed row that changed. The packed
@@ -14,7 +16,7 @@ public sealed partial class SdfWorldTables {
     // table, and when the last consumed frame has left the producer's history; no unpacked row is compared. An empty
     // list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
     // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
-    // options grew the table to. Returns whether any row was packed.
+    // options grew the table to. Returns whether the active row count or any packed row changed.
     private bool PackDynamicTransforms(SdfFrame frame) {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
@@ -24,6 +26,7 @@ public sealed partial class SdfWorldTables {
         );
         var everything = (
             !m_dynamicTransformsPacked ||
+            (m_packedTransformCount != count) ||
             !ReferenceEquals(
             objA: moved,
             objB: m_movedTransformsSource
@@ -49,6 +52,9 @@ public sealed partial class SdfWorldTables {
         m_movedTransformsTable = transforms;
 
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
+        var changed = (!m_dynamicTransformsPacked || (m_packedTransformCount != count));
+
+        m_packedTransformCount = count;
 
         if (everything) {
             // Which owners changed is unknown when every row is owed, so every previous row is seeded.
@@ -57,7 +63,7 @@ public sealed partial class SdfWorldTables {
             if (count == 0) {
                 floats.Clear();
                 floats[7] = 1f; // identity quaternion
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: 0
                 );
@@ -68,19 +74,17 @@ public sealed partial class SdfWorldTables {
                     floats: floats,
                     transform: transforms[index]
                 );
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: index
                 );
             }
 
             m_dynamicTransformsPacked = true;
-            m_dynamicTransformRevision++;
+            if (changed) { m_dynamicTransformRevision++; }
 
-            return true;
+            return changed;
         }
-
-        var packed = false;
 
         for (var run = 0; (run < m_owedTransforms.Count); run++) {
             var start = m_owedTransforms.Start(index: run);
@@ -94,31 +98,40 @@ public sealed partial class SdfWorldTables {
                     floats: floats,
                     transform: transforms[index]
                 );
-                WriteDynamicTransform(
+                changed |= WriteDynamicTransform(
                     floats: floats,
                     slot: index
                 );
-                packed = true;
             }
         }
 
-        if (packed) {
+        if (changed) {
             m_dynamicTransformRevision++;
         }
 
-        return packed;
+        return changed;
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
-    private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+    private bool WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+        MarkIndirectTransform(current: floats, slot: slot);
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
             m_changedTransforms.Add(length: 1, start: slot);
+            return true;
         }
+        return false;
     }
+
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
-    // soft-shadow march only), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
+    // direct soft-shadow march), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. Indirect queries
+    // and their conservative light camera use the independent instance policy. The lanes row is what an op
     // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
     // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
-    private static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
+    /// <summary>Packs a transform into the world table's three float4 rows: position and shadow participation,
+    /// orientation, then render lanes.</summary>
+    /// <param name="floats">The destination, with at least twelve elements.</param>
+    /// <param name="transform">The frame's posed transform.</param>
+    /// <exception cref="IndexOutOfRangeException">The destination has fewer than twelve elements.</exception>
+    public static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
         floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = (transform.CastsSoftShadow
             ? 0f
             : 1f
@@ -126,18 +139,7 @@ public sealed partial class SdfWorldTables {
         floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
-    // Packs the screen-light table: each screen slot's emitted color (the framebuffer average set through SetScreenLight)
-    // with the room-glow intensity gain in w. KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights.
-    private void PackScreenLights() {
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
 
-        for (var index = 0; (index < MaxScreenSurfaces); index++) {
-            var color = m_screenLightColors[index];
-            var b = (index * 4);
-
-            floats[(b + 0)] = color.X; floats[(b + 1)] = color.Y; floats[(b + 2)] = color.Z; floats[(b + 3)] = ScreenLightIntensity;
-        }
-    }
     // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
     private void PackVolumes(SdfFrame frame) {
         Array.Clear(array: m_volumeScratch);
@@ -174,7 +176,7 @@ public sealed partial class SdfWorldTables {
             floats[(b + 18)] = motion.Pulse;
             floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
             floats[(b + 22)] = ((float)volume.Kind); floats[(b + 23)] = motion.AdvectionZ;
-            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness;
+            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness; floats[(b + 42)] = volume.Scatter;
             for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
                 var row = ((b + 24) + (stop * 4));
                 var value = volume.Ramp[stop];
@@ -185,17 +187,12 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // The latest packed frame's environment rows, SdfEnvironment's lanes with the host bakes.
-    private readonly float[] m_environment = new float[SdfEnvironment.LaneCount];
-
     /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
-    /// instance-mask width, the mesh draws, the debug view mode, and the environment rows with the host bakes applied
-    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>).</summary>
+    /// instance-mask width, the mesh draws and the debug view mode.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
-        Environment: m_environment,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: MeshDrawCount,
         ScreenCount: BoundScreenCount()
@@ -204,7 +201,8 @@ public sealed partial class SdfWorldTables {
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
     /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, rebuilds the
-    /// frame instance grid when a binnable instance moved, and packs the screen lights, volumes and mesh draws. Each region
+    /// frame instance grid when a binnable instance moved, and packs the screen lights, the lights and the sky, the volumes
+    /// and the mesh draws. Each region
     /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
     /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
     /// <param name="frame">The frame.</param>
@@ -246,6 +244,7 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        StageIndirectParticipation(frame: frame);
         var transformsChanged = PackDynamicTransforms(frame: frame);
 
         // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose
@@ -266,17 +265,9 @@ public sealed partial class SdfWorldTables {
             m_instanceGridRebuildOwed = false;
         }
 
-        // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
+        // The volume table is packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
-        PackScreenLights();
-        SdfFrameBlock.BakeEnvironment(
-            frame: frame,
-            rows: m_environment
-        );
-        _ = m_screenLightRegion.Write(
-            bytes: m_screenLightScratch,
-            offset: 0
-        );
+        PackLightsAndSky(frame: frame);
         PackVolumes(frame: frame);
         _ = m_volumeRegion.Write(
             bytes: m_volumeScratch,

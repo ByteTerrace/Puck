@@ -37,6 +37,7 @@ public sealed class AttestationReleaseVerifierTests {
         Revoked: revoked,
         Rollout: new ReleaseRollout(Percent: 100),
         Schema: ReleaseManifest.CurrentSchema,
+        Shape: ReleaseManifest.CurrentShape,
         Signature: null,
         StateGeneration: 1,
         Version: version

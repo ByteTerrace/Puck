@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The build and the runtime shader compiler run one DXC recipe. <c>build/Shaders.targets</c> compiles every stage
-/// source with the options <c>build/ShaderRecipe.props</c> holds for its stage and target, and that file is
+/// source with the options <c>build/ShaderRecipe.targets</c> holds for its stage and target, and that file is
 /// <see cref="ShaderCompiler.GenerateBuildRecipe"/>'s output, so a stage source compiles with exactly the arguments
 /// <see cref="ShaderCompiler.StepsOf"/> gives the compiler, followed by the output and the source.
 /// </summary>
@@ -21,12 +21,30 @@ public sealed partial class ShaderBuildRecipeLawTests {
             keySelector: static element => element.Name.LocalName
         );
         var targets = File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"));
-        var commands = ExecCommand().Matches(input: targets).Select(selector: static match => (Item: match.Groups["item"].Value, Extension: match.Groups["extension"].Value, Property: match.Groups["property"].Value)).ToArray();
+        var declarations = XDocument.Parse(text: targets).Descendants(name: "_PuckShaderBytecode").ToArray();
+        var commands = declarations.Select(selector: declaration => {
+            var output = BytecodeItem().Match(input: declaration.Attribute(name: "Include")!.Value);
+            var options = RecipeProperty().Match(input: declaration.Element(name: "Recipe")!.Value);
 
-        // Every DXC compile of the build (every invocation but the version probe) is one of these six, and each runs
-        // its stage's options and nothing else.
+            Assert.True(condition: output.Success);
+            Assert.True(condition: options.Success);
+            Assert.Equal(expected: "$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))", actual: declaration.Element(name: "SourcePath")!.Value);
+            return (Item: output.Groups["item"].Value, Extension: output.Groups["extension"].Value, Property: options.Groups["property"].Value);
+        }).ToArray();
+
+        // Every stage/backend recipe reaches the bounded compiler task through the selected bytecode items.
         Assert.Equal(expected: 6, actual: commands.Length);
         Assert.Equal(expected: 6, actual: Regex.Count(input: targets, pattern: "&quot;\\$\\(DxcCommand\\)&quot; (?!--version)"));
+        var compile = Assert.Single(collection: XDocument.Parse(text: targets).Descendants(name: "Target")
+            .Single(predicate: target => (target.Attribute(name: "Name")!.Value == "CompileShaders"))
+            .Elements(name: "PuckCompileShaderBytecode"));
+
+        Assert.Equal(expected: "@(_PuckCompiledBytecode)", actual: compile.Attribute(name: "BytecodeFiles")!.Value);
+        Assert.Equal(expected: "$(_PuckShaderToken)", actual: compile.Attribute(name: "Token")!.Value);
+        var worker = File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/PuckCompileShaderBytecode.cs"));
+
+        Assert.Contains(actualString: worker, expectedSubstring: "Command = (((((bytecode.GetMetadata(metadataName: \"Recipe\") + \" -Fo \\\"\") + TemporaryPath(bytecode: bytecode)) + \"\\\" \\\"\") + bytecode.GetMetadata(metadataName: \"SourcePath\")) + \"\\\"\"),");
+        Assert.Contains(actualString: worker, expectedSubstring: "private string TemporaryPath(ITaskItem bytecode) => (((bytecode.GetMetadata(metadataName: \"FullPath\") + \".\") + Token) + \".tmp\");");
 
         foreach (var stage in Enum.GetValues<ShaderStage>()) {
             var steps = ShaderCompiler.StepsOf(
@@ -49,7 +67,8 @@ public sealed partial class ShaderBuildRecipeLawTests {
         }
     }
 
-    // One build invocation: DXC, a recipe property, and -Fo the stage source's bytecode beside it, then the source.
-    [GeneratedRegex(pattern: "Command=\"&quot;\\$\\(DxcCommand\\)&quot; \\$\\((?<property>PuckDxc\\w+)\\) -Fo &quot;%\\((?<item>\\w+)\\.RootDir\\)%\\(\\k<item>\\.Directory\\)%\\(\\k<item>\\.Filename\\)\\.(?<extension>spv|dxil)&quot; &quot;%\\(\\k<item>\\.FullPath\\)&quot;\"")]
-    private static partial Regex ExecCommand();
+    [GeneratedRegex(pattern: @"^@\((?<item>\w+) -> '%\(RootDir\)%\(Directory\)%\(Filename\)\.(?<extension>spv|dxil)'\)$")]
+    private static partial Regex BytecodeItem();
+    [GeneratedRegex(pattern: "^\"\\$\\(DxcCommand\\)\" \\$\\((?<property>PuckDxc\\w+)\\)$")]
+    private static partial Regex RecipeProperty();
 }

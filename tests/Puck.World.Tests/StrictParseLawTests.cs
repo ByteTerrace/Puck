@@ -8,8 +8,8 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// An in-process substrate law directly against <see cref="WorldDefinitionSerialization"/>: an unknown JSON
-/// member on a NESTED document row (a <c>WorldAddonRow</c>) refuses BY NAME, and the identical document minus
-/// that one member parses clean; a root-level reserved-prefix member survives the same strict default through
+/// member on a nested document row, including <c>memory</c> on a <see cref="WorldScreen"/>, refuses by name, and
+/// the identical document minus that member parses clean; a root-level reserved-prefix member survives through
 /// <c>WorldDefinition.Extensions</c>'s <c>[JsonExtensionData]</c> carve-out.
 /// <see cref="WorldDefinitionSerialization.Deserialize"/> wraps every parse/validation failure in one
 /// <see cref="InvalidDataException"/> (its own documented contract), so the probe below unwraps to the
@@ -19,6 +19,20 @@ namespace Puck.World.Tests;
 /// composition root and is unproven here.
 /// </summary>
 public sealed class StrictParseLawTests {
+    [Fact]
+    public void ScreenMemory_IsAnUnknownMember_RefusesByName_ControlParsesClean() {
+        var node = JsonNode.Parse(utf8Json: WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()))!.AsObject();
+
+        _ = WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString()));
+        node["screens"]![0]!["memory"] = new JsonArray();
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+        var parseException = Assert.IsType<JsonException>(@object: exception.InnerException);
+
+        Assert.Contains(expectedSubstring: "memory", actualString: parseException.Message, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: nameof(WorldScreen), actualString: parseException.Message, comparisonType: StringComparison.Ordinal);
+    }
+
     private static bool TryParse(byte[] bytes) {
         try {
             _ = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);

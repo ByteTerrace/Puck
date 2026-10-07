@@ -8,7 +8,7 @@ public sealed partial class WorldGrants {
     /// <summary>Commits an autonomous traveler into the entity-table index reserved by destination escrow. Its
     /// authored intent source survives the crossing; unlike a live peer, it receives no connection route or Drive
     /// grant and remains server-authored.</summary>
-    internal SessionReply AdmitTransferredEntity(int slot, IntentSource source, WorldIdentity? identity) {
+    internal SessionReply AdmitTransferredEntity(int slot, IntentSource source, WorldIdentity? identity, WorldTransferredOccupant occupant) {
         if (source.IsLive) {
             return new SessionReply(
                 Accepted: false,
@@ -19,6 +19,7 @@ public sealed partial class WorldGrants {
         }
         if (!Host.Population.TryAdmitTransferredEntityAt(
             admitted: out var admitted,
+            occupant: occupant,
             refusal: out var refusal,
             slot: slot,
             source: source
@@ -34,7 +35,7 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
-            ordered: true
+            ordered: false
         );
         if (identity is not null) {
             Host.Population.SetSeatProfile(
@@ -56,12 +57,14 @@ public sealed partial class WorldGrants {
     /// wire-supplied profile does not reach the identity columns: they name the authenticated authority the verdict
     /// was decided against.</param>
     /// <returns>The admission verdict.</returns>
-    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict) {
+    /// <param name="occupant">What the traveler brings, which the admitted event records.</param>
+    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant) {
         if (!TryAdmitVerifiedParticipant(
             verdict: verdict,
             reservedSlot: slot,
             source: IntentSource.Live,
             authorityTransferred: true,
+            occupant: occupant,
             admitted: out _,
             refusal: out var refusal
         )) {
@@ -165,8 +168,9 @@ public sealed partial class WorldGrants {
     /// connection.</param>
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
+    /// <param name="occupant">What a transferred traveler brings; <see langword="null"/> for a connection.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal) {
+    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal, WorldTransferredOccupant? occupant = null) {
         if (verdict is not { } decision) {
             admitted = default;
             refusal = "admission carries no door verdict — nothing authorizes this ingress";
@@ -215,7 +219,8 @@ public sealed partial class WorldGrants {
                 identitySubject: decision.IdentitySubject,
                 admitted: out admitted,
                 refusal: out refusal,
-                authorityTransferred: authorityTransferred
+                authorityTransferred: authorityTransferred,
+                occupant: occupant
             )
             : Host.Population.TryAdmitRemotePeer(
                 source: source,
@@ -234,7 +239,7 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
-            ordered: true,
+            ordered: !authorityTransferred,
             mintedGrants: BuildAdmissionGrants(
                 principal: admitted.Identity,
                 bodyIndex: admitted.BodyIndex,
@@ -520,13 +525,14 @@ public sealed partial class WorldGrants {
                     // in addition to this check, once this one succeeds.
                     if (!WorldHelloDoor.TryAccept(
                         offeredKey: join.WireProtocolKey,
+                        offeredShape: join.WireShape,
                         refusal: out var helloRefusal
                     )) {
                         return new SessionReply(
                             Accepted: false,
                             AssignedIndex: -1,
                             RosterEcho: string.Empty,
-                            Reason: $"{helloRefusal}: wire key 0x{join.WireProtocolKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}"
+                            Reason: $"{helloRefusal}: wire key 0x{join.WireProtocolKey:x16} shape {join.WireShape} != server 0x{WorldProtocol.WireProtocolKey:x16} shape {WorldProtocol.WireShape}"
                         );
                     }
 

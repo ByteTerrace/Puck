@@ -26,6 +26,7 @@ namespace Puck.World.Tests;
 /// software (WARP) renderer.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class MeshTextureDeviceLawTests {
     private const string KernelName = "mesh-textures.comp";
     private const uint Group = 3U;
@@ -74,6 +75,7 @@ public sealed class MeshTextureDeviceLawTests {
         emit(obj: builder);
 
         return SdfBaker.Bake(
+            cancellationToken: TestContext.Current.CancellationToken,
             center: Vector3.Zero,
             materials: Materials,
             program: builder.Build(buildInstanceGrid: false),

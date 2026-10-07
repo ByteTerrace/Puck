@@ -177,11 +177,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     }
 
     uint2 cells = max(uint2(passGroup.width, passGroup.height), uint2(1, 1));
-    float2 extent = float2(passGroup.extent);
+    // The board is laid out in the placed rect's pixels, not the image's: a pane keeps its allocation's extent while
+    // its rect eases, and the placement stretches the image into the rect.
+    float2 extent = frameGroup.placedExtent;
     // Square cells as large as the pane allows, the board centred in it.
     float size = min((extent.x / cells.x), (extent.y / cells.y));
     float2 origin = (0.5 * (extent - (size * float2(cells))));
-    float2 at = (((float2(id.xy) + 0.5) - origin) / size);
+    float2 placed = (((float2(id.xy) + 0.5) / float2(passGroup.extent)) * extent);
+    float2 at = ((placed - origin) / size);
 
     if (any(at < 0.0) || any(at >= float2(cells))) {
         board[id.xy] = float4(Margin, 1.0);

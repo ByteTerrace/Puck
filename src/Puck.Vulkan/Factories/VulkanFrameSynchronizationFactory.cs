@@ -64,7 +64,7 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
                 semaphoreHandle: out imageAvailableSemaphoreHandle
             );
 
-            imageAvailableResult.ThrowIfFailed(operation: "vkCreateSemaphore");
+            imageAvailableResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateSemaphore");
             EnsureHandle(
                 handle: imageAvailableSemaphoreHandle,
                 message: "vkCreateSemaphore returned success without a valid image-available semaphore handle."
@@ -77,7 +77,7 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
                     semaphoreHandle: out renderFinishedSemaphoreHandles[semaphoreIndex]
                 );
 
-                renderFinishedResult.ThrowIfFailed(operation: "vkCreateSemaphore");
+                renderFinishedResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateSemaphore");
                 EnsureHandle(
                     handle: renderFinishedSemaphoreHandles[semaphoreIndex],
                     message: "vkCreateSemaphore returned success without a valid render-finished semaphore handle."
@@ -89,7 +89,7 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
                 request: fenceRequest
             );
 
-            fenceResult.ThrowIfFailed(operation: "vkCreateFence");
+            fenceResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateFence");
             EnsureHandle(
                 handle: inFlightFenceHandle,
                 message: "vkCreateFence returned success without a valid in-flight fence handle."

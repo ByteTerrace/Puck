@@ -240,15 +240,25 @@ origin.
 | `TruncatedTrihexagonal` | 4.6.12 |
 | `Penrose` | P3 thick and thin rhombs |
 
-Tiles become cells ordered outward from the origin by distance, then by angle,
-so ordinal 0 is the tile at the origin. Two tiles that share a side are
-neighbours. Each side's outward normal names a direction slot by its angle in
-degrees counterclockwise from +X (`a0`, `a30`, …), and the opposite slot is the
-angle plus 180°.
+Tiles become cells ring by ring outward from the origin, so ordinal 0 is the
+tile nearest the origin. A ring is a run of tiles whose centre distances differ
+by no more than 10⁻⁶ edge lengths. Within a ring, cells run counterclockwise
+from +X by an angle in [0°, 360°), so a tile on −X sits at exactly 180°. Two
+tiles that share a side are neighbours. Each side's outward normal names a
+direction slot by its angle in degrees counterclockwise from +X (`a0`, `a30`,
+…), and the opposite slot is the angle plus 180°.
 
-The generator works in doubles, but its coordinates are closed-form and it
-merges vertices on a fine quantized grid, so it produces the same graph on
-every machine. The result is cached per authored instance. A Penrose patch
+The generator works in doubles but uses only addition, subtraction,
+multiplication, division, square root, and comparison, which IEEE 754 rounds
+identically everywhere, so it produces the same graph, bit for bit, on every
+machine and runtime. Every angle a family uses is a multiple of 7.5° or 18°,
+and the generator takes its cosine and sine from closed-form square-root
+expressions rather than a math library. The angular order compares the
+centres, quantized to a 10⁻⁶ grid, by half-plane and cross product, and a
+normal's slot is the nearest of those angles. Vertices merge on the same
+quantized grid. `TilingTopologyLawTests` pins a digest of several generated
+graphs, so a platform-dependent result fails on one of the CI platforms. The
+result is cached per authored instance. A Penrose patch
 grows by Robinson-triangle inflation from a sun of ten triangles, taking at
 most `TilingGenerator.MaxPenroseInflations` (9) steps, which covers a radius of
 about 76 edge lengths. `TilingGenerator.TryDescribePenrose` reports each Penrose

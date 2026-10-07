@@ -2,7 +2,8 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The compiler's seam over ChildProcess.RunAsync, so tests can stand in for the shader tools.
-internal interface IShaderProcessRunner {
+/// <summary>Runs shader tools for the compiler through <see cref="ChildProcess.RunAsync"/> or a supplied runner.</summary>
+public interface IShaderProcessRunner {
+    /// <summary>Runs one tool invocation with the compiler's cancellation token.</summary>
     Task<ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken);
 }

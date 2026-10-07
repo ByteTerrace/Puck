@@ -1,0 +1,75 @@
+schema: "puck.world.definition.v1"
+documentId: "indirect-portal-red-room"
+admission [{
+    algorithm: ""
+    disclosure: Replica
+    domain: "*"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+    publicKey: ""
+    subject: null
+  }
+]
+render {
+  farDistance: 16
+  environment {
+    ambient: 0
+    reflection: 0
+  }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  lighting {
+    lights []
+  }
+  sky {
+    layers [gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])]
+  }
+}
+prototypes {
+  prototype "arch" {
+    document {
+      schema: "puck.creation.v1"
+      name: "arch"
+      behavior {
+        faces [{ name: "glass", shapeId: 0, defaultSource: null }]
+      }
+      palette [{ color: "#000000", roughness: 1, specular: 0, fill: "#000000", receive: 0 }]
+      shape Box "rim" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.2, 1, 0.05]
+      }
+      shape Box "opening" {
+        material: 0
+        blend: Subtraction
+        position [0, 0, 0]
+        scale [1.15, 0.95, 0.3]
+      }
+    }
+  }
+  prototype "red-wall" {
+    document {
+      schema: "puck.creation.v1"
+      name: "red-wall"
+      palette [{ color: "#FF0000", emissive: 1, metal: 1, roughness: 1, specular: 0, fill: "#000000", receive: 0 }]
+      shape Box "wall" {
+        material: 0
+        position [0, 0, 0]
+        scale [8, 8, 0.1]
+      }
+    }
+  }
+}
+placements {
+  placement "arch" {
+    prototype: "arch"
+    position [0, 1.5, 0]
+  }
+  placement "red-wall" {
+    prototype: "red-wall"
+    position [0, 1.5, -2]
+  }
+}

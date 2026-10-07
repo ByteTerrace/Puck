@@ -30,8 +30,8 @@ public sealed partial class RenderGraphSchedulerLawTests {
         reads: reads
     );
 
-    // The sdf.world package's pass count (SdfWorldPackage.Fragment in Puck.Shaders), which prices a view of the world.
-    private const int WorldPasses = 9;
+    // The sdf.world package's pass count (SdfWorldPackage.NativeFragment in Puck.Shaders), which prices a view of the world.
+    private const int WorldPasses = 11;
 
     // A view of the world: an instance of the sdf.world package, which renders the package's passes.
     private static RenderGraphInstance World(RenderGraphRead[]? reads = null) => Instance(
@@ -521,7 +521,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         }
     }
     [Fact]
-    public void ABufferNoRenderingViewReadsIsNotRenderedAndAPreviousFrameReadTakesItsLastOutput() {
+    public void ABufferNoRenderingViewReadsIsNotRenderedAndAPreviousFrameReadDemandsNothing() {
         var set = Set(
             Instance(name: "main"),
             Instance(
@@ -558,11 +558,11 @@ public sealed partial class RenderGraphSchedulerLawTests {
         );
 
         Assert.Equal(
-            expected: new RenderGraphReadSchedule(Consumer: "mirror", Frame: 1, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "bricks"),
+            expected: new RenderGraphReadSchedule(Consumer: "mirror", Frame: -1, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "bricks"),
             actual: Assert.Single(collection: mirrored[^1].Reads)
         );
         Assert.Equal(
-            expected: 3,
+            expected: 0,
             actual: RenderCount(
                 name: "bricks",
                 schedules: mirrored,
@@ -603,7 +603,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Contains(expectedSubstring: "reads 'security' as Buffer, but its output is Image", actualString: bufferOfImage.Message);
     }
     [Fact]
-    public void AnExternalProducerReadsImagesAndPreviousFramesButNoBuffer() {
+    public void AnExternalInstanceReadsImagesBuffersAndPreviousFrames() {
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Instance(name: "camera"),
@@ -625,20 +625,17 @@ public sealed partial class RenderGraphSchedulerLawTests {
                 set: out var withRead
             ), userMessage: accepted?.Message);
             Assert.True(condition: withRead.Reads[1][0].PreviousFrame);
-            Assert.Equal(expected: 0, actual: withRead.NestingDepth);
         }
 
-        Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [
                 Bricks(),
                 World(reads: [BufferRead(producer: "bricks")]),
             ],
             refusal: out var refusal,
-            set: out _
-        ));
-        Assert.Equal(expected: RenderGraphInstanceRefusalCode.ExternalReads, actual: refusal.Code);
-        Assert.Equal(expected: ["world"], actual: refusal.Instances);
-        Assert.Contains(expectedSubstring: "'world' is the external producer 'sdf.world'", actualString: refusal.Message);
+            set: out var bufferSet
+        ), userMessage: refusal?.Message);
+        Assert.Equal(expected: [0, 1], actual: bufferSet.Order);
     }
     [Fact]
     public void TwoExternalViewsReadEachOthersPreviousFrame() {
@@ -658,7 +655,6 @@ public sealed partial class RenderGraphSchedulerLawTests {
 
         // The one same-frame read orders the camera before the watcher; every previous-frame read orders nothing.
         Assert.Equal(expected: [1, 0, 2, 3], actual: set.Order);
-        Assert.Equal(expected: 1, actual: set.NestingDepth);
     }
     [Fact]
     public void AnExternalProducerIsScheduledAndPricedLikeAnyInstance() {
@@ -783,8 +779,10 @@ public sealed partial class RenderGraphSchedulerLawTests {
             set: set
         ));
     }
-    [Fact]
-    public void ASteadyFrameSchedulesWithoutAllocating() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ASteadyFrameSchedulesWithoutAllocating(bool explicitNames) {
         var set = Set(
             Instance(name: "north"),
             Instance(name: "south"),
@@ -814,6 +812,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         ];
         // The budget fits one quarter-axis camera, so the north and south cameras alternate through the sort.
         const long Budget = (480 * 270);
+        string[]? names = (explicitNames ? ["security"] : null);
         RenderGraphSchedule[] schedules = [new(set: set), new(set: set)];
         var history = RenderGraphHistory.Empty(set: set);
         var frame = 0L;
@@ -836,7 +835,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
                 footprints: footprints,
                 index: index,
                 roots: roots
-            ),
+            ) with { Named = names },
             set: set
         )[^1];
         var last = schedules[((frame - 1) % 2)];
@@ -861,7 +860,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
                     footprints: footprints,
                     index: frame,
                     roots: roots
-                ),
+                ) with { Named = names },
                 history: history,
                 schedule: schedule,
                 set: set

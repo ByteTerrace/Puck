@@ -239,14 +239,17 @@ public sealed class SessionLeverLawTests {
     }
     // ---- The wire ----
 
-    [Fact]
-    public void TheLeafRoundTripsTheNameAndTheSeat() {
+    [InlineData(null)]
+    [InlineData("world$2")]
+    [Theory]
+    public void TheLeafRoundTripsTheNameSeatAndView(string? view) {
         var lever = new WorldSessionLever(
             A: 0.5,
             B: 12.25,
             Name: WorldSessionLevers.BindingBar,
             Seat: 3,
-            Section: WorldSection.Bindings
+            Section: WorldSection.Bindings,
+            View: view
         );
 
         Assert.True(
@@ -280,12 +283,20 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.FarBound,
+            WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
+            WorldSessionLevers.ShadowAmortize,
             WorldSessionLevers.ShadowMarch,
             WorldSessionLevers.ShadowMask,
+            WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
+            WorldSessionLevers.SkyMute,
+            WorldSessionLevers.SkyFieldScale,
+            WorldSessionLevers.SkyQuality,
+            WorldSessionLevers.SkySolo,
             WorldSessionLevers.TargetHertz,
+            WorldSessionLevers.Temporal,
             WorldSessionLevers.UpscaleSharpness,
         ];
 

@@ -1,0 +1,71 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+basis: "../phase-fixture"
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "all"
+  }
+]
+
+host {
+  exitAfterSeconds: 0
+  presentation: None
+}
+
+rule "verdict-pass-phase-still-zero" {
+  when phase(passPhase) == 0
+  mode: Level
+  passPhaseStillZero[ok] = 1
+  passPhaseStillZero[generation] = phase(passPhase)
+}
+
+"schedule" {
+  rows [
+    {
+      command: "body.press nosuchchannel"
+      principal: "seat1"
+      tick: 3
+    }
+  ]
+  settleTicks: 6
+}
+
+simulation {
+  rateHz: 30
+}
+
+state {
+  world {
+    row {
+      cells [
+        {
+          key: "ok"
+          value: 0
+        }
+        {
+          key: "generation"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "passPhaseStillZero"
+      verdict {
+        gate: "passPhase stands at 0 — true whatever the scheduled row did, so only the row's own outcome can fail this world"
+        status: "ok"
+      }
+    }
+  }
+}

@@ -19,7 +19,7 @@ How a world is composed, compiled, packaged, released, and rolled back, and what
 
 Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
 
-- [Humble Gaming Deck](humble-gaming-deck.md)—the proposed NES and Famicom emulator core, the shared-layer changes it needs, and its accuracy target.
+- [Humble Gaming Deck](humble-gaming-deck.md)—the NES and Famicom emulator core (built, but registered by no extension, so no cabinet runs it yet), the shared-layer changes it needs, and its accuracy target.
 
 ## [Play](play.md)
 
@@ -33,12 +33,20 @@ Durable GPU fixtures, per-pass work counters, general graphics attachments, shar
 
 The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a district of the forcing world laid out, lit and debugged in build mode without typing a coordinate.
 
+## [Milestone 1 acceptance laws](acceptance-laws.md)
+
+The six cross-system laws that prove the pipeline foundation holds together on the integration head: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything. The page also names the gaps found while designing them: G1 to G5 are fixed in code with laws, and G6 and a narrowed G7 remain open.
+
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
 
 S7's engine and language substrate is present, including generation-aware
 single and pair pools, snapshots, lexical claim/release/iteration, and authored
-round trips. It remains an open package until mutable body attachments,
-identity-owned transfer, pair interactions through the real World host, record
-field traits, and the promised Paddleball/Arena migrations and executable evidence
-land. The detailed evidence list stays in the
+round trips. Its World integration is present too: logical enum carriers on
+bodies, pair interactions through the World host, identity-owned record transfer,
+and the Paddleball and Arena migrations. It remains an open package until
+remote home adoption of identity records closes
+([records and pools](records-and-pools.md#remote-home-adoption)) and records
+carry the timed row traits they lack today, which
+[S7](state-and-language.md#s7--records-and-pools) names as the condition for
+converting rows that use them. The evidence list stays in the
 [records and pools contract](records-and-pools.md).

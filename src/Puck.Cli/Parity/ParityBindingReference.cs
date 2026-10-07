@@ -95,7 +95,7 @@ internal sealed class ParityBindingReference {
     /// <summary>Reads the reference's inputs: the binding graph's config defaults and output extent, the values the
     /// station's bound parameters read at its capture ticks, and the world's simulation rate.</summary>
     /// <param name="graphPath">The binding graph document.</param>
-    /// <param name="worldPath">The world document that runs it.</param>
+    /// <param name="worldPath">The world document or <c>.puck</c> source that runs it.</param>
     /// <param name="parameters">The scalar fields a bound parameter moves, keyed by pass and field, each with the steps
     /// of the value its row holds: from each step's simulation tick on, the field reads the step's value, and before the
     /// first step it reads the graph's default. Only the scalar fields the reference reads may be named.</param>
@@ -133,9 +133,17 @@ internal sealed class ParityBindingReference {
             var width = ((uint)dimensions.Width);
             var height = ((uint)dimensions.Height);
 
+            if (!WorldDefinitionFileSource.TryReadDocumentFile(
+                content: out var document,
+                path: worldPath,
+                reason: out var reason
+            )) {
+                throw new InvalidDataException(message: reason);
+            }
+
             var rateHz = WorldDefinitionSerialization.Deserialize(
                 documentDirectory: Path.GetDirectoryName(path: worldPath),
-                utf8Json: File.ReadAllBytes(path: worldPath)
+                utf8Json: document
             ).SimulationRateHz;
 
             if (

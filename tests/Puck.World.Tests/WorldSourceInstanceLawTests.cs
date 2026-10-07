@@ -117,7 +117,7 @@ public sealed class WorldSourceInstanceLawTests {
             probe,
             machine with { },
             new WorldScreenSource.View(CameraName: "security"),
-        ]);
+        ], world: WorldDefinitionLoader.BootInstanceName);
 
         var names = sources.Instances.Select(selector: static instance => instance.Name).ToArray();
 
@@ -175,7 +175,7 @@ public sealed class WorldSourceInstanceLawTests {
         Assert.Equal(expected: ["source.qr", "source.testPattern"], actual: packages.SourceIds);
         Assert.Equal(expected: ["source.capture"], actual: packages.ProducerIds);
 
-        var sources = WorldSourceInstances.Of(shown: [Pattern(width: 96), Pattern(width: 96)]);
+        var sources = WorldSourceInstances.Of(shown: [Pattern(width: 96), Pattern(width: 96)], world: WorldDefinitionLoader.BootInstanceName);
 
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: sources.Instances,
@@ -224,7 +224,7 @@ public sealed class WorldSourceInstanceLawTests {
         );
 
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
-            instances: WorldSourceInstances.Of(shown: [Pattern(width: 32)]).Instances,
+            instances: WorldSourceInstances.Of(shown: [Pattern(width: 32)], world: WorldDefinitionLoader.BootInstanceName).Instances,
             refusal: out _,
             set: out var set
         ));
@@ -253,13 +253,13 @@ public sealed class WorldSourceInstanceLawTests {
     public void RemovingTheFirstScreenKeepsTheOtherSourcesNameAndProducer() {
         var a = Pattern(width: 128);
         var b = Pattern(width: 64);
-        var before = WorldSourceInstances.Of(shown: [a, b]);
+        var before = WorldSourceInstances.Of(shown: [a, b], world: WorldDefinitionLoader.BootInstanceName);
 
         var (runtime, openings) = Run(sources: before);
 
         using (runtime) {
             var kept = ProducersByName(runtime: runtime, sources: before)[before.InstanceOf(screen: 1)!];
-            var after = WorldSourceInstances.Of(shown: [b]);
+            var after = WorldSourceInstances.Of(shown: [b], world: WorldDefinitionLoader.BootInstanceName);
 
             Reconfigure(runtime: runtime, sources: after);
 
@@ -272,13 +272,13 @@ public sealed class WorldSourceInstanceLawTests {
     public void ReorderingScreensKeepsEverySourcesNameAndProducer() {
         var a = Pattern(width: 128);
         var b = Pattern(width: 64);
-        var before = WorldSourceInstances.Of(shown: [a, b]);
+        var before = WorldSourceInstances.Of(shown: [a, b], world: WorldDefinitionLoader.BootInstanceName);
 
         var (runtime, openings) = Run(sources: before);
 
         using (runtime) {
             var producers = ProducersByName(runtime: runtime, sources: before);
-            var after = WorldSourceInstances.Of(shown: [b, a]);
+            var after = WorldSourceInstances.Of(shown: [b, a], world: WorldDefinitionLoader.BootInstanceName);
 
             Reconfigure(runtime: runtime, sources: after);
 
@@ -315,7 +315,7 @@ public sealed class WorldSourceInstanceLawTests {
 
             foreach (var order in ((WorldScreenSource[][])[rotated, [.. rotated.Reverse()]])) {
                 for (var removed = -1; (removed < order.Length); removed++) {
-                    var sources = WorldSourceInstances.Of(shown: [.. order.Where(predicate: (_, index) => (index != removed))]);
+                    var sources = WorldSourceInstances.Of(shown: [.. order.Where(predicate: (_, index) => (index != removed))], world: WorldDefinitionLoader.BootInstanceName);
 
                     foreach (var instance in sources.Instances) {
                         var content = $"{instance.SourceProducer} {ImageSourceSettings.Canonical(settings: instance.Settings)}";
@@ -338,7 +338,7 @@ public sealed class WorldSourceInstanceLawTests {
             Spelled(json: """{ "height": 6.0, "width": 9.6e1 }"""),
             Spelled(json: """{ "width": 960e-1, "height": 0.6E+1 }"""),
             Spelled(json: """{ "width": 97, "height": 6 }"""),
-        ]);
+        ], world: WorldDefinitionLoader.BootInstanceName);
 
         var name = sources.InstanceOf(screen: 0);
 
@@ -373,7 +373,7 @@ public sealed class WorldSourceInstanceLawTests {
 
         public void Dispose() => Opening.Feed?.Dispose();
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => false;
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => FrameRender.Waiting(reason: "the fake has no image");
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new InvalidOperationException(message: "the test source serves no capture"));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;

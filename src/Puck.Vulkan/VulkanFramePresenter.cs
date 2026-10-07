@@ -38,7 +38,8 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         return (result is VkResult.ErrorOutOfDateKhr
             or VkResult.SuboptimalKhr);
     }
-    private static bool NeedsVulkanReset(VkResult result) {
+    private static bool NeedsVulkanReset(VkResult result, VulkanDeviceCommands device) {
+        if (result == VkResult.ErrorDeviceLost) { Console.Error.WriteLine(value: device.Fault.ReadAfterDeviceLoss()); }
         return (result is VkResult.ErrorDeviceLost
             or VkResult.ErrorSurfaceLostKhr);
     }
@@ -66,7 +67,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
                     m_presentCount++;
                 }
             } else if (
-                !NeedsVulkanReset(result: waitResult) &&
+                !NeedsVulkanReset(device: device, result: waitResult) &&
                 !NeedsPresentationResourceRecreate(result: waitResult) &&
                 (waitResult != VkResult.Timeout)
             ) {
@@ -117,7 +118,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.Skipped);
         }
 
-        if (NeedsVulkanReset(result: waitResult)) {
+        if (NeedsVulkanReset(device: logicalDevice.Commands, result: waitResult)) {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.ResetVulkanResources);
         }
 
@@ -125,7 +126,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.RecreatePresentationResources);
         }
 
-        waitResult.ThrowIfFailed(operation: "vkWaitForFences");
+        waitResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkWaitForFences");
 
         var acquireRequest = new VulkanFrameAcquireRequest(
             Device: logicalDevice.Commands,
@@ -143,7 +144,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.Skipped);
         }
 
-        if (NeedsVulkanReset(result: acquireResult)) {
+        if (NeedsVulkanReset(device: logicalDevice.Commands, result: acquireResult)) {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.ResetVulkanResources);
         }
 
@@ -160,7 +161,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.RecreatePresentationResources);
         }
 
-        acquireResult.ThrowIfFailed(operation: "vkAcquireNextImageKHR");
+        acquireResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkAcquireNextImageKHR");
 
         if (imageIndex >= commandResources.CommandBufferHandles.Count) {
             throw new InvalidOperationException(message: "vkAcquireNextImageKHR returned an image index that does not map to a recorded command buffer.");
@@ -182,7 +183,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             fenceHandle: frameSynchronization.InFlightFenceHandle
         );
 
-        resetResult.ThrowIfFailed(operation: "vkResetFences");
+        resetResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkResetFences");
 
         // The render-finished semaphore is the acquired IMAGE's: vkQueuePresentKHR's wait
         // on it is not fence-observable, so it may only be reused once the presentation
@@ -198,7 +199,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         );
         var submitResult = m_framePresentationApi.Submit(request: submitRequest);
 
-        if (NeedsVulkanReset(result: submitResult)) {
+        if (NeedsVulkanReset(device: logicalDevice.Commands, result: submitResult)) {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.ResetVulkanResources);
         }
 
@@ -206,7 +207,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.RecreatePresentationResources);
         }
 
-        submitResult.ThrowIfFailed(operation: "vkQueueSubmit");
+        submitResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkQueueSubmit");
 
         // Closed-loop present timing (only when VK_KHR_present_wait is enabled): tag this present with a monotonic id;
         // a zero id leaves the present unchanged. Present ids are per-swapchain, so reset the counter when it changes.
@@ -247,7 +248,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         );
         var presentResult = m_framePresentationApi.Present(request: presentRequest);
 
-        if (NeedsVulkanReset(result: presentResult)) {
+        if (NeedsVulkanReset(device: logicalDevice.Commands, result: presentResult)) {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.ResetVulkanResources);
         }
 
@@ -255,7 +256,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             return VulkanFramePresentationOutcome.FromResult(result: VulkanFramePresentationResult.RecreatePresentationResources);
         }
 
-        presentResult.ThrowIfFailed(operation: "vkQueuePresentKHR");
+        presentResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkQueuePresentKHR");
 
         if (presentId != 0UL) {
             RecordPresentTiming(

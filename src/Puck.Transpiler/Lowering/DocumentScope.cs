@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -110,7 +111,7 @@ public interface IDocumentVocabulary {
             path2: name
         ));
 
-        reason = (Modules.CompileInputs.Exists(path: path)
+        reason = (CompileInputs.Exists(path: path)
             ? string.Empty
             : $"Imported document '{name}' could not be found at '{path}'."
         );

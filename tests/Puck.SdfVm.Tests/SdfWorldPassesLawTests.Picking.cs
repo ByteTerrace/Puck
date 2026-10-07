@@ -21,13 +21,13 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = 0;
         var boxes = 0;
@@ -35,7 +35,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * 64));
+                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * 96));
                 copies++;
             } else if ((bytes == BoxBytes) && (offset == 0)) {
                 boxes++;
@@ -46,7 +46,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 reads++;
             }
         };
-        gpu.WriteReadback = bytes => {
+        gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length == (PickRecordBytes + BoxBytes)) {
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[12..], value: (0x123456U << 8) | 173U);
                 WriteBox(box: WholeBox, bytes: bytes);
@@ -102,18 +102,18 @@ public sealed partial class SdfWorldPassesLawTests {
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
         var captured = current.Views[0].Camera;
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = new List<ulong>();
 
         gpu.OnBufferCopy = (_, bytes) => { if (bytes is PickRecordBytes or SurfaceRecordBytes) { copies.Add(item: bytes); } };
-        gpu.WriteReadback = bytes => {
+        gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length != (SurfaceRecordBytes + BoxBytes)) { return; }
             BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: 4);
             BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: 1));
@@ -174,13 +174,13 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copied = new List<(uint X, uint Y)>();
         var answered = new List<(uint X, uint Y)>();
@@ -188,12 +188,12 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                var pixel = (offset / 64UL);
+                var pixel = (offset / 96UL);
 
                 copied.Add(item: (((uint)(pixel % Extent)), ((uint)(pixel / Extent))));
             }
         };
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         for (var idle = 0; (idle < 4); idle++) {
             _ = view.Produce(context: in context);
         }
@@ -239,15 +239,15 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var node = view.Runtime.Node(instance: 0);
         var installed = node.Plan;
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
@@ -257,7 +257,7 @@ public sealed partial class SdfWorldPassesLawTests {
         current = current with { Views = [current.Views[0] with { RenderScale = 0.5f, ResolvedRenderScale = 0.5f }] };
         var request = picker.Request(x: 0.25f, y: 0.75f);
 
-        SdfTestPipelines.ProduceUntil(frame: () => {
+        TestLiveness.Until(step: () => {
             _ = view.Produce(context: in context);
 
             return (!ReferenceEquals(objA: node.Plan, objB: installed) && !node.IsBuildingCandidate);
@@ -274,15 +274,15 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var current = Frame();
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         var first = picker.Request(x: 0.25f, y: 0.75f);
 
@@ -304,9 +304,19 @@ public sealed partial class SdfWorldPassesLawTests {
 
     private static readonly uint[] WholeBox = [0, 0, (Extent / 8), (Extent / 8)];
 
-    private static FrameContext ContextOf(IGpuDeviceContext gpu) => new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
-        Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
-        StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
+    private static FrameContext ContextOf(IGpuDeviceContext gpu) {
+        if (gpu is FakeGpuDevice { WriteReadback: null } fake) {
+            // The common sphere fixture has a receiver. Zero-reader laws provide their own completed census.
+            fake.WriteReadback = static (name, bytes) => {
+                if ((name.Detail == "indirect-deferred") && (bytes.Length >= (2 * sizeof(uint)))) {
+                    BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[sizeof(uint)..], value: 1u);
+                }
+            };
+        }
+        return new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
+            StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
+    }
     // The dispatch box a readback carries after its record.
     private static void WriteBox(Span<byte> bytes, ReadOnlySpan<uint> box) {
         for (var word = 0; (word < box.Length); word++) {

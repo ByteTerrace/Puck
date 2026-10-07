@@ -1,4 +1,5 @@
 using Puck.Launcher;
+using Puck.SignedDistance;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -10,6 +11,10 @@ namespace Puck.World.Client;
 /// <remarks>The tokens are the verb names without their <c>world.</c> prefix, so a reader who knows the verb knows the
 /// wire name. A verb submits <see cref="WorldSessionLever"/> carrying one of these; nothing else may.</remarks>
 public static partial class WorldSessionLevers {
+    /// <summary>Sky solo row, -1 to restore all rows.</summary>
+    public const string SkySolo = "sky-layer.solo";
+    /// <summary>Sky mute row in A and on/off in B.</summary>
+    public const string SkyMute = "sky-layer.mute";
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
     /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>
@@ -26,6 +31,8 @@ public static partial class WorldSessionLevers {
     public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
+    /// <summary>The residency's indirect-cache tier (<c>world.indirect</c>).</summary>
+    public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
@@ -37,14 +44,31 @@ public static partial class WorldSessionLevers {
     /// <summary>Soft-shadow reach in <see cref="WorldSessionLever.A"/> and crowd radius in
     /// <see cref="WorldSessionLever.B"/> (<c>world.shadows</c>).</summary>
     public const string Shadows = "shadows";
+    /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
+    public const string ShadowSlots = "shadow-slots";
+    /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
+    public const string SkyQuality = "sky-quality";
+    /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
+    public const string SkyFieldScale = "sky-field-scale";
     /// <summary>The target present rate in Hz, 0 meaning automatic display pacing (<c>world.target</c>), folding into
     /// <c>host</c>.</summary>
     public const string TargetHertz = "target";
+    /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
+    public const string Temporal = "temporal";
+    /// <summary>Secondary shadow history reuse (<c>world.shadow-amortize</c>).</summary>
+    public const string ShadowAmortize = "shadow-amortize";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
     private static bool Flag(WorldSessionLever lever) => (lever.A != 0.0);
 
+    /// <summary>Creates the one lever that installs a preset's complete shadow policy.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The four shadow fields in one accepted settings write.</returns>
+    public static WorldSessionLever ShadowPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: ShadowSlots,
+        A: preset.ShadowLights, B: preset.ShadowFadeSlots,
+        C: preset.ShadowFadeTicks, D: ((int)preset.ShadowOverflow));
     /// <summary>Composes the applier every shipped knob is registered on.</summary>
     /// <param name="settings">The live render-lever settings the frame source reads.</param>
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
@@ -59,6 +83,9 @@ public static partial class WorldSessionLevers {
         ArgumentNullException.ThrowIfNull(bindingBar);
 
         var sink = new WorldSessionLeverSink();
+
+        sink.Register(name: SkySolo, setter: lever => settings.SkyLayers.SetSolo(index: ((int)lever.A)));
+        sink.Register(name: SkyMute, setter: lever => settings.SkyLayers.SetMuted(index: ((int)lever.A), muted: (lever.B != 0d)));
 
         sink.Register(
             name: MasterVolume,
@@ -92,6 +119,10 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.FarBound = Flag(lever: lever)
         );
         sink.Register(
+            name: Indirect,
+            setter: lever => settings.IndirectTier = ((SdfIndirectTier)((int)lever.A))
+        );
+        sink.Register(
             name: ShadowMask,
             setter: lever => settings.ShadowMask = ((ShadowMaskMode)((int)lever.A))
         );
@@ -101,7 +132,31 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: RenderScale,
-            setter: lever => settings.RenderScale = ((float)lever.A)
+            setter: lever => {
+                if (!settings.SetResolution((lever.View ?? "*"), ((WorldRenderScaleOperation)((int)lever.B)), ((float)lever.A), out var refusal)) {
+                    Console.Error.WriteLine(value: $"[{refusal}]");
+                }
+            }
+        );
+        sink.Register(
+            name: Temporal,
+            setter: lever => settings.Temporal = Flag(lever: lever)
+        );
+        sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
+        sink.Register(name: SkyFieldScale, setter: lever => {
+            if (lever.A is not (1d or .5d)) {
+                Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");
+                return;
+            }
+            settings.SkyFieldScale = ((float)lever.A);
+        });
+        sink.Register(
+            name: SkyQuality,
+            setter: lever => settings.SkyQuality = (((int)lever.A) switch {
+                0 => WorldSkyTier.Low,
+                1 => WorldSkyTier.Medium,
+                _ => WorldSkyTier.High,
+            })
         );
         sink.Register(
             name: UpscaleSharpness,
@@ -134,6 +189,8 @@ public static partial class WorldSessionLevers {
             }
         );
 
+        sink.Register(name: ShadowSlots, setter: lever => settings.ShadowSlots = new WorldShadowSettings(
+            Slots: ((int)lever.A), FadeSlots: ((int)lever.B), FadeTicks: ((uint)lever.C), Overflow: ((WorldShadowOverflow)((int)lever.D))));
         return sink;
     }
 }

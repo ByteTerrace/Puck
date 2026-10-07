@@ -199,6 +199,7 @@ public sealed class WorldAdjacencyBorderColorLawTests {
         public Quaternion CurrentOrientation(int index) => Quaternion.Identity;
         public Vector3 CurrentPosition(int index) => Vector3.Zero;
         public WorldEntityAddress EntityAddress(int index) => default;
+        public string? PlacementId(int index) => null;
         public bool IsEntityActive(int index) => false;
         public WorldLook Look(int index) => null!;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Puck.Cli.Azure;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -49,53 +50,51 @@ public sealed class WorldReleaseRollbackTests {
     [InlineData("exercise", "Host configuration directory does not exist")]
     [Theory]
     public async Task OperatorRefusalsReportTheReasonWithoutAnUnhandledException(string verb, string reason) {
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-release-refusal-");
+        using var temporary = new TemporaryDirectory(prefix: "puck-release-refusal-");
 
-        try {
-            var start = new ProcessStartInfo(fileName: "dotnet") {
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                WorkingDirectory = temporary.FullName,
-            };
+        var start = new ProcessStartInfo(fileName: "dotnet") {
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            WorkingDirectory = temporary.RootPath,
+        };
 
-            foreach (var argument in new[] { typeof(PuckRootCommand).Assembly.Location, "world", "release", verb, Path.Combine(
-                path1: temporary.FullName,
-                path2: "missing"
-            ) }) {
-                start.ArgumentList.Add(item: argument);
-            }
-            using var process = Process.Start(startInfo: start)!;
-            var token = TestContext.Current.CancellationToken;
-            var output = process.StandardOutput.ReadToEndAsync(cancellationToken: token);
-            var errors = process.StandardError.ReadToEndAsync(cancellationToken: token);
+        foreach (var argument in new[] { typeof(PuckRootCommand).Assembly.Location, "world", "release", verb, Path.Combine(
+            path1: temporary.RootPath,
+            path2: "missing"
+        ) }) {
+            start.ArgumentList.Add(item: argument);
+        }
+        using var process = Process.Start(startInfo: start)!;
+        var token = TestContext.Current.CancellationToken;
+        var output = process.StandardOutput.ReadToEndAsync(cancellationToken: token);
+        var errors = process.StandardError.ReadToEndAsync(cancellationToken: token);
 
-            await process.WaitForExitAsync(cancellationToken: token);
-            Assert.Equal(
-                CliExit.Refused,
-                process.ExitCode
-            );
-            Assert.Empty(value: await output);
-            var diagnostic = await errors;
+        await process.WaitForExitAsync(cancellationToken: token);
+        Assert.Equal(
+            CliExit.Refused,
+            process.ExitCode
+        );
+        Assert.Empty(value: await output);
+        var diagnostic = await errors;
 
-            Assert.StartsWith(
-                actualString: diagnostic,
-                expectedStartString: $"puck world release {verb}: "
-            );
-            Assert.Contains(
-                actualString: diagnostic,
-                expectedSubstring: reason
-            );
-            Assert.DoesNotContain(
-                actualString: diagnostic,
-                expectedSubstring: "Unhandled exception"
-            );
-            Assert.DoesNotContain(
-                actualString: diagnostic,
-                expectedSubstring: "   at "
-            );
-        } finally { temporary.Delete(recursive: true); }
+        Assert.StartsWith(
+            actualString: diagnostic,
+            expectedStartString: $"puck world release {verb}: "
+        );
+        Assert.Contains(
+            actualString: diagnostic,
+            expectedSubstring: reason
+        );
+        Assert.DoesNotContain(
+            actualString: diagnostic,
+            expectedSubstring: "Unhandled exception"
+        );
+        Assert.DoesNotContain(
+            actualString: diagnostic,
+            expectedSubstring: "   at "
+        );
     }
     [Fact]
     public void ReusingAnOperationCannotToggleBackOrSelectItsOldRecoveryRoots() {

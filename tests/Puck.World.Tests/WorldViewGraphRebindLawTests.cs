@@ -18,9 +18,10 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
     private const string Camera = "cam";
     private const string Ink = "ink";
 
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-world-graph-rebind-{Guid.NewGuid():N}"
+    // The runtime may still hold a file here as it is disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-world-graph-rebind-"
     );
     private readonly List<string> m_reports = [];
 
@@ -33,16 +34,15 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
             condition: (new ShaderToolchain().Locate(name: ShaderCompiler.DxcTool) is null),
             reason: "DXC is required to compile the installed graph."
         );
-        Directory.CreateDirectory(path: m_directory);
         Write(name: "pass.hlsl", text: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }");
         Write(name: "feed.hlsl", text: Convert(input: "feed"));
         Write(name: "other.hlsl", text: Convert(input: "other"));
         Write(name: "feed.graph.json", text: Graph(input: "feed"));
         Write(name: "other.graph.json", text: Graph(input: "other"));
         m_runtime = new WorldViewGraphHost(
-            documentDirectory: m_directory,
+            documentDirectory: m_directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "cache"
             )))
         ) {
@@ -115,18 +115,17 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
     ]);
     // Pumps the host until no compile is pending and the latest result is installed. The bound is liveness; it decides
     // nothing.
-    private void PumpUntilInstalled() => Assert.True(condition: SpinWait.SpinUntil(
-        condition: () => {
+    private void PumpUntilInstalled() => TestLiveness.Until(
+        step: () => {
             m_runtime!.PumpWatches();
 
             return m_runtime.Entries.Values.All(predicate: static entry => !entry.IsCompiling);
-        },
-        timeout: TimeSpan.FromSeconds(value: 60)
-    ));
+        }
+    );
     private void Write(string name, string text) => File.WriteAllText(
         contents: text,
         path: Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: name
         )
     );
@@ -134,14 +133,7 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
     public void Dispose() {
         m_runtime?.Dispose();
         m_instances?.Dispose();
-
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
+        m_directory.Dispose();
     }
     [Fact]
     public void ARowThatBecomesAPackageIsNotHandedItsInstalledGraph() {

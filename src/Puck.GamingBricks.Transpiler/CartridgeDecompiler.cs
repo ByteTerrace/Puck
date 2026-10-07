@@ -401,7 +401,7 @@ public static class CartridgeDecompiler {
 
         var sb = new StringBuilder();
 
-        sb.Append(value: "schema: \"").Append(value: (document["schema"]?.GetValue<string>() ?? CartridgeVocabulary.Schema)).Append(value: "\"\n");
+        sb.Append(value: "schema: \"").Append(value: (document["schema"]?.GetValue<string>() ?? CartridgeDocument.SchemaId)).Append(value: "\"\n");
 
         foreach (var key in OrderedSections(document: document)) {
             sb.Append(value: '\n');

@@ -1,0 +1,6 @@
+world.cadence on
+world.quality medium
+world.indirect medium
+world.rate pause
+world.wait ready 180
+world.rate resume

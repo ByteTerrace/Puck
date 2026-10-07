@@ -1,4 +1,5 @@
 using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
@@ -16,7 +17,8 @@ public static class VulkanResultExtensions {
     /// <param name="result">The result code to check.</param>
     /// <param name="operation">The name of the operation that produced the result, included in the exception message.</param>
     /// <exception cref="VulkanException"><paramref name="result"/> is not a success code.</exception>
-    public static void ThrowIfFailed(this VkResult result, string operation) {
+    /// <param name="device">The device that returned the result, when the operation is device-scoped.</param>
+    public static void ThrowIfFailed(this VkResult result, string operation, VulkanDeviceCommands? device = null) {
         if (result.IsSuccess()) {
             return;
         }
@@ -28,8 +30,14 @@ public static class VulkanResultExtensions {
             (result == VkResult.ErrorDeviceLost) ||
             (result == VkResult.ErrorSurfaceLostKhr)
         ) {
+            var message = $"{operation} failed: {result} (graphics device lost).";
+
+            if (result == VkResult.ErrorDeviceLost) {
+                message += $"\n{(device?.Fault.ReadAfterDeviceLoss() ?? "Device fault diagnostics unavailable: no logical device for this operation.")}";
+                Console.Error.WriteLine(value: message);
+            }
             throw new DeviceLostException(
-                message: $"{operation} failed: {result} (graphics device lost).",
+                message: message,
                 reasonCode: ((long)result)
             );
         }

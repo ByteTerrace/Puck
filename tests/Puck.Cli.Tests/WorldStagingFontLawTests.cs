@@ -18,7 +18,7 @@ public sealed class WorldStagingFontLawTests {
             """);
         var world = new JsonObject { ["schema"] = WorldDefinition.SchemaVersion, ["basis"] = "base" };
 
-        Assert.True(condition: WorldStaging.TryWrite(world: world, name: "base", sourceDirectory: files.PathOf(name: "source"),
+        Assert.True(condition: WorldStaging.TryWrite(catalog: CliWorldVocabulary.EnsureInstalled(), world: world, name: "base", sourceDirectory: files.PathOf(name: "source"),
             directory: files.PathOf(name: "staged"), path: out var staged, reason: out var reason), userMessage: reason);
         Assert.Equal(expected: "inherited title", actual: JsonNode.Parse(utf8Json: File.ReadAllBytes(path: staged))!["title"]!.GetValue<string>());
     }
@@ -52,7 +52,7 @@ public sealed class WorldStagingFontLawTests {
                 }
                 world["imports"] = new JsonArray { import };
             }
-            Assert.True(condition: WorldStaging.TryWrite(
+            Assert.True(condition: WorldStaging.TryWrite(catalog: CliWorldVocabulary.EnsureInstalled(),
                 world: world, name: "entry", sourceDirectory: source, directory: files.PathOf(name: "staged"),
                 path: out var staged, reason: out var reason
             ), userMessage: reason);
@@ -119,7 +119,7 @@ public sealed class WorldStagingFontLawTests {
         Assert.True(condition: origins.TryGetOrigin(value: fonts[1]!["source"], origin: out var replaced));
         Assert.Equal(expected: rootPath, actual: replaced.DocumentPath);
         Assert.Equal(expected: "\"root.ttf\"", actual: replaced.Json);
-        Assert.True(condition: WorldStaging.TryWrite(world: world, name: "entry", sourceDirectory: files.RootPath,
+        Assert.True(condition: WorldStaging.TryWrite(catalog: CliWorldVocabulary.EnsureInstalled(), world: world, name: "entry", sourceDirectory: files.RootPath,
             directory: files.PathOf(name: "staged"), path: out var staged, reason: out reason), userMessage: reason);
         var stagedFonts = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: staged))!["text"]!["fonts"]!.AsArray();
 
@@ -175,7 +175,7 @@ public sealed class WorldStagingFontLawTests {
                 ["text"] = new JsonObject { ["defaultFont"] = "first", ["fonts"] = fonts },
             };
 
-            Assert.True(condition: WorldStaging.TryWrite(
+            Assert.True(condition: WorldStaging.TryWrite(catalog: CliWorldVocabulary.EnsureInstalled(),
                 directory: target, name: "entry", path: out var staged, reason: out var reason,
                 sourceDirectory: source, world: world
             ), userMessage: reason);
@@ -205,7 +205,7 @@ public sealed class WorldStagingFontLawTests {
                 paths.Add(item: path);
             }
             Assert.Equal(expected: 2, actual: paths.Distinct(comparer: StringComparer.Ordinal).Count());
-            Assert.True(condition: WorldStaging.TryStageComposition(
+            Assert.True(condition: WorldStaging.TryStageComposition(catalog: CliWorldVocabulary.EnsureInstalled(),
                 path: Path.Combine(path1: source, path2: "world.puck"),
                 worlds: [new WorldCompiledWorld(Entry: true, Json: CanonicalJsonDocument.Serialize(node: new JsonObject { ["schema"] = WorldDefinition.SchemaVersion }), Name: "empty")],
                 entry: null, directory: target, entryPath: out _, entryName: out _, reason: out reason

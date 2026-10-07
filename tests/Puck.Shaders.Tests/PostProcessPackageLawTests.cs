@@ -105,20 +105,18 @@ public sealed class PostProcessPackageLawTests {
     // blocks each draw reads, in hex. The frame group block holds the frame counter, counting from one, and the tick rate;
     // the pass block holds the 64x64 extent, the default flicker rate of 24, then the bound config (intensity, seed, then
     // the package's remaining fields) and the pass's work counter row, zero.
+    // Each frame block ends with the placed extent, the node's own 64 by 64 (0x42800000) since nothing places it.
     private static Recorded Pinned(string configHex) => new(
-        Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
+        Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)}0000804200008042{new string(c: '0', count: 16)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
         Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
         Writes: [.. Enumerable.Repeat(count: 4, element: new[] { $"1 {Input.ImageViewHandle}", "3 work counters" }).SelectMany(selector: static pair => pair)]
     );
-    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => Assert.True(
-        condition: SpinWait.SpinUntil(
-            condition: () => !node.ProduceFrame(context: default).IsEmpty,
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ),
-        userMessage: "The pass never published a frame."
+    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => TestLiveness.Until(
+        reason: () => "The pass never published a frame.",
+        step: () => !node.ProduceFrame(context: default).IsEmpty
     );
     // What a law compares of one pass's recording: the render pass and pipeline it was created for, the graphics
     // commands, the input written at a binding, and the frame and pass blocks each frame's draw reads, read from the
@@ -334,16 +332,13 @@ public sealed class PostProcessPackageLawTests {
             height: (Extent / 2),
             width: (Extent / 2)
         );
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = node.ProduceFrame(context: default);
+        TestLiveness.Until(
+            reason: () => "The resize never installed.",
+            step: () => {
+                _ = node.ProduceFrame(context: default);
 
-                    return (node.Extent == ((Extent / 2), (Extent / 2)));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The resize never installed."
+                return (node.Extent == ((Extent / 2), (Extent / 2)));
+            }
         );
         _ = node.ProduceFrame(context: default);
         _ = node.ProduceFrame(context: default);
@@ -445,16 +440,13 @@ public sealed class PostProcessPackageLawTests {
                     kind: kind,
                     nth: nth
                 );
-                Assert.True(
-                    condition: SpinWait.SpinUntil(
-                        condition: () => {
-                            _ = node.ProduceFrame(context: default);
+                TestLiveness.Until(
+                    reason: () => $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported.",
+                    step: () => {
+                        _ = node.ProduceFrame(context: default);
 
-                            return (node.LastSwapError is not null);
-                        },
-                        timeout: TimeSpan.FromSeconds(value: 30)
-                    ),
-                    userMessage: $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported."
+                        return (node.LastSwapError is not null);
+                    }
                 );
 
                 var fault = Assert.IsType<GpuCreationFaultException>(@object: node.LastSwapError);

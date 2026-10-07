@@ -174,18 +174,17 @@ public sealed partial class SdfWorldTables {
         // change invalidates the signature.
         m_decalRevision++;
     }
-    /// <summary>Supplies the colored light a declared screen surface at <paramref name="screenIndex"/> emits into the
-    /// room this frame — typically the average color of its framebuffer, so the room glows the game's dominant hue. The
-    /// light's position/orientation/extent come from the program's screen-surface table (a screen is an area emitter);
-    /// only its color is per-frame. Contributes nothing while the screen is unbound (the shader gates on the same
-    /// bound flag <see cref="SetScreenBound"/> maintains) or while the color is zero (a dark screen).</summary>
+    /// <summary>Sets whether the screen's acquired image emits light. Its GPU reduction supplies both direct lighting
+    /// and indirect face emission; a camera of the same world is excluded to prevent self illumination.</summary>
     /// <param name="screenIndex">The screen slot (0..31, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
-    /// <param name="color">The emitted light color (linear RGB, typically 0..1).</param>
+    /// <param name="emits">Whether the source is an independent image or a view of another world.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>
-    public void SetScreenLight(int screenIndex, Vector3 color) {
+    public void SetScreenEmission(int screenIndex, bool emits) {
         RequireScreenIndex(screenIndex: screenIndex);
+        var flag = (emits ? 1f : 0f);
 
-        m_screenLightColors[screenIndex] = color;
+        _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in flag)),
+            offset: (((screenIndex * ScreenMappingByteLength) + ScreenBoundOffset) + (sizeof(float) * 2)));
     }
     /// <summary>States whether a declared screen surface (see <see cref="SdfProgramBuilder"/>'s screen-surface
     /// <c>ScreenSlab</c> overload) at <paramref name="screenIndex"/> shows a source this frame: its row's bound flag, which

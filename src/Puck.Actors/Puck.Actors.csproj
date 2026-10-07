@@ -11,16 +11,22 @@
         <TargetFramework>net10.0</TargetFramework>
         <UserSecretsId>e1b0662e-9c2a-4c04-9b53-4e4dbf1a6a10</UserSecretsId>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- From Azure.Monitor.OpenTelemetry.Exporter 1.9 a provider's shutdown writes pending telemetry to local offline
+             storage for a later process to send, and a replaced instance never runs again on that disk. This switch
+             makes a provider's shutdown send that batch instead. Puck.Azure's UseAzureMonitorExporterWithBoundedShutdown
+             shuts the providers down while the host stops and bounds the send. -->
+        <RuntimeHostConfigurationOption Include="Azure.Monitor.OpenTelemetry.Exporter.DisablePersistOnShutdown" Value="true" />
+    </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Azure\Puck.Azure.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
+        <ProjectReference Include="../Puck.Azure/Puck.Azure.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
-        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />
         <PackageReference Include="Microsoft.Azure.AppConfiguration.AspNetCore" Version="[8.*,9.0)" />
         <PackageReference Include="Microsoft.Graph" Version="[6.*,7.0)" />

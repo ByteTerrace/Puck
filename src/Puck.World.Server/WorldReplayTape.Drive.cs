@@ -24,6 +24,9 @@ public sealed partial class WorldReplayTape {
     /// local route epochs so input deduplication and presentation do not retain the replaced timeline's cursor.</summary>
     public event Action? TimelineRestored;
 
+    // The history's seek installs a past timeline through the same subscribers a drive's boot image reaches.
+    internal void RaiseTimelineRestored() => TimelineRestored?.Invoke();
+
     // One live drive's whole mutable state — dropped the instant the drive ends, so no field of it can leak into
     // the recording a fork hands over to.
     private sealed class DriveState {
@@ -82,12 +85,59 @@ public sealed partial class WorldReplayTape {
         EndDriveCore(completed: completed);
         m_liveServer.EndUnobservedSessions();
     }
+    // A drive seats each profiled seat on a detached copy of the identity its tape pinned, so a replayed identity write
+    // lands on the copy and never in the catalog. When the drive ends the copy is discarded: a seat this authority's own
+    // catalog owns returns to the live owned identity, where a later write is saved again, and where the copy differs from
+    // it the difference is narrated as drift. A seat the catalog does not own (a visitor, or an id it holds no document
+    // for) keeps what it carries.
+    private HashSet<int> RebindOwnedSeats() {
+        var population = m_liveServer.Population;
+        var profiles = m_liveServer.Profiles;
+        var rebound = new HashSet<int>();
+
+        for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
+            if (
+                !population.IsActive(index: slot) ||
+                (population.EntryBody(index: slot)?.Profile is not { } detached) ||
+                profiles.Owns(identity: detached) ||
+                (m_liveServer.HomeSeatIdentity(
+                    id: detached.Id,
+                    mobility: population.CurrentMobility(index: slot),
+                    slot: slot
+                ) is not { } live)
+            ) {
+                continue;
+            }
+
+            WorldReplaySnapshot.ReportAdoptionDrift(
+                current: live,
+                narrationHub: profiles.NarrationHub,
+                taped: detached,
+                used: WorldReplaySnapshot.DriveEndTapedUsed
+            );
+
+            var color = population.BodyColor(index: slot);
+
+            population.SetSeatProfile(
+                profile: live,
+                slot: slot
+            );
+            population.SetBodyColor(
+                color: color,
+                slot: slot
+            );
+            _ = rebound.Add(item: slot);
+        }
+
+        return rebound;
+    }
     private void EndDriveCore(bool completed) {
         var drive = m_drive!;
 
         m_drive = null;
         m_liveServer.Extensions.CompleteReplay();
         m_transport.InputMasked = false;
+        var rebound = RebindOwnedSeats();
 
         var verdict = ((drive.DivergedAt < 0)
             ? "every driven tick matched the recording"
@@ -107,7 +157,8 @@ public sealed partial class WorldReplayTape {
             !completed ||
             (drive.ForkName is not { } forkName)
         ) {
-            m_mode = WorldReplayMode.Idle;
+            SetMode(mode: WorldReplayMode.Idle);
+            RefreshCapture();
 
             return;
         }
@@ -121,8 +172,10 @@ public sealed partial class WorldReplayTape {
 
         m_recordName = forkName;
         m_definitionJson = source.DefinitionJson;
+        m_startCheckpoint = source.StartCheckpoint;
         m_recordRateHz = source.SimulationRate;
         m_pipelineSourceDirectory = source.PipelineSourceDirectory;
+        m_documentDirectory = source.DocumentDirectory;
         m_mountedAddons = [.. source.MountedAddons];
         m_seats = [.. source.Seats];
         m_ticks = prefix;
@@ -136,8 +189,19 @@ public sealed partial class WorldReplayTape {
             ParentName: drive.SourceName,
             Tick: drive.Target
         );
-        AttachTaps();
-        m_mode = WorldReplayMode.Recording;
+        // The seats the drive rebound continue as the live owned identity, which is not the identity this recording's boot
+        // image pins: the fork's own tape switches them at the head of its first tick, where the live fork switched.
+        foreach (var slot in rebound.Order()) {
+            if (m_liveServer.Body(index: slot)?.Profile?.Project() is { } continued) {
+                m_recordPrefix.Add(item: new WorldReplayEntry.SeatIdentity(
+                    Profile: continued,
+                    Slot: slot
+                ));
+            }
+        }
+
+        SetMode(mode: WorldReplayMode.Recording);
+        RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
                 channel: "replay.fork",
@@ -150,7 +214,7 @@ public sealed partial class WorldReplayTape {
     // running session, and the hash comparison that follows reports the resulting divergence honestly.
     private string? NarrateRebuildContentPin(WorldReplayEntry.Rebuild rebuild) {
         if (
-            (rebuild.PathHint is { } path) &&
+            (rebuild.Origin is WorldRebuildOrigin.File { Path: var path }) &&
             (m_drive is { } drive)
         ) {
             if (!WorldDefinitionFileSource.TryReadContentPin(
@@ -246,35 +310,41 @@ public sealed partial class WorldReplayTape {
     // pipeline), then the complete authority checkpoint a fresh server reaches after the recorded seats join.
     // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
-        var population = new WorldPopulation(definition: definition);
-        using var machines = m_machineHostFactory(
-            definition.Screens,
-            m_engines,
-            documentPath,
-            null
-        );
-        var shadow = new WorldServer(
-            definition: definition,
-            population: population,
-            profiles: m_profiles,
-            envelope: new WorldRenderEnvelope(),
-            machines: machines
-        );
+        // A tape that starts from a checkpoint carries its whole starting authority state; one that starts from the
+        // boot image has it rebuilt here, on a shadow with the recorded seats joined.
+        var checkpoint = source.StartCheckpoint;
 
-        source.SeatRecordedSeats(
-            definition: definition,
-            population: population,
-            profiles: m_profiles,
-            server: shadow
-        );
-        // A population-only reset leaves the old clock, latches, decisions, and held input alive.
-        // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
-        if (!shadow.TryCaptureCheckpoint(
-            WorldAuthorityHostRowCheckpoint.Empty,
-            out var checkpoint,
-            out var reason
-        )) {
-            return $"the replay boot image could not be captured: {reason}";
+        if (checkpoint is null) {
+            var population = new WorldPopulation(definition: definition);
+            using var machines = m_machineHostFactory(
+                definition.Screens,
+                m_engines,
+                documentPath,
+                null
+            );
+            var shadow = new WorldServer(
+                definition: definition,
+                population: population,
+                profiles: m_profiles,
+                envelope: new WorldRenderEnvelope(),
+                machines: machines
+            );
+
+            source.SeatRecordedSeats(
+                definition: definition,
+                population: population,
+                profiles: m_profiles,
+                server: shadow
+            );
+            // A population-only reset leaves the old clock, latches, decisions, and held input alive.
+            // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
+            if (!shadow.TryCaptureCheckpoint(
+                WorldAuthorityHostRowCheckpoint.Empty,
+                out checkpoint,
+                out var reason
+            )) {
+                return $"the replay boot image could not be captured: {reason}";
+            }
         }
         return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
             if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
@@ -283,7 +353,9 @@ public sealed partial class WorldReplayTape {
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
                     Definition: definition,
-                    PathHint: documentPath,
+                    Origin: ((documentPath is null)
+                        ? null
+                        : new WorldRebuildOrigin.File(Path: documentPath)),
                     Force: true,
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
                 ),
@@ -297,7 +369,7 @@ public sealed partial class WorldReplayTape {
                 m_liveServer.Extensions.CompleteReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
-            m_liveServer.RestoreCheckpoint(checkpoint: checkpoint!);
+            m_liveServer.Persistence.RestoreCheckpoint(checkpoint: checkpoint!, restoreOwnedIdentities: false);
             return null;
         });
     }
@@ -343,7 +415,7 @@ public sealed partial class WorldReplayTape {
             expectedMutationOutcomes: drive.ExpectedMutationOutcomes,
             input: drive.Source.Ticks[drive.Cursor],
             population: m_liveServer.Population,
-            rebuildContentPin: NarrateRebuildContentPin,
+            rebuildSource: rebuild => (null, NarrateRebuildContentPin(rebuild: rebuild)),
             replayedMutationOutcomes: drive.ReplayedMutationOutcomes,
             server: m_liveServer
         );
@@ -384,7 +456,7 @@ public sealed partial class WorldReplayTape {
             source = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: source.PipelineSourceDirectory, utf8Json: source.DefinitionJson);
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: source.DocumentDirectory, utf8Json: source.DefinitionJson);
 
         if (source.SimulationRate != ((uint)definition.SimulationRateHz)) {
             throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {source.SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — this tape is internally inconsistent; re-record it.");
@@ -433,10 +505,10 @@ public sealed partial class WorldReplayTape {
         }
 
         if (
-            (definition.Screens.Count > 0) &&
-            (m_liveServer.AnyMachineEverPumped || m_liveServer.AnyScreenOpEverApplied)
+            m_liveServer.AnyScreenOpEverApplied ||
+            ((definition.Screens.Count > 0) && m_liveServer.AnyMachineEverPumped)
         ) {
-            refusal = "the tape's world declares screens and a live screen machine has already stepped or a screen op has already applied — the rebuild door reconciles screens but never resets a booted cartridge's core state, so the boot image cannot be reached in this session";
+            refusal = "a screen or machine operation has applied, or the tape declares screens and a live machine has stepped — screen-owned state and memory observations are outside the checkpoint inventory, so the boot image cannot be reached in this session";
             return false;
         }
 
@@ -445,6 +517,11 @@ public sealed partial class WorldReplayTape {
             m_liveServer.AnyAddonEverPumped
         ) {
             refusal = "the tape pins mounted addons and a live guest has already been pumped — the rebuild door reuses an unchanged addon row's guest with its accumulated state, so the boot image cannot be reached in this session";
+            return false;
+        }
+
+        if (source.Ticks.Any(predicate: static tick => tick.Authority.Any(predicate: static entry => (entry is WorldReplayEntry.Arrival)))) {
+            refusal = $"'{name}' lands travelers another authority handed over — driving it here would embody them with no source releasing them; replay.verify lands them again offline";
             return false;
         }
 
@@ -477,7 +554,8 @@ public sealed partial class WorldReplayTape {
             Target = target,
         };
         m_transport.InputMasked = true;
-        m_mode = WorldReplayMode.Replaying;
+        SetMode(mode: WorldReplayMode.Replaying);
+        RefreshCapture();
         TimelineRestored?.Invoke();
         refusal = "";
 

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Platform;
 using Puck.Platform.Probes;
@@ -26,8 +27,8 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
-/// (<see cref="MachineSource"/>) writes an output's frames into its region, and <see cref="Server.WorldMachineHost.Light"/>
-/// lights the room. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
+/// (<see cref="MachineSource"/>) writes an output's frames into its region, and the residency reduces the acquired GPU
+/// image for lighting. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
 /// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
 /// <c>LinkOf</c>, <c>DescribeLinks</c>, <c>TryReadLinkMembers</c>) so presentation-side
 /// callers (<c>PlayerCommandModule</c>, <c>WorldAudioDirector</c>,
@@ -35,7 +36,8 @@ namespace Puck.World;
 /// already hold. Machine lifecycle mutation (insert/eject/select/options/link/unlink) routes through
 /// <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
 /// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
-/// own remarks). Producer, jumbotron-view, probe and session screen sources remain genuinely presentation-owned.
+/// own remarks). Producer, jumbotron-view and probe feeds belong to presentation. Session feeds render the
+/// authority-owned observations <see cref="WorldInstanceHost"/> admits and releases.
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) binds 0, so the
 /// engine leaves its surface unbound. One webcam session is opened engine-wide per sensor and shared by every camera screen
 /// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must
@@ -43,7 +45,9 @@ namespace Puck.World;
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
 /// lock guards this state.</para>
 /// </remarks>
-internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter {
+internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
+    public WorldSkyAudition? SkyLayers { get; init; }
+
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
     private const int QrDefaultQuietZoneModules = 4;
     // The seat a screen row, a probe export, or a console bind resolves a seat-relative camera against: none of
@@ -62,6 +66,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The factory is non-null only on the D3D12 host, and the render adapter LUID is resolved once from the render device
     // context at the first publish (the device does not exist at construction), so capture feeds open on the render GPU.
     private readonly bool m_hostsOnDirectX;
+    // The host's paper-white level, which an HDR capture's room glow is measured against.
+    private readonly double m_paperWhiteNits;
+    private readonly WorldValueDomainGuard m_domains;
     // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
     // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
     private readonly WorldInstanceHost m_instanceHost;
@@ -80,7 +87,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Func<uint, GpuImageLease> m_fillImage;
     private readonly WorldCaptureFills m_fills;
 
-    // The producers every producer source opens through: the four the engine ships, then any the host registers.
+    // The producers every producer source opens through: the five the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
     /// <summary>Gets the image producers the binder opens screen sources through, which the render root registers with its
@@ -199,9 +206,15 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// captures and <c>puck parity</c>, so external content never reaches any frame it produces.</param>
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
+    /// <param name="paperWhiteNits">The host's paper-white level, in cd/m², the luminance a working value of one shows at,
+    /// which an HDR capture's room glow is measured against.</param>
+    /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
+    /// transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
+        m_domains = domains;
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
@@ -230,6 +243,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_facts = facts;
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
+        m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         m_roster = roster;
         // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
         // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.
@@ -247,6 +261,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_fillImage = m_fills.Acquire;
         m_producers.Register(producer: new WorldTestPatternProducer());
         m_producers.Register(producer: new WorldQrProducer());
+        m_producers.Register(producer: new WorldColorProducer());
         m_producers.Register(producer: new CameraProducer(binder: this));
         m_producers.Register(producer: new CaptureProducer(binder: this));
 
@@ -459,8 +474,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_disposed = true;
 
-        foreach (var slot in m_slots.Values) {
-            slot.Session?.Dispose();
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            feed.Dispose();
         }
 
         m_fills.Dispose();

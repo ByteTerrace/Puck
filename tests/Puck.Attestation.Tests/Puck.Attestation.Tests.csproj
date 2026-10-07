@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -11,11 +12,9 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.*, )" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Attestation\Puck.Attestation.csproj" />
+        <ProjectReference Include="../../src/Puck.Attestation/Puck.Attestation.csproj" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
     </ItemGroup>
 </Project>

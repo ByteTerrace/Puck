@@ -1,0 +1,14 @@
+world.cadence off
+world.wait ready 25
+world.wait 4
+world.screenshot {run}/off-before.png
+world.wait captures 5
+world.indirect medium
+world.wait indirect 25
+world.wait 4
+world.screenshot {run}/on.png
+world.wait captures 5
+world.indirect off
+world.wait 4
+world.screenshot {run}/off-after.png
+world.wait captures 5

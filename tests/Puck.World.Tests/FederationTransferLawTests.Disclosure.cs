@@ -7,6 +7,7 @@ using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Tests.FederationSigning;
 
 namespace Puck.World.Tests;
 
@@ -98,6 +99,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
 
@@ -205,12 +207,12 @@ public sealed partial class FederationTransferLawTests {
         );
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
-        Assert.True(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             members: [member, member],
             reason: out var reason,
             sourceAuthority: DisclosureSource,
             transferId: request.TransferId
-        ), userMessage: reason);
+        ) == WorldTransferStatus.Committed), userMessage: reason);
 
         foreach (var body in ((int[])[4, 5])) {
             SetCell(fixture: fixture, key: "reader", row: $"owner{body}", text: fixture.Server.Population.PeerPrincipal(index: body).Describe(), value: 0L);
@@ -236,7 +238,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
 
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var ct = TestContext.Current.CancellationToken;

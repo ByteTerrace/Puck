@@ -1,7 +1,7 @@
 {
   "id": "kernel-counters",
   "title": "world.counters gpu reads the work passes count where they do it: a bounded volume's march steps double when its sample count does, a pass that marches nothing reads zero, and a post pass counts one texel a pixel",
-  "binding": "The positive leg boots a still offscreen world whose one placement is a creation with no shapes and one cloud volume integrating sixteen samples along every ray through it, turns the cadence gate off so every frame renders every pass, waits for the engine to be ready, and reads world.counters gpu. It then points the placement at the same cloud at thirty-two samples and reads again. The sky pass marches nothing but the volume, so every march step it counts is a volume sample, and each ray through the cloud integrates exactly its step count: the second read's sky march steps are exactly twice the first's, and the first's are more than zero. The cull arguments pass walks no field and writes no texel, so it reads zero of both. The world's views.post row runs the sdf.film-grain package over the 64x64 output, whose fragments each write one texel and count it, helper lanes aside, so the grain pass reads 4096 texels written. The discriminating leg points the placement at its own sixteen-sample cloud again, so the second read's sky march steps equal the first's: the count follows the samples, not the edit.",
+  "binding": "The positive leg boots a still offscreen world whose one placement is a creation with no shapes and one cloud volume integrating sixteen samples along every ray through it, turns the cadence gate off so every frame renders every pass, waits for the engine to be ready, and reads world.counters gpu. It then points the placement at the same cloud at thirty-two samples and reads again. The composite integrates the bounded media and marches nothing else, so every march step it counts is a volume sample, and each ray through the cloud integrates exactly its step count: the second read's composite march steps are exactly twice the first's, and the first's are more than zero. The cull arguments pass walks no field and writes no texel, so it reads zero of both. The world's views.post row runs the sdf.film-grain package over the 64x64 output, whose fragments each write one texel and count it, helper lanes aside, so the grain pass reads 4096 texels written. The discriminating leg points the placement at its own sixteen-sample cloud again, so the second read's composite march steps equal the first's: the count follows the samples, not the edit.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -62,9 +62,9 @@
         "count": 2,
         "extract": [
           {
-            "name": "sky-sixteen",
+            "name": "composite-sixteen",
             "field": "march.steps",
-            "line": "work sdf.world$sky"
+            "line": "work sdf.world$composite"
           },
           {
             "name": "cull-args-steps",
@@ -92,18 +92,18 @@
         "count": 2,
         "extract": [
           {
-            "name": "sky-thirty-two",
+            "name": "composite-thirty-two",
             "field": "march.steps",
-            "line": "work sdf.world$sky"
+            "line": "work sdf.world$composite"
           }
         ]
       },
       {
         "type": "relation",
-        "name": "the-sky-marches-the-cloud",
+        "name": "the-composite-marches-the-cloud",
         "operator": "greater",
         "left": {
-          "value": "sky-sixteen"
+          "value": "composite-sixteen"
         },
         "right": {
           "literal": 0
@@ -114,11 +114,11 @@
         "name": "doubling-the-samples-doubles-the-steps",
         "operator": "equal",
         "left": {
-          "value": "sky-thirty-two",
-          "minus": "sky-sixteen"
+          "value": "composite-thirty-two",
+          "minus": "composite-sixteen"
         },
         "right": {
-          "value": "sky-sixteen"
+          "value": "composite-sixteen"
         }
       },
       {
@@ -157,7 +157,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/kernel-counters/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {
@@ -206,9 +206,9 @@
         "count": 2,
         "extract": [
           {
-            "name": "sky-first",
+            "name": "composite-first",
             "field": "march.steps",
-            "line": "work sdf.world$sky"
+            "line": "work sdf.world$composite"
           }
         ]
       },
@@ -221,9 +221,9 @@
         "count": 2,
         "extract": [
           {
-            "name": "sky-second",
+            "name": "composite-second",
             "field": "march.steps",
-            "line": "work sdf.world$sky"
+            "line": "work sdf.world$composite"
           }
         ]
       },
@@ -232,10 +232,10 @@
         "name": "the-same-samples-march-the-same-steps",
         "operator": "equal",
         "left": {
-          "value": "sky-second"
+          "value": "composite-second"
         },
         "right": {
-          "value": "sky-first"
+          "value": "composite-first"
         }
       }
     ]

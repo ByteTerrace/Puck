@@ -66,9 +66,45 @@ public static class WorldStateExport {
         return hashes;
     }
     private static JsonArray Resolved(WorldDefinition definition, ulong tick, ulong engineTick) {
+        var resolved = new JsonArray();
+        var values = new JsonArray();
+
+        VisitResolvedCells(
+            definition: definition,
+            engineTick: engineTick,
+            tick: tick,
+            visit: (_, key, rawValue, text) => values.Add(value: new JsonObject {
+                ["key"] = key,
+                ["value"] = rawValue,
+                ["text"] = text,
+            }),
+            visitRow: row => {
+                values = new JsonArray();
+                resolved.Add(value: new JsonObject {
+                    ["row"] = row.Name.Value,
+                    ["cells"] = values,
+                });
+            }
+        );
+
+        return resolved;
+    }
+
+    /// <summary>Walks every cell the live definition's document-lane rows store and reads the value and text each
+    /// resolves to at a tick — the one walk the export's <c>resolved</c> member and a history diff's cell image share.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="tick">The simulation tick to resolve at.</param>
+    /// <param name="engineTick">The engine tick to resolve at.</param>
+    /// <param name="visitRow">Called once per row the catalog resolves, before its cells.</param>
+    /// <param name="visit">Called once per resolving cell with its row, key, raw value, and text.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static void VisitResolvedCells(WorldDefinition definition, ulong tick, ulong engineTick, Action<WorldStateRow> visitRow, Action<WorldStateRow, string, long?, string?> visit) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: visitRow);
+        ArgumentNullException.ThrowIfNull(argument: visit);
+
         var catalog = definition.StateCatalog;
         var rows = definition.State;
-        var resolved = new JsonArray();
 
         for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
             var row = rows[rowIndex];
@@ -81,8 +117,9 @@ public static class WorldStateExport {
                 continue;
             }
 
+            visitRow(obj: row);
+
             var cells = (row.Cells ?? []);
-            var values = new JsonArray();
 
             for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
                 var cell = cells[cellIndex];
@@ -101,22 +138,15 @@ public static class WorldStateExport {
                     continue;
                 }
 
-                values.Add(value: new JsonObject {
-                    ["key"] = cell.Key.Value,
-                    ["value"] = rawValue,
-                    ["text"] = text,
-                });
+                visit(
+                    arg1: row,
+                    arg2: cell.Key.Value,
+                    arg3: rawValue,
+                    arg4: text
+                );
             }
-
-            resolved.Add(value: new JsonObject {
-                ["row"] = row.Name.Value,
-                ["cells"] = values,
-            });
         }
-
-        return resolved;
     }
-
     /// <summary>Renders <paramref name="server"/>'s live state substrate as canonical UTF-8 JSON (no BOM, LF
     /// newlines, two-space indentation, one trailing newline).</summary>
     /// <param name="server">The live server to export.</param>

@@ -1,5 +1,6 @@
 using Puck.Cli.Affected;
 using Puck.Cli.Architecture;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -14,43 +15,39 @@ namespace Puck.Cli.Tests;
 public sealed class AffectedDocumentsLawTests {
     [Fact]
     public void AGraphDocumentReachesThePassSourcesItNamesAndTheirIncludes() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-affected-graph-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-graph-");
 
-        try {
-            var passes = Directory.CreateDirectory(path: Path.Combine(path1: directory.FullName, path2: "passes"));
-            var named = Path.Combine(path1: passes.FullName, path2: "fill.hlsl");
-            var unnamed = Path.Combine(path1: passes.FullName, path2: "other.hlsl");
-            var include = Path.Combine(path1: passes.FullName, path2: "common.hlsli");
-            var unincluded = Path.Combine(path1: passes.FullName, path2: "unused.hlsli");
-            var graph = Path.Combine(path1: directory.FullName, path2: "fill.graph.json");
+        var passes = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "passes"));
+        var named = Path.Combine(path1: passes.FullName, path2: "fill.hlsl");
+        var unnamed = Path.Combine(path1: passes.FullName, path2: "other.hlsl");
+        var include = Path.Combine(path1: passes.FullName, path2: "common.hlsli");
+        var unincluded = Path.Combine(path1: passes.FullName, path2: "unused.hlsli");
+        var graph = Path.Combine(path1: scratch.RootPath, path2: "fill.graph.json");
 
-            File.WriteAllText(contents: "#include \"common.hlsli\"\n[numthreads(8, 8, 1)] void main() {}", path: named);
-            File.WriteAllText(contents: "static const uint Fill = 1;", path: include);
-            File.WriteAllText(contents: "static const uint Unused = 1;", path: unincluded);
-            File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: unnamed);
-            File.WriteAllText(
-                contents: """
-                    {
-                      "$schema": "puck.render.graph.v1",
-                      "name": "fill",
-                      "resources": [ { "name": "out", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "relative", "width": 1, "height": 1 } } ],
-                      "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out" } ] } ],
-                      "outputs": [ "out" ]
-                    }
-                    """,
-                path: graph
-            );
+        File.WriteAllText(contents: "#include \"common.hlsli\"\n[numthreads(8, 8, 1)] void main() {}", path: named);
+        File.WriteAllText(contents: "static const uint Fill = 1;", path: include);
+        File.WriteAllText(contents: "static const uint Unused = 1;", path: unincluded);
+        File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: unnamed);
+        File.WriteAllText(
+            contents: """
+                {
+                  "$schema": "puck.render.graph.v1",
+                  "name": "fill",
+                  "resources": [ { "name": "out", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "relative", "width": 1, "height": 1 } } ],
+                  "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out" } ] } ],
+                  "outputs": [ "out" ]
+                }
+                """,
+            path: graph
+        );
 
-            var tree = new AffectedWorkingTree(root: directory.FullName);
+        var tree = new AffectedWorkingTree(root: scratch.RootPath);
 
-            Assert.Equal(actual: AffectedDocuments.PassSources(graph: "fill.graph.json", tree: tree), expected: ["passes/fill.hlsl"]);
-            Assert.Equal(
-                actual: AffectedDocuments.Reach(path: "fill.graph.json", tree: tree).Order(comparer: StringComparer.Ordinal),
-                expected: ["fill.graph.json", "passes/common.hlsli", "passes/fill.hlsl"]
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(actual: AffectedDocuments.PassSources(graph: "fill.graph.json", tree: tree), expected: ["passes/fill.hlsl"]);
+        Assert.Equal(
+            actual: AffectedDocuments.Reach(path: "fill.graph.json", tree: tree).Order(comparer: StringComparer.Ordinal),
+            expected: ["fill.graph.json", "passes/common.hlsli", "passes/fill.hlsl"]
+        );
     }
     [Fact]
     public void AFileACanarysDocumentsReachChoosesItAndIsMapped() {
@@ -64,7 +61,8 @@ public sealed class AffectedDocumentsLawTests {
             declaresTests: static _ => false,
             projects: [new AffectedProject(Directory: "src/World", IsSuite: false, Name: "World", References: [])],
             standInsFor: static _ => [],
-            worldClosure: new HashSet<string>(collection: ["World"], comparer: StringComparer.OrdinalIgnoreCase)
+            worldClosure: new HashSet<string>(collection: ["World"], comparer: StringComparer.OrdinalIgnoreCase),
+            worldInput: static _ => false
         );
 
         Assert.Equal(actual: plan.Canaries, expected: ["ink"]);
@@ -100,10 +98,11 @@ public sealed class AffectedDocumentsLawTests {
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Sources/image-source.hlsli"], expected: "source-conversion");
 
         // The same reach read from a revision's tree through git rather than the disk: the committed documents of two
-        // real canaries reach the same pass sources.
+        // real canaries reach the same pass sources, a world authored as .puck included (the revision exports once and composes it).
+        using var head = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: "HEAD", root: repositoryRoot);
         var recorded = AffectedDocuments.ReachedBy(
             canaries: [.. canaries.Where(predicate: static canary => (canary.Id is "resample-reconstruction" or "pipeline-ink"))],
-            tree: new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot)
+            tree: head
         );
 
         Assert.Contains(collection: recorded["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");
@@ -124,5 +123,47 @@ public sealed class AffectedDocumentsLawTests {
             ),
             expected: ["src/Puck.Platform.Windows/Win32D3D11CameraFrameConverter.cs"]
         );
+    }
+
+    /// <summary>A module authored only as a <c>.puck</c> source (no <c>.world.json</c> beside it) is a layer the importing
+    /// world composes from, so a world authored as a source reaches it, in the working tree and in a revision.</summary>
+    private static void WriteModuleTree(string root) {
+        var modules = Directory.CreateDirectory(path: Path.Combine(path1: root, path2: "mods"));
+
+        File.Copy(
+            destFileName: Path.Combine(path1: modules.FullName, path2: "ttt.puck"),
+            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck")
+        );
+        File.WriteAllText(
+            contents: "schema: \"puck.world.definition.v1\"\n\nimport \"mods/ttt\" as a\n",
+            path: Path.Combine(path1: root, path2: "host.puck")
+        );
+    }
+
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedThroughTheImportThatNamesIt() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-module-");
+
+        WriteModuleTree(root: scratch.RootPath);
+
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: new AffectedWorkingTree(root: scratch.RootPath));
+
+        Assert.Contains(collection: reached, expected: "host.puck");
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
+    }
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedFromTheRevisionThatRecordedIt() {
+        using var checkout = new GitScratchCheckout();
+
+        WriteModuleTree(root: checkout.Root);
+        _ = checkout.Commit(message: "the tree");
+
+        // The working tree no longer holds the files: only the revision does, and it composes them from an export.
+        File.Delete(path: Path.Combine(path1: checkout.Root, path2: "mods", path3: "ttt.puck"));
+
+        using var revision = new AffectedRevisionTree(documentTrees: ["host.puck", "mods"], revision: "HEAD", root: checkout.Root);
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: revision);
+
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
     }
 }

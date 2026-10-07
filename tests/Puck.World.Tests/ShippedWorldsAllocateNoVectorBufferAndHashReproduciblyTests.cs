@@ -5,7 +5,7 @@ namespace Puck.World.Tests;
 
 public sealed class ShippedWorldsAllocateNoVectorBufferAndHashReproduciblyTests {
     [InlineData("src/Puck.World/Assets/worlds/puck.world.json")]
-    [InlineData("src/Puck.World/Assets/worlds/pipeline.world.json")]
+    [InlineData("src/Puck.World/Assets/worlds/pipeline.puck")]
     [Theory]
     public void ShippedWorlds_HaveNoVectorSpacesOrVectorRows(string relativePath) {
         var definition = AuthoredGameFixtures.Load(relativePath: relativePath);
@@ -35,7 +35,7 @@ public sealed class ShippedWorldsAllocateNoVectorBufferAndHashReproduciblyTests 
     }
     [Fact]
     public void ShippedWorld_Pipeline_HasEmptyVectorFrame_AndUnchangedAuthoritativeHash() {
-        const string RelativePath = "src/Puck.World/Assets/worlds/pipeline.world.json";
+        const string RelativePath = "src/Puck.World/Assets/worlds/pipeline.puck";
         var definition = AuthoredGameFixtures.Load(relativePath: RelativePath);
         var documentPath = Path.Combine(path1: AuthoredGameFixtures.Root, path2: RelativePath);
 

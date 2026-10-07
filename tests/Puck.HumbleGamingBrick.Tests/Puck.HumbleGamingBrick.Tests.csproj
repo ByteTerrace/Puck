@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -8,15 +9,10 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- The battery executable is the subject: the facts launch it and read its exit code and summary. -->
-        <ProjectReference Include="..\..\src\Puck.HumbleGamingBrick.Post\Puck.HumbleGamingBrick.Post.csproj" />
+        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
     </ItemGroup>
 </Project>

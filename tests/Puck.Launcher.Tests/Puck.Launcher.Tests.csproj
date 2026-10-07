@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -10,23 +11,19 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Overlays\Puck.Overlays.csproj" />
+        <ProjectReference Include="../../src/Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../../src/Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../../src/Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../../src/Puck.Overlays/Puck.Overlays.csproj" />
         <!-- StubDecisionTableTests exercises the stub's pure selection policy directly — a Test-kind project may
              reference any ranked project regardless of row, and the stub's own closure stays empty. -->
-        <ProjectReference Include="..\..\src\Puck.Launcher.Stub\Puck.Launcher.Stub.csproj" />
+        <ProjectReference Include="../../src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <!-- ReleaseChainFixture mints its throwaway signing chain through AttestationTestSupport's shared
              key-minting/chain-signing helpers — a terminal-to-terminal edge between two Test-kind projects. -->
-        <ProjectReference Include="..\Puck.Attestation.Tests\Puck.Attestation.Tests.csproj" />
+        <ProjectReference Include="../Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
     </ItemGroup>
 </Project>

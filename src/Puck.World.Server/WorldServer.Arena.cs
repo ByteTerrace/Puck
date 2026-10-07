@@ -178,17 +178,29 @@ public sealed partial class WorldServer {
         );
     }
 
-    // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
-    // columns and reloads their values; a reconstruction-time re-declaration relayouts atomically and carries the
-    // runtime key ledger plus the participant and identity lanes. Relayout refusal leaves the arena alone; a load
-    // refusal after a successful relayout throws from the reconstruction path rather than dropping the ledger via
-    // a fresh-build fallback.
-    public void SyncArena(WorldDefinition definition) {
-        var time = m_ruleHost.Time;
+    /// <summary>Returns whether installing <paramref name="definition"/> keeps the live arena's columns and reloads
+    /// their values: its state catalog is the one the arena stores and neither declares a pool. Any other document
+    /// installs a replacement arena (<see cref="TryPrepareArenaReplacement"/>), which a door that can refuse prepares
+    /// before it changes anything.</summary>
+    /// <param name="definition">The document about to install.</param>
+    /// <returns><see langword="true"/> when the install reloads the live arena in place.</returns>
+    internal bool ReloadsArenaInPlace(WorldDefinition definition) => (
+        ReferenceEquals(
+            objA: m_arenaCatalog,
+            objB: definition.StateCatalog
+        ) &&
+        (m_arena.Catalog.Pools.Count == 0) &&
+        (definition.StateCatalog.Pools.Count == 0)
+    );
 
-        // Generated pool rows cannot pass through ordinary row import: doing so would bypass the relationship
-        // between live slots, field domains, and lifetime generations. Reconstruct the whole section instead.
-        if ((m_arena.Catalog.Pools.Count != 0) || (definition.StateCatalog.Pools.Count != 0)) {
+    // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
+    // columns and reloads their values. Any other document is installed whole: its rows are the truth the install
+    // loads, so nothing is carried from the replaced layout but the runtime key ledger and the participant and
+    // identity lanes, and a row the document re-declares with another kind, shape or trait starts as the document
+    // declares it. Generated pool rows take the same path, since they cannot pass through ordinary row import. A
+    // refusal here is a door that did not prepare its replacement first (ApplyRebuild does), or a validator hole.
+    public void SyncArena(WorldDefinition definition) {
+        if (!ReloadsArenaInPlace(definition: definition)) {
             if (!TryPrepareArenaReplacement(definition: definition, prepared: out var replacement,
                 reason: out var replacementReason, settled: out var settled)) {
                 throw new InvalidOperationException(message: $"the installed state section does not load into the arena: {replacementReason}");
@@ -198,46 +210,21 @@ public sealed partial class WorldServer {
             return;
         }
 
-        if (ReferenceEquals(
-            objA: m_arenaCatalog,
-            objB: definition.StateCatalog
-        )) {
-            if (!m_arena.TryLoad(
-                reason: out var reason,
-                rows: definition.State,
-                time: in time
-            )) {
-                throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
-            }
-            if (reason.Length != 0) {
-                throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
-            }
+        var time = m_ruleHost.Time;
 
-            MarkPublished();
-            m_publishEveryRow = true;
-
-            return;
-        }
-        if (!m_arena.TryRelayout(
-            catalog: definition.StateCatalog,
-            reason: out var relayoutReason,
-            section: definition.StateRaw,
-            time: in time
-        )) {
-            throw new InvalidOperationException(message: $"the installed document does not relayout into the arena: {relayoutReason}");
-        }
         if (!m_arena.TryLoad(
-            reason: out var loaded,
+            reason: out var reason,
             rows: definition.State,
             time: in time
         )) {
-            throw new InvalidOperationException(message: $"the relaid-out document does not load into the arena: {loaded}");
+            throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
         }
-        if (loaded.Length != 0) {
-            throw new InvalidOperationException(message: $"the relaid-out document only partially loads into the arena: {loaded}");
+        if (reason.Length != 0) {
+            throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
         }
 
-        AdoptLayout(definition: definition);
+        MarkPublished();
+        m_publishEveryRow = true;
     }
 
     // The document and the arena agree on every row as they stand.

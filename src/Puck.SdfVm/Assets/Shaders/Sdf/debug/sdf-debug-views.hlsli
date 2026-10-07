@@ -6,11 +6,69 @@
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
+#include "../indirect/sdf-indirect-read.hlsli"
+#include "../indirect/sdf-indirect-light.hlsli"
+
+// A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
+// in the material-id debug view.
+float3 materialPalette(int material) {
+    float hue = frac(float(material) * 0.61803399);
+    float3 ramp = (abs((frac(hue + float3(0.0, 0.33333333, 0.66666667)) * 6.0) - 3.0) - 1.0);
+
+    return saturate(ramp);
+}
 
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
+    // The slice's plane (case 7). Default plane: through the WORLD ORIGIN with normal = camera forward (the debug subject
+    // sits at the origin — a camera-locked slice). The pass block's slice axis and offset optionally select a world-axis
+    // plane instead (the `sdf.slice` verb; camera-locked while the axis is 0).
+    bool slicing = (p.viewMode == 7);
+    bool sliceParallel = false;
+    float planeT = 0.0;
+
+    if (slicing) {
+        float3 sliceNormal = p.view.forward.xyz; // already unit (the camera basis)
+        float planeOffset = 0.0;               // the plane is dot(p, n) = planeOffset
+        int sliceAxis = (int)round(passGroup.debugSliceAxis);
+
+        if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
+        else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
+        else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = passGroup.debugSliceOffset; }
+
+        float denominator = dot(p.rayDirection, sliceNormal);
+
+        sliceParallel = (abs(denominator) < 1.0e-4);
+
+        if (!sliceParallel) {
+            planeT = ((planeOffset - dot(p.rayOrigin, sliceNormal)) / denominator);
+        }
+    }
+
+    // The debug views' field reads run through one loop, so the views kernel inlines the interpreter once for all of
+    // them: the slice's one sample of the UNMASKED field at its plane (case 7), and the overshoot detector's two marches,
+    // clamped then unclamped (case 9).
+    float firstRead = 0.0;
+    float secondRead = 0.0;
+    uint reads = ((p.viewMode == 9) ? 2u : ((slicing && !sliceParallel && !(planeT < 0.0)) ? 1u : 0u));
+
+    [loop]
+    for (uint read = 0u; (read < reads); read++) {
+        float value = marchOvershootDepth(p.rayOrigin, p.rayDirection, (slicing ? planeT : p.marchStart), p.firstExit, p.secondEntry, p.farDistance, (slicing ? SDF_INSTANCE_MASK_ALL : p.instanceMaskBase), p.pixelFootprint, ((read == 0u) ? 1.0 : (1.0 / sdfStepScale())), slicing);
+
+        if (read == 0u) {
+            firstRead = value;
+        } else {
+            secondRead = value;
+        }
+    }
+
     switch (p.viewMode) {
+        case DebugViewModeIndirect: {
+            viewColor = sdfIndirectSourceTotal(sdfIndirectReceiverSources);
+            break;
+        }
         case 1: { // depth
             float depth = saturate(s.t / p.farDistance);
             viewColor = float3(depth, depth, depth);
@@ -65,35 +123,21 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
         case 7: { // distance-field cross-section — the IDEAL field, wall to wall (see the termination/slice split
                   // note on case 6). The march was skipped (the gate above); the beam force-survived every in-viewport
                   // tile for this mode, so every pixel of the viewport reaches here — no tile truncation, no staircase.
-                  // Default plane: through the WORLD ORIGIN with normal = camera forward (the debug subject sits at
-                  // the origin — a camera-locked slice). The pass block's slice axis and offset optionally select a
-                  // world-axis plane instead (the `sdf.slice` verb; camera-locked while the axis is 0).
-            float3 sliceNormal = p.view.forward.xyz; // already unit (the camera basis)
-            float planeOffset = 0.0;               // the plane is dot(p, n) = planeOffset
-
-            int sliceAxis = (int)round(passGroup.debugSliceAxis);
-
-            if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
-            else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
-            else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = passGroup.debugSliceOffset; }
-
-            float denominator = dot(p.rayDirection, sliceNormal);
-
-            if (abs(denominator) < 1.0e-4) {
+                  // The plane and its sample were read above the switch.
+            if (sliceParallel) {
                 viewColor = float3(0.0, 0.0, 0.0); // ray parallel to the slice — nothing to sample
                 break;
             }
-
-            float planeT = ((planeOffset - dot(p.rayOrigin, sliceNormal)) / denominator);
 
             if (planeT < 0.0) {
                 viewColor = float3(0.0, 0.0, 0.0); // the plane is behind the camera along this ray
                 break;
             }
 
-            // The UNMASKED field (map, never mapMasked): the slice is the ideal mathematics, so no per-tile instance mask
-            // may hide far-field contributions. Still the post-stepScale-clamp distance — the quantity the marcher steps on — so an isoline IS a level set of the marched field.
-            float sliceDistance = mapDistance(p.rayOrigin + (p.rayDirection * planeT));
+            // The UNMASKED field (every instance, never the tile mask): the slice is the ideal mathematics, so no per-tile
+            // instance mask may hide far-field contributions. Still the post-stepScale-clamp distance — the quantity the
+            // marcher steps on — so an isoline IS a level set of the marched field.
+            float sliceDistance = firstRead;
 
             // Two-scale isolines over the sign-split hue ramp (inside warm/red, outside cool/blue): brightness ramps
             // within each MINOR band (0.25 wu) so the gradient direction stays readable; a thin dark line marks every
@@ -156,8 +200,9 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
                   // thin geometry the clamp holds. Where they agree the clamp was not load-bearing (green); where the
                   // unclamped march tunneled past a surface the terminals diverge (hot) — the liar's-spiral class made
                   // live. This is a DEBUG-ONLY two-marches-per-pixel cost; the primary march was gated OFF above for it.
-            float clampedDepth = marchOvershootDepth(p.rayOrigin, p.rayDirection, p.marchStart, p.firstExit, p.secondEntry, p.farDistance, p.instanceMaskBase, p.pixelFootprint, 1.0);
-            float unclampedDepth = marchOvershootDepth(p.rayOrigin, p.rayDirection, p.marchStart, p.firstExit, p.secondEntry, p.farDistance, p.instanceMaskBase, p.pixelFootprint, (1.0 / sdfStepScale()));
+            // Both marches ran above the switch.
+            float clampedDepth = firstRead;
+            float unclampedDepth = secondRead;
             float disagreement = abs(clampedDepth - unclampedDepth);
             // Log-scaled against the march reach so a sub-unit tunnel still reads while a full escape saturates.
             float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + p.farDistance));
@@ -178,6 +223,26 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             float evalRamp = saturate(sdfEvalCount / EvalHeatmapCeiling);
             float3 coldBand = lerp(float3(0.02, 0.04, 0.20), float3(0.14, 0.85, 0.30), saturate(evalRamp * 2.0));
             viewColor = lerp(coldBand, float3(0.95, 0.16, 0.10), saturate((evalRamp - 0.5) * 2.0));
+            break;
+        }
+        case DebugViewModeIndirectProbes: {
+            viewColor = sdfIndirectDebugProbes(p.rayOrigin, p.rayDirection, sdfIndirectDebugMaximum(s.hit, s.t, p.farDistance), color);
+            break;
+        }
+        case DebugViewModeIndirectCells: {
+            if (s.hit) {
+                viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t);
+            }
+            break;
+        }
+        case DebugViewModeIndirectLight: {
+            if (s.hit && passGroup.shadowSlotCount > 0u && passGroup.shadowSlots.x >= 0) {
+                uint lightIndex = (uint)passGroup.shadowSlots.x;
+                uint region;
+                float visible;
+                bool fallback = !sdfIndirectLightLookup(lightIndex, p.rayOrigin + p.rayDirection * s.t, s.normal, visible, region);
+                viewColor = fallback ? float3(visible, 0.0, 0.75) : float3(0.0, visible, 0.25 + 0.25 * (region % 2u));
+            }
             break;
         }
         case 12: { // MOTION: red/green encode previous minus current pixel position at 1/32 per pixel;

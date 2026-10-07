@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Abstractions.Sources;
 
@@ -14,9 +15,16 @@ namespace Puck.Abstractions.Sources;
 /// <para>
 /// A planar source's chroma is sampled at the co-sited pixel of its half-resolution plane with no filtering, the Y'CbCr
 /// matrix and code range are the ones its header names, and the resulting R'G'B' is clamped to 0–1 and not linearized.
-/// The transfer pass decodes the header's transfer function to linear light scaled so 1 is the SDR reference white:
-/// sRGB and linear values pass their own scale, and a perceptual-quantizer value is divided by
-/// <see cref="ReferenceWhiteNits"/>.
+/// </para>
+/// <para>
+/// Every pass writes the working space a frame is drawn in: display-referred values, one at SDR white, which the display
+/// encode shows at the paper-white level, with headroom above one. An 8-bit sRGB pass copies its codes, which are already
+/// working values. The transfer pass decodes the header's transfer function to linear light relative to the paper-white
+/// level (<see cref="ToLinear"/>): an sRGB value is relative to SDR white already, a linear value is scRGB, one at
+/// <see cref="DisplayOutput.SdrWhiteNits"/>, and a perceptual-quantizer value is its luminance; it then moves BT.2020
+/// primaries to BT.709 and encodes the result with the sRGB curve extended past one and mirrored below zero
+/// (<see cref="LinearToWorking"/>), the curve the display encode decodes. So a sample of N cd/m² displays at N cd/m² on an
+/// HDR output, nothing above SDR white is clipped before the display encode, and nothing is encoded twice.
 /// </para>
 /// </summary>
 public static class ImageSourceConversion {
@@ -24,12 +32,16 @@ public static class ImageSourceConversion {
     public const string PalettePass = "source-palette";
     /// <summary>The pass that turns an NV12 image into RGBA8.</summary>
     public const string Nv12Pass = "source-nv12";
-    /// <summary>The luminance, in cd/m², the transfer pass maps to 1: the HDR reference white of ITU-R BT.2408.</summary>
-    public const double ReferenceWhiteNits = 203.0;
     /// <summary>The pass that copies an RGBA8 or BGRA8 image into RGBA8.</summary>
     public const string RgbaPass = "source-rgba";
-    /// <summary>The pass that decodes an image's transfer function to linear light in a half-float RGBA image.</summary>
+    /// <summary>The pass that decodes an image's transfer function and primaries into working values in a half-float RGBA
+    /// image.</summary>
     public const string TransferPass = "source-transfer";
+    /// <summary>The pass that converts an imported half-float scRGB image, read as an image on the device rather than
+    /// uploaded (a desktop capture of an HDR display copied into shared targets on the GPU), into working values in a
+    /// half-float RGBA image: what <see cref="TransferPass"/> writes for the same pixels uploaded in
+    /// <see cref="ImagePixelFormat.R16G16B16A16Float"/> under the scRGB encoding.</summary>
+    public const string ScRgbImagePass = "source-scrgb";
 
     // SMPTE ST 2084 constants.
     private const double PqC1 = (3424.0 / 4096.0);
@@ -38,6 +50,16 @@ public static class ImageSourceConversion {
     private const double PqM1 = (2610.0 / 16384.0);
     private const double PqM2 = ((2523.0 / 4096.0) * 128.0);
     private const double PqPeakNits = 10_000.0;
+    // The sRGB curve's linear segment ends at this linear value, where 12.92 x meets 1.055 x^(1 / 2.4) - 0.055.
+    private const double SrgbLinearLimit = 0.0031308;
+
+    // BT.2020 primaries to BT.709, for linear light (ITU-R BT.2407), row by row: the inverse of the display encode's BT.709
+    // to BT.2020 (ITU-R BT.2087) to within 1e-6.
+    private static ReadOnlySpan<double> Bt2020ToBt709 => [
+        1.6604910, -0.5876411, -0.0728499,
+        -0.1245505, 1.1328999, -0.0083494,
+        -0.0181508, -0.1005789, 1.1187297,
+    ];
 
     private static (double Kr, double Kb) Coefficients(ImageYuvMatrix matrix) => matrix switch {
         ImageYuvMatrix.Bt601 => (0.299, 0.114),
@@ -47,16 +69,6 @@ public static class ImageSourceConversion {
             actualValue: matrix,
             message: "The Y'CbCr matrix is not defined.",
             paramName: nameof(matrix)
-        ),
-    };
-    private static double Decode(ImageTransferFunction transfer, double value) => transfer switch {
-        ImageTransferFunction.Srgb => SrgbToLinear(value: value),
-        ImageTransferFunction.Linear => value,
-        ImageTransferFunction.Pq => (PqToNits(value: value) / ReferenceWhiteNits),
-        _ => throw new ArgumentOutOfRangeException(
-            actualValue: transfer,
-            message: "The transfer function is not defined.",
-            paramName: nameof(transfer)
         ),
     };
     private static void RequireLength(int length, uint width, uint height, int channels, string paramName) {
@@ -97,8 +109,9 @@ public static class ImageSourceConversion {
     /// <summary>Returns the conversion pass a source's format and encoding need.</summary>
     /// <param name="format">The source's pixel format.</param>
     /// <param name="color">The source's color encoding.</param>
-    /// <returns><see cref="TransferPass"/> for linear or perceptual-quantizer content or
-    /// <see cref="ImagePixelFormat.R10G10B10A2Unorm"/> pixels; otherwise the format's own pass.</returns>
+    /// <returns><see cref="TransferPass"/> for linear or perceptual-quantizer content,
+    /// <see cref="ImagePixelFormat.R10G10B10A2Unorm"/> pixels or <see cref="ImagePixelFormat.R16G16B16A16Float"/> pixels;
+    /// otherwise the format's own pass.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not a defined format, or planar or
     /// indexed content names a transfer function other than sRGB.</exception>
     public static string PassOf(ImagePixelFormat format, ImageColorEncoding color) {
@@ -107,7 +120,7 @@ public static class ImageSourceConversion {
         return format switch {
             ImagePixelFormat.R8G8B8A8Unorm => (sdr ? RgbaPass : TransferPass),
             ImagePixelFormat.B8G8R8A8Unorm when sdr => RgbaPass,
-            ImagePixelFormat.R10G10B10A2Unorm => TransferPass,
+            ImagePixelFormat.R10G10B10A2Unorm or ImagePixelFormat.R16G16B16A16Float => TransferPass,
             ImagePixelFormat.Indexed8 when sdr => PalettePass,
             ImagePixelFormat.Nv12 when sdr => Nv12Pass,
             _ => throw new ArgumentOutOfRangeException(
@@ -117,6 +130,24 @@ public static class ImageSourceConversion {
             ),
         };
     }
+    /// <summary>Returns the conversion pass an imported image of a format and encoding needs: one the device reads as an
+    /// image, never through an upload's region.</summary>
+    /// <param name="format">The image's pixel format.</param>
+    /// <param name="color">The image's color encoding.</param>
+    /// <returns><see cref="ScRgbImagePass"/> for <see cref="ImagePixelFormat.R16G16B16A16Float"/> scRGB content: linear,
+    /// BT.709 primaries.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">No conversion reads such an image.</exception>
+    public static string ImagePassOf(ImagePixelFormat format, ImageColorEncoding color) => ((
+        (format == ImagePixelFormat.R16G16B16A16Float) &&
+        (color.Transfer == ImageTransferFunction.Linear) &&
+        (color.Primaries == ImageColorPrimaries.Bt709)
+    )
+        ? ScRgbImagePass
+        : throw new ArgumentOutOfRangeException(
+            actualValue: format,
+            message: $"No conversion pass reads an imported {format} image with the {color.Transfer} transfer function and {color.Primaries} primaries.",
+            paramName: nameof(format)
+        ));
     /// <summary>Returns the perceptual quantizer's decoded luminance for an encoded value (SMPTE ST 2084).</summary>
     /// <param name="value">The encoded value, 0 to 1.</param>
     /// <returns>The luminance in cd/m², 0 to 10,000.</returns>
@@ -155,6 +186,25 @@ public static class ImageSourceConversion {
                 x: ((clamped + 0.055) / 1.055),
                 y: 2.4
             )
+        );
+    }
+    /// <summary>Returns the sRGB-encoded value of a linear value (IEC 61966-2-1), the inverse of
+    /// <see cref="SrgbToLinear"/>.</summary>
+    /// <param name="value">The linear value, 0 to 1; a value outside it is clamped.</param>
+    /// <returns>The encoded value, 0 to 1.</returns>
+    public static double LinearToSrgb(double value) {
+        var clamped = Math.Clamp(
+            max: 1.0,
+            min: 0.0,
+            value: value
+        );
+
+        return ((clamped <= 0.0031308)
+            ? (clamped * 12.92)
+            : ((1.055 * Math.Pow(
+                x: clamped,
+                y: (1.0 / 2.4)
+            )) - 0.055)
         );
     }
     /// <summary>Returns the 8-bit sRGB code of a linear value (IEC 61966-2-1): the code whose interval under
@@ -303,53 +353,170 @@ public static class ImageSourceConversion {
             }
         }
     }
-    /// <summary>Computes what <see cref="TransferPass"/> writes for a region: four linear floats per pixel, red first,
-    /// row by row, alpha carried through unchanged.</summary>
+    /// <summary>Computes what <see cref="TransferPass"/> writes for a region: four working values per pixel
+    /// (<see cref="ToWorking(ImageColorEncoding, double, double, double, double)"/>), red first, row by row, alpha carried
+    /// through unchanged.</summary>
     /// <param name="region">The source's region, header first; its format is
-    /// <see cref="ImagePixelFormat.R8G8B8A8Unorm"/> or <see cref="ImagePixelFormat.R10G10B10A2Unorm"/>.</param>
-    /// <param name="linear">The destination; at least four floats per pixel.</param>
+    /// <see cref="ImagePixelFormat.R8G8B8A8Unorm"/>, <see cref="ImagePixelFormat.R10G10B10A2Unorm"/> or
+    /// <see cref="ImagePixelFormat.R16G16B16A16Float"/>.</param>
+    /// <param name="paperWhiteNits">The paper-white level, in cd/m²: the luminance a working value of one shows at.</param>
+    /// <param name="working">The destination; at least four floats per pixel.</param>
     /// <exception cref="ArgumentException"><paramref name="region"/>'s header is not valid or names another format, or
-    /// <paramref name="linear"/> is too short.</exception>
-    public static void ToLinear(ReadOnlySpan<byte> region, Span<float> linear) {
+    /// <paramref name="working"/> is too short.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
+    /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts.</exception>
+    public static void ToWorking(ReadOnlySpan<byte> region, double paperWhiteNits, Span<float> working) {
         var header = ImageSourceUploadLayout.Read(region: region);
 
-        if (header.Format is not (ImagePixelFormat.R8G8B8A8Unorm or ImagePixelFormat.R10G10B10A2Unorm)) {
+        if (header.Format is not (ImagePixelFormat.R8G8B8A8Unorm or ImagePixelFormat.R10G10B10A2Unorm or ImagePixelFormat.R16G16B16A16Float)) {
             throw new ArgumentException(
-                message: $"{TransferPass} reads R8G8B8A8Unorm or R10G10B10A2Unorm content, not {header.Format}.",
+                message: $"{TransferPass} reads R8G8B8A8Unorm, R10G10B10A2Unorm or R16G16B16A16Float content, not {header.Format}.",
                 paramName: nameof(region)
             );
         }
 
+        _ = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         RequireLength(
             channels: 4,
             height: header.Height,
-            length: linear.Length,
-            paramName: nameof(linear),
+            length: working.Length,
+            paramName: nameof(working),
             width: header.Width
         );
 
-        var transfer = header.Color.Transfer;
-
         for (var y = 0U; (y < header.Height); y++) {
             for (var x = 0U; (x < header.Width); x++) {
-                var word = BinaryPrimitives.ReadUInt32LittleEndian(source: region[((int)((header.Plane0Offset + (y * header.Plane0Stride)) + (x * 4U)))..]);
-                var target = linear.Slice(
+                var row = region[((int)(header.Plane0Offset + (y * header.Plane0Stride)))..];
+                var target = working.Slice(
                     length: 4,
                     start: checked((int)(((y * header.Width) + x) * 4U))
                 );
 
-                var (r, g, b, a) = ((header.Format == ImagePixelFormat.R10G10B10A2Unorm)
-                    ? (((word & 0x3FFU) / 1023.0), (((word >> 10) & 0x3FFU) / 1023.0), (((word >> 20) & 0x3FFU) / 1023.0), ((word >> 30) / 3.0))
-                    : (((word & 0xFFU) / 255.0), (((word >> 8) & 0xFFU) / 255.0), (((word >> 16) & 0xFFU) / 255.0), ((word >> 24) / 255.0))
+                var (r, g, b, a) = SampleOf(
+                    format: header.Format,
+                    row: row,
+                    x: x
+                );
+                var (red, green, blue) = ToWorking(
+                    b: b,
+                    color: header.Color,
+                    g: g,
+                    paperWhiteNits: paperWhiteNits,
+                    r: r
                 );
 
-                target[0] = ((float)Decode(transfer: transfer, value: r));
-                target[1] = ((float)Decode(transfer: transfer, value: g));
-                target[2] = ((float)Decode(transfer: transfer, value: b));
+                target[0] = ((float)red);
+                target[1] = ((float)green);
+                target[2] = ((float)blue);
                 target[3] = ((float)a);
             }
         }
     }
+    /// <summary>Converts one sample to the working space: its transfer function decoded to linear light relative to the
+    /// paper-white level (<see cref="ToLinear"/>), BT.2020 primaries moved to BT.709, and each channel encoded with
+    /// <see cref="LinearToWorking"/>.</summary>
+    /// <param name="color">The sample's color encoding; its matrix and range are not read.</param>
+    /// <param name="r">The red value as stored, normalized: a code over its maximum, or a float as it is.</param>
+    /// <param name="g">The green value as stored.</param>
+    /// <param name="b">The blue value as stored.</param>
+    /// <param name="paperWhiteNits">The paper-white level, in cd/m².</param>
+    /// <returns>The working values, unclamped.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A transfer function or primaries value is not defined, or
+    /// <paramref name="paperWhiteNits"/> is outside the range <see cref="DisplayOutput.RequirePaperWhite"/>
+    /// accepts.</exception>
+    public static (double R, double G, double B) ToWorking(ImageColorEncoding color, double r, double g, double b, double paperWhiteNits) {
+        var red = ToLinear(paperWhiteNits: paperWhiteNits, transfer: color.Transfer, value: r);
+        var green = ToLinear(paperWhiteNits: paperWhiteNits, transfer: color.Transfer, value: g);
+        var blue = ToLinear(paperWhiteNits: paperWhiteNits, transfer: color.Transfer, value: b);
+
+        switch (color.Primaries) {
+            case ImageColorPrimaries.Bt709:
+                break;
+            case ImageColorPrimaries.Bt2020: {
+                    var m = Bt2020ToBt709;
+
+                    (red, green, blue) = (
+                        (((m[0] * red) + (m[1] * green)) + (m[2] * blue)),
+                        (((m[3] * red) + (m[4] * green)) + (m[5] * blue)),
+                        (((m[6] * red) + (m[7] * green)) + (m[8] * blue))
+                    );
+
+                    break;
+                }
+            default:
+                throw new ArgumentOutOfRangeException(
+                    actualValue: color.Primaries,
+                    message: "The color primaries are not defined.",
+                    paramName: nameof(color)
+                );
+        }
+
+        return (LinearToWorking(linear: red), LinearToWorking(linear: green), LinearToWorking(linear: blue));
+    }
+    /// <summary>Decodes one stored value to linear light relative to the paper-white level, so one is the luminance a
+    /// working value of one shows at: an sRGB value (IEC 61966-2-1, clamped to 0–1) is relative to SDR white already
+    /// and passes its own scale; a linear value is scRGB, one at <see cref="DisplayOutput.SdrWhiteNits"/>, and is
+    /// scaled by that level over the paper white, unclamped; and a perceptual-quantizer value is its luminance
+    /// (<see cref="PqToNits"/>) over the paper white.</summary>
+    /// <param name="transfer">The transfer function the value is encoded with.</param>
+    /// <param name="value">The value as stored, normalized.</param>
+    /// <param name="paperWhiteNits">The paper-white level, in cd/m².</param>
+    /// <returns>The linear value; one is the paper-white level.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="transfer"/> is not defined, or
+    /// <paramref name="paperWhiteNits"/> is outside the range <see cref="DisplayOutput.RequirePaperWhite"/>
+    /// accepts.</exception>
+    public static double ToLinear(ImageTransferFunction transfer, double value, double paperWhiteNits) {
+        var paperWhite = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
+
+        return transfer switch {
+            ImageTransferFunction.Srgb => SrgbToLinear(value: value),
+            ImageTransferFunction.Linear => ((value * DisplayOutput.SdrWhiteNits) / paperWhite),
+            ImageTransferFunction.Pq => (PqToNits(value: value) / paperWhite),
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: transfer,
+                message: "The transfer function is not defined.",
+                paramName: nameof(transfer)
+            ),
+        };
+    }
+    /// <summary>Encodes linear light as a working value: the sRGB curve (IEC 61966-2-1), extended past one and mirrored
+    /// below zero, which is the curve the display encode decodes, so one encodes to one and headroom stays on the
+    /// curve.</summary>
+    /// <param name="linear">The linear value; one is the paper-white level.</param>
+    /// <returns>The working value, unclamped.</returns>
+    public static double LinearToWorking(double linear) {
+        var magnitude = Math.Abs(value: linear);
+        var encoded = ((magnitude <= SrgbLinearLimit)
+            ? (magnitude * 12.92)
+            : ((1.055 * Math.Pow(
+                x: magnitude,
+                y: (1.0 / 2.4)
+            )) - 0.055));
+
+        return ((linear < 0.0) ? -encoded : encoded);
+    }
+
+    // One stored pixel of a transfer-pass format, each channel normalized: a 10-bit or 8-bit code over its maximum, or a
+    // half float as it is.
+    private static (double R, double G, double B, double A) SampleOf(ImagePixelFormat format, ReadOnlySpan<byte> row, uint x) {
+        if (format == ImagePixelFormat.R16G16B16A16Float) {
+            var pixel = row[((int)(x * 8U))..];
+
+            return (
+                ((double)BinaryPrimitives.ReadHalfLittleEndian(source: pixel)),
+                ((double)BinaryPrimitives.ReadHalfLittleEndian(source: pixel[2..])),
+                ((double)BinaryPrimitives.ReadHalfLittleEndian(source: pixel[4..])),
+                ((double)BinaryPrimitives.ReadHalfLittleEndian(source: pixel[6..]))
+            );
+        }
+
+        var word = BinaryPrimitives.ReadUInt32LittleEndian(source: row[((int)(x * 4U))..]);
+
+        return ((format == ImagePixelFormat.R10G10B10A2Unorm)
+            ? (((word & 0x3FFU) / 1023.0), (((word >> 10) & 0x3FFU) / 1023.0), (((word >> 20) & 0x3FFU) / 1023.0), ((word >> 30) / 3.0))
+            : (((word & 0xFFU) / 255.0), (((word >> 8) & 0xFFU) / 255.0), (((word >> 16) & 0xFFU) / 255.0), ((word >> 24) / 255.0)));
+    }
+
     /// <summary>Returns the linear value of an 8-bit sRGB code (IEC 61966-2-1): the smallest <see cref="double"/> at or
     /// above the exact decoded value, found in integer arithmetic, so it is the same on every machine. It is the decode
     /// <see cref="LinearToSrgb8"/> inverts: every code's value encodes back to that code. A filter that averages sRGB

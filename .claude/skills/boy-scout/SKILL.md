@@ -15,8 +15,12 @@ is stale; update it in the same change and say so.
 Load this skill for every repository task. Constant activation is a restraint
 on scope, not permission to manufacture cleanup work, commits, or artifacts.
 
-The first command in a worktree is `puck worktree-base <tip>` — a worktree an
-agent is handed can sit at a stale base.
+Start a brief by merging the current tip of the integration branch the lead's
+brief names into your working branch, never by resetting it (`AGENTS.md`
+§ Branches, commits and pushes). A review pass instead starts at the author's
+head its scope names and neither merges nor resets it (`review-passes`). Use
+`puck worktree-base <tip>` only in a fresh worktree with no work of its own: it
+resets a tracked-clean tree and does not protect existing commits.
 
 ---
 
@@ -75,7 +79,7 @@ and synchronizing the relevant documentation is part of the code change.
    | Inline and code-adjacent comments | A comment states an invariant, algorithm, reason, unit, layout, protocol, generated-code source, synchronization rule, or cross-language contract affected by the code. Include paired C#/shader, serializer/schema, host/device, and protocol comments. |
    | Human READMEs and `docs/` | The nearest project or folder README, a parent/root entry point, user or contributor guidance, examples, architecture, or verification prose describes the changed capability or routes readers to it. |
    | docfx and other generated documentation | XML comments are the source of generated API reference. Update hand-maintained docfx landing, navigation, or configuration files only when their contract or routing changed; regenerate or verify output when required, and never hand-edit generated output. |
-   | Agent-facing material | An owning skill, its references or evals, `CLAUDE.md`, or other operational instructions encode a settled fact, contract pair, hazard, command, gate, or procedure changed by the code. Update the owning skill even when the code still compiles without it. |
+   | Agent-facing material | An owning skill, its references or evals, `AGENTS.md`, or other operational instructions encode a settled fact, contract pair, hazard, command, gate, or procedure changed by the code. Update the owning skill even when the code still compiles without it. |
    | A checked-in `.puck` source, a cartridge source's compiled `.cartridge.json` twin, or a companion `.md` beside either | Editing one half obliges regenerating or verifying the other (`puck compile`/`puck decompile`). Cartridge pairs are machine-gated byte-for-byte (`CartridgeRoundTripTests`) and both halves are tracked. A world `.puck` source has no committed JSON: the game's build compiles it into its own output (`build/WorldAssets.targets`), and a `.world.json` beside the source of its name emitting that name is never read or shipped, while an untracked one fails `WorldDocumentOutputLawTests`. Regenerate and verify the document in the same change. A companion `.md` that quotes a `.puck` value (for example a `let` constant) goes stale the same way a README does. |
 
 4. **Synchronize, do not duplicate.** Update the authoritative home and make
@@ -163,6 +167,7 @@ A finding recorded nowhere was not left deliberately; it was dropped.
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The incidental fix touched emulator code — it owes the Humble and Advanced Post batteries that skill routes. |
 | [`puck-world`](../puck-world/SKILL.md) | The finding touches world data, server substrate, replay, session behavior, or the greenfield game surface. Consult its current verification routing. |
 | [`content-search`](../content-search/SKILL.md) / [`symbol-analysis`](../symbol-analysis/SKILL.md) | Finding every referrer of the thing you fixed — text by search, C# semantics by the compiler. |
+| [`verification`](../verification/SKILL.md) | Proving the change and its fixes: the gate route, red legs, ledgers checked with `--check`, GPU legs. |
 
 Do not hard-code that engine work has no gate. Route through `puck-world` and
 inspect the current test projects and verification guidance: settled substrate

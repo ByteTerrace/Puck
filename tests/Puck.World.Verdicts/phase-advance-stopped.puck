@@ -1,0 +1,104 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.definition.v1"
+basis: "phase-fixture"
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "all"
+  }
+]
+
+host {
+  exitAfterSeconds: 0
+  presentation: None
+}
+
+rule "verdict-pass-phase-advanced" {
+  mode: Level
+  if phase(passPhase) > 0 {
+    passPhaseAdvanced[ok] = 1
+  }
+  passPhaseAdvanced[generation] = phase(passPhase)
+}
+
+rule "verdict-trick-phase-advanced" {
+  mode: Level
+  if phase(idlePhase) > 0 {
+    trickPhaseAdvanced[ok] = 1
+  }
+  trickPhaseAdvanced[generation] = phase(idlePhase)
+}
+
+"schedule" {
+  rows [
+    {
+      command: "world.state.transform {\"$type\":\"transfer\",\"from\":\"deck\",\"to\":\"hand\",\"selector\":\"First\"}"
+      principal: "seat1"
+      tick: 3
+    }
+    {
+      command: "world.state.act passPhase 0 {\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pass\",\"selector\":\"First\"}"
+      principal: "seat1"
+      tick: 6
+    }
+  ]
+  settleTicks: 6
+}
+
+simulation {
+  rateHz: 0
+}
+
+state {
+  world {
+    row {
+      cells [
+        {
+          key: "ok"
+          value: 0
+        }
+        {
+          key: "generation"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "passPhaseAdvanced"
+      verdict {
+        gate: "passPhase's generation advanced past 0 once the scheduled guarded transform landed"
+        status: "ok"
+      }
+    }
+
+    row {
+      cells [
+        {
+          key: "ok"
+          value: 0
+        }
+        {
+          key: "generation"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      name: "trickPhaseAdvanced"
+      verdict {
+        gate: "idlePhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it"
+        status: "ok"
+      }
+    }
+  }
+}

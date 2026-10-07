@@ -143,15 +143,15 @@ public sealed class WorldPresentationLookupLawTests {
             Id: "seat"
         )],
     };
-    // The first frame every document-level consumer draws after an install: the theme, the render cycle, every
+    // The first frame every document-level consumer draws after an install: the theme, the environment, every
     // camera program the document carries, and every bindable the manifest records read through Scalar and Color.
     private static void FirstFrame(WorldDefinition definition, WorldStateMirror mirror) {
-        _ = new WorldThemeResolve().Resolve(
+        _ = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: definition,
             mirror: mirror,
             revision: 1
         );
-        _ = new WorldRenderCycleTrack().Resolve(
+        _ = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: definition,
             mirror: mirror,
             revision: 1
@@ -167,7 +167,7 @@ public sealed class WorldPresentationLookupLawTests {
         );
 
         foreach (var camera in definition.Cameras) {
-            _ = WorldCameraRigCompiler.Compile(
+            _ = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
                 definition: definition,
                 mirror: mirror,
                 program: camera.Rig

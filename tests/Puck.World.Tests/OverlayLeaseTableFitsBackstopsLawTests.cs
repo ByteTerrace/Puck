@@ -24,7 +24,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
         );
         Assert.NotNull(@object: new OverlayChannelLeases(capacity: control));
     }
-    /// <summary>An adversarial host count is multiplied exactly before the backstop check; it cannot wrap the four
+    /// <summary>An adversarial host count is multiplied exactly before the backstop check; it cannot wrap the six
     /// per-seat clip reservations negative and masquerade as spare capacity.</summary>
     [Fact]
     public void OversubscribedCapacityArithmeticCannotWrapPastTheBackstop() {
@@ -46,7 +46,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "5368709120"
+            expectedSubstring: "6442450944"
         );
     }
     /// <summary>The Schema-derived capacity builds a lease table without a construction-time refusal, and every
@@ -112,7 +112,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
         Assert.True(condition: (leases.TextWordCapacity >= sum));
         Assert.True(condition: ((leases.TextWordCapacity / 2) < sum));
         Assert.Equal(expected: 0, actual: leases.TextWordCapacity & (leases.TextWordCapacity - 1));
-        Assert.Equal(expected: ((seats * InspectorWriter.MaxLines) * InspectorWriter.MaxLineChars),
+        Assert.Equal(expected: (seats * ((InspectorWriter.MaxLines * InspectorWriter.MaxLineChars) + HistoryRowWriter.MaxLabelChars)),
             actual: leases.ReservationOf(channel: OverlayChannel.Editor).TextWords);
     }
 

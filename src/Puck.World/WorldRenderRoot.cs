@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Overlays;
 using Puck.SdfVm;
@@ -31,6 +32,7 @@ internal sealed class WorldOverlayGlyphs {
     /// <summary>Gets the loaded pack, or <see langword="null"/> when none could be loaded.</summary>
     public OverlayGlyphSdfPack? Pack { get; }
 }
+
 /// <summary>Builds the render root both GPU presentation shapes present and capture: the world's SDF residency and the
 /// <c>sdf.world</c> passes every view renders through, the graph's packages (<c>place</c>, every post-process package a
 /// <c>views.post</c> row may name, and the overlay when the shape draws one), and the <see cref="RenderGraphRuntime"/>
@@ -38,12 +40,13 @@ internal sealed class WorldOverlayGlyphs {
 /// instances — its <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an
 /// authored <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/>
 /// drives the runtime from then on, frame by frame.</summary>
-internal static class WorldRenderRoot {
+public static class WorldRenderRoot {
     /// <summary>Builds the render root and records it, and the world's residency, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws
     /// none.</param>
-    /// <returns>The render root, which releases the screen binder at its teardown.</returns>
+    /// <returns>The render root, which releases the graph host's residency registrations, the screen binder and the
+    /// world's residency at its teardown while the device is alive.</returns>
     /// <exception cref="InvalidOperationException">The document's instances do not form a set, or the runtime refused
     /// them.</exception>
     public static IRenderRoot Build(IServiceProvider sp, OverlayPackage? overlay) {
@@ -73,7 +76,7 @@ internal static class WorldRenderRoot {
         // Configure the views now the frame source has probed the render envelope: each camera a screen shows and each
         // session screen registers a view the render graph renders through an engine sized to these worst-case
         // capacities, using the selected host's bytecode, at its declared extent over the display's.
-        binder.ConfigureViews(
+        sp.GetRequiredService<IWorldViewHost>().ConfigureViews(
             displayHeight: hostSettings.Height,
             displayWidth: hostSettings.Width,
             dynamicTransformCapacity: frameSource.DynamicTransformCapacity,
@@ -153,6 +156,21 @@ internal static class WorldRenderRoot {
                         )))
             );
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
+        host.Environment = new SdfSkyEnvironmentPasses(views: host.Pickers);
+        packages.Register(factory: host.Environment, package: RenderGraphPackageCatalog.SkyEnvironment);
+        host.Indirect = new SdfIndirectPasses(views: host.Pickers);
+        host.ReadIndirectTier = () => sp.GetRequiredService<WorldRenderSettings>().IndirectTier;
+        host.IndirectResidencyChanged = (cacheResidency, added) => {
+            var indirectProbe = sp.GetRequiredService<WorldRenderProbe>();
+
+            if (added) {
+                indirectProbe.Indirect.Attach(instance: cacheResidency.IndirectWork);
+            } else {
+                indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
+            }
+            indirectProbe.RegisterIndirectResidency(active: added, residency: cacheResidency);
+        };
+        packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),
@@ -176,9 +194,13 @@ internal static class WorldRenderRoot {
         }
 
         // An uploaded producer's source instance and a machine source convert the region their upload writes through
-        // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
-        // external producer that hands out its image through the binder's capture gate.
-        SourceConversionPackage.RegisterAll(packages: packages);
+        // the conversion its descriptor names, into working values relative to the host's paper white; any other
+        // producer's instance, and a probe source, renders through an external producer that hands out its image through
+        // the binder's capture gate.
+        SourceConversionPackage.RegisterAll(
+            packages: packages,
+            paperWhiteNits: hostSettings.PaperWhiteNits
+        );
         packages.RegisterSource(package: WorldFrameComparison.SourcePackage, factory: context => {
             var slot = WorldComparisonGraph.SeatOf(source: context.Instance);
             var snapshot = ((slot >= 0) ? comparison.Seat(slot: slot) : null);
@@ -218,6 +240,7 @@ internal static class WorldRenderRoot {
         }
 
         binder.Runtime = runtime;
+        frameSource.CapturePending = () => (runtime.PendingCapturePath is not null);
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.
         frameSource.ViewRendered = view => runtime.TryLatestImage(
@@ -228,17 +251,23 @@ internal static class WorldRenderRoot {
         var overlaid = (overlay is not null);
         var timing = sp.GetRequiredService<WorldGpuTiming>();
 
-        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
-        // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
-        // running root.
-        // A debug view shows its own colors, so the root runs no tonemap while one is on.
+        frameSource.FrameComposed = () => {
+            host.PresentComparison();
+            compareCapture.RecordPreparedFrame();
+        };
+
+        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, or a
+        // temporally resolved view starts or stops sharpening, from the post passes and tonemap the document names then,
+        // so a live views.post, render.tonemap or lever edit reaches the running root.
+        // A debug view shows its own colors, so the root runs no tonemap and no sharpen while one is on.
         host.ShowsDebugView = () => (residency.DebugMode != 0);
         host.Attach(
-            compose: (panes, views, post, tonemap) => WorldRootGraph.Compose(
+            compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
+                sharpens: sharpens,
                 tonemap: tonemap,
                 views: views
             ),
@@ -255,19 +284,24 @@ internal static class WorldRenderRoot {
             runtime: runtime,
             width: width
         ) {
+            // The windowed overlay ticks these feeds immediately before drawing them. A root without an overlay
+            // still follows the same published views and polls explanation fences, including on retained frames.
+            FrameProduced = (overlaid ? null : () => {
+                sp.GetRequiredService<WorldCursorFeed>().Tick();
+                sp.GetRequiredService<WorldInspector>().Tick();
+            }),
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,
-            // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
-            // created before the device context, so the container would dispose them after it; the root's teardown releases
-            // them, after the runtime's passes gave back their holds, while the device is alive.
-            Holdings = [compareCapture, binder, residency],
+            Named = host.Named,
+            // The graph host's environment and indirect registrations retain residencies. Release those registrations
+            // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
+            // These services can predate the device context, so their later container disposal is too late for GPU owners.
+            Holdings = [compareCapture, host, binder, residency],
             Prepare = (in FrameContext context) => {
                 compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
-                host.PresentComparison();
-                compareCapture.RecordPreparedFrame();
                 timing.Tick();
             },
             Roots = host.Roots,
@@ -279,6 +313,21 @@ internal static class WorldRenderRoot {
         probe.Residency = residency;
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
+        // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
+        // it reads it, the views' counted march steps, and their budget for the device's backend.
+        frameSource.FrameLoad = new WorldFrameLoadSource(
+            backend: () => sp.GetService<IGpuWorkRegistry>()?.DeviceIdentity?.Backend,
+            presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
+            probe: probe,
+            timing: timing
+        );
+        frameSource.FrameLoadForView = name => new WorldFrameLoadSource(
+            backend: () => sp.GetService<IGpuWorkRegistry>()?.DeviceIdentity?.Backend,
+            presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
+            probe: probe,
+            timing: timing,
+            view: name
+        );
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)

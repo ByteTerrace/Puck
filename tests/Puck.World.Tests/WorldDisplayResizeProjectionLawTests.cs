@@ -21,12 +21,11 @@ namespace Puck.World.Tests;
 /// the root's extent too. Every frame the root renders is judged: the aspect of the camera it rendered with against the
 /// extent its installed graph rendered at.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
     private const string Instance = "world";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
-
-    private static readonly TimeSpan Settle = TimeSpan.FromSeconds(value: 30);
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-resize-projection-");
 
@@ -79,7 +78,11 @@ public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
                 world: World
             ).Build();
             m_presenter = m_host.Services.GetRequiredService<WorldFramePresenter>();
-            m_host.Services.GetRequiredService<WorldRenderSettings>().RenderScale = 1f;
+            var settings = m_host.Services.GetRequiredService<WorldRenderSettings>();
+
+            settings.RenderScale = 1f;
+            // This rig authors one view and no cache producer; resize projection does not depend on indirect light.
+            settings.IndirectTier = Puck.SignedDistance.SdfIndirectTier.Off;
             if (transition) {
                 m_host.Services.GetRequiredService<WorldCompositionState>().ActiveLayout = "settled";
             }
@@ -155,11 +158,14 @@ public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
 
             m_display = (width, height);
             m_presenter.ResizeDisplay(height: height, width: width);
-            Assert.True(condition: SpinWait.SpinUntil(condition: () => {
-                renderedAt |= (Produce() && (Root.Extent == (width, height)));
+            TestLiveness.Until(
+                reason: () => $"the root never rendered at {width}x{height}: {m_runtime.UnservedCaptureReason}",
+                step: () => {
+                    renderedAt |= (Produce() && (Root.Extent == (width, height)));
 
-                return (renderedAt && !Root.IsBuildingCandidate);
-            }, timeout: Settle), userMessage: $"the root never rendered at {width}x{height}: {m_runtime.UnservedCaptureReason}");
+                    return (renderedAt && !Root.IsBuildingCandidate);
+                }
+            );
         }
         // Produces frames at the current display extent, judging each.
         public void Frames(int count) {

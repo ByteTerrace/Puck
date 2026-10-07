@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -11,7 +12,7 @@ namespace Puck.Shaders.Tests;
 /// graphs reading their producers through external versions; a mirror reads its own previous frame through its graph's
 /// history. Every instance renders through its own node, so its renders are that node's submissions.
 /// </summary>
-public sealed partial class RenderGraphRuntimeLawTests {
+public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
     private const int Display = 64;
     private const string Camera = "test.camera";
     private const string Over = "test.over";
@@ -56,6 +57,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Summary: "A raw buffer its readers bind."
         ),
     ]);
+
+    private readonly TemporaryDirectory m_captures = new(prefix: "puck-render-graph-capture-");
+
+    public void Dispose() => m_captures.Dispose();
 
     private static CompiledShader Shader(string name) {
         ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
@@ -241,10 +246,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         }
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Create(context: context);
 
         public Dictionary<string, Counter> ByInstance { get; } = new(comparer: StringComparer.Ordinal);
+        public Dictionary<string, GpuImagePublication> Publications { get; } = new(comparer: StringComparer.Ordinal);
+
+        public void OutputPublished(string instance, GpuImagePublication publication) => Publications[instance] = publication;
+
         // A fake's default profile stages a host buffer port's region, which copies through this kernel's pipeline, the
         // one UploadModelGpu runs.
         public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
@@ -281,6 +290,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private sealed class Counter {
         public int Created;
         public int Disposed;
+        // Whether a record told it may not stand in draws instead of drawing nothing, as a shipped package does.
+        public bool DrawsWhenRefused;
         public uint Height;
         public nint InputImage;
         public GpuImageLayout InputLayout;
@@ -299,11 +310,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public readonly Dictionary<string, (nint Input, nint Output, bool MayStandIn)> PassRecords = new(comparer: StringComparer.Ordinal);
 
         public long Records;
+        public ulong? CadenceSignature;
+
+        public readonly Dictionary<nint, long> ImageWrites = [];
+        public readonly Dictionary<string, long> SampledWrites = new(comparer: StringComparer.Ordinal);
+
+        public bool RefuseRecording;
         public uint Width;
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
+        public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => counter.CadenceSignature;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+            if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }
             counter.Records++;
             counter.MayStandIn = recording.MayStandIn;
             recording.Leases.Hold(lease: in counter.Lease);
@@ -319,18 +338,31 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 : recording.Inputs[0].Image.Layout);
             counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
             counter.PassRecords[pass] = (counter.InputImage, counter.OutputImage, recording.MayStandIn);
+            if (counter.CadenceSignature.HasValue) {
+                if (recording.Inputs.Length == 0) { counter.ImageWrites[counter.OutputImage] = counter.Records; } else { counter.SampledWrites[pass] = (counter.ImageWrites.TryGetValue(key: counter.InputImage, value: out var written) ? written : -1); }
+            }
 
-            return (counter.PassOutcomes.TryGetValue(
+            var outcome = (counter.PassOutcomes.TryGetValue(
                 key: pass,
-                value: out var outcome
+                value: out var passOutcome
             )
-                ? outcome
+                ? passOutcome
                 : counter.Outcome);
+
+            return ((counter.DrawsWhenRefused && !recording.MayStandIn)
+                ? RenderGraphPackageOutcome.Drew
+                : outcome);
         }
     }
-    /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>
+    /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices. The count is
+    /// the runtime's, shared by every <see cref="Frames"/> over it, so frames keep following one another across a
+    /// reconfiguration, as a host's do.</summary>
     private sealed class Frames(RenderGraphRuntime runtime, IReadOnlyList<RenderGraphRoot> roots, IReadOnlyList<RenderGraphFootprint> footprints) {
-        public long Index { get; private set; }
+        private static readonly ConditionalWeakTable<RenderGraphRuntime, StrongBox<long>> Counts = [];
+
+        private readonly StrongBox<long> m_count = Counts.GetValue(createValueCallback: static _ => new StrongBox<long>(), key: runtime);
+
+        public long Index => m_count.Value;
 
         public Surface Next() {
             var frame = new RenderGraphFrame(
@@ -338,7 +370,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 DisplayHertz: 60,
                 DisplayWidth: Display,
                 Footprints: footprints,
-                Index: Index++,
+                Index: m_count.Value++,
                 Roots: roots
             );
 
@@ -356,16 +388,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         // consumer has read a completed output of each producer that frame scheduled. An instance refreshed at a divisor
         // that frame did not schedule may still be building.
         public void Settle() {
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        _ = Next();
+            TestLiveness.Until(
+                reason: () => "The runtime's scheduled instances never all produced.",
+                step: () => {
+                    _ = Next();
 
-                        return runtime.IsSettled;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The runtime's scheduled instances never all produced."
+                    return runtime.IsSettled;
+                }
             );
             _ = Next();
         }

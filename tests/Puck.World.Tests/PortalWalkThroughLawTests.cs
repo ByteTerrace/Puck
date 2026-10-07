@@ -35,12 +35,14 @@ public sealed class PortalWalkThroughLawTests {
     private const ulong ArrivalTransferId = 4_201UL;
     private const string DoorPrototype = "door";
     private const float DoorScale = 5f;
-    private const string Face = "door";
+
+    internal const string Face = "door";
+
     private const int ForwardOrdinal = 0;
     private const string SourceAuthority = "peer-world/source";
     private const int WalkBound = 120;
 
-    private static WorldPlacement Door(string id, Vector3 position, float yawDegrees, WorldPlacementPortal? portal) => new(
+    internal static WorldPlacement Door(string id, Vector3 position, float yawDegrees, WorldPlacementPortal? portal) => new(
         FaceSources: [new WorldPlacementFace(
             Face: Face,
             Portal: portal,
@@ -54,7 +56,7 @@ public sealed class PortalWalkThroughLawTests {
     );
     // One row: a document with room for peers and census bodies, the door creation, one door, and the other row as
     // its one destination.
-    private static WorldDefinition Row(string neighbourPath, WorldPlacement door) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
+    internal static WorldDefinition Row(string neighbourPath, WorldPlacement door) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
         CreationsRaw = [PortalArrivalValidationLawTests.BuildDoorCreation()],
         Destinations = [new WorldDestination(
             Durability: WorldDestinationDurability.Persisted,
@@ -68,6 +70,7 @@ public sealed class PortalWalkThroughLawTests {
             Name: SafeName.Parse(candidate: "neighbour")
         )],
     });
+
     // Commits one traveller into a row the way an authenticated peer authority does, and answers its body.
     private static int AdmitPeer(WorldServer server, int ordinal = 0) {
         var origin = new WorldEntityAddress(
@@ -105,7 +108,7 @@ public sealed class PortalWalkThroughLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: server.CommitTransfer(
+            condition: (server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     BodyMotionProgramName: "grounded",
                     HasMappedArrival: false,
@@ -118,7 +121,7 @@ public sealed class PortalWalkThroughLawTests {
                 reason: out var reason,
                 sourceAuthority: SourceAuthority,
                 transferId: (ArrivalTransferId + ((ulong)ordinal))
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 

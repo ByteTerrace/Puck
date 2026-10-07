@@ -1,0 +1,106 @@
+schema: "puck.world.definition.v1"
+documentId: "portal-nested-inner"
+
+admission [
+  {
+    algorithm: ""
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+    publicKey: ""
+    subject: null
+  }
+]
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "arch" {
+    prototype: "arch"
+    position [0, 1.5, 0]
+  }
+
+  placement "backdrop" {
+    prototype: "backdrop"
+    position [0, 1.5, -2]
+  }
+}
+
+prototypes {
+  prototype "arch" {
+    document {
+      behavior {
+        faces [
+          {
+            defaultSource: null
+            name: "glass"
+            shapeId: 0
+          }
+        ]
+      }
+      name: "arch"
+      palette [
+        {
+          color: "#303030"
+          roughness: 0.8
+          sheen: 0
+          specular: 0
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "rim" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.2, 1, 0.05]
+      }
+
+      shape Box "opening" {
+        blend: "Subtraction"
+        material: 0
+        position [0, 0, 0]
+        scale [1.15, 0.95, 0.3]
+      }
+    }
+  }
+
+  prototype "backdrop" {
+    document {
+      name: "backdrop"
+      palette [
+        {
+          color: "#20FF40"
+          emissive: 0.5
+          roughness: 0.8
+          sheen: 0
+          specular: 0
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "wall" {
+        material: 0
+        position [0, 0, 0]
+        scale [12, 8, 0.1]
+      }
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}

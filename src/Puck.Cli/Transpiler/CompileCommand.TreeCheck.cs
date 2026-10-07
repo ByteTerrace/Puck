@@ -13,82 +13,80 @@ internal static partial class CompileCommand {
         var catalog = Path.GetFullPath(path: output);
 
         if (!Directory.Exists(path: catalog)) {
-            Console.Error.WriteLine(value: $"error: '{catalog}' does not exist, so there is no output to check.");
+            Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: catalog)}' does not exist, so there is no output to check.");
 
             return 2;
         }
 
-        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-tree-check-").FullName;
+        // A check that fails keeps the fresh run it compared against, named.
+        using var run = RunDirectory.Create(prefix: "puck-tree-check-");
+        var scratch = run.Path;
 
-        try {
-            var fresh = Path.Combine(path1: scratch, path2: "output");
-            var report = Path.Combine(path1: scratch, path2: "written");
-            // The comparison is with a fresh run, so the check bakes every creation rather than reading a cache.
-            var ran = RunTree(
-                bakeCache: null,
-                bundle: bundle,
-                output: fresh,
-                paths: paths,
-                report: report,
-                strict: strict,
-                tree: tree,
-                validate: validate
-            );
+        var fresh = Path.Combine(path1: scratch, path2: "output");
+        var report = Path.Combine(path1: scratch, path2: "written");
+        // The comparison is with a fresh run, so the check bakes every creation rather than reading a cache.
+        var ran = RunTree(
+            bakeCache: null,
+            bundle: bundle,
+            output: fresh,
+            paths: paths,
+            report: report,
+            strict: strict,
+            tree: tree,
+            validate: validate
+        );
 
-            if (ran != 0) {
-                return ran;
-            }
+        if (ran != 0) {
+            return ran;
+        }
 
-            var written = File.ReadAllLines(path: report).Where(predicate: static line => (line.Length > 0)).ToArray();
-            var expected = new HashSet<string>(collection: written, comparer: StringComparer.Ordinal);
-            var problems = new List<string>();
+        var written = File.ReadAllLines(path: report).Where(predicate: static line => (line.Length > 0)).ToArray();
+        var expected = new HashSet<string>(collection: written, comparer: StringComparer.Ordinal);
+        var problems = new List<string>();
 
-            foreach (var relative in written) {
-                var shipped = Path.Combine(path1: catalog, path2: relative);
+        foreach (var relative in written) {
+            var shipped = Path.Combine(path1: catalog, path2: relative);
 
-                if (!File.Exists(path: shipped)) {
-                    problems.Add(item: $"missing {relative}: a fresh run writes it and '{catalog}' does not hold it.");
-                } else if (!File.ReadAllBytes(path: shipped).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: Path.Combine(path1: fresh, path2: relative)))) {
-                    problems.Add(item: $"differs {relative}: its bytes are not what a fresh run writes.");
-                }
-            }
-
-            var owned = ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension])
-                .SelectMany(selector: suffix => Directory.EnumerateFiles(path: catalog, searchOption: SearchOption.AllDirectories, searchPattern: ("*" + suffix)))
-                .Concat(second: (Directory.Exists(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName))
-                    ? Directory.EnumerateFiles(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), searchOption: SearchOption.AllDirectories, searchPattern: "*")
-                    : []
-                ))
-                .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: catalog).Replace(newChar: '/', oldChar: '\\'))
-                .ToArray();
-
-            foreach (var relative in owned.Where(predicate: relative => !expected.Contains(item: relative)).Order(comparer: StringComparer.Ordinal)) {
-                problems.Add(item: $"stale {relative}: no source in the tree compiles to it.");
-            }
-
-            foreach (var group in owned.GroupBy(keySelector: static relative => relative, comparer: StringComparer.OrdinalIgnoreCase).Where(predicate: static group => (group.Count() > 1))) {
-                problems.Add(item: $"repeated {group.Key}: the output holds it {group.Count()} times, ignoring case.");
-            }
-
-            if (problems.Count > 0) {
-                foreach (var problem in problems) {
-                    Console.Error.WriteLine(value: $"tree check: {problem}");
-                }
-
-                Console.Error.WriteLine(value: $"tree check: '{catalog}' is not what a fresh run of '{Path.GetFullPath(path: tree)}' writes ({problems.Count} problem(s)).");
-
-                return 1;
-            }
-
-            Console.WriteLine(value: $"tree check: '{catalog}' holds exactly the {written.Length:N0} files a fresh run of '{Path.GetFullPath(path: tree)}' writes.");
-
-            return 0;
-        } finally {
-            try {
-                Directory.Delete(path: scratch, recursive: true);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"tree check: the scratch directory '{scratch}' could not be removed: {exception.Message}");
+            if (!File.Exists(path: shipped)) {
+                problems.Add(item: $"missing {relative}: a fresh run writes it and '{CliPaths.ToDisplay(fullPath: catalog)}' does not hold it.");
+            } else if (!File.ReadAllBytes(path: shipped).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: Path.Combine(path1: fresh, path2: relative)))) {
+                problems.Add(item: $"differs {relative}: its bytes are not what a fresh run writes.");
             }
         }
+
+        var owned = ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension])
+            .SelectMany(selector: suffix => Directory.EnumerateFiles(path: catalog, searchOption: SearchOption.AllDirectories, searchPattern: ("*" + suffix)))
+            // A package's lock beside its directory coordinates writers and ships nothing.
+            .Concat(second: (Directory.Exists(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName))
+                ? Directory.EnumerateFiles(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), searchOption: SearchOption.AllDirectories, searchPattern: "*")
+                    .Where(predicate: file => !(file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".lock") && string.Equals(a: Path.GetDirectoryName(path: file), b: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), comparisonType: StringComparison.Ordinal)))
+                : []
+            ))
+            .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: catalog).Replace(newChar: '/', oldChar: '\\'))
+            .ToArray();
+
+        foreach (var relative in owned.Where(predicate: relative => !expected.Contains(item: relative)).Order(comparer: StringComparer.Ordinal)) {
+            problems.Add(item: $"stale {relative}: no source in the tree compiles to it.");
+        }
+
+        foreach (var group in owned.GroupBy(keySelector: static relative => relative, comparer: StringComparer.OrdinalIgnoreCase).Where(predicate: static group => (group.Count() > 1))) {
+            problems.Add(item: $"repeated {group.Key}: the output holds it {group.Count()} times, ignoring case.");
+        }
+
+        if (problems.Count > 0) {
+            foreach (var problem in problems) {
+                Console.Error.WriteLine(value: $"tree check: {problem}");
+            }
+
+            Console.Error.WriteLine(value: $"tree check: '{CliPaths.ToDisplay(fullPath: catalog)}' is not what a fresh run of '{CliPaths.ToDisplay(fullPath: tree)}' writes ({problems.Count} problem(s)).");
+
+            return 1;
+        }
+
+        Console.WriteLine(value: $"tree check: '{CliPaths.ToDisplay(fullPath: catalog)}' holds exactly the {written.Length:N0} files a fresh run of '{CliPaths.ToDisplay(fullPath: tree)}' writes.");
+
+        run.Conclude(passed: true);
+
+        return 0;
     }
 }

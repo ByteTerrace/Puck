@@ -178,8 +178,8 @@ public sealed partial class WorldDocument {
 
         return null;
     }
-    // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
-    // Everything else, cameras included, applies live on delivery.
+    // Whether a mutation updates document defaults without overwriting live session levers. This echo classification
+    // does not delay fields read from the delivered definition, such as authored lighting.
     private static bool IsDocumentDefaults(WorldMutation mutation) => (AnyMember(
         affects: IsDocumentDefaults,
         mutation: mutation

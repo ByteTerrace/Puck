@@ -1,13 +1,14 @@
-// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one thirty-one-word
+// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one forty-one-word
 // record a draw (its row-vector object-to-world matrix row by row, its material, the word its first index sits at, its
 // index count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at,
-// and its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
+// its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, and its impostor: the bounding sphere,
+// the view grid and the impostor atlas rectangle, frame/sdf-mesh-impostor.hlsli), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
 // indices. KEEP IN SYNC with SdfMeshRegion.Write. The includer's interface declares the region, sdfMeshRegion: sdf-world
 // and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 
-static const uint SdfMeshDrawWords = 31u;
+static const uint SdfMeshDrawWords = 41u;
 static const uint SdfMeshMaterialWord = 16u;
 static const uint SdfMeshIndexWord = 17u;
 static const uint SdfMeshIndexCountWord = 18u;
@@ -17,11 +18,13 @@ static const uint SdfMeshTriangleMaterialWord = 21u;
 static const uint SdfMeshNormalMatrixWord = 22u;
 static const uint SdfMeshVertexWords = 8u;
 // A record's attribute flags: its mesh carries a normal per vertex, a palette entry per triangle, and surface textures
-// the mesh atlases hold (frame/sdf-mesh-textures.hlsli). KEEP IN SYNC with SdfMeshRegion.NormalsFlag, MaterialsFlag and
-// TexturesFlag.
+// the mesh atlases hold (frame/sdf-mesh-textures.hlsli), or it is an impostor card (frame/sdf-mesh-impostor.hlsli). KEEP
+// IN SYNC with SdfMeshRegion.NormalsFlag, MaterialsFlag, TexturesFlag, ImpostorFlag and DynamicFlag.
 static const uint SdfMeshNormalsFlag = 1u;
 static const uint SdfMeshMaterialsFlag = 2u;
 static const uint SdfMeshTexturesFlag = 4u;
+static const uint SdfMeshImpostorFlag = 8u;
+static const uint SdfMeshDynamicFlag = 16u;
 // The bit the view starts at in the index a mesh draw call pushes; the bits below it name the draw. KEEP IN SYNC with
 // SdfWorldInterfaces.MeshViewShift.
 static const uint SdfMeshViewShift = 24u;
@@ -30,6 +33,10 @@ static const uint SdfMeshDrawMask = ((1u << SdfMeshViewShift) - 1u);
 // The first word of a draw's record.
 uint sdfMeshRecord(uint draw) {
     return (draw * SdfMeshDrawWords);
+}
+// Whether a draw is an impostor card whose views the impostor atlases hold.
+bool sdfMeshIsImpostor(uint draw) {
+    return ((sdfMeshRegion[(sdfMeshRecord(draw) + SdfMeshFlagsWord)] & SdfMeshImpostorFlag) != 0u);
 }
 // The material a draw's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh
 // carries one.
@@ -77,6 +84,17 @@ float3 sdfMeshNormalToWorld(uint record, float3 n) {
     float3 row2 = asfloat(uint3(sdfMeshRegion[(rows + 6u)], sdfMeshRegion[(rows + 7u)], sdfMeshRegion[(rows + 8u)]));
 
     return (((n.x * row0) + (n.y * row1)) + (n.z * row2));
+}
+// A direction or position in a draw's object space from world space: v * N^T, where N is the draw's normal matrix, the
+// inverse transpose of its matrix, so N^T is the matrix's inverse (a nonuniform scale and a mirror included). The caller
+// subtracts the draw's translation (row 3) first for a position.
+float3 sdfMeshObjectFromWorld(uint record, float3 v) {
+    uint rows = (record + SdfMeshNormalMatrixWord);
+    float3 row0 = asfloat(uint3(sdfMeshRegion[rows], sdfMeshRegion[(rows + 1u)], sdfMeshRegion[(rows + 2u)]));
+    float3 row1 = asfloat(uint3(sdfMeshRegion[(rows + 3u)], sdfMeshRegion[(rows + 4u)], sdfMeshRegion[(rows + 5u)]));
+    float3 row2 = asfloat(uint3(sdfMeshRegion[(rows + 6u)], sdfMeshRegion[(rows + 7u)], sdfMeshRegion[(rows + 8u)]));
+
+    return float3(dot(v, row0), dot(v, row1), dot(v, row2));
 }
 // The world normal of a draw's index `k`: the normal the vertex it names carries, under the draw's normal matrix.
 // Meaningful only for a mesh that carries normals.

@@ -39,10 +39,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)
-    private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
-    // The seventh ScreenMappingData row: the bound flag at its first float, the sampler at its second.
+    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
     private const int ScreenSamplerOffset = (ScreenBoundOffset + sizeof(float));
     private const int ScreenStateFloats = 4;
@@ -144,9 +142,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // a view showing one renders every frame (TablesSignature).
     private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates
-    // it: m_programRevision bumps on every UploadProgram (program words, live mask width, kernel variant, screen-surface
-    // reseed), m_decalRevision on every SetScreenDecal/ClearScreenDecal call that ACTUALLY changes the stored bytes.
+    // it: program revision covers every changed packed program; geometry revision excludes only palette values.
+    // Decal revision covers SetScreenDecal/ClearScreenDecal calls that actually change the stored bytes.
     private ulong m_programRevision;
+    private ulong m_programGeometryRevision;
     private bool m_rebuildInstanceGridPerFrame;
     private int m_requiredDynamicTransformCapacity;
     // The uploads submitted, which selects each upload's ring slot.
@@ -160,10 +159,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
-    // The screen-light table (screen glow colors, environment, grid-overlay and lever rows) and the bounded-volume table
-    // (views and sky), each packed here every frame and written into its region.
-    private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
-    private readonly Vector3[] m_screenLightColors = new Vector3[MaxScreenSurfaces];
+    // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     private readonly IGpuStorageBuffer[] m_brickRequestBuffers = new IGpuStorageBuffer[SdfBrickPoolLayout.MaxBricks];
     private readonly nint[] m_brickBakeSets = new nint[SdfBrickPoolLayout.MaxBricks];
@@ -204,6 +200,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <param name="meshRaster">The device's mesh pass pipeline (<see cref="SdfMeshRasterPass"/>), built on
     /// <paramref name="device"/> with the render pass it draws in, which a view's mesh pass records with. The caller keeps
     /// ownership and disposes it after the tables.</param>
+    /// <param name="impostorRaster">The device's impostor card pipeline, built on <paramref name="device"/> with the mesh pass's
+    /// layout and render pass, which a view's mesh pass draws impostor cards with after its meshes. The caller keeps
+    /// ownership and disposes it after the tables.</param>
     /// <param name="options">The construction options (scene program, capacities, brick pool, work ledger).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The options enable a brick pool the pipelines were built without, or the mesh
@@ -211,11 +210,12 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, SdfWorldTablesOptions options) {
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline impostorRaster, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
         ArgumentNullException.ThrowIfNull(meshRaster);
+        ArgumentNullException.ThrowIfNull(impostorRaster);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
             instance: pipelines
@@ -238,6 +238,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             framesInFlight: FrameRingSize,
             name: "gpu.sdf-tables"
         ));
+        m_skyDetails = (options.SkyDetails ?? new SdfSkyDetails());
 
         var gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
@@ -274,6 +275,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_pipelines = pipelines;
         m_meshPipeline = (meshRaster.Graphics ?? throw new ArgumentException(message: "The mesh pass pipeline is not a graphics pipeline.", paramName: nameof(meshRaster)));
         m_meshRenderPass = (meshRaster.RenderPass ?? throw new ArgumentException(message: "The mesh pass pipeline names no render pass.", paramName: nameof(meshRaster)));
+        m_impostorPipeline = (impostorRaster.Graphics ?? throw new ArgumentException(message: "The impostor pass pipeline is not a graphics pipeline.", paramName: nameof(impostorRaster)));
         m_regionCopyPipeline = regionCopy;
         m_regionCopies = new GpuRegionCopyRecording(
             begin: BeginUpload,
@@ -333,10 +335,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             byteCount: (MaxScreenSurfaces * ScreenMappingByteLength),
             region: ScreenMappingRegionIndex
         ));
-        m_screenLightRegion = scope.Own(created: CreateRegion(
-            byteCount: m_screenLightScratch.Length,
-            region: ScreenLightRegionIndex
-        ));
         m_volumeRegion = scope.Own(created: CreateRegion(
             byteCount: m_volumeScratch.Length,
             region: VolumeRegionIndex
@@ -349,6 +347,15 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
         ));
+        m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
+        m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
+        m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
+        m_shadowHandoffBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: RegionName(region: ShadowHandoffRegionIndex), sizeBytes: ((ulong)RecordBytes(records: m_shadowHandoffs)), usage: GpuBufferUsage.Storage));
+        m_shadowHandoffRegion = scope.Own(created: new GpuRegion(
+            destination: m_shadowHandoffBuffer, byteCount: RecordBytes(records: m_shadowHandoffs), slotCount: FrameRingSize,
+            buffers: gpu.BufferFactory, bindings: gpu.Bindings, recorder: gpu.Recorder, copyPipeline: m_regionCopyPipeline,
+            name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex)));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
@@ -451,6 +458,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
 
             SdfWorldInterfaces.BrickBakeParameters.WriteFrame(
                 block: frameBlockBytes,
+                extent: default,
                 frame: 0UL,
                 values: default
             );
@@ -508,10 +516,19 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
                     bufferSize: bakeBlock.SizeBytes,
                     descriptorSetHandle: bakeSet
                 );
-                WriteBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakeRequest, set: bakeSet);
-                WriteBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
+                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakeRequest, set: bakeSet);
+                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: bakeSet);
             }
         }
+
+        // The sky's environment, which the World sets bind and the graph's shared producer renders after upload.
+        // Its constructor joins each object it creates to the scope, which releases them should a later step throw.
+        m_skyEnvironment = new SkyEnvironmentPass(
+            gpu: gpu,
+            scope: scope,
+            tables: this
+        );
+        m_screenEmission = new ScreenEmissionPass(gpu: gpu, scope: scope, tables: this);
 
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the
@@ -520,17 +537,18 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         scope.Complete();
     }
 
-    // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
-    // structured view the kernel's generated declaration reads on Direct3D 12.
-    private void WriteBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
-        var resource = SdfWorldInterfaces.ResourceOf(layout: layout, member: member);
+    // Writes a buffer at a resource of an interface whose group layouts the set was allocated against, as the kind its
+    // member declares and at its element's stride (a record's or a value type's), the structured view the kernel's
+    // generated declaration reads on Direct3D 12.
+    internal void WriteInterfaceBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer, IGpuBindings? bindings = null) {
+        var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: member);
 
-        m_bindings.WriteBuffer(
+        (bindings ?? m_bindings).WriteBuffer(
             binding: resource.Binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: resource.Member.Type!.Value.SizeBytes(),
+            elementStride: (resource.Member.Structure?.SizeBytes ?? resource.Member.Type!.Value.SizeBytes()),
             kind: resource.Kind
         );
     }
@@ -553,6 +571,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
 
         DisposeRegions();
+        DisposeIndirect();
         m_previousDynamicTransforms.Dispose();
         m_previousMeshTransforms.Dispose();
         m_brickBakeFrameBlock?.Dispose();
@@ -563,6 +582,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
 
         m_brickPoolBuffer.Dispose();
+        m_skyEnvironment.Dispose();
+        m_screenEmission.Dispose();
 
         foreach (var sampler in m_samplers) {
             m_bindings.DestroySampler(samplerHandle: sampler);

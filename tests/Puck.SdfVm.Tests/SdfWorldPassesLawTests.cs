@@ -32,6 +32,7 @@ public sealed partial class SdfWorldPassesLawTests {
         using var view = new SdfTestView(
             device: gpu,
             extent: Extent,
+            hostsOnDirectX: false,
             pipelines: pipelines,
             residency: new SdfWorldResidency(
                 brickPoolVoxelCapacity: 0,
@@ -56,8 +57,8 @@ public sealed partial class SdfWorldPassesLawTests {
             TargetWidth: Extent
         );
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => view.Produce(context: in context),
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason,
             wait: view.Residency.WaitPipelineBuilds
         );
@@ -73,8 +74,8 @@ public sealed partial class SdfWorldPassesLawTests {
             .ToDictionary(elementSelector: static group => group.Count(), keySelector: static group => group.Key);
 
         Assert.Equal(
-            actual: new[] { "arguments", "cullBounds", "instanceMasks", "tiles", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
-            expected: [1, 1, 1, 1, 1]
+            actual: new[] { "arguments", "cullBounds", "instanceMasks", "segmentTapes", "tiles", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
+            expected: [1, 1, 1, 1, 1, 1]
         );
 
         var scheduled = new RenderGraphFrame(
@@ -177,7 +178,11 @@ public sealed partial class SdfWorldPassesLawTests {
                     Y: 0f
                 )
             )]
-        );
+        ) {
+            // This fixture installs ordinary view/cache factories only. Environment laws add their actual producer
+            // and explicitly enable Sky; a finite solve must never pretend an absent producer supplied its map.
+            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Feedback | SdfIndirectSources.Emission,
+        };
     }
 
     private sealed class CapturingFrameSource(Func<SdfFrame> capture) : ISdfFrameSource {

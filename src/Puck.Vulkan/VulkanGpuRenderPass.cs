@@ -168,7 +168,7 @@ public sealed class VulkanGpuRenderPass : IGpuRenderPass {
                 description: description,
                 device: device
             )
-        ).ThrowIfFailed(operation: "vkCreateRenderPass");
+        ).ThrowIfFailed(device: device, operation: "vkCreateRenderPass");
 
         return new VulkanGpuRenderPass(
             description: description,
@@ -240,7 +240,7 @@ public sealed class VulkanGpuFramebuffer : IGpuFramebuffer {
                 RenderPassHandle: renderPass.RenderPass.Handle,
                 Width: width
             )
-        ).ThrowIfFailed(operation: "vkCreateFramebuffer");
+        ).ThrowIfFailed(device: renderPass.RenderPass.Device, operation: "vkCreateFramebuffer");
 
         return new VulkanGpuFramebuffer(
             framebufferSetApi: framebufferSetApi,

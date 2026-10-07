@@ -1,0 +1,890 @@
+{
+  "id": "indirect-near",
+  "title": "a bounded near ray observes a small emitter and its independent first-ray reference",
+  "binding": "Source preparation: the authored 0.12m red metallic emitter sits 0.18m above a white receiver. Metal removes reflected feedback but leaves emission 1*red*white=red; Feedback remains enabled and requires the actual predecessor and proof. The companion changes only emissive 1 to 0 and must fail the same positive red-emission bound while holding zero. Both backends use the shared pointer and one fenced explanation. That one response must report NearHit/Resolved, its pre-material emission and the independent fixed-first-ray reference together; absent transport provenance or unsupported sources refuse rather than use the cache reference. Pointer 64,64 and first explanation admission are provisional until observed in the real World; a miss/nonadmitted phase fails and requires an authored station correction. This initial fixture does not establish the separate diffuse-bleed, finite furnace, sealed-room, gloss/fog or P15 temporal outcomes, which remain owed in their prepared scenes. The counters extraction uses the actual views/indirect-near detail row after the world node. These are newest completed submission counts, not cumulative warm-up totals; no measured ceiling is invented.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": ["README.md", "scenes.puck", "fixture.puck", "gloss-fog.puck", "no-bleed.puck", "positive.script.txt", "medium.script.txt", "no-bleed.script.txt"],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/indirect-near/emission.puck",
+    "script": "emission.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.explain",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "same-fenced-near-and-reference",
+        "stream": "stdout",
+        "verb": "world.explain",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "near",
+            "field": "near",
+            "line": "indirect method="
+          },
+          {
+            "name": "status",
+            "field": "status",
+            "line": "indirect method="
+          },
+          {
+            "name": "emission-r",
+            "field": "emission",
+            "component": 0,
+            "line": "sources direct="
+          },
+          {
+            "name": "emission-g",
+            "field": "emission",
+            "component": 1,
+            "line": "sources direct="
+          },
+          {
+            "name": "emission-b",
+            "field": "emission",
+            "component": 2,
+            "line": "sources direct="
+          },
+          {
+            "name": "reference-r",
+            "field": "cpu-reference",
+            "component": 0,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "reference-g",
+            "field": "cpu-reference",
+            "component": 1,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "reference-b",
+            "field": "cpu-reference",
+            "component": 2,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "source-role",
+            "field": "source-role",
+            "line": "source-sequence="
+          },
+          {
+            "name": "source-sequence",
+            "field": "source-sequence",
+            "line": "source-sequence="
+          },
+          {
+            "name": "incoming-source",
+            "field": "incoming-source",
+            "line": "near-direction="
+          },
+          {
+            "name": "previous-stamp",
+            "field": "previous-stamp",
+            "line": "near-direction="
+          },
+          {
+            "name": "read-stamp",
+            "field": "read-stamp",
+            "line": "read-generation="
+          },
+          {
+            "name": "published-stamp",
+            "field": "published-stamp",
+            "line": "published-generation="
+          },
+          {
+            "name": "reference-source",
+            "field": "source",
+            "line": "reference source="
+          },
+          {
+            "name": "reference-unresolved",
+            "field": "unresolved",
+            "line": "cpu-reference="
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-holds",
+        "operator": "equal",
+        "left": {
+          "value": "near"
+        },
+        "right": {
+          "literal": "hit"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "status-holds",
+        "operator": "equal",
+        "left": {
+          "value": "status"
+        },
+        "right": {
+          "literal": "resolved"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-r-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-r"
+        },
+        "right": {
+          "literal": 1
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-g-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-b-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-g-holds",
+        "operator": "equal",
+        "left": {
+          "value": "reference-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-b-holds",
+        "operator": "equal",
+        "left": {
+          "value": "reference-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "independent-emission-envelope",
+        "operator": "betweenInclusive",
+        "left": {
+          "value": "reference-r"
+        },
+        "minimum": 0.8,
+        "maximum": 1.2
+      },
+      {
+        "type": "line",
+        "name": "current-shared-cache-is-fenced",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-reference-refusal",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "reference unavailable:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      },
+      {
+        "type": "response",
+        "name": "actual-bounded-near-work",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "near-queries",
+            "field": "march.steps",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-samples",
+            "field": "indirect.samples",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-hits",
+            "field": "indirect.hits",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-unresolved",
+            "field": "indirect.unresolved",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-hashes",
+            "field": "sky.hashes",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-loads",
+            "field": "sky.texture-loads",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-queries-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-queries"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-samples-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-samples"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-hits-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-hits"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-names-current-source",
+        "operator": "equal",
+        "left": {
+          "value": "source-role"
+        },
+        "right": {
+          "literal": "current-near-publication"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "captured-predecessor-exists",
+        "operator": "greater",
+        "left": {
+          "value": "previous-stamp"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "captured-current-stamp-exists",
+        "operator": "greater",
+        "left": {
+          "value": "read-stamp"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-source-exists",
+        "operator": "greater",
+        "left": {
+          "value": "incoming-source"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-source-is-the-rendered-source",
+        "operator": "equal",
+        "left": {
+          "value": "incoming-source"
+        },
+        "right": {
+          "value": "source-sequence"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-uses-that-same-source",
+        "operator": "equal",
+        "left": {
+          "value": "reference-source"
+        },
+        "right": {
+          "value": "incoming-source"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "current-stamp-is-the-captured-publication",
+        "operator": "equal",
+        "left": {
+          "value": "read-stamp"
+        },
+        "right": {
+          "value": "published-stamp"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "independent-reference-is-fully-resolved",
+        "operator": "equal",
+        "left": {
+          "value": "reference-unresolved"
+        },
+        "right": {
+          "literal": 0
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/indirect-near/emission-off.puck",
+    "script": "emission-off.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.indirect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.explain",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "same-fenced-near-and-reference",
+        "stream": "stdout",
+        "verb": "world.explain",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "near",
+            "field": "near",
+            "line": "indirect method="
+          },
+          {
+            "name": "status",
+            "field": "status",
+            "line": "indirect method="
+          },
+          {
+            "name": "emission-r",
+            "field": "emission",
+            "component": 0,
+            "line": "sources direct="
+          },
+          {
+            "name": "emission-g",
+            "field": "emission",
+            "component": 1,
+            "line": "sources direct="
+          },
+          {
+            "name": "emission-b",
+            "field": "emission",
+            "component": 2,
+            "line": "sources direct="
+          },
+          {
+            "name": "reference-r",
+            "field": "cpu-reference",
+            "component": 0,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "reference-g",
+            "field": "cpu-reference",
+            "component": 1,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "reference-b",
+            "field": "cpu-reference",
+            "component": 2,
+            "line": "cpu-reference="
+          },
+          {
+            "name": "source-role",
+            "field": "source-role",
+            "line": "source-sequence="
+          },
+          {
+            "name": "source-sequence",
+            "field": "source-sequence",
+            "line": "source-sequence="
+          },
+          {
+            "name": "incoming-source",
+            "field": "incoming-source",
+            "line": "near-direction="
+          },
+          {
+            "name": "previous-stamp",
+            "field": "previous-stamp",
+            "line": "near-direction="
+          },
+          {
+            "name": "read-stamp",
+            "field": "read-stamp",
+            "line": "read-generation="
+          },
+          {
+            "name": "published-stamp",
+            "field": "published-stamp",
+            "line": "published-generation="
+          },
+          {
+            "name": "reference-source",
+            "field": "source",
+            "line": "reference source="
+          },
+          {
+            "name": "reference-unresolved",
+            "field": "unresolved",
+            "line": "cpu-reference="
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-holds",
+        "operator": "equal",
+        "left": {
+          "value": "near"
+        },
+        "right": {
+          "literal": "hit"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "status-holds",
+        "operator": "equal",
+        "left": {
+          "value": "status"
+        },
+        "right": {
+          "literal": "resolved"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-r-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-r"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-g-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "emission-b-holds",
+        "operator": "equal",
+        "left": {
+          "value": "emission-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-g-holds",
+        "operator": "equal",
+        "left": {
+          "value": "reference-g"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-b-holds",
+        "operator": "equal",
+        "left": {
+          "value": "reference-b"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-r-holds",
+        "operator": "equal",
+        "left": {
+          "value": "reference-r"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "line",
+        "name": "current-shared-cache-is-fenced",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[indirect: settled at tick",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-reference-refusal",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "reference unavailable:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      },
+      {
+        "type": "response",
+        "name": "actual-bounded-near-work",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 1,
+        "extract": [
+          {
+            "name": "near-queries",
+            "field": "march.steps",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-samples",
+            "field": "indirect.samples",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-hits",
+            "field": "indirect.hits",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-unresolved",
+            "field": "indirect.unresolved",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-hashes",
+            "field": "sky.hashes",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          },
+          {
+            "name": "near-loads",
+            "field": "sky.texture-loads",
+            "line": "work views detail=indirect-near executed:",
+            "after": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "near-queries-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-queries"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-samples-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-samples"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-hits-were-counted",
+        "operator": "greater",
+        "left": {
+          "value": "near-hits"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-names-current-source",
+        "operator": "equal",
+        "left": {
+          "value": "source-role"
+        },
+        "right": {
+          "literal": "current-near-publication"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "captured-predecessor-exists",
+        "operator": "greater",
+        "left": {
+          "value": "previous-stamp"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "captured-current-stamp-exists",
+        "operator": "greater",
+        "left": {
+          "value": "read-stamp"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-source-exists",
+        "operator": "greater",
+        "left": {
+          "value": "incoming-source"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "near-source-is-the-rendered-source",
+        "operator": "equal",
+        "left": {
+          "value": "incoming-source"
+        },
+        "right": {
+          "value": "source-sequence"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "reference-uses-that-same-source",
+        "operator": "equal",
+        "left": {
+          "value": "reference-source"
+        },
+        "right": {
+          "value": "incoming-source"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "current-stamp-is-the-captured-publication",
+        "operator": "equal",
+        "left": {
+          "value": "read-stamp"
+        },
+        "right": {
+          "value": "published-stamp"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "independent-reference-is-fully-resolved",
+        "operator": "equal",
+        "left": {
+          "value": "reference-unresolved"
+        },
+        "right": {
+          "literal": 0
+        }
+      }
+    ]
+  }
+}

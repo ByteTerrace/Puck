@@ -1,7 +1,8 @@
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Decompiler;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 
@@ -31,38 +32,22 @@ public class LinterSugarTests {
     // so composed-catalog resolution runs (`resolveGlobalReferences: true`) without depending on any real shipped
     // basis content.
     private static DiagnosticBag LintReferencesAsRoot(JsonObject document) {
-        var directory = Directory.CreateDirectory(path: Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-lint-refs-" + Guid.NewGuid().ToString(format: "N"))
-        )).FullName;
+        using var directory = new TemporaryDirectory(prefix: "puck-lint-refs-");
 
-        try {
-            File.WriteAllText(
-                Path.Combine(
-                    path1: directory,
-                    path2: "basis.world.json"
-                ),
-                "{}"
-            );
-            document["basis"] = "basis";
-            var diagnostics = new DiagnosticBag();
+        _ = directory.WriteText(
+            name: "basis.world.json",
+            text: "{}"
+        );
+        document["basis"] = "basis";
+        var diagnostics = new DiagnosticBag();
 
-            PuckLinter.LintReferences(
-                document,
-                sourceMap: null,
-                diagnostics,
-                sourcePath: Path.Combine(
-                    path1: directory,
-                    path2: "root.world.json"
-                )
-            );
-            return diagnostics;
-        } finally {
-            Directory.Delete(
-                directory,
-                recursive: true
-            );
-        }
+        PuckLinter.LintReferences(
+            document,
+            sourceMap: null,
+            diagnostics,
+            sourcePath: directory.PathOf(name: "root.world.json")
+        );
+        return diagnostics;
     }
     // A shipped world is linted as its source: a `.puck` source as written, a hand-authored JSON world through its
     // decompilation. Its directory is where a declared basis or import resolves from.
@@ -140,45 +125,29 @@ public class LinterSugarTests {
     public void BasisSuppliedStateRowResolvesAndIsNotFlagged() {
         // The basis declares the row the root's own rule reads; the root never repeats it. Composed resolution
         // must see it, so this is the negative half of RootOwnMisspelledNameIsFlagged below.
-        var directory = Directory.CreateDirectory(path: Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-lint-refs-" + Guid.NewGuid().ToString(format: "N"))
-        )).FullName;
+        using var directory = new TemporaryDirectory(prefix: "puck-lint-refs-");
 
-        try {
-            File.WriteAllText(
-                Path.Combine(
-                    path1: directory,
-                    path2: "basis.world.json"
-                ),
-                """{ "state": { "world": [ { "name": "transforms" } ] } }"""
-            );
-            var document = new JsonObject {
-                ["basis"] = "basis",
-                ["rules"] = new JsonArray(new JsonObject {
-                    ["name"] = "r",
-                    ["gate"] = new JsonObject { ["$type"] = "compareState", ["state"] = "transforms", ["comparison"] = "Equal", ["value"] = 1 },
-                    ["effects"] = new JsonArray(),
-                }),
-            };
-            var diagnostics = new DiagnosticBag();
+        _ = directory.WriteText(
+            name: "basis.world.json",
+            text: """{ "state": { "world": [ { "name": "transforms" } ] } }"""
+        );
+        var document = new JsonObject {
+            ["basis"] = "basis",
+            ["rules"] = new JsonArray(new JsonObject {
+                ["name"] = "r",
+                ["gate"] = new JsonObject { ["$type"] = "compareState", ["state"] = "transforms", ["comparison"] = "Equal", ["value"] = 1 },
+                ["effects"] = new JsonArray(),
+            }),
+        };
+        var diagnostics = new DiagnosticBag();
 
-            PuckLinter.LintReferences(
-                document,
-                sourceMap: null,
-                diagnostics,
-                sourcePath: Path.Combine(
-                    path1: directory,
-                    path2: "root.world.json"
-                )
-            );
-            Assert.Empty(collection: diagnostics);
-        } finally {
-            Directory.Delete(
-                directory,
-                recursive: true
-            );
-        }
+        PuckLinter.LintReferences(
+            document,
+            sourceMap: null,
+            diagnostics,
+            sourcePath: directory.PathOf(name: "root.world.json")
+        );
+        Assert.Empty(collection: diagnostics);
     }
     [Fact]
     public void ChannelPrefixTypoIsFlaggedAsInformation() {
@@ -545,6 +514,6 @@ public class LinterSugarTests {
         "games/billiards.puck",
         "games/tictactoe.puck",
         "games/poker.puck",
-        "pipeline.world.json",
+        "pipeline.puck",
     };
 }

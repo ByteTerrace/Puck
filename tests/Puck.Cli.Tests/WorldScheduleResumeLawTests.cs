@@ -8,7 +8,7 @@ namespace Puck.Cli.Tests;
 /// every row again from tick 1. The same lines on an unarmed boot of the same document are not refused by that
 /// text, which is the discriminating half.</summary>
 public sealed class WorldScheduleResumeLawTests {
-    private const string ScheduledWorld = "phase-advance.world.json";
+    private const string ScheduledWorld = "phase-advance.puck";
 
     private static readonly string[] Verbs = ["world.save", "world.load", "world.reload", "world.undo"];
 

@@ -37,11 +37,43 @@ topology.
 
 Past the seam, a body that crossed is the destination's seat. The destination's
 rules read its input with `channel(1, name)` exactly as they read a seat that
-booted there, and its owned identity, facts included, arrives with it. The
-[rulepush package](../../../../worlds/rulepush/README.md) relies on both: a level hears
-the visitor's presses, a win writes an identity fact, and the overworld opens a
-gate from the fact the visitor carries back. Its `rulepush-overworld` canary is the
-end-to-end check.
+booted there.
+
+**What crosses is the identity projection and nothing else.** A traveler's
+`WorldIdentityProjection` (id, name, color, the two rates, the records
+`identity.records` selects, and the facts row) is the only identity a crossing
+carries, on every path: reservation and commit (`WorldTransferReservationMember.Identity`
+and `WorldTransferCommitMember.Profile` are projections), a commit retried after a
+source restart, and a colocated crossing. `WorldIdentityProjectionWire` is its one
+wire form, shared by the federation codec, the crossing log, the arrival tape and
+the checkpoint's escrow, in-doubt and body rows. Bindings, the HUD panel, the
+seat look and every other owned row never leave home. The destination lands
+`WorldIdentity.FromProjection` (`WorldTransferEscrow.ArrivingProfile`); a field a
+destination needs is added to the projection, never read off a document.
+
+A destination writes a visitor's facts and records on that travelling copy:
+`WorldOwnedWorlds.TrySetFact` keeps a visitor's fact on its travelling row, and
+`TrySave` refuses by name an identity the catalog does not own, so no destination
+writes a visitor to disk. A local seat coming home (a colocated arrival at the
+seat whose `Mobility.Incarnation` this authority minted, carrying an id its
+catalog owns; an id alone is not enough, since catalogs seed identities from
+their templates) rebinds to its owned identity, which adopts the carried facts
+and records and nothing else (`WorldOwnedWorlds.TryAdopt`), after all landings succeed and the arrival
+record is durable. A rolled-back arrival changes no owned identity. An empty projected facts row
+preserves the owner's authored name and capacity before its first write. Remote round trips do
+not adopt: a federation reservation has no admission field, so it is always a peer admission and
+can never claim a local seat, since a remote incarnation claim is unauthenticated. A crossing
+whose source restarts restores its logged departure's facts and records before live writes
+resume. A transfer already in the checkpoint uses that checkpoint's catalog. An abort reseats
+and saves the current owned identity, preserving both the departing facts and later owner
+writes while recovery waits. A replay's re-driven home arrival binds the projection its taped outcome records the live adoption bound, in a detached identity, and saves nothing.
+Foreign-written
+facts are unsigned until provenance attestation for carried state exists. The
+[rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level
+hears the visitor's presses, a win writes an identity fact onto the travelling
+record, and the overworld adopts it when the visitor walks home and opens a gate
+from it. Its `rulepush-overworld` canary is the end-to-end check, and
+`CrossingIdentityPrivacyLawTests` pins every path.
 
 A shard names one document several times over — its own `basis`, each adjacency
 neighbour, each derived corner destination — and a composed document is reused
@@ -137,6 +169,15 @@ IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
 transactions/travelers, not lifetime crossing count.
+The source's reservation reads the traveler's credential and never mints it
+(`WorldPopulation.ReadMobility`, a pure read: the stored credential of the
+occupant's generation, else the one its authority, index and generation
+derive). Only the departure's detach mints it (`EnsureMobility` in
+`WorldServer.DetachForTransfer`), which a replay's re-drive runs too, because
+the authoritative hash folds a body's credential every recorded tick and the
+tape records no reservation. A refused and retried reservation, an abort
+before the detach, an in-doubt restore and a reused body slot each replay tick
+for tick (`CrossingTapeOrderLawTests`).
 An exact committed retry includes action-continuity collection order and every
 channel/register value, not just profile and motion. Escrow retains detached
 continuity values at commit and checkpoint restore; mutating a caller's original
@@ -183,6 +224,69 @@ route, exactly as QUIC ingress does. Never hold one authority gate across that
 call. Local synchronous traversal has a 64-hop stack-safety bound. Accepted leave
 retires every retained branch for the incarnation in each traversed host, including
 branches left by revisiting the final authority; other incarnations remain intact.
+
+### Durable crossings
+
+The handoff token is the source-scoped `WorldTransferKey` (source authority,
+transfer id), fenced three ways: the traveler's ownership epoch (a reservation
+for an epoch the destination already consumed is refused as stale), the
+destination's lease deadline (a commit after it is refused), and the
+destination's crossing-log activation (a commit whose arrival record the log
+refuses lands nothing). An exact replay of a committed token answers committed,
+including from a destination rebuilt from its checkpoint and log; a different
+commit under the same token is refused.
+
+An authority with an installed `IWorldCrossingLog`
+(`WorldServer.InstallCrossingLog`) writes every crossing step a peer can see
+ahead of the step: the source's `Departure` (its complete in-doubt record)
+before the commit, the destination's `Arrival` (reservation, body indices,
+commit) before the commit's answer, and the source's `Settlement` (arrived with
+its forwarding routes, or stayed) before the acknowledgement or the cohort's
+restore. `IWorldCrossingLog.Append` answers `WorldCrossingDurability`
+(`Durable`, `Refused`, `Uncertain`); after an `Uncertain` record the server
+latches `WorldServer.UncertainCrossing` and refuses every later record until a
+recovered activation replaces it. A source record that is not `Durable` refuses
+its step; a pending settlement narrates `SETTLEMENT-PENDING` once and retries
+each drain. Records share one
+dense per-authority sequence (`WorldTransferEscrow.CrossingSequence`), captured
+by every checkpoint as its watermark. Recovery is
+`WorldInstanceHost.RecoverCrossings(row, entries)` after `Admit` and
+`RestoreRow`: each record past the watermark is redone in order — an arrival
+lands again through `WorldTransferEscrow.TryReland` (under the lease a restored
+checkpoint still holds, or the one the record bound, restored at its recorded
+body indices, without writing the record twice), a departure detaches its
+cohort by incarnation and puts the transfer back in doubt, a settlement
+publishes the routes or restores the cohort — and the next drain reconciles
+the rest. A failed arrival redo refuses recovery and leaves its sequence
+unapplied. A silo row's log is its authority journal
+(`WorldAuthorityJournalEntryKind.Crossing` entries appended under the
+activation fence; activation redoes them and mutations in publication order
+after restoring the row). Checkpoint coverage is pinned at capture, so a later
+arrival remains in the journal suffix. A desktop
+process installs none. The record codec
+(`WorldAuthorityCheckpointCodec.EncodeCrossingEntry`/`TryDecodeCrossingEntry`)
+reuses the checkpoint's own escrow and in-doubt leaves.
+
+A failed mutation journal append blocks the activation's later publications,
+so no crossing commits against a document edit recovery cannot reproduce.
+
+An `Uncertain` arrival record lands nothing and is neither a refusal nor a
+commit. The commit door (`WorldServer.CommitTransfer`, `IWorldPeerCall.Commit`,
+the federation commit reply) answers a `WorldTransferStatus`: `Committed`,
+`Missing` for a refusal, or `Uncertain`. The escrow keeps the uncertain arrival
+(`WorldTransferEscrow.Uncertain.cs`), answers `Uncertain` to the status query
+and to a retried commit, and refuses any reservation for its travelers; the
+destination narrates `UNCERTAIN` on `world.transfer`. The source keeps an
+`Uncertain` answer in doubt exactly like an `Unreachable` one, so it neither
+settles home nor completes. Only the destination's recovery resolves it: the
+recovered log either lands the arrival again (`Committed`) or does not hold it
+(`Missing`). `WorldInstanceHost.TryStop` unbinds in-doubt transfers addressed
+to the stopped row so they bind by authority to its recovered successor. In a
+silo, `RowCrossingLog` maps a store `RecoveryRequired` (a root CAS it could not
+reconcile) to `Uncertain`, which also blocks the activation; a store throw is a
+refusal, since the store reconciles its own commit point. Laws:
+`CrossingUncertaintyLawTests` (each crash point, with red legs replaying the
+refusal) and `WorldSiloCrossingRecoveryLawTests`.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and
@@ -236,11 +340,13 @@ the reciprocal edge is disabled. Other edges remain eligible, including determin
 at a multi-world corner. One already-evaluated source step carries its mapped
 geometric cursor, exact engine-time interval, consumed-through watermark, and
 bounded face count through every onward owner. Each destination sweeps its own
-terrain before selecting another ownership face. Before an ordinary authority
-step, the composition root resolves pending topology under that authority's
-gate; a body cannot evaluate input, actions, timers, gravity, or movement while
-the geometric cursor is pending or while the step's start overlaps consumed
-continuum time. This makes a 60 Hz source safe when its destination is scheduled
+terrain before selecting another ownership face. Each authority step settles
+its pending continuations itself, under its own gate, before it advances
+(`WorldAdjacencyOwnership.ResolveContinuations`, the same sweep the host's
+post-step scan selects winning faces from), so a replay shadow with no host
+settles them exactly as the live step did; a body cannot evaluate input,
+actions, timers, gravity, or movement while the geometric cursor is pending or
+while the step's start overlaps consumed continuum time. This makes a 60 Hz source safe when its destination is scheduled
 at 120 Hz. Exhausting the eight-face work ceiling clamps one raw fixed-point
 unit inside the last confirmed owner and removes only outward normal velocity.
 
@@ -318,27 +424,51 @@ determinism for cross-authority dynamic contact.
 
 ## What the tape does and does not carry about federation
 
-Exactly one federation fact rides the tape: `WorldReplayEntry.LinkDelivery`,
-one entry per authored `adjacencies` row per tick on which that row's delivered
-neighbour snapshot tick advanced. It is what makes the `linkEstablished`/
-`linkDropped` event family and the `$link:<adjacencyName>` rule channel
-replay-faithful — a rule gated on link staleness fires on the same tick in a
-re-drive as it did live, because the staleness count and the grace comparison
-both derive from that boolean plus the local tick.
+Every authority tapes its own half of a crossing. The source's
+`WorldReplayEntry.Departure` entries name each detached or restored slot, and a
+re-drive detaches them; its `WorldReplayEntry.Transfer` names the target
+authority (and whether it is remote), the outcome and the slots the settlement
+made final, and is the pairing key. The
+destination's `WorldReplayEntry.Arrival` carries the arrival record and is
+landed again through the shadow's own escrow at the tick it landed
+(`ReplayRefusal.ArrivalRefused` when it cannot land in the same body indices);
+its `WorldReplayEntry.FederatedIntents` carries the federated device images
+forwarded and federated travelers drove the authority with, which reach it
+through no loopback. An arrival's own admissions are not taped separately: they
+re-derive when the arrival lands again. `replay.record` on a desktop tapes every
+row of the process as companions in one file, and verification pairs each
+departure with its arrival by handoff token (`WorldReplaySetVerdict`). A
+crossing whose other half is on a remote authority, or on a row nothing taped,
+is `NOT VERIFIED`, and `replay.verify` fails however exactly each trajectory
+replays.
 
-Everything else about federation is still absent, and a `replay.verify` MATCH
-says nothing about it:
+`WorldReplayEntry.LinkDelivery` remains the one transport fact taped for
+adjacency liveness: one entry per authored `adjacencies` row per tick on which
+that row's delivered neighbour snapshot tick advanced. It is what makes the
+`linkEstablished`/`linkDropped` event family and the `$link:<adjacencyName>`
+rule channel replay-faithful.
 
-- The delivered CONTENT is not taped — neighbour poses, definition revisions,
-  and geometry. Cross-authority contact against remote dynamic bodies is
-  therefore still outside what a MATCH proves (see the paragraph above).
-- Federated ARRIVAL is not reproduced. A traveller entering this authority from
-  elsewhere has no source population in the shadow world to arrive from; only
-  the DEPARTURE half replays, through `WorldReplayEntry.Transfer`'s
-  `DepartedBootSlots`.
-- Transfer reserve/commit/abort/acknowledge traffic is not taped as protocol —
-  `Transfer` records the decided outcome as narration, not a re-executed
-  handshake.
+- Both halves of a transfer replay, as this process taped them. Each departure,
+  and each rollback of one, replays through `WorldReplayEntry.Departure` at the
+  position its authority operation took; `WorldReplayEntry.Transfer` is the
+  settlement's narration and the pairing key. The arrival
+  replays through `WorldReplayEntry.Arrival`: `WorldServer.ArrivalTap` reports
+  each commit that landed a traveler, with its `WorldArrivalOutcome` (each
+  landed generation, and whether it rolled back), and the re-drive calls
+  `WorldTransferEscrow.TryReland` with that outcome. Admission is part of the
+  landing and is never taped beside it. The tape refuses at read an arrival no
+  commit could have decided, and the re-drive refuses by name one its escrow
+  does not reproduce.
+
+Still absent, and outside what a MATCH proves:
+
+- The delivered CONTENT — neighbour poses, definition revisions, and geometry.
+  Cross-authority contact against remote dynamic bodies is therefore still
+  outside a MATCH (see the paragraph above).
+- Reserve/commit/abort/acknowledge traffic as protocol: the tapes record the
+  decided departure and the arrival with its outcome, not the handshake.
+- A crossing between processes: each process tapes its own half, and nothing
+  pairs tapes recorded by separate processes.
 
 What IS taped on the submission side: every document mutation, whatever
 ingress it arrived through. `WorldServer.MutationTap` fires at the envelope
@@ -349,9 +479,6 @@ the acting principal its own envelope stamped. The two internal producers that
 reach `EnqueueMutation` directly — a mounted guest's decoded act and a world
 rule's `generate` effect — are deliberately untaped and re-derive during the
 drive.
-
-Do not cite `replay.verify` MATCH as evidence that federated transfer works;
-the five-authority runner and focused laws below remain that proof.
 
 ## Federation transport
 
@@ -431,15 +558,17 @@ idempotent status.
 
 ## Verification
 
-Run the focused laws after changing frames, handoff continuity, hysteresis, or
-contact sweeping:
+Run the focused laws after changing frames, handoff continuity, hysteresis,
+contact sweeping, or crossing durability:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
-dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*FederationTransferLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests" --filter-class "*WorldSiloCrossingRecoveryLawTests"
+dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 
-Run `puck canary seamless-adjacency` for the driven crossing on NW's east face,
+Run `puck canary seamless-adjacency` for the driven crossing on NW's east face
+(its tape set pairs NW's departure with NE's own taped arrival and names the
+crossing verified),
 `puck canary quilt-nw-gap-edge-carry` for the undriven one (a body placed past
 NW's own ground on the `south` face's centre line is minted a crossing by the
 per-tick scan alone; quilt-nw-gap drops that adjacency, so the identical body
@@ -449,6 +578,10 @@ canary four-corners-sharded` for the federated hop: five real `Puck.World`
 processes (four ground worlds and the floating island), each binding its own
 dynamic loopback endpoint and trusting the others' generated federation
 identity, with one driven body crossing NW's east face onto NE's own process.
+NW and NE each record a tape there: NW's names the crossing `NOT VERIFIED`
+because its arrival is on a remote authority, and NE's lands the arrival again,
+replays every step it held the traveler's federated input for, and names the
+arrival from NW `NOT VERIFIED` for the same reason.
 
 A body that arrives over a federation hop is minted rigid on the destination,
 and `WorldInstanceHost.Transfers.cs` refuses a rigid body's own transfer by name,

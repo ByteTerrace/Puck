@@ -3,7 +3,7 @@
   "name": "graph",
   "document": "other.graph.json",
   "compiler": {
-    "version": "puck-shader-compiler-4",
+    "version": "puck-shader-compiler-1",
     "tools": [
       {
         "name": "dxc",

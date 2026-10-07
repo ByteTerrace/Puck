@@ -100,29 +100,29 @@ with — optionally adding rows a sibling district would have supplied
 
 | World | Document | Composition | Ticks | Moves state |
 |---|---|---|---|---|
-| arena | `games/arena.puck` | fixture `minimal-arena-host.world.json` | 224 | yes |
+| arena | `games/arena.puck` | fixture `minimal-arena-host.puck` | 224 | yes |
 | backgammon | `games/backgammon.puck` | document | 630 | yes |
-| billiards | `games/billiards.puck` | fixture `minimal-billiards-host.world.json` | 510 | yes |
+| billiards | `games/billiards.puck` | fixture `minimal-billiards-host.puck` | 510 | yes |
 | bowling | `games/bowling.puck` | spliced | 600 | no |
 | dominoes | `games/dominoes.puck` | spliced | 600 | no |
 | freecell | `games/freecell.puck` | spliced | 610 | yes |
 | go | `games/go.puck` | document | 168 | yes |
-| hexlines | `games/hexlines.puck` | fixture `minimal-hexlines-host.world.json` | 600 | yes |
-| hiddenranks | `games/hiddenranks.puck` | fixture `minimal-hiddenranks-host.world.json` | 190 | yes |
+| hexlines | `games/hexlines.puck` | fixture `minimal-hexlines-host.puck` | 600 | yes |
+| hiddenranks | `games/hiddenranks.puck` | fixture `minimal-hiddenranks-host.puck` | 190 | yes |
 | klondike | `games/klondike.puck` | spliced | 680 | yes |
 | lineup | `worlds/parlor/lineup.puck` | source | 135 | yes |
 | mancala | `games/mancala.puck` | spliced | 590 | yes |
 | moth-courtyard | `moth-courtyard.puck` | document | 600 | yes |
-| paddleball | `games/paddleball.puck` | fixture `minimal-paddleball-host.world.json` | 2941 | yes |
-| pipeline | `pipeline.world.json` | document | 600 | no |
+| paddleball | `games/paddleball.puck` | fixture `minimal-paddleball-host.puck` | 2941 | yes |
+| pipeline | `pipeline.puck` | document | 600 | no |
 | poker | `games/poker.puck` | spliced | 610 | yes |
 | reversi | `games/reversi.puck` | document | 600 | yes |
-| snake | `games/snake.puck` | fixture `minimal-snake-host.world.json` | 635 | yes |
+| snake | `games/snake.puck` | fixture `minimal-snake-host.puck` | 635 | yes |
 | solitaire | `games/solitaire.puck` | spliced | 600 | no |
 | spider | `games/spider.puck` | spliced | 810 | yes |
 | tetromino | `games/tetromino.puck` | document | 130 | yes |
-| tictactoe | `games/tictactoe.puck` | fixture `twin-tictactoe-host.world.json` | 600 | yes |
-| wordspy | `games/wordspy.puck` | fixture `minimal-wordspy-host.world.json` | 162 | yes |
+| tictactoe | `games/tictactoe.puck` | fixture `twin-tictactoe-host.puck` | 600 | yes |
+| wordspy | `games/wordspy.puck` | fixture `minimal-wordspy-host.puck` | 162 | yes |
 
 "Moves state" is asserted both ways: a sequence declared to move the world-scope
 state hash must move it, and one declared not to must leave it exactly as it

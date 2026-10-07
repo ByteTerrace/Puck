@@ -6,6 +6,25 @@ namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfFieldScopeClampLawTests {
     [Fact]
+    public void NestedClampsRetainTheirShapesAndMultiplyTheInstancesDistanceRescale() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));
+
+        builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f)
+            .PushField().Sphere(1f, material)
+            .PushField().ResetPoint().Sphere(1f, material)
+            .ResetPoint().CellDisplace(amplitude: 1f, frequency: 1f, mode: SdfCellMode.F1, randomness: .2f, seed: 0u).PopField()
+            .ResetPoint().CellDisplace(amplitude: 1f, frequency: 1f, mode: SdfCellMode.F1, randomness: .2f, seed: 0u).PopField().EndInstance();
+        var program = builder.Build(buildInstanceGrid: false);
+
+        Assert.Collection(program.FieldScopeClamps,
+            inner => { Assert.Equal(1, inner.ShapeCount); Assert.Equal(.5f, inner.StepScale); },
+            outer => { Assert.Equal(2, outer.ShapeCount); Assert.Equal(.5f, outer.StepScale); });
+        Assert.Equal(4f, program.InspectInstance(index: 0).FieldRescale);
+        Assert.False(condition: program.InspectInstance(index: 0).Unmaskable);
+        Assert.True(condition: (program.InspectInstance(index: 0).BoundRadius >= 2.5f));
+    }
+    [Fact]
     public void FieldOnlyChainContributesToTheScopeWithoutAShapeBinder() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));

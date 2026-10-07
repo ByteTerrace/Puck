@@ -22,11 +22,12 @@ public static class WorldSourceLoader {
     /// the host overrides nothing the document carries.</param>
     /// <param name="compiled">The compiled world the drawn document is read from or written to, or
     /// <see langword="null"/> to draw the document without one.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the document composed, loaded and was admitted.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static bool TryLoadForAdmission(string path, byte[] document, out WorldDefinitionAdmission? admission, out string reason, string catalogFingerprint = "",
-        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null) {
+        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
@@ -38,7 +39,8 @@ public static class WorldSourceLoader {
             document: document,
             json: out var json,
             path: path,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         )) {
             return false;
         }
@@ -73,11 +75,12 @@ public static class WorldSourceLoader {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog, or <see langword="null"/> to defer provider checks.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the document composed and parsed.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static bool TryReadAuthored(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored, out string reason,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldCompiledSource? sourceCompilation = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
@@ -89,7 +92,8 @@ public static class WorldSourceLoader {
             document: document,
             json: out var json,
             path: path,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         ) || !WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
             json: Encoding.UTF8.GetString(bytes: json),
@@ -118,12 +122,13 @@ public static class WorldSourceLoader {
     /// <param name="bakePack">Where the bake pack lies relative to the directory the compiled world ships in
     /// (<see cref="WorldBakePack.Reference"/>), or <see langword="null"/> for <see cref="WorldBakePack.FileName"/>
     /// beside it.</param>
+    /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the document composed, parsed, drew, and every chunk derived.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="bakes"/> is
     /// <see langword="null"/>.</exception>
     public static bool TryCompileWorld(string path, byte[] document, WorldBakeStore bakes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? bakePack = null) {
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? bakePack = null, WorldCompiledSource? sourceCompilation = null) {
         ArgumentNullException.ThrowIfNull(argument: bakes);
 
         compiledWorld = null;
@@ -134,7 +139,8 @@ public static class WorldSourceLoader {
             catalogFingerprint: catalogFingerprint,
             document: document,
             path: path,
-            reason: out reason
+            reason: out reason,
+            sourceCompilation: sourceCompilation
         ) && CompiledWorld.TryCompile(
             authored: authored,
             bytes: out compiledWorld,
@@ -150,7 +156,7 @@ public static class WorldSourceLoader {
         ));
     }
 
-    private static bool TryCompose(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog) {
+    private static bool TryCompose(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
         json = document;
 
         if (!PuckDocumentComposer.TryComposeWorldDocument(
@@ -160,7 +166,8 @@ public static class WorldSourceLoader {
             composed: out var composed,
             reason: out var composeReason,
             rootBytes: document,
-            rootResolvedPath: path
+            rootResolvedPath: path,
+            sourceCompilation: sourceCompilation
         )) {
             reason = $"{path} composition refused: {composeReason}";
 

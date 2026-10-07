@@ -18,6 +18,7 @@ namespace Puck.Overlays;
 /// <param name="Cursor">The per-seat drawn-cursor source, or <see langword="null"/>.</param>
 /// <param name="Wheel">The per-seat radial-action-menu source, or <see langword="null"/>.</param>
 /// <param name="Inspector">The optional editor inspector text source.</param>
+/// <param name="HistoryRow">The optional editor history scrubber row source.</param>
 public sealed record UnifiedOverlaySources(
     IConsoleTapeSource? Console,
     IBindingBarSource? BindingBar,
@@ -28,5 +29,6 @@ public sealed record UnifiedOverlaySources(
     IHudBindingResolver? HudBindings = null,
     ICursorSource? Cursor = null,
     IWheelSource? Wheel = null,
-    IInspectorSource? Inspector = null
+    IInspectorSource? Inspector = null,
+    IHistoryRowSource? HistoryRow = null
 );

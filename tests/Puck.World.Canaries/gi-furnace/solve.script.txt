@@ -1,0 +1,14 @@
+world.cadence off
+world.wait ready 25
+world.wait indirect 25
+world.view.pointer 64 64
+world.wait 4
+world.screenshot {run}/furnace.png
+world.wait captures 5
+world.explain
+world.indirect-reset
+world.wait indirect 25
+world.wait 4
+world.screenshot {run}/furnace-reset.png
+world.wait captures 5
+world.explain

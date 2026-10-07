@@ -38,12 +38,15 @@ namespace Puck.SignedDistance;
 /// noise) out of the lighting normal while leaving the silhouette and geometric AO normal untouched — the study's per-part guide
 /// ellipsoid normal, generalized without an authored guide shape. 0 (the default) skips the extra probe
 /// entirely.</param>
-/// <param name="Bounce">The warm/cool bounce tint added as <c>albedo * Bounce * (1 - max(n·key, 0)) *
+/// <param name="Fill">The warm/cool fill tint added as <c>albedo * Fill * (1 - max(n·key, 0)) *
 /// ambientOcclusion</c> — a restrained, art-directed fill on the side of a surface the key light does not reach
-/// (the study's skin bounce term, generalized to any material via an authored color instead of a hardcoded warm
+/// (the study's skin fill term, generalized to any material via an authored color instead of a hardcoded warm
 /// constant). Black (the default) contributes exactly 0.</param>
 /// <param name="Inset">Optional refractive radial paint layer.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Bounce = default, SdfInset? Inset = null) {
+/// <param name="Bleed">The finite, nonnegative tint multiplying diffuse reflectance and emission sent into the
+/// indirect cache. Null means white; this does not change the directly viewed surface color.</param>
+/// <param name="Receive">The finite, nonnegative gain applied to indirect irradiance received by the surface.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>

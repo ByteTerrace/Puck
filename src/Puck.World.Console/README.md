@@ -47,7 +47,10 @@ authored/mutated through the same ordinary state doors any other row uses),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver`—the row's own
 gate, since a host running several rows has one gate per row and a singleton
-would always arm whichever row it was constructed against), and `replay.*`
+would always arm whichever row it was constructed against). Its indirect form
+uses `IWorldIndirectReadiness` and a newer produced frame to retain every active
+shared cache's current-source fence identity, independently of view receiver
+admission. `replay.*`
 (`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
 `WorldReplayCommandModule.Inspect.cs`—record/stop/cancel/
 drive/fork/verify/inspect/list/status; a client-local control surface over the
@@ -58,7 +61,17 @@ itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
 `WorldReplaySnapshot` reads `WorldReplayInspector.DescribeRate`, a Server-internal
 coupling this project cannot see through, so only the verb surface lives here; the
 module reaches the tape, the inspector, and `WorldInstanceHost` by their
-already-public surface. `WorldCommandArguments` (the free-text-tail
+already-public surface. `world.history` (`WorldHistoryCommandModule`) is the
+in-session time-travel surface over the boot world's `WorldHistory`: on/off,
+status, row, seek, step, scrub, resume, branch, switch, save, diff, and
+replay-edit, plus the held `world.history.drag` the scrubber row's pointer binds.
+It pauses the boot row through `WorldInstanceHost` when a seek lands behind the
+head and releases it on resume. The verb is bindable. `step`, `scrub`, `resume`
+and `branch` run for a seat that holds `control` over `history`
+(`WorldHistoryCommandModule.Seat.cs`, `WorldHistory.TryAuthorize`), `row` for
+anyone, and every other form for the operator only. The history itself lives in
+[`Puck.World.Server`](../Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs).
+`WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 in `Puck.World` need it too.
@@ -77,8 +90,11 @@ entry: the frame that showed its tick, or a
 named `refusal` with its `detail` (the vocabulary is in the
 [parity README](../../tests/Puck.Parity/README.md)). While a capture waits for
 its frame, `AwaitsFrame` holds, and the host composes that frame before its
-next step. The offscreen host goes further and steps no tick past the armed one
-until the capture is served or refused (`HoldsClock`). The hold counts from
+next step. Both rendered hosts, windowed and offscreen, go further and step no
+tick past the armed one until the capture is served or refused (`HoldsClock`),
+composing the owed frame again meanwhile. A capture a script arms with
+`world.screenshot` (`ArmUnscheduled`) is held for the same way, from the same
+budgets, but writes no manifest entry: its outcome is its own request's. The hold counts from
 readiness: time held while the engine is not ready (`IWorldEngineReadiness`,
 its pipeline set not yet installed or no frame produced from it) is spent from
 `BuildHoldBudgetSeconds` (180) per run, and time held once it is ready from
@@ -90,6 +106,16 @@ scheduler counts `world.captures.held` and `world.captures.ticks-while-armed`
 under its `world.captures` work source. It lives here rather than in `Puck.World.Client` because it reads
 `WorldServer` (the capture state hash and the `SolidField` inside-check), a
 reference Client is denied.
+
+The read-back modules for the rest of the server-side surface live here too:
+`world.counters` (`WorldCountersCommandModule`, which prints a section per
+registered `IWorkCounterSource`, plus the render nodes' GPU work and an
+allocation reading; `WorldCountersServiceRegistration` registers it and the
+server's own counters), `world.lighting` (`WorldLightingCommandModule`, the
+`render` section's lights, sky, grounding and tonemap), `world.timeline`
+(`WorldTimelineCommandModule`, the named clocks), `world.extensions`
+(`WorldExtensionsCommandModule`, the host-approved extension runtime), and
+`machine.state`/`machine.operation` (`WorldMachineCommandModule`).
 
 `WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
 `IWorldNarrationSink` implementation every composition root binds so a

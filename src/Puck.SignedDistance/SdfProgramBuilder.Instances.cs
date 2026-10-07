@@ -10,12 +10,8 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="InvalidOperationException">The composed palette already holds <see cref="ScreenMaterialId"/>
     /// materials (see the ceiling check below).</exception>
     public int AddMaterial(SdfMaterial material) {
-        // Every field lands verbatim in the three packed palette words (SdfProgram writes Albedo/Emissive, then
-        // Specular/Roughness/Sheen/Metal, then Coat), so all seven are shading inputs with no host-side
-        // normalization: a negative reflectance or emissive/specular strength has no physical reading, an
-        // out-of-[0,1] roughness/sheen/metal/coat falls outside the curve this material model derives its GGX alpha
-        // and fresnel lift from, and a NaN in any of them propagates into the shaded colour of every pixel the
-        // material wins.
+        // Packed shading inputs retain their authored values; admission rejects invalid domains before either
+        // the view or indirect transport can propagate a non-finite or negative color into its output.
         RequireNonNegative(
             value: material.Albedo,
             paramName: nameof(material),
@@ -62,10 +58,12 @@ public sealed partial class SdfProgramBuilder {
             subject: "A material shading-normal soften"
         );
         RequireNonNegative(
-            value: material.Bounce,
+            value: material.Fill,
             paramName: nameof(material),
-            subject: "A material bounce tint"
+            subject: "A material fill tint"
         );
+        RequireNonNegative(value: (material.Bleed ?? Vector3.One), paramName: nameof(material), subject: "A material bleed tint");
+        RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
             weathering: material.Weathering
@@ -112,10 +110,11 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="cameraHidden">Whether the camera never sees the instance, while shadows and ambient occlusion still
     /// read it (<see cref="SdfInstanceRange.CameraHidden"/>).</param>
+    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
-    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
+    /// <paramref name="boundRadius"/> is not finite and non-negative, or <paramref name="indirect"/> is undefined.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -127,7 +126,8 @@ public sealed partial class SdfProgramBuilder {
             isDynamic: false,
             center: boundCenter,
             radius: boundRadius,
-            slot: 0
+            slot: 0,
+            indirect: indirect
         );
 
         return this;
@@ -145,11 +145,12 @@ public sealed partial class SdfProgramBuilder {
     /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
     /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
     /// almost nothing. Its mask bit is always 0 — Stage 1 never marches it.</param>
+    /// <param name="indirect">The whole instance's indirect-light participation; Default follows the frame's body policy.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
-    /// non-negative.</exception>
+    /// non-negative, or <paramref name="indirect"/> is undefined.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true) {
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -161,7 +162,8 @@ public sealed partial class SdfProgramBuilder {
             center: boundOffset,
             isDynamic: true,
             radius: boundRadius,
-            slot: slot
+            slot: slot,
+            indirect: indirect
         );
 
         return this;
@@ -192,11 +194,12 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
+    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
-    /// non-negative.</exception>
-    public SdfProgramBuilder DynamicInstance(int slot, Vector3 boundOffset, float boundRadius, Action<SdfProgramBuilder> emit) {
+    /// non-negative, or <paramref name="indirect"/> is undefined.</exception>
+    public SdfProgramBuilder DynamicInstance(int slot, Vector3 boundOffset, float boundRadius, Action<SdfProgramBuilder> emit, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -206,6 +209,7 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundOffset,
             emit: emit,
+            indirect: indirect,
             isDynamic: true,
             radius: boundRadius,
             slot: slot
@@ -220,7 +224,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: "EndInstance was called with no open instance (unbalanced Begin/EndInstance).");
         }
 
-        if (m_fieldScope is not null) {
+        if (m_fieldScopes is { Count: > 0 }) {
             throw new InvalidOperationException(message: "EndInstance was called with a field scope still open (PushField without its PopField). Close every scope opened inside the instance before EndInstance.");
         }
 
@@ -240,7 +244,8 @@ public sealed partial class SdfProgramBuilder {
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
             Active: m_openInstanceActive,
-            CameraHidden: m_openInstanceCameraHidden
+            CameraHidden: m_openInstanceCameraHidden,
+            Indirect: m_openInstanceIndirect
         ));
 
         m_openInstanceFirst = -1;
@@ -253,10 +258,11 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
+    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
-    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
-    public SdfProgramBuilder Instance(Vector3 boundCenter, float boundRadius, Action<SdfProgramBuilder> emit) {
+    /// <paramref name="boundRadius"/> is not finite and non-negative, or <paramref name="indirect"/> is undefined.</exception>
+    public SdfProgramBuilder Instance(Vector3 boundCenter, float boundRadius, Action<SdfProgramBuilder> emit, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -266,6 +272,7 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundCenter,
             emit: emit,
+            indirect: indirect,
             isDynamic: false,
             radius: boundRadius,
             slot: 0

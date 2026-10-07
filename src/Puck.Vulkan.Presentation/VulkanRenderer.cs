@@ -20,6 +20,7 @@ namespace Puck.Vulkan.Presentation;
 public sealed class VulkanRenderer(
     VulkanRendererOptions options,
     PresentationOptions presentationOptions,
+    PresentationWork presentation,
     IVulkanInstanceFactory instanceFactory,
     IVulkanSurfaceFactory surfaceFactory,
     IVulkanPhysicalDeviceSelector physicalDeviceSelector,
@@ -102,8 +103,9 @@ public sealed class VulkanRenderer(
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
 
     /// <summary>The renderer's presentation counters, the <c>presentation.vulkan</c> work source: each
-    /// <see cref="VulkanFramePresentationResult.Skipped"/> outcome counts one <c>presentation.skipped</c>.</summary>
-    public PresentationWork Presentation { get; } = new(name: "presentation.vulkan");
+    /// <see cref="VulkanFramePresentationResult.Skipped"/> outcome counts one <c>presentation.skipped</c>. The
+    /// composition owns the source and hands it in, so a counter readout never has to create the renderer.</summary>
+    public PresentationWork Presentation { get; } = presentation;
 
     /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
     public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
@@ -370,7 +372,8 @@ public sealed class VulkanRenderer(
         } else if (outcome.Result == VulkanFramePresentationResult.ResetVulkanResources) {
             // Device/surface lost — surface it as the neutral recoverable signal for the host pump (this outcome was
             // produced but consumed nowhere before; it is now the device-loss recovery trigger).
-            throw new DeviceLostException(message: "Vulkan present reported a lost device or surface.");
+            throw new DeviceLostException(message: ("Vulkan present reported a lost device or surface." +
+                ((m_device.Commands.Fault.Report is { } report) ? $"\n{report}" : string.Empty)));
         } else if (outcome.Result == VulkanFramePresentationResult.Skipped) {
             // The fence/acquire was not ready this tick — no GPU work submitted. Counted as presentation.skipped, which
             // world.counters reads; not itself an error, so nothing else reacts to it. Under the frame ring this path
@@ -450,7 +453,7 @@ public sealed class VulkanRenderer(
         }
 
         // Unbounded like vkDeviceWaitIdle; a device loss surfaces as the neutral DeviceLostException for recovery.
-        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(operation: "vkWaitForFences");
+        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(device: synchronization.Device, operation: "vkWaitForFences");
     }
     public void WaitForGpuIdle() {
         if (m_device is null) {

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Cli.Azure;
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -11,10 +12,7 @@ namespace Puck.Cli.Tests;
 /// <summary>Retained deployment inputs survive controller replacement without following a mutable latest secret,
 /// leaking bootstrap credentials to ordinary storage, or replacing an already published configuration.</summary>
 public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: ("puck-release-retention-" + Guid.NewGuid().ToString(format: "N"))
-    );
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-release-retention-");
     private readonly Guid m_owner = Guid.NewGuid();
     private readonly Secrets m_secrets = new();
     private readonly WorldReleaseManifest m_manifest = new() {
@@ -62,7 +60,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     );
     private WorldReleaseDeploymentStore Store() => new(
         m_blobs,
-        new DirectoryObjectStorageTarget(m_directory),
+        new DirectoryObjectStorageTarget(m_directory.RootPath),
         m_owner,
         m_secrets
     );
@@ -97,12 +95,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     }
     public void Dispose() {
         m_provider.Dispose();
-        if (Directory.Exists(path: m_directory)) {
-            Directory.Delete(
-            m_directory,
-            recursive: true
-        );
-        }
+        m_directory.Dispose();
     }
     [Fact]
     public async Task LostSecretWriteResponseLeavesNoReferenceAndRetryPublishesVerifiedInputs() {
@@ -135,6 +128,58 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             Token
         ));
     }
+    // The retained reference carries the shape fingerprint the ledger records for its layout; a reference of the same schema
+    // under another shape is refused by the fingerprint's name before it selects a secret version.
+    [Fact]
+    public async Task AReferenceOfAnotherShapeIsRefusedByItsFingerprint() {
+        await Store().SaveAsync(
+            m_manifest,
+            Configuration(),
+            Token
+        );
+
+        var recorded = FormatLedgerShapes.Of(id: "WorldReleaseDeploymentStore.Schema");
+        var file = Assert.Single(
+            collection: Directory.EnumerateFiles(
+            path: m_directory.RootPath,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.json"
+        ),
+            predicate: static candidate => candidate.Replace(
+            newChar: '/',
+            oldChar: Path.DirectorySeparatorChar
+        ).Contains(value: "/releases/deployments/")
+        );
+        var text = File.ReadAllText(path: file);
+
+        Assert.Contains(
+            actualString: text,
+            expectedSubstring: recorded
+        );
+        Assert.NotNull(@object: await Store().LoadAsync(
+            m_manifest,
+            "official",
+            Token
+        ));
+        File.WriteAllText(
+            contents: text.Replace(
+                newValue: "0000000000000000",
+                oldValue: recorded
+            ),
+            path: file
+        );
+
+        var refusal = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().LoadAsync(
+            m_manifest,
+            "official",
+            Token
+        ));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "shape fingerprint '0000000000000000'"
+        );
+    }
     [Fact]
     public async Task RestartReadsExactVersionAndOrdinaryStorageContainsNoBootstrapSecret() {
         var configuration = Configuration();
@@ -162,7 +207,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             restored.Parameters["bootstrapCommand"]!.GetValue<string>()
         );
         foreach (var file in Directory.EnumerateFiles(
-            path: m_directory,
+            path: m_directory.RootPath,
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         )) {

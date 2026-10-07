@@ -22,7 +22,10 @@ public enum WorldModelAccess : byte {
 /// <param name="DeclaringType">The type that declares the C# member, which a derived record inherits it from.</param>
 /// <param name="Member">The C# member's name.</param>
 /// <param name="Access">How the member is read and written.</param>
-public sealed record WorldModelMember(string Name, Type Type, Type DeclaringType, string Member, WorldModelAccess Access);
+public sealed record WorldModelMember(string Name, Type Type, Type DeclaringType, string Member, WorldModelAccess Access) {
+    /// <summary>Gets the generated reader for this document member.</summary>
+    public Func<object, object?>? Get { get; init; }
+}
 /// <summary>One arm of a polymorphic world document model type.</summary>
 /// <param name="Discriminator">The arm's <c>$type</c> value; <see langword="null"/> for an arm with no string
 /// discriminator.</param>
@@ -62,6 +65,8 @@ public static partial class WorldModelShape {
     });
 
     /// <summary>Gets every type the table holds.</summary>
+    /// <exception cref="InvalidOperationException">The assembly is the schema-only bootstrap build, which has no
+    /// generated model table.</exception>
     public static IReadOnlyCollection<WorldModelType> Types =>
         Table.Value.Values;
 
@@ -70,16 +75,25 @@ public static partial class WorldModelShape {
     /// <returns>The type's shape, or <see langword="null"/> when the type is not reachable from
     /// <see cref="WorldDefinition"/> or is a primitive, an enumeration or a string.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The assembly is the schema-only bootstrap build, which has no
+    /// generated model table.</exception>
     public static WorldModelType? Of(Type type) {
         ArgumentNullException.ThrowIfNull(argument: type);
 
         return Table.Value.GetValueOrDefault(key: (Nullable.GetUnderlyingType(nullableType: type) ?? type));
     }
 
+#if PUCK_SCHEMA_BOOTSTRAP
+    // The bootstrap generator uses its existing reflective walk; engine walks must never receive an empty table.
+    private static WorldModelType[] Generated() => throw new InvalidOperationException(
+        message: "The schema bootstrap assembly has no generated model table; run schema, then rebuild normally."
+    );
+#else
     private static WorldModelArm A(string? discriminator, Type type) =>
         new(Discriminator: discriminator, Type: type);
-    private static WorldModelMember M(string name, Type type, Type declaringType, string member, WorldModelAccess access) =>
-        new(Access: access, DeclaringType: declaringType, Member: member, Name: name, Type: type);
+    private static WorldModelMember M(string name, Type type, Type declaringType, string member, WorldModelAccess access, Func<object, object?>? get = null) =>
+        new(Access: access, DeclaringType: declaringType, Member: member, Name: name, Type: type) { Get = get };
     private static WorldModelType T(Type type, bool described, JsonTypeInfoKind kind, Type? elementType, WorldModelArm[] arms, WorldModelMember[] members, WorldModelMember[] properties) =>
         new(Arms: arms, Described: described, ElementType: elementType, Kind: kind, Members: members, Properties: properties, Type: type);
+#endif
 }

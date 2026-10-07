@@ -1,0 +1,48 @@
+schema: "puck.world.definition.v1"
+basis: "scenes"
+
+documentId: "indirect-near-emission"
+render {
+  lighting {
+    lights []
+  }
+}
+prototypes {
+  prototype "near-study" {
+    document {
+      palette [
+        { color: "#FFFFFF", emissive: 0, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }
+        // Metal removes reflected feedback without removing the independently observed emission.
+        { color: "#FF0000", emissive: 1, metal: 1, roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 0 }
+      ]
+      shape Box "receiver" {
+        material: 0
+        position [0, -0.025, 0]
+        scale [0.6, 0.025, 0.6]
+      }
+      shape Sphere "small-red-source" {
+        material: 1
+        position [0, 0.18, 0]
+        scale [0.06, 0.06, 0.06]
+      }
+    }
+  }
+}
+placements {
+  placement "near-study" {
+    prototype: "near-study"
+    position [0, 0, 0]
+  }
+}
+hud {
+  defaults {
+    enabled: true
+    cursor {
+      hoverRadius: 100
+      sizePx: 3
+      role: Accent
+      visible: null
+    }
+  }
+  panels []
+}

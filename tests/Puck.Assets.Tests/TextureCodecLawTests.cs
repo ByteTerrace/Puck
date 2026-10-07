@@ -707,7 +707,7 @@ public sealed class TextureCodecLawTests {
     }
 
     // The SHA-256 of each encoder's blocks for the fixed images above. An encoder change that moves them re-records them
-    // and moves SdfBaker.Version, since every bake's textures are these encoders' bytes.
+    // and regenerates DerivationFingerprint.Bake, since every bake's textures are these encoders' bytes.
     private const string PinnedBc4 = "57808ae1feae7b5e01d78d2bc225e447b62dbcebca2f5cbd494a60bb688d813f";
     private const string PinnedBc5 = "d1b9dfff4236b5b78d3bb3b6af70151346eafd5a99f578aea6f5f41e64e9e816";
     private const string PinnedBc6h = "b0df78800f41d301dd9ef1b949ac7ab913e02cda8310b0e73eea3100981000c2";

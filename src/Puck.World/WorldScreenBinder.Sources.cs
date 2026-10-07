@@ -1,9 +1,9 @@
-using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.World.Client;
+using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -26,30 +26,16 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <returns>The producer, which owns the feed.</returns>
     public IRenderGraphExternalProducer Adapt(WorldImageSourceOpening opening) => new WorldImageFeedProducer(
         fill: m_fillImage,
+        fillRender: m_fills.RenderOf,
         gate: m_captureGate,
         opening: opening
     );
     /// <inheritdoc/>
-    /// <remarks>A screen reading a source instance lights the room with its source's light, resolved through the capture
-    /// gate; a view films an already-lit world and lights nothing.</remarks>
-    public Vector3 Light(int screen) {
-        if (
-            !m_slots.ContainsKey(key: screen) ||
-            (Mappings.InstanceOf(screen: screen) is not { } instance)
-        ) {
-            return Vector3.Zero;
-        }
-
-        return ShownOf(screen: screen) switch {
-            WorldScreenSource.Machine machine => (m_machines.VideoOutput(
-                instance: machine.Instance,
-                output: machine.Output
-            )?.EmittedLight ?? Vector3.Zero),
-            _ => ((FeedOf(instance: instance) is { } source)
-                ? ResolveLight(feed: source)
-                : Vector3.Zero),
-        };
-    }
+    public bool Emits(int screen) => (m_slots.TryGetValue(key: screen, value: out var slot) && (ShownOf(screen: screen) switch {
+        WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
+        WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldInstanceHost.BootInstanceName)),
+        _ => false,
+    }));
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
     public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(
@@ -61,17 +47,21 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     );
     /// <summary>Creates the upload of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>): once per
     /// completed tick it writes the named machine output's latest complete frame into the instance's region, which the
-    /// runtime converts once however many screens show it.</summary>
+    /// runtime converts once however many screens show it. The machine is its world's own, read from the host of the
+    /// world instance its settings name (<see cref="MachinesOf"/>), the boot world's or a world shown through a screen,
+    /// so the source shows nothing while that world runs on another authority.</summary>
     /// <param name="context">The source instance and its settings.</param>
-    /// <returns>The upload, which owns nothing: the machine belongs to <see cref="Server.WorldMachineHost"/>.</returns>
+    /// <returns>The upload, which owns nothing: the machine belongs to its world's machine host.</returns>
     public IRenderGraphSourceUpload MachineSource(RenderGraphExternalProducerContext context) {
-        var source = (SourceOf(context: context) as WorldScreenSource.Machine);
+        var instance = SourceInstanceOf(context: context);
+        var source = (WorldSourceInstances.SourceOf(instance: instance) as WorldScreenSource.Machine);
+        var world = WorldSourceInstances.WorldOf(instance: instance);
 
         return new MachineVideoSourceUpload(
             name: context.Instance,
-            output: () => ((source is null)
+            output: () => (((source is null) || (world is null))
                 ? null
-                : m_machines.VideoOutput(
+                : MachinesOf(world: world)?.VideoOutput(
                     instance: source.Instance,
                     output: source.Output
                 )),
@@ -80,25 +70,67 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     }
     /// <summary>Creates the producer of a probe source instance (<see cref="WorldImageProducerSettings.ProbeId"/>): an
     /// imported source adapted like any other (<see cref="Adapt"/>), whose feed is the probe output's ring, so the capture
-    /// gate hands out its latest published slot, or its capture fill while the gate fills.</summary>
+    /// gate hands out its latest published slot, or its capture fill while the gate fills. Only the boot world runs a
+    /// probe host: a probe of a world shown through a screen opens with a fault naming that world.</summary>
     /// <param name="context">The source instance and its settings.</param>
     /// <returns>The producer, whose feed owns nothing: the probe's ring belongs to this binder.</returns>
-    public IRenderGraphExternalProducer ProbeSource(RenderGraphExternalProducerContext context) => Adapt(opening: ((SourceOf(context: context) is WorldScreenSource.Probe probe)
-        ? new WorldImageSourceOpening(
-            Context: context,
-            Fault: null,
-            Feed: new ProbeSourceFeed(feed: GetOrAddProbeFeed(id: probe.Id))
-        )
-        : new WorldImageSourceOpening(
-            Context: context,
-            Fault: $"probe source '{context.Instance}' names no probe",
-            Feed: null
-        )));
+    public IRenderGraphExternalProducer ProbeSource(RenderGraphExternalProducerContext context) {
+        var instance = SourceInstanceOf(context: context);
+        var world = WorldSourceInstances.WorldOf(instance: instance);
+
+        return Adapt(opening: (WorldSourceInstances.SourceOf(instance: instance) switch {
+            WorldScreenSource.Probe probe when string.Equals(
+                a: world,
+                b: WorldInstanceHost.BootInstanceName,
+                comparisonType: StringComparison.Ordinal
+            ) => new WorldImageSourceOpening(
+                Context: context,
+                Fault: null,
+                Feed: new ProbeSourceFeed(feed: GetOrAddProbeFeed(id: probe.Id))
+            ),
+            WorldScreenSource.Probe probe => new WorldImageSourceOpening(
+                Context: context,
+                Fault: $"probe '{probe.Id}' of world '{world}': no probe host runs for a world shown through a screen",
+                Feed: null
+            ),
+            _ => new WorldImageSourceOpening(
+                Context: context,
+                Fault: $"probe source '{context.Instance}' names no probe",
+                Feed: null
+            ),
+        }));
+    }
+    /// <summary>Returns the machine host of a world instance this process runs: the boot world's own, or the host of a
+    /// local instance a screen shows or a seat is presented in, which steps that world's machines on its own ticks.</summary>
+    /// <param name="world">The world instance's name.</param>
+    /// <returns>The host, or <see langword="null"/> for a world this process does not run, whose machines run on its own
+    /// authority and reach no screen here.</returns>
+    public IWorldMachineHost? MachinesOf(string world) {
+        if (string.Equals(
+            a: world,
+            b: WorldInstanceHost.BootInstanceName,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return m_machines;
+        }
+
+        return ((m_instanceHost.TryGet(
+            instance: out var instance,
+            name: world
+        ) && (instance is not null))
+            ? instance.Server.Machines
+            : null);
+    }
     /// <inheritdoc/>
-    /// <remarks>A screen reads the instance of the source it shows: its row's, or the one a live presentation verb bound
-    /// over the row; the source instance of a producer, machine or probe source, and the view instance of a camera view
-    /// or a session.</remarks>
-    public string? ReadOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
+    /// <remarks>Every view of the world's residency, a seat's or a camera's, shows the world's screens alike
+    /// (<see cref="InstanceOf"/>).</remarks>
+    public string? ReadOf(int view, int screen) => InstanceOf(screen: screen);
+    /// <summary>Returns the name of the instance a screen of the boot world reads: the source it shows, its row's or the
+    /// one a live presentation verb bound over the row; the source instance of a producer, machine or probe source, and
+    /// the view instance of a camera view or a session.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> when the screen shows nothing or text.</returns>
+    public string? InstanceOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
         key: screen,
         value: out var slot
     )
@@ -106,12 +138,12 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         : null
     ));
 
-    // The screen source a source instance's settings name.
-    private static WorldScreenSource? SourceOf(RenderGraphExternalProducerContext context) => WorldSourceInstances.SourceOf(instance: RenderGraphInstance.Source(
+    // The source instance a producer context opens, rebuilt from its package and settings.
+    private static RenderGraphInstance SourceInstanceOf(RenderGraphExternalProducerContext context) => RenderGraphInstance.Source(
         name: context.Instance,
         producer: context.Package[RenderGraphInstance.SourcePackagePrefix.Length..],
         settings: context.Settings
-    ));
+    );
     // The feed a running source instance opened: an imported producer's (a probe's included) through its adapter, an
     // uploaded producer's through its upload; null for a machine source, one the set does not run, or no runtime.
     private IWorldImageFeed? FeedOf(string instance) {

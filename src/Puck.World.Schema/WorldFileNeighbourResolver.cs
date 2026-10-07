@@ -13,7 +13,7 @@ namespace Puck.World;
 /// document names its neighbours by a <see cref="WorldReference.Document"/> locator relative to its own directory
 /// (the island names <c>"shards/quilt-nw"</c>; a shard names <c>"quilt-ne"</c> beside itself and <c>"../puck"</c>
 /// above it), so "relative to the document that names it" is the whole resolution rule, and the file read is that
-/// name's document file (<see cref="WorldDocumentName"/>), never a catalog or a discovery step. The definition handed
+/// name's document file (<see cref="WorldDocumentName"/>), or, where no such file stands, the <c>.puck</c> source of that name lowered through the local document source, never a catalog or a discovery step. The definition handed
 /// back is read from the base directory, so every locator the neighbour authored is re-expressed against that base
 /// (<see cref="ReexpressReferences"/>): the derived-corner walk compares two neighbours' locators for one third
 /// document by string and resolves the winner beside the reading document, and both hold only when every locator
@@ -115,7 +115,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: nameReason);
         }
 
-        if (!File.Exists(path: path)) {
+        if (!WorldDefinitionFileSource.DocumentFileExists(path: path)) {
             return WorldNeighbourResolution.Unavailable(reason: $"no local copy at '{path}'");
         }
 

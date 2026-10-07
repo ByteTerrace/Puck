@@ -88,7 +88,7 @@ public sealed class VulkanGpuImage : IGpuImage {
                     Format: vkFormat,
                     ImageHandle: image.ImageHandle
                 )
-            ).ThrowIfFailed(operation: "vkCreateImageView");
+            ).ThrowIfFailed(device: device, operation: "vkCreateImageView");
 
             return new VulkanGpuImage(
                 device: device,

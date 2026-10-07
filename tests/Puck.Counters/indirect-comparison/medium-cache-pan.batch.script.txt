@@ -1,0 +1,18 @@
+# Restore the same stationary authored inputs while retaining the actual shared cache.
+world.indirect-method cache
+world.state.cell.set dayRunning $value 0
+world.state.cell.set orbitRunning $value 0
+world.state.cell.set cameraPose $value 0
+world.state.cell.set orbitYaw $value 0.0
+world.state.cell.set dayPhase $value 0.25
+# Warm-up ends at current geometry/lighting source completion on the existing GPU fence.
+world.rate pause
+world.wait indirect 180
+world.rate resume
+world.state.cell.set cameraPose $value 1
+world.wait 120
+# Retain actual body participation and disjoint residency bytes beside this counter response.
+body.where 0
+world.looks
+world.budget
+world.counters --json

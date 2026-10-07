@@ -51,9 +51,15 @@ namespace Puck.World;
 /// admits. The editor verb family moved to <see cref="AddWorldAuthoritativeCore"/> wholesale because nothing
 /// in its dependency chain is GPU-typed; <see cref="WorldUiCommandModule"/> and <see cref="WorldWheelCommandModule"/>
 /// stay core-registered too but resolve their presentation dependency as optional and refuse by name at use — they
-/// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
+/// genuinely need their live presentation dependencies; the wheel also needs a windowed overlay.</para>
 /// </summary>
 public static class WorldBootComposition {
+    private static WorldRenderSettings ReadRenderQuality(WorldDefinition definition) {
+        var settings = new WorldRenderSettings(defaults: definition.Render);
+
+        settings.ReadQuality(definition: definition);
+        return settings;
+    }
     // Points the render probe's sdf.transforms forwarder at the presenter's moved set the moment the presenter is built,
     // so world.counters can register it, and read it, before the presenter exists.
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
@@ -79,7 +85,7 @@ public static class WorldBootComposition {
 
         // The graph pointer's source: the process's one pointer store, read NON-destructively (position + primary
         // button — never the drained motion/wheel accumulators WorldSeatViewInput owns), on the seat the pointer rides.
-        // An offscreen boot registers no pointer, so its graphs see no press.
+        // An offscreen boot has no input observer; its inspection override never writes a press into this store.
         if (
             (sp.GetService<WorldPointer>() is { } pointer) &&
             (sp.GetService<PlayerRoster>() is { } roster)
@@ -100,6 +106,29 @@ public static class WorldBootComposition {
 
         host.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
         return host;
+    }
+    // Both GPU shapes inspect their actual composed view through one cursor feed and picker. Offscreen has no
+    // window observer or overlay; its console override supplies the point and its HUD store stays empty.
+    private static void AddWorldInspection(IServiceCollection services) {
+        services.AddSingleton<WorldPointer>();
+        services.AddSingleton<WorldSeatViewInput>();
+        services.AddSingleton<WorldSeatViewports>();
+        services.AddSingleton<HudStore>();
+        services.AddSingleton<CursorStore>();
+        services.AddSingleton<WorldInspector>();
+        services.AddSingleton<IInspectorSource>(implementationFactory: static sp => sp.GetRequiredService<WorldInspector>());
+        services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
+            bindings: sp.GetRequiredService<WorldSeatBindings>(),
+            pointer: sp.GetRequiredService<WorldPointer>(),
+            roster: sp.GetRequiredService<PlayerRoster>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            viewInput: sp.GetRequiredService<WorldSeatViewInput>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            hud: sp.GetRequiredService<HudStore>(),
+            store: sp.GetRequiredService<CursorStore>(),
+            facts: sp.GetRequiredService<WorldOverlayFacts>(),
+            panes: sp.GetRequiredService<WorldViewGraphHost>()
+        ) { EditorSeats = sp.GetRequiredService<WorldEditorSeats>() });
     }
     // host.icon resolved the way every other document-relative path in this file is: against the world document's own
     // directory, so an author's icon travels beside their world file rather than having to be installed next to the
@@ -128,6 +157,12 @@ public static class WorldBootComposition {
         // The boot's own work counts, which every boot shape does before the first tick; a counters report reads
         // every registered work source.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBootWork.Process);
+        // What keeping presentation-tier recipients current costs: projections, deltas, their bytes and the anchor rows
+        // held per recipient.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
+        // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs
@@ -319,13 +354,13 @@ public static class WorldBootComposition {
         services.AddSingleton<FrameRateMonitor>();
         // The live render settings boot from the definition's render-lever defaults (then the console verbs move
         // them live).
-        services.AddSingleton(implementationFactory: static sp => new WorldRenderSettings(defaults: sp.GetRequiredService<WorldDefinition>().Render));
+        services.AddSingleton(implementationFactory: static sp => ReadRenderQuality(definition: sp.GetRequiredService<WorldDefinition>()));
 
         // The live-content platform seams the screen binder pulls CPU pixels through: the webcam (Media Foundation
         // on Windows, the CPU tier) and compositor-owned desktop-window capture. Registered here (not presentation)
         // because WorldScreenBinder's constructor needs them regardless of boot shape — see below. Puck.World
         // references both Puck.Platform.Windows and Puck.Platform.Linux directly (it stays one universal build, per
-        // CLAUDE.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
+        // AGENTS.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
         // them; it is not a falsifier target itself — that property belongs to Puck.Launcher.Linux/.Headless, which
         // touch neither package.
         if (OperatingSystem.IsWindows()) {
@@ -349,12 +384,13 @@ public static class WorldBootComposition {
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
-        // WorldMachineHost's own narration hub: it is a peer singleton to WorldServer (constructed before it, as its
-        // own constructor parameter — see the remarks below), so it cannot share WorldServer's hub without a
-        // circular dependency; this one is its own. Bound to stderr in the same factory that constructs it, before
-        // anything resolves it — WorldMachineHost narrates from inside its own constructor (a declared machine's
-        // boot fault), so attaching only after the container finishes building the host, the way
-        // WorldPostBuildWiring.Install attaches WorldInstanceHost's, would miss those lines.
+        // The narration hub of the peers constructed before WorldServer: WorldMachineHost (a constructor parameter of
+        // WorldServer — see the remarks below) and the owned-world catalog (its identity refusals and a replay's
+        // profile drift). Neither can share WorldServer's hub without a circular dependency, so this one is theirs.
+        // Bound to stderr in the same factory that constructs it, before anything resolves it — both narrate from
+        // inside their own constructors (a declared machine's boot fault, a refused owned world), so attaching only
+        // after the container finishes building them, the way WorldPostBuildWiring.Install attaches
+        // WorldInstanceHost's, would miss those lines.
         services.AddSingleton(implementationFactory: static sp => {
             var hub = new WorldOutputHub();
 
@@ -392,6 +428,9 @@ public static class WorldBootComposition {
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
 
+        // Where every presentation reports a bound value it clamps into its field's domain; WorldPostBuildWiring routes
+        // the reports to the host's diagnostic fan-out.
+        services.AddSingleton<WorldValueDomainGuard>();
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
@@ -422,6 +461,8 @@ public static class WorldBootComposition {
                 // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless
                 // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
+                paperWhiteNits: sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
+                domains: sp.GetRequiredService<WorldValueDomainGuard>(),
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.
@@ -433,10 +474,11 @@ public static class WorldBootComposition {
                 alwaysFillsCaptures: sp.GetRequiredService<WorldHostSettings>().Offscreen,
                 // Image producers the host registers beside the four the engine ships.
                 producers: [.. sp.GetServices<IWorldImageProducer>()]
-            );
+            ) { SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers };
         });
         // The slice of the binder the frame presenter drives each frame.
         services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
+        services.AddSingleton<IWorldViewHost>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
 
         // The participant/census and authoritative-diagnostic surface — world.players/.devices/.population plus
         // world.navigation/.budget. Split out of WorldCommandModule (which stays presentation-only) because these
@@ -515,8 +557,12 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
-        services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
-        services.AddSingleton<ICommandModule, WorldTimelineCommandModule>();
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldLightingCommandModule(authority: sp.GetRequiredService<IWorldConsoleAuthority>(), shadowReport: definition => sp.GetService<WorldFramePresenter>()?.DescribeShadowSlots(definition: definition), indirectReport: definition => (ReferenceEquals(objA: definition, objB: sp.GetRequiredService<WorldServer>().Definition) ? WorldIndirectDiagnosticText.Describe(sp.GetService<WorldRenderProbe>(), sp.GetService<WorldCursorFeed>()?.Explanation.Captured?.Indirect, sp.GetService<WorldCursorFeed>()?.Explanation.CapturedResidency) : null)));
+        // world.timeline reads the clocks off the authority and the keyed resolutions off the client's state mirror.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTimelineCommandModule(
+            authority: sp.GetRequiredService<IWorldConsoleAuthority>(),
+            presentation: server => (ReferenceEquals(objA: server, objB: sp.GetRequiredService<WorldServer>()) ? sp.GetRequiredService<WorldClient>().StateMirror : null)
+        ));
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.
@@ -591,6 +637,16 @@ public static class WorldBootComposition {
         // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
         services.AddSingleton<IWorldDocumentSource>(implementationInstance: PuckDocumentComposer.Instance);
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
+        // The in-session history (world.history): keyframes plus the tape capture's per-tick input, for deterministic
+        // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.
+        services.AddSingleton(implementationFactory: static sp => new WorldHistory(
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            server: sp.GetRequiredService<WorldServer>(),
+            stateRoot: sp.GetRequiredService<WorldStateRoot>(),
+            tape: sp.GetRequiredService<WorldReplayTape>()
+        ));
+        services.AddSingleton<ICommandModule, WorldHistoryCommandModule>();
 
         // The console's sequencing primitive: the tick barrier world.wait arms (published by the shared server-step
         // shell each fixed step) and the verb that arms it. CORE — world.wait is a server-safe verb by name (DELIVER
@@ -685,6 +741,7 @@ public static class WorldBootComposition {
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             population: sp.GetRequiredService<WorldPopulation>(),
             continuum: sp.GetRequiredService<WorldContinuum>(),
+            history: sp.GetRequiredService<WorldHistory>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
@@ -823,6 +880,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
             () => sp.GetRequiredService<TextCommandSource>(),
+            sp.GetRequiredService<WorldCaptureScheduler>(),
             sp.GetService<WorldRenderProbe>()
         ));
 
@@ -949,9 +1007,8 @@ public static class WorldBootComposition {
             worlds: provider.GetRequiredService<WorldOwnedWorlds>()
         ));
 
-        // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-        // Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its own, or has
-        // none), composed per seat with the seat's profile bindings and its live session rebinds. One WorldSeatBindings
+        // The player's controls as DATA: the world's binding overlays (the engine ships none — a world authors its own
+        // movement rows, inherits its basis's, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One WorldSeatBindings
         // resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
         // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal.
         // Constructed before the container builds, with the boot overlays; the roster, the rebind verbs, and the
@@ -1010,8 +1067,8 @@ public static class WorldBootComposition {
             services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
         } else if (hostSettings.Offscreen) {
             // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain. The server
-            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService additionally
-            // produces one composed frame per iteration.
+            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService steps it one
+            // tick per produced frame.
             services.AddLauncherOffscreenTerminal();
             if (OperatingSystem.IsWindows()) {
                 services.AddWindowsPrecisionWaiter();
@@ -1069,6 +1126,7 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfKernelSet.LoadWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfMeshLodSelector.ProcessWork);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
     }
@@ -1084,14 +1142,15 @@ public static class WorldBootComposition {
     /// <summary>
     /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the default render
     /// graph without the overlay (the world and its <c>views.post</c> passes; no console mirror, binding bar,
-    /// glyph atlas, HUD store, console-session bank, wheel, pointer, cursor, or audio-render-device registration), with NO
+    /// glyph atlas, console-session bank, wheel, pointer observer, or audio-render-device registration), with NO
     /// window and NO swap chain: see <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up.
     /// Registered only when <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c>
     /// (core-registered) works unchanged because it reaches the render graph's own <c>RequestCapture</c>, never a
     /// presenter or swap chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
     /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; <c>world.screens</c> and
     /// <c>world.view-refresh</c> are core (<see cref="ScreenCommandModule"/>), so an offscreen boot reads its screens back. Camera and session screens render
-    /// as in the windowed shape, through the views <see cref="WorldRenderRoot"/> configures.
+    /// as in the windowed shape, through the views <see cref="WorldRenderRoot"/> configures. The shared cursor feed
+    /// and inspector read those rendered views, including console pointer overrides, without drawing an overlay.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
@@ -1145,7 +1204,9 @@ public static class WorldBootComposition {
         // The render probe, and the plain per-frame state a bare world render (no overlay) still composes through:
         // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
         // and the SDF document intake itself. None of these touch a window or the GPU.
-        services.AddSingleton<WorldRenderProbe>();
+        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe {
+            IndirectSubmissionLog = ((sp.GetService<GpuDeviceOptions>()?.DebugLayers == true) ? Console.Error.WriteLine : null),
+        });
         // The capture world.screenshot <path> crossing arms for the first frame a seat presents after its route moves.
         services.AddSingleton(implementationFactory: static sp => new WorldCrossingCapture(
             captureTarget: () => sp.GetRequiredService<WorldRenderProbe>().Root,
@@ -1156,8 +1217,10 @@ public static class WorldBootComposition {
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
-        services.AddSingleton<WorldSeatViewports>();
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
+        AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
@@ -1195,7 +1258,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
@@ -1358,42 +1422,37 @@ public static class WorldBootComposition {
 
         // The pointer: ONE store of live browsing state (cursor position, drainable motion and wheel, held
         // buttons — per seat), ONE IWindowInputObserver that writes it, and any number of consumers that read it.
-        // Presentation-only (nothing here rides a CommandSnapshot), so it lives in this method rather than the
-        // authoritative-core one — a headless boot never sees a pointer to observe. A new pointer-driven feature
+        // Presentation-only (nothing here rides a CommandSnapshot): both GPU shapes share the store, while only this
+        // windowed shape observes input. A headless boot has neither. A new pointer-driven feature
         // registers an IWorldPointerConsumer below; it does NOT add a second window-input observer.
-        services.AddSingleton<WorldPointer>();
+        AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), pointer: sp.GetRequiredService<WorldPointer>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
 
         // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFramePresenter
         // composes onto the slot-0 chase camera anchor, and the pointer consumer that nudges it while the authored
         // arming button is held.
-        services.AddSingleton<WorldSeatViewInput>();
         services.AddSingleton<IWorldPointerConsumer>(implementationFactory: static sp => sp.GetRequiredService<WorldSeatViewInput>());
 
         services.AddSingleton<WorldPointerSink>();
         services.AddSingleton<IWindowInputObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldPointerSink>());
 
-        // The drawn cursor: the per-seat viewport+camera publication the frame source fills each dressed frame, the
-        // per-frame feed that reads the pointer store NON-destructively (position + held buttons; the drained
-        // motion/wheel accumulators stay WorldSeatViewInput's) and asks the render graph host's picker which pane it
-        // hovers, and the store the unified overlay's cursor writer renders. All presentation/session state — nothing
-        // here reaches a CommandSnapshot or the simulation.
-        services.AddSingleton<WorldSeatViewports>();
-        services.AddSingleton<CursorStore>();
-        services.AddSingleton<WorldInspector>();
-        services.AddSingleton<IInspectorSource>(implementationFactory: static sp => sp.GetRequiredService<WorldInspector>());
-        services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
-            bindings: sp.GetRequiredService<WorldSeatBindings>(),
-            pointer: sp.GetRequiredService<WorldPointer>(),
-            roster: sp.GetRequiredService<PlayerRoster>(),
-            client: sp.GetRequiredService<WorldClient>(),
-            viewInput: sp.GetRequiredService<WorldSeatViewInput>(),
-            viewports: sp.GetRequiredService<WorldSeatViewports>(),
-            hud: sp.GetRequiredService<HudStore>(),
-            store: sp.GetRequiredService<CursorStore>(),
-            facts: sp.GetRequiredService<WorldOverlayFacts>(),
-            panes: sp.GetRequiredService<WorldViewGraphHost>()
-        ) { EditorSeats = sp.GetRequiredService<WorldEditorSeats>() });
+        // The in-session history's scrubber row: the editor overlay draws it for each building seat, and the same row,
+        // attached as the history's pointer, turns a seat's pointer into the tick world.history.drag seeks to. A
+        // headless boot attaches none, so the drag does nothing there.
+        services.AddSingleton(implementationFactory: static sp => {
+            var history = sp.GetRequiredService<WorldHistory>();
+            var row = new WorldHistoryRow(
+                bindings: sp.GetRequiredService<WorldSeatBindings>(),
+                history: history,
+                pointer: sp.GetRequiredService<WorldPointer>(),
+                viewports: sp.GetRequiredService<WorldSeatViewports>()
+            );
+
+            history.Pointer = row;
+
+            return row;
+        });
+        services.AddSingleton<IHistoryRowSource>(implementationFactory: static sp => sp.GetRequiredService<WorldHistoryRow>());
         // The one pointer consumer that does ride a CommandSnapshot: the ray a Simulation screen reads, cast each host
         // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's
         // snapshots, so the seat verbs quantize it into the seat's intent on every tick.
@@ -1461,7 +1520,6 @@ public static class WorldBootComposition {
         // rect WorldOverlayFeed reads for its own per-seat viewport). The live binding resolver and the world.hud
         // verb surface are core (WorldBootComposition.AddWorldAuthoritativeCore) — only the on-screen render cache is
         // presentation-only.
-        services.AddSingleton<HudStore>();
         // The unified overlay's IOverlayFrameSources — adapts the binder's WorldFrameSource vocabulary (camera/
         // view/probe/capture) to the opaque key a HUD Frame element's overlay slot addresses its source by.
         // Registered as itself (WorldHudFeed calls KeyFor when building a Frame element) AND as the interface
@@ -1498,11 +1556,15 @@ public static class WorldBootComposition {
 
         // The render probe the world.debug-view verb and world.counters' gpu section read the live render nodes
         // through — a mutable holder the render-root factory below fills in once the world's residency exists.
-        services.AddSingleton<WorldRenderProbe>();
+        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe {
+            IndirectSubmissionLog = ((sp.GetService<GpuDeviceOptions>()?.DebugLayers == true) ? Console.Error.WriteLine : null),
+        });
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
+        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.
@@ -1559,7 +1621,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack
@@ -1606,15 +1669,11 @@ public static class WorldBootComposition {
                     sources: new UnifiedOverlaySources(
                         BindingBar: sp.GetRequiredService<BindingBarStore>(),
                         Console: sp.GetRequiredService<ConsoleTapeStore>(),
-                        // WorldHudFeed's Tick joins WorldOverlayFeed's in the same per-produced-frame hook — it only
-                        // reconciles HudStore's STRUCTURE on a definition-revision move (cheap on every other frame); live
-                        // binding VALUES are resolved separately, every frame, by HudWriter through HudBindings.
+                        // The windowed overlay updates its feeds after the world has produced, before it draws them.
+                        // A root with no overlay ticks the same inspection feed after producing the graph.
                         FeedTick: () => {
                             sp.GetRequiredService<WorldOverlayFeed>().Tick();
                             sp.GetRequiredService<WorldHudFeed>().Tick();
-                            // The cursor feed reads the viewports the frame source published THIS frame (the overlay pass
-                            // records after the world has produced), so it runs after the two feeds above only by
-                            // convention.
                             sp.GetRequiredService<WorldCursorFeed>().Tick();
                             sp.GetRequiredService<WorldInspector>().Tick();
                             // The radial menu orders against the cursor feed the same way: its hub anchor and hover
@@ -1635,7 +1694,8 @@ public static class WorldBootComposition {
                         HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
                         Cursor: sp.GetRequiredService<CursorStore>(),
                         Wheel: sp.GetRequiredService<WheelStore>(),
-                        Inspector: sp.GetRequiredService<IInspectorSource>()
+                        Inspector: sp.GetRequiredService<IInspectorSource>(),
+                        HistoryRow: sp.GetRequiredService<IHistoryRowSource>()
                     ),
                     theme: themeResolve.Resolve(
                         definition: sp.GetRequiredService<WorldDefinition>(),

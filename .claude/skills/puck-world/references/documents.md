@@ -82,10 +82,35 @@ because it discloses no `state` section, `Compose` answers every
 authority's own state and sends the literal (`WorldStateDocumentValues.TryFlatten`,
 on a rehydrated copy so the live document keeps the authored reference canonical
 write-back preserves), and `TryToDefinition` refuses BY NAME a peer that still
-names a cell no observed row carries.
+names a cell no observed row carries. Its `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` instead of the row; `Compose` takes the recipient's
+`WorldClockAnchorLedger` and refuses a clock whose row's slot, or a bindable
+whose bound cell (every cell for a per-body read), the recipient may not read,
+while a row a bindable binds that it may read crosses in `observations` whether
+or not it declares a policy, and `TryToDefinition` refuses a carried row, a malformed anchor, or a
+keyed clock the timeline does not carry.
 
-On the wire a document leaf is `[tier byte][document bytes]`
-(`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), so a receiver names
+A presentation-tier recipient is fed by one `WorldProjectionFeed` (the session
+sink and the federation projection sink each hold one): a whole projection first,
+then member deltas (`WorldDocumentBasis.Diff`) only when a member changed, all as
+compact canonical JSON (`WorldProjection.SerializeCompact`), and a
+timeline delta at the authoritative ticks a held anchor's prediction misses.
+A held anchor ahead of the authority's engine tick (a restore or a history seek
+moved the authority behind it) is stale: `WorldClockAnchorLedger.Carry` and
+`Step` drop it first, counted as a released anchor row, and carry what a fresh
+recipient composed at that tick holds (the row's anchor, the clock's seed, or no
+anchor), and the step's timeline delta clears it on the recipient
+(`ProjectionAnchorLawTests`).
+`WorldProjectionHold` is the receiving half. The feed counts under
+`WorldProjectionWork` (`world.projection`), whose anchor rows retained and
+released are the per-recipient anchor memory.
+
+On the wire a document leaf is `[tier byte][version][document bytes]`
+(`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), and a
+presentation-tier delta a `ProjectionDelta` leaf that adds the authoritative tick
+and engine tick before the delta (`EncodeProjectionDelta`/
+`TryDecodeProjectionDelta`), so a receiver names
 what it was handed rather than sniffing it — the observation lane narrates it
 once per tier change on stderr. A traveler's reservation carries a
 `WorldIdentityProjection` (id, name, colour, move/turn rate), never its owned
@@ -141,8 +166,11 @@ shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
 runtime code consumes; see `WorldInputHoldSettings`'s remarks), `Rules`,
 `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
 `Generators`, `References`, `Portals`,
-`Simulation`, `Destinations`, `Admission`, `Adjacencies`, `Text`, and
-`Metadata` — plus `Schema` and the `[JsonExtensionData]` `Extensions` bag.
+`Simulation`, `Destinations`, `Admission`, `Adjacencies`, `Text`,
+`Metadata`, `Icons`, `Theme`, `Markers`, `SeatModes`, `Probes`, `Captures`,
+`Schedule`, `Update`, `Music`, `Navigation`, `Patterns`, `Tables`, `Search`,
+`RuleGroups`, `Sets`, `Editor`, and `Timeline` — plus `Schema` and the
+`[JsonExtensionData]` `Extensions` bag.
 Scenery is authored through `Placements`.
 
 `Dynamics`, `Curves`, `Rules`, `References`, `Gravity`, `Portals`,

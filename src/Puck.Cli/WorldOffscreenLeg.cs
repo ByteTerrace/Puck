@@ -16,9 +16,6 @@ internal static class WorldOffscreenLeg {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly string UnsupportedPrefix = Puck.Launcher.LauncherHostRun.UnsupportedLinePrefix(label: "world");
 
-    /// <summary>The World flag that creates the GPU device with its backend's validation layer.</summary>
-    public const string DebugLayersFlag = "--debug-layers";
-
     /// <summary>The graphics backends a leg runs on, in the order a verb runs them.</summary>
     public static IReadOnlyList<string> Backends { get; } = ["vulkan", "directx"];
 
@@ -34,25 +31,13 @@ internal static class WorldOffscreenLeg {
     public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact) {
         var built = WorldArtifactBuild.TryResolve(
             artifact: out artifact,
-            build: out var build,
             error: out var buildError,
+            logDirectory: runDirectory,
             repositoryRoot: repositoryRoot,
             timeout: timeout,
             verb: verb
         );
 
-        if (build is not null) {
-            WriteLog(
-                name: "build-stdout.log",
-                runDirectory: runDirectory,
-                text: build.Stdout
-            );
-            WriteLog(
-                name: "build-stderr.log",
-                runDirectory: runDirectory,
-                text: build.Stderr
-            );
-        }
         if (!built) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
         }

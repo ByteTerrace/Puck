@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -13,17 +14,12 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
         <!-- Puck.Commands exposes DocumentIdentifier in its public binding model; several fixtures here name
              Puck.Abstractions types directly, so the contract owner is referenced explicitly rather than relied on
              transitively through Puck.Commands. -->
-        <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../../src/Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../../src/Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../../src/Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

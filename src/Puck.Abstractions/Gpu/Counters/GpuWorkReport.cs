@@ -12,6 +12,7 @@ namespace Puck.Abstractions.Gpu;
 /// <code>
 /// work submission=S revision=R
 /// work &lt;label&gt; executed: dispatches=N dispatches.indirect=N …
+/// work &lt;label&gt; detail=&lt;detail&gt; executed: dispatches=N …
 /// work &lt;label&gt; skipped
 /// work &lt;label&gt; not-reached
 /// work outside: dispatches=N …
@@ -81,7 +82,8 @@ public static class GpuWorkReport {
         );
     }
     /// <summary>Appends one node's lines: <c>node &lt;name&gt; </c> followed by its newest completed submission's lines
-    /// (<see cref="AppendCompleted"/>), then, when the node counts object lifetimes, its lifetime line.</summary>
+    /// (<see cref="AppendCompleted"/>), then, when the node counts object lifetimes, its lifetime line, then, when it reports
+    /// them, <c>owned-bytes=N</c> on a line of its own.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <param name="node">The node to write.</param>
     /// <param name="sample">The caller's sample, overwritten by the read.</param>
@@ -98,18 +100,22 @@ public static class GpuWorkReport {
             source: node.Work
         );
 
-        return ((node.Lifetime is { } lifetime)
-            ? AppendLifetime(
+        if (node.Lifetime is { } lifetime) {
+            _ = AppendLifetime(
                 builder: builder,
                 source: lifetime
-            )
+            );
+        }
+
+        return ((node.OwnedBytes is { } owned)
+            ? builder.Append(value: "owned-bytes=").Append(value: owned).Append(value: '\n')
             : builder
         );
     }
     /// <summary>Writes one node as the JSON object
-    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|not-reached","counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null}</c>.
+    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|standing|not-reached","details":[{"label":…,"counts":{…}}],"counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null,"owned-bytes":N|null}</c>.
     /// A pass's <c>class</c> is <see cref="GpuWorkSample.GetPassClass"/>. A pass that did not execute carries no
-    /// <c>counts</c>; <c>sample</c> is <see langword="null"/> while no submission has completed.</summary>
+    /// <c>counts</c> on either the pass or its details; <c>sample</c> is <see langword="null"/> while no submission has completed.</summary>
     /// <param name="writer">The writer to write to.</param>
     /// <param name="node">The node to write.</param>
     /// <param name="sample">The caller's sample, overwritten by the read.</param>
@@ -145,15 +151,24 @@ public static class GpuWorkReport {
             writer.WriteNullValue();
         }
 
+        writer.WritePropertyName(propertyName: "owned-bytes");
+
+        if (node.OwnedBytes is { } owned) {
+            writer.WriteNumberValue(value: owned);
+        } else {
+            writer.WriteNullValue();
+        }
+
         writer.WriteEndObject();
     }
     /// <summary>Appends one sample's lines: the submission line, one line per pass in pass order, then the outside
     /// line; or <c>work unavailable</c> when <paramref name="sample"/> holds no submission.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <param name="sample">The sample to write.</param>
+    /// <param name="includePass">An optional pass selection; a selected report omits work outside passes.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> or <paramref name="sample"/> is <see langword="null"/>.</exception>
-    public static StringBuilder AppendSample(StringBuilder builder, GpuWorkSample sample) {
+    public static StringBuilder AppendSample(StringBuilder builder, GpuWorkSample sample, Func<string, bool>? includePass = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(sample);
 
@@ -177,6 +192,7 @@ public static class GpuWorkReport {
         var kinds = GpuWork.SubmissionKinds;
 
         for (var pass = 0; (pass < sample.PassCount); pass++) {
+            if ((includePass is not null) && !includePass(labels[pass])) { continue; }
             var state = sample.GetPassState(pass: pass);
 
             _ = builder.Append(value: "work ").Append(value: labels[pass]).Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));
@@ -199,8 +215,24 @@ public static class GpuWorkReport {
             }
 
             _ = builder.Append(value: '\n');
+            for (var detail = 0; (detail < sample.Details.Length); detail++) {
+                var identity = sample.Details[detail];
+
+                if (identity.Pass != pass) { continue; }
+                _ = builder.Append(value: "work ").Append(value: labels[pass]).Append(value: " detail=").Append(value: identity.Detail)
+                    .Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));
+                if (state == GpuPassState.Executed) {
+                    _ = builder.Append(value: ':');
+                    for (var column = 0; (column < kinds.Length); column++) {
+                        _ = sample.TryGetDetailCount(column: column, detail: detail, value: out var value);
+                        AppendCount(builder: builder, kind: kinds[column], value: value);
+                    }
+                }
+                _ = builder.Append(value: '\n');
+            }
         }
 
+        if (includePass is not null) { return builder; }
         _ = builder.Append(value: "work outside:");
 
         for (var column = 0; (column < kinds.Length); column++) {
@@ -247,6 +279,24 @@ public static class GpuWorkReport {
                 propertyName: "state",
                 value: EnumWireName<GpuPassState>.Of(value: state)
             );
+            writer.WriteStartArray(propertyName: "details");
+            for (var detail = 0; (detail < sample.Details.Length); detail++) {
+                var identity = sample.Details[detail];
+
+                if (identity.Pass != pass) { continue; }
+                writer.WriteStartObject();
+                writer.WriteString(propertyName: "label", value: identity.Detail);
+                if (state == GpuPassState.Executed) {
+                    writer.WriteStartObject(propertyName: "counts");
+                    for (var column = 0; (column < kinds.Length); column++) {
+                        _ = sample.TryGetDetailCount(column: column, detail: detail, value: out var value);
+                        writer.WriteNumber(propertyName: kinds[column].Name, value: value);
+                    }
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
 
             if (state == GpuPassState.Executed) {
                 writer.WriteStartObject(propertyName: "counts");

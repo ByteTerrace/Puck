@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 13,
+        "width": 14,
         "height": 1
       }
     }

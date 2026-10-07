@@ -4,8 +4,9 @@ namespace Puck.Hosting;
 
 /// <summary>What the scheduler decided for one instance in one frame.</summary>
 public enum RenderGraphInstanceStatus : byte {
-    /// <summary>Neither the display nor any instance rendering this frame shows or reads it, so it does not
-    /// render.</summary>
+    /// <summary>Nothing the display shows reaches it this frame, though something still names it
+    /// (<see cref="RenderGraphFrame.Named"/>): it does not render, and keeps everything it has, so it shows its last image
+    /// the next frame something shows it.</summary>
     Unread = 1,
     /// <summary>Something shows or reads it, but it does not render this frame: its refresh or a source's cadence is not
     /// due, a source's producer declares no extent, or no consumer that shows or reads it renders. Its consumers read its
@@ -20,6 +21,11 @@ public enum RenderGraphInstanceStatus : byte {
     /// (<see cref="RenderGraphFrame.DisplayHertz"/> zero), so its rate cannot be counted in frames: it does not render
     /// until the display's rate is known, and this row names it.</summary>
     Refused = 5,
+    /// <summary>Nothing names it any more: the display does not reach it, the host does not name it
+    /// (<see cref="RenderGraphFrame.Named"/>), and nothing named shows or reads it, as a seat's view once its seat leaves
+    /// or a pane once no layout slot places it. It does not render, and a render-graph runtime releases its graph until
+    /// something names and shows it again.</summary>
+    Unnamed = 6,
 }
 /// <summary>One instance's row in a frame's schedule: its decision and its price.</summary>
 /// <param name="Instance">The instance name.</param>
@@ -94,6 +100,46 @@ public sealed class RenderGraphHistory {
 
         return new RenderGraphHistory(count: set.Instances.Count);
     }
+    /// <summary>Creates the history of a set that replaces another: each instance kept from the previous set keeps when it
+    /// last rendered and the extent its targets are allocated at, so a kept instance whose output still stands is not
+    /// rendered again only because the set around it changed; an instance new to the set has not rendered.</summary>
+    /// <param name="set">The new instance set.</param>
+    /// <param name="previous">The history of the set it replaces.</param>
+    /// <param name="kept">For each instance of <paramref name="set"/>, its index in the previous set, or -1 for an instance
+    /// the previous set did not keep.</param>
+    /// <returns>The carried history.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="previous"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="kept"/> does not cover <paramref name="set"/>, or names an index
+    /// <paramref name="previous"/> does not cover.</exception>
+    public static RenderGraphHistory Carried(RenderGraphInstanceSet set, RenderGraphHistory previous, ReadOnlySpan<int> kept) {
+        ArgumentNullException.ThrowIfNull(argument: set);
+        ArgumentNullException.ThrowIfNull(argument: previous);
+
+        if (kept.Length != set.Instances.Count) {
+            throw new ArgumentException(message: $"The kept indices cover {kept.Length} instances; the set has {set.Instances.Count}.", paramName: nameof(kept));
+        }
+
+        var carried = new RenderGraphHistory(count: kept.Length) { Frame = previous.Frame };
+
+        for (var index = 0; (index < kept.Length); index++) {
+            var old = kept[index];
+
+            if (old < 0) {
+                continue;
+            }
+            if (old >= previous.Count) {
+                throw new ArgumentException(message: $"Instance {index} is kept from index {old}, past the previous set's {previous.Count}.", paramName: nameof(kept));
+            }
+
+            carried.Height[index] = previous.Height[old];
+            carried.Latest[index] = previous.Latest[old];
+            carried.Ticks[index] = previous.Ticks[old];
+            carried.Width[index] = previous.Width[old];
+        }
+
+        return carried;
+    }
     /// <summary>Returns the frame an instance last rendered.</summary>
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The frame, or -1 when it has never rendered.</returns>
@@ -122,6 +168,18 @@ public sealed class RenderGraphHistory {
 
         Latest[index] = previous.Latest[index];
         Ticks[index] = previous.Ticks[index];
+        Width[index] = previous.Width[index];
+        Height[index] = previous.Height[index];
+    }
+    /// <summary>Forgets an instance whose targets were released, such as one nothing names any more: it reads as never
+    /// rendered and never allocated, so it is due, at the extent its consumers demand, the next frame something shows it,
+    /// and its consumers bind no output of it until then.</summary>
+    /// <param name="index">The instance's index in its set.</param>
+    public void Forget(int index) {
+        Latest[index] = -1L;
+        Ticks[index] = 0L;
+        Width[index] = 0d;
+        Height[index] = 0d;
     }
     /// <summary>Returns the extent an instance's targets are allocated at, as quantized fractions of the display.</summary>
     /// <param name="index">The instance's index in its set.</param>

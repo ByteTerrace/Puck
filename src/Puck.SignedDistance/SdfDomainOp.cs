@@ -42,19 +42,29 @@ public abstract record SdfDomainOp {
     /// <param name="Limit">The repeat-cell limit per plane axis.</param>
     /// <param name="Plane">The fold plane.</param>
     /// <param name="MaterialStride">The parity-material stride (0 = geometric only).</param>
-    /// <param name="LodDistance">The symmetry-LOD distance threshold (0 = off).</param>
     public sealed record Wallpaper(
         SdfWallpaperGroup Group,
         Vector2 Cell,
         Vector2 Limit,
         SdfPlane Plane = SdfPlane.XZ,
-        int MaterialStride = 0,
-        float LodDistance = 0f
+        int MaterialStride = 0
     ) : SdfDomainOp;
 }
 /// <summary>Applies an ordered <see cref="SdfDomainOp"/> list to a builder chain — the one place the family's
 /// argument mapping onto <see cref="SdfProgramBuilder"/> is written.</summary>
 public static class SdfDomainOps {
+    /// <summary>The per-axis repeat-cell limit that leaves a lattice without an edge: far past any authored reach, so no
+    /// cell index is ever clamped.</summary>
+    public const float UnboundedRepeatLimit = 1000000f;
+
+    /// <summary>Whether <paramref name="limit"/> leaves a repeat lattice without an edge: any axis at
+    /// <see cref="UnboundedRepeatLimit"/>. Such a repeat has copies at every distance on that axis, so its influence has
+    /// no bound, and every reader of the limit takes this one answer for it rather than the sentinel as a number of
+    /// cells.</summary>
+    /// <param name="limit">The per-axis repeat-cell limit.</param>
+    /// <returns><see langword="true"/> when the repeat's influence is unbounded.</returns>
+    public static bool IsUnboundedRepeat(System.Numerics.Vector3 limit) => ((limit.X >= UnboundedRepeatLimit) || (limit.Y >= UnboundedRepeatLimit) || (limit.Z >= UnboundedRepeatLimit));
+
     private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
         return op switch {
             SdfDomainOp.Symmetry symmetry => chain.SymmetryPlane(
@@ -79,7 +89,6 @@ public static class SdfDomainOps {
             cell: wallpaper.Cell,
             group: wallpaper.Group,
             limit: wallpaper.Limit,
-            lodDistance: wallpaper.LodDistance,
             materialStride: wallpaper.MaterialStride,
             plane: wallpaper.Plane
         ),

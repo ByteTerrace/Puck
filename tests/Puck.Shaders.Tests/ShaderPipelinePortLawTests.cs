@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -273,55 +274,51 @@ public sealed class ShaderPipelinePortLawTests {
     }
     [Fact]
     public void A_source_that_never_names_a_port_is_refused_at_load_naming_the_pass_the_port_its_identifier_and_as() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-ports-");
+        using var directory = new TemporaryDirectory(prefix: "puck-ports-");
 
-        try {
-            var graph = Path.Combine(
-                path1: directory.FullName,
-                path2: "renamed.graph.json"
-            );
+        var graph = Path.Combine(
+            path1: directory.RootPath,
+            path2: "renamed.graph.json"
+        );
 
-            File.WriteAllText(
-                contents: """
-                {
-                  "$schema": "puck.render.graph.v1",
-                  "name": "renamed",
-                  "resources": [
-                    { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 8, "height": 8 } }
-                  ],
-                  "passes": [
-                    { "name": "fill", "source": "fill.hlsl", "entryPoint": "main", "kind": "Compute", "outputs": [ { "name": "color" } ] }
-                  ],
-                  "outputs": ["color"]
-                }
-                """,
-                path: graph
-            );
-            File.WriteAllText(
-                contents: "#include \"fill.interface.hlsli\"\n[numthreads(8, 8, 1)]\nvoid main(uint3 id : SV_DispatchThreadID) {\n    image[id.xy] = float4(1.0, 0.0, 0.0, 1.0);\n}\n",
-                path: Path.Combine(
-                    path1: directory.FullName,
-                    path2: "fill.hlsl"
-                )
-            );
+        File.WriteAllText(
+            contents: """
+            {
+              "$schema": "puck.render.graph.v1",
+              "name": "renamed",
+              "resources": [
+                { "name": "color", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 8, "height": 8 } }
+              ],
+              "passes": [
+                { "name": "fill", "source": "fill.hlsl", "entryPoint": "main", "kind": "Compute", "outputs": [ { "name": "color" } ] }
+              ],
+              "outputs": ["color"]
+            }
+            """,
+            path: graph
+        );
+        File.WriteAllText(
+            contents: "#include \"fill.interface.hlsli\"\n[numthreads(8, 8, 1)]\nvoid main(uint3 id : SV_DispatchThreadID) {\n    image[id.xy] = float4(1.0, 0.0, 0.0, 1.0);\n}\n",
+            path: Path.Combine(
+                path1: directory.RootPath,
+                path2: "fill.hlsl"
+            )
+        );
 
-            var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: directory.CreateSubdirectory(path: "cache").FullName)).Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: "renamed",
-                path: graph
-            );
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: directory.PathOf(name: "cache"))).Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: "renamed",
+            path: graph
+        );
 
-            Assert.Equal(
-                actual: result.Status,
-                expected: ShaderPipelineLoadStatus.Failed
-            );
-            Assert.Equal(
-                actual: result.Message,
-                expected: "[SHADERPIPE_INTERFACE] Pass 'fill' output 'color' reads as 'color', which 'fill.hlsl' never names; give the port \"as\": \"<identifier>\" with the name the source reads it by."
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(
+            actual: result.Status,
+            expected: ShaderPipelineLoadStatus.Failed
+        );
+        Assert.Equal(
+            actual: result.Message,
+            expected: "[SHADERPIPE_INTERFACE] Pass 'fill' output 'color' reads as 'color', which 'fill.hlsl' never names; give the port \"as\": \"<identifier>\" with the name the source reads it by."
+        );
     }
     [Fact]
     public void Null_document_collections_produce_a_planner_diagnostic() {

@@ -8,15 +8,15 @@ using Puck.SignedDistance.Baking;
 
 namespace Puck.World.Authoring;
 
-/// <summary>What one bake is keyed by: the creation's content pin, the baker's version, and the quality tier. Two bakes
-/// with one key are the same bytes, so the key's <see cref="Pin"/> names a bake in every cache.</summary>
+/// <summary>What one bake is keyed by: the creation's content pin, the bake derivation's fingerprint, and the quality
+/// tier. Two bakes with one key are the same bytes, so the key's <see cref="Pin"/> names a bake in every cache.</summary>
 /// <param name="CreationPin">The creation's pin: the SHA-256 hex of its canonical bytes
 /// (<see cref="CreationCanonicalizer.Canonicalize"/>), which a world's prototype row carries as its hash.</param>
-/// <param name="BakerVersion">The baker's version (<see cref="SdfBaker.Version"/>).</param>
+/// <param name="Fingerprint">The bake producer's code fingerprint (<see cref="DerivationFingerprint.Bake"/>).</param>
 /// <param name="Quality">The quality tier.</param>
-public readonly record struct CreationBakeKey(string CreationPin, uint BakerVersion, SdfBakeQuality Quality) {
+public readonly record struct CreationBakeKey(string CreationPin, string Fingerprint, SdfBakeQuality Quality) {
     /// <summary>Gets the key's own pin: the SHA-256 of its three parts, which names the bake in a store.</summary>
-    public ContentPin Pin => ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"puck.creation.bake\n{CreationPin}\n{BakerVersion}\n{((int)Quality)}"));
+    public ContentPin Pin => ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"puck.creation.bake\n{CreationPin}\n{Fingerprint}\n{((int)Quality)}"));
 
     /// <summary>Returns the key of a bake the running baker makes of a creation at <paramref name="quality"/>.</summary>
     /// <param name="creationPin">The creation's pin.</param>
@@ -28,8 +28,8 @@ public readonly record struct CreationBakeKey(string CreationPin, uint BakerVers
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: creationPin);
 
         return new CreationBakeKey(
-            BakerVersion: SdfBaker.Version,
             CreationPin: creationPin,
+            Fingerprint: DerivationFingerprint.Bake,
             Quality: quality
         );
     }
@@ -52,9 +52,12 @@ public static class CreationBaker {
     /// <param name="quality">The quality tier.</param>
     /// <param name="bake">The bake, or <see langword="null"/> when the creation has none.</param>
     /// <param name="reason">Why the creation has no bake, or empty on success.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next field evaluation.</param>
     /// <returns><see langword="true"/> when the creation baked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryBake(CreationDocument document, SdfBakeQuality quality, [NotNullWhen(returnValue: true)] out SdfBake? bake, out string reason) {
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    [Derivation(name: "bake")]
+    public static bool TryBake(CreationDocument document, SdfBakeQuality quality, [NotNullWhen(returnValue: true)] out SdfBake? bake, out string reason, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: document);
         bake = null;
 
@@ -83,6 +86,7 @@ public static class CreationBaker {
                 )
             );
             bake = SdfBaker.Bake(
+                cancellationToken: cancellationToken,
                 center: Vector3.Zero,
                 materials: materials,
                 program: builder.Build(buildInstanceGrid: false),

@@ -12,14 +12,21 @@ dotnet build src/Puck.SdfVm -c Release          # dxc on PATH, or /p:DxcCommand=
 ```
 
 The recipe is `build/Shaders.targets`, imported into every project by
-`Directory.Build.targets`; projects without shader items never run DXC. DXC runs in place in the source tree and compiles each `.hlsl` to both
-SPIR-V and DXIL. Editing any `.hlsl`, `.hlsli`, the project file, or the targets
-file recompiles the whole set. The `.spv`, `.dxil`, and `.hash` outputs are
+`Directory.Build.targets`; projects without shader items never run DXC. DXC runs
+in place in the source tree and compiles each declared stage for its enabled
+backends. `PuckShaderSpirvEnabled` selects SPIR-V; `PuckShaderDxilEnabled` selects
+vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
+All three default to true. Admission compares each kernel's source plus ordered includes,
+effective compiler command and backend options, and compiled bytes with its
+sidecar. Equal content with newer timestamps reuses the pair; changed source
+recompiles that kernel, and changed include content conservatively recompiles
+the whole project. Changed recipes, missing recipe identities and damaged pairs
+also require compilation. The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them.
 `ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
 when its sidecar records its bytes (the build wrote it), printing one line per
 file, and fails the build on any other sourceless bytecode, which it leaves in
-place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+place; `CollectShaderBytecode` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 
@@ -55,7 +62,10 @@ interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
 kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
 `sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
-survive; the cadence signature is invalidated. The last
+survive; the cadence signature is invalidated. A reload also builds again any
+views kernel the residency refused (its creation failed; `NotReadyReason`
+names it), even when the tree leaves its bytecode unchanged: that, or a device
+loss, is the only retry a refused views kernel gets. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI or
@@ -65,16 +75,20 @@ buffer-layout changes need a rebuild.
 
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices its selected package fragment into the one-pass graph the runtime makes
-for the instance. `NativeFragment` has ten passes, `sdf.world$sky` through
-`sdf.world$views`; `Fragment`, which a view below a native ceiling runs, adds
-`sdf.world$resolve`.
+for the instance. `NativeFragment` has twelve passes, `sdf.world$mask` through
+`sdf.world$views`, then `sdf.world$sky` and `sdf.world$composite`; `Fragment`,
+which a view below a native ceiling runs, puts `sdf.world$resolve` between views
+and the sky.
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
-under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
+under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
-when that work is pending; and `upload`, the region copies. An upload skips a
-pass it has no work for. Every pass of the view counts its own march steps
+when that work is pending; `upload`, the region copies; and `environment`, the
+sky's environment map and its coefficients, rendered only on an upload whose sky
+lighting-visible irradiance differs by at least 1/255 while ambient, reflections, sky-coloured fog or haze reads it (`SdfWorldTables.SkyEnvironment.cs`;
+`sdf-sky-environment.comp` then `sdf-sky-environment-reduce.comp`). An upload
+skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
 volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
 `sdfVisibilityStoreWord` and the output writes; the mesh pass one per fragment)
@@ -82,7 +96,19 @@ into its node's kernel counters through the generated `puckCountWork` (one
 wave-summed atomic a wave into the row `workCounterRow` names,
 `GpuKernelCounters`), which the node clears ahead of the first pass and copies
 to the slot's readback behind the last; `world.counters gpu` reads them as
-`march.steps` and `texels.written`, per-backend deterministic. A new counting
+`march.steps` and `texels.written`, per-backend deterministic. Generated
+`puckCountShapes` adds `sdfWorkShapes` and `sdfWorkGradients` to the same row as
+`shapes.evaluated` and `shapes.gradients`. The shape total includes tape
+construction, scalar winner selection, analytic derivatives and each
+finite-difference tap. The gradient counter includes analytic primitive
+derivatives only; local finite differences and whole-field curvature/normal
+probes count their scalar taps in the shape total. The sky and composite passes
+also count `sky.evaluations`, `sky.hashes` and `sky.texture-loads` into their named
+layer rows through `puckCountDetail`. The shadow stage
+also calls generated `puckCountShadow` for each marched slot; the existing kind
+dimension adds `shadow.slot0.steps` through `shadow.slot5.steps` to each pass
+row. The shadow columns partition that pass's march total. Slots past K + F,
+inactive incoming slots and every other pass's shadow columns are zero. A new counting
 site adds to `sdfWorkSteps` beside the evaluation it counts. The
 runtime declares a view unchanged when nothing it renders from moved
 (`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
@@ -90,27 +116,34 @@ of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality, levers and environment are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
-| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and pass groups as every per-view pass. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the lights, active shadow handoff controls and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
+| `tape` | `sdf-tape.comp` | Evaluates masked candidates over eight depth-slab balls and writes the certified live-segment mask, summary words and covered balls. Unknown candidates stay live; camera queries consume the mask only inside its certified domain. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
-| `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
-| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface, volumes, diagnostics, written into the view's output image. |
+| `shadow` | `sdf-world-shadow.comp` | One gather and march for each occupied stable slot and active incoming slot, bounded by K + F. Four 8-bit stable visibilities pack into the K row; incoming visibilities use the policy-sized transient image. Skips when soft shadows are off or the slot table contains no marched light (`Skips`). |
+| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. |
+| `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
+| `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the stack's lowest field run's offset, then each upper field run's scale and offset, the base's alpha marking an evaluated texel. Each layer counts `gpu.sky.evaluations` in its own detail row (`SdfSkyDetails`). Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
+| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's atmosphere transmittance) plus each atmosphere kind's in-scatter colour by the surface transport's weight for it (the fog's and the haze's sky from the environment map the residency's upload renders, `sdfSkyEnvironment`, filtered bilinearly along the pixel's ray, evaluating no sky layer; each kind counted once a pixel in the `atmosphere` detail row), the sky's layers in their authored order (each field run's summary filtered from the texels the sky evaluated, each point layer evaluated at the pixel), through the haze and the medium, beneath it by its coverage, then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
 
-The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
-(`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
-fragment change is always a rebuild the node holds its last image through, never
-a frame of one graph at another's grid. A view at a native ceiling uses
-`SdfWorldPackage.NativeFragment`, ten passes writing `color` directly, and
-ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
-`Fragment`: traversal writes `currentColor` (one transient allocation, started by
-the sky) at the active render grid, then `sdf-resolve.comp` writes `color` at the
-output grid, reading its render grid from the recording
+The ceiling (`SdfViewSnapshot.RenderCeiling`) and the temporal ask
+(`SdfViewQuality.Temporal`) select the fragment (`SdfWorldPasses.FragmentOf`)
+and are the whole render-extent revision, so a fragment change is always a
+rebuild the node holds its last image through, never a frame of one graph at
+another's grid. A view at a native ceiling that asks for nothing temporal uses
+`SdfWorldPackage.NativeFragment`, twelve passes whose composite writes `color`,
+and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
+`Fragment`, and a view asking for temporal reconstruction uses
+`SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
+reactivity buffer and the history, [SKILL](../SKILL.md#temporal-reconstruction)).
+In `Fragment`: views writes `currentColor` (one retained allocation) at the active
+render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
+at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
 (`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
 Scratch is allocated at the render ceiling; current-grid changes, a layout
 transition's dip among them, replace no resources and rebuild nothing. `place`
@@ -131,15 +164,20 @@ groupshared candidate mask. Before primary, the
 `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
 frame's mesh draws into the mesh visibility target that primary bounds its
 march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
-draw and triangle for the later stages; the target and its depth attachment are transient fragment
+draw and triangle for the later stages; the target and its depth attachment are retained fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
-draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh
+draw (`SdfKernelInterfaces.MeshPushedIndex`), and skips a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither its draws nor its
 target and depth barriers, when the pass block's `meshDraws` tells the hit
 passes not to read the target. A view the cadence gate declares unchanged records none of
-its passes, and its latest output stands; `world.cadence off` disables the gate
-for measurement.
+its passes, and its latest output stands. Each pass also declares a signature:
+visual edits execute sky/composite, hit lighting adds views and resolve, selected
+shadow directions add shadow, and geometry/camera changes execute every active
+pass. Temporal sampling renders geometry while samples are owed; visual edits
+leave settled lit history and its ring standing. `world.cadence off` disables
+both gates for measurement. Retained inputs use their last queued writes, and
+standing passes use the existing tracker without recording their planned accesses.
 
 The visibility record is 64 bytes per pixel of the view's render ceiling
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
@@ -149,18 +187,24 @@ through primary's, surface's, ambient's and shadow's versions;
 sixteen words in six rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
 packed with its other material plus one); L (the exact winning dynamic frame slot
-in its first word, -1 for static, or a mesh hit's triangle; other words reserved); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+in its first word, -1 for static, or a mesh hit's triangle; words 9 and 10 hold
+replaceable AO and shadow query tallies, generated from `SdfVisibility`); N (a 16-bit octahedral geometric normal and the gradient magnitude);
 and S (curvature and raw AO as halves, then the surface flags packed with the
-saturated surface, AO and shadow query count); and K (the key light's
-soft-shadow visibility, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
+saturated surface query count); and K (four stable visibilities
+packed as 8-bit lanes, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
 most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
-surface writes N and S; ambient updates S. Every reader and writer uses the
+surface writes N and S; ambient updates S and its own tally, shadow K and its
+own tally. Views sums the enabled stages' tallies. A repeated shadow write
+does not accumulate queries in retained surface data. Each forwarding version
+declares predecessor preservation. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
 module and `VisibilityRecordByteLength`. A record is current only inside the frame's
 dispatch box, where primary writes every active pixel, misses included: a
 reader of another pixel's record asks `worldVisibilityCurrent` first and
-treats a pixel outside the box as sky, since the beam proved its tile empty.
+treats a pixel outside the box as sky, since the beam proved its tile empty; the
+resolve and the native sky and composite read the lit image the same way, every
+pixel outside the box uncovered.
 The rule is `SdfVisibility.IsCurrent`, generated into `sdf-isa.hlsli` as
 `SDF_VISIBILITY_CURRENT` with the box's unit `SDF_VISIBILITY_BOX_EDGE` (the hit
 passes' workgroup edge), and a pick applies it on the host to the box its copy
@@ -177,6 +221,16 @@ uneven viewport rectangles, reduced render scale, layout changes, and the
 diagnostic counters on both backends, and check buffer memory as well as the
 per-pass work `world.counters gpu` counts.
 
+Shadow and views have F = 0, 1 and 2 kernel variants in addition to the views
+ISA tiers. Their `SDF_SHADOW_FADE_SLOTS` value selects the generated interface:
+F = 0 has no incoming image binding; F = 1 uses R8, and F = 2 R8G8. The graph
+fragment allocates `incomingVisibility` as retained storage at the render
+ceiling whenever policy permits fades, including frames without an active
+handoff. Only active incoming slots march and write it, and only active
+handoffs read it. The host uploads each active 16-byte `SdfShadowHandoff`
+through its counted region. Keep variants, region layout, graph ports,
+resource accounting and the generated declarations synchronized.
+
 ## Buffer hazards
 
 Every scratch buffer and image of a view is a resource of
@@ -186,7 +240,7 @@ port names (a compute read or write, the indirect arguments, a color
 attachment), and `ShaderPipelineCompiler.Accesses.cs` gives every access its
 prior state and barrier, the first use of a frame included, which orders it
 after the frame before. `SdfWorldPassRecorder` records no barrier; the
-instance's node records the planned ones before each pass. Scratch is transient,
+instance's node records the planned ones before each executing pass. Scratch is retained,
 one allocation per instance shared by every frame slot, and a counted buffer is
 sized by the bases the residency reports (`SdfWorldResidency.CountsAt`,
 through `IRenderGraphPackageFactory.CounterOf`); the view's color is published
@@ -221,7 +275,7 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
+`isa/sdf-bricks.interface.hlsli`, both generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's
@@ -243,14 +297,16 @@ full binding map is in
 `coneMarchTileBounds` abandons its gap and tail searches after
 `TileGapStallLimit` consecutive occupied samples with non-increasing clearance,
 keeping the established entry and far-plane sentinels; a stall never proves
-empty space. Programs admitted for independent part tracing use
+empty space. A cone's clearance stops at every log-sphere wall
+(`sdfMapBallClearance`); the cone crosses none, since none is centred on its
+apex. Programs admitted for independent part tracing use
 `IndependentConeMarchSteps` entry samples without gap or tail searches. When
 changing these heuristics, compare whole-frame cost and hit/material captures,
 including grazing rays and separated bands.
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals`
+`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion`
 selects a diagnostic image (`DebugViewModes.Names` is the list); `depth` isolates the march. To see what a shadow
 ray sees, place a camera at the shaded point looking along the sun direction
 under `material-id`.

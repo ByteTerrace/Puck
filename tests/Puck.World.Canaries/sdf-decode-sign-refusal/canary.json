@@ -22,7 +22,7 @@
     "valid-control.sdf.json"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "refused" },
@@ -58,7 +58,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "accepted" },

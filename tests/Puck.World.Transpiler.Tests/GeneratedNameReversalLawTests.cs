@@ -50,7 +50,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 1, File: Sessions, Mints: "a freshly started instance's name"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
-        new(Calls: 5, File: Views, Mints: "a session screen's and a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
+        new(Calls: 14, File: Views, Mints: "a residency environment producer and its indirect light camera, an infinity view's instance name under the viewer's own sky and under a deeper view's, a session screen's view name, a session seen through it one level deeper and the head a routed world's sessions are named under, a camera of a world shown through a screen under its level, a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
         new(Calls: 1, File: Probes, Mints: "a seat-relative probe's instance key, which exists only at run time"),
     ];
     private static readonly Regex MintingCall = new(
@@ -163,7 +163,7 @@ public sealed class GeneratedNameReversalLawTests {
                 behavior { faces [{ name: "portal", shapeId: 0 }] }
             } }]
             placements { rows [{
-                id: "arch1", prototypeId: "arch", position [0, 0, 0], yawDegrees: 0, scale: 1,
+                id: "arch1", prototypeId: arch, position [0, 0, 0], yawDegrees: 0, scale: 1,
                 faceSources [{ face: "portal", source { "$type": "none" } }]
             }] }
             ground floor { size [12m, 8m] }
@@ -428,7 +428,14 @@ public sealed class GeneratedNameReversalLawTests {
         new(Label: "extension directory", Site: Extensions, Check: static () => FileBacked(site: Extensions)),
         new(Label: "capture frame file", Site: Captures, Check: static () => FileBacked(site: Captures)),
         new(Label: "view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0")), name: GeneratedName.Join("session", "0"))),
+        new(Label: "residency environment name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandGraphDocument(name: GeneratedName.Append(name: "world", part: "environment")), name: GeneratedName.Append(name: "world", part: "environment"))),
+        new(Label: "indirect light camera name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Append(name: "world$indirect", part: "indirect-light")), name: GeneratedName.Append(name: "world$indirect", part: "indirect-light"))),
+        new(Label: "nested view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "24", "24")), name: GeneratedName.Join("session", "24", "24"))),
+        new(Label: "routed view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("routed", "0123456789abcdef", "24")), name: GeneratedName.Join("routed", "0123456789abcdef", "24"))),
+        new(Label: "nested camera view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "24", "camera", "billboard")), name: GeneratedName.Join("session", "24", "camera", "billboard"))),
         new(Label: "views.graphs name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandGraphDocument(name: GeneratedName.Join("main", "frame")), name: GeneratedName.Join("main", "frame"))),
+        new(Label: "infinity view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("sky", "lobby")), name: GeneratedName.Join("sky", "lobby"))),
+        new(Label: "nested infinity view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0", "sky", "lobby")), name: GeneratedName.Join("session", "0", "sky", "lobby"))),
         new(Label: "source instance name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("source", "qr", "0123456789abcdef")), name: GeneratedName.Join("source", "qr", "0123456789abcdef"))),
         new(Label: "probe instance key a hand document spells", Site: Probes, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("head", "2")), name: GeneratedName.Join("head", "2"))),
     ];

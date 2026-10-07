@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.Assets;
 using Puck.Cli.Parity;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -17,20 +18,12 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     private const string StateHash = "0123456789abcdef";
     private const string Station = "binding";
     private const ulong Tick = 1205;
-    private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    private const string WorldPath = "tests/Puck.Parity/parity.puck";
 
-    private readonly string m_root;
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-reference-");
 
-    public ParityBindingReferenceLawTests() {
-        m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-cli-tests-parity-reference-{Guid.NewGuid():N}"
-        );
-
-        Directory.CreateDirectory(path: m_root);
-    }
-
-    private static (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
+    // Load the checked-in contract itself: its relative references must resolve the authored world source.
+    private (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
         Assert.True(
             condition: ParityManifestLoader.TryLoadContract(
                 contract: out var contract,
@@ -46,21 +39,37 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
         return (contract, Assert.IsType<ParityBindingReference>(@object: resolved.Reference));
     }
+    // The schedule reader consumes the compiled world that the parity runner ships into its run directory.
+    private string EmittedWorld() {
+        var path = Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "parity.world.json"
+        );
+
+        if (!File.Exists(path: path)) {
+            File.WriteAllBytes(
+                bytes: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: WorldPath)),
+                path: path
+            );
+        }
+
+        return path;
+    }
     private string WriteContract(Action<JsonNode> edit) {
         var contract = JsonNode.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: ContractPath)))!;
 
         edit(obj: contract);
 
-        // The reference's graph and world resolve beside the contract, so a copy names the checked-in ones.
+        // Copied parameter contracts isolate parameter diagnostics from source loading.
         foreach (var station in contract["stations"]!.AsObject()) {
             if (station.Value!["reference"] is { } reference) {
                 reference["graph"] = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/binding.graph.json");
-                reference["world"] = RepositoryPaths.Resolve(relativePath: WorldPath);
+                reference["world"] = EmittedWorld();
             }
         }
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"contract-{Guid.NewGuid():N}.json"
         );
 
@@ -73,11 +82,11 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     }
     private IReadOnlyList<ParityCaptureVerdict> Compare(ParityContract contract, byte[] left, byte[] right, int width, int height, string station = Station, ulong tick = Tick) {
         var leftDir = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"left-{Guid.NewGuid():N}"
         );
         var rightDir = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"right-{Guid.NewGuid():N}"
         );
 
@@ -141,12 +150,12 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             )
         );
     private string WriteWorld(Action<JsonNode> edit) {
-        var world = JsonNode.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: WorldPath)))!;
+        var world = JsonNode.Parse(utf8Json: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: WorldPath)))!;
 
         edit(obj: world);
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"world-{Guid.NewGuid():N}.json"
         );
 
@@ -260,7 +269,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         contract["stations"]![Station]!["reference"]!["kind"] = "unknown";
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "contract.json"
         );
 
@@ -280,18 +289,57 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         );
     }
     [Fact]
-    public void TheWaitTickFollowsTheWorldsLastCaptureTick() {
+    public void TheScheduleFollowsTheWorldsCaptureTicks() {
         Assert.True(
-            condition: ParityCommand.TryReadWaitTick(
+            condition: ParityCommand.TryReadSchedule(
                 error: out var error,
+                reconstructionTick: out var reconstructionTick,
                 waitTick: out var waitTick,
-                worldPath: RepositoryPaths.Resolve(relativePath: WorldPath)
+                worldPath: EmittedWorld()
             ),
             userMessage: error
         );
+        // Past the converge station's last capture, and reconstruction on its lead before the station's first.
         Assert.Equal(
             actual: waitTick,
-            expected: 1255UL
+            expected: 1360UL
+        );
+        Assert.Equal(
+            actual: reconstructionTick,
+            expected: 1240UL
+        );
+    }
+    // A station captured once reconstruction is on must converge, since every station that does not holds with
+    // reconstruction off; a converging station with no room for the lead is refused too.
+    [Fact]
+    public void AStationThatDoesNotConvergeAfterReconstructionTurnsOnIsRefusedByName() {
+        var late = WriteWorld(edit: static world => world["captures"]!["rows"]![0]!["ticks"] = new JsonArray(JsonValue.Create(value: 1320UL)));
+
+        Assert.False(condition: ParityCommand.TryReadSchedule(
+            error: out var error,
+            reconstructionTick: out _,
+            waitTick: out _,
+            worldPath: late
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "without converging"
+        );
+        var early = WriteWorld(edit: static world => {
+            var rows = world["captures"]!["rows"]!.AsArray();
+
+            rows[(rows.Count - 1)]!["ticks"] = new JsonArray(JsonValue.Create(value: 30UL));
+        });
+
+        Assert.False(condition: ParityCommand.TryReadSchedule(
+            error: out error,
+            reconstructionTick: out _,
+            waitTick: out _,
+            worldPath: early
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "leaves no room for the 60-tick reconstruction lead"
         );
     }
     /// <summary>The <c>bound</c> station's grain seed is bound to a state row the world's rules move from 0 to 13 at
@@ -405,8 +453,9 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     public void AScheduleWithNoRoomForTheWaitMarginIsRefusedByName() {
         var path = WriteWorld(edit: static world => world["captures"]!["rows"]![0]!["ticks"] = new JsonArray(JsonValue.Create(value: (ulong.MaxValue - 5UL))));
 
-        Assert.False(condition: ParityCommand.TryReadWaitTick(
+        Assert.False(condition: ParityCommand.TryReadSchedule(
             error: out var error,
+            reconstructionTick: out _,
             waitTick: out _,
             worldPath: path
         ));
@@ -418,7 +467,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     [Fact]
     public void AMalformedWorldIsRefusedByNameRatherThanThrown() {
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "malformed.world.json"
         );
 
@@ -427,8 +476,9 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             path: path
         );
 
-        Assert.False(condition: ParityCommand.TryReadWaitTick(
+        Assert.False(condition: ParityCommand.TryReadSchedule(
             error: out var error,
+            reconstructionTick: out _,
             waitTick: out _,
             worldPath: path
         ));
@@ -437,13 +487,5 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             expectedSubstring: "could not be read for its capture schedule"
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
 }

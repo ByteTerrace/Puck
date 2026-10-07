@@ -8,6 +8,7 @@ namespace Puck.World.Protocol;
 /// the <c>.puckreplay</c> tape, the authority checkpoint, and the federation frames all map through here, so no codec
 /// derives a byte from an enum's declaration ordinal by a cast that would reorder on a member insertion. A byte this
 /// type does not name is refused like any other undeclared value.</summary>
+[FormatLeaf]
 public static class WorldWireTags {
     /// <summary>Maps a wire byte back to its <see cref="WorldCapability"/>.</summary>
     /// <param name="wire">The wire byte.</param>
@@ -66,6 +67,7 @@ public static class WorldWireTags {
             case 9: value = GrantSubjectKind.Placement; return true;
             case 10: value = GrantSubjectKind.Adjacency; return true;
             case 11: value = GrantSubjectKind.Machine; return true;
+            case 12: value = GrantSubjectKind.History; return true;
             default: value = default; return false;
         }
     }
@@ -161,6 +163,7 @@ public static class WorldWireTags {
             case GrantSubjectKind.Placement: wire = 9; return true;
             case GrantSubjectKind.Adjacency: wire = 10; return true;
             case GrantSubjectKind.Machine: wire = 11; return true;
+            case GrantSubjectKind.History: wire = 12; return true;
             default: wire = default; return false;
         }
     }

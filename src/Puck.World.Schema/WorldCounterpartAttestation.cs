@@ -9,7 +9,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The overlap arithmetic's inputs from one side of a seam. Both sides derive the same depth from the pair, so a
-/// neighbour across a trust boundary proves its half by attesting these five numbers rather than by handing over the
+/// neighbour across a trust boundary proves its half by attesting these six numbers rather than by handing over the
 /// document they were computed from.
 /// </summary>
 /// <remarks>Every distance rides as raw Q48.16 bits rather than the document's decimal-string spelling: this payload
@@ -110,9 +110,14 @@ public sealed record WorldAttestedEdge(SafeName Name, string Counterpart, string
 public sealed record WorldCounterpartAttestation(string Document, IReadOnlyList<WorldAttestedEdge> Edges, WorldOverlapTerms Overlap) {
     /// <summary>The document schema tag a signed attestation payload carries.</summary>
     public const string SchemaVersion = "puck.world.counterpart-attestation.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for this payload, which a signer stamps and a verifier
+    /// requires.</summary>
+    public const string CurrentShape = FormatShapes.WorldCounterpartAttestationSchemaVersion;
 
     /// <summary>Gets the schema tag.</summary>
     public string Schema { get; init; } = SchemaVersion;
+    /// <summary>Gets the shape fingerprint of the payload's layout.</summary>
+    public string Shape { get; init; } = CurrentShape;
 
     /// <summary>Finds the edge a local adjacency's <c>counterpart</c> names.</summary>
     /// <param name="name">The counterpart edge name.</param>
@@ -309,6 +314,17 @@ public static class WorldCounterpartAttestationProtocol {
             comparisonType: StringComparison.Ordinal
         )) {
             reason = $"counterpart attestation schema '{attestation.Schema}' is not {WorldCounterpartAttestation.SchemaVersion}";
+            attestation = null;
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: attestation.Shape,
+            b: WorldCounterpartAttestation.CurrentShape,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"counterpart attestation shape fingerprint '{attestation.Shape}' is not {WorldCounterpartAttestation.CurrentShape}";
             attestation = null;
 
             return false;

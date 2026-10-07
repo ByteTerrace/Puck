@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 // The shading levers decide which stages a view's frame runs: the ambient part runs exactly when ambient occlusion is on,
-// and the shadow part exactly when soft shadows are on and the environment has a shadow light. A part the lever turns off
+// and the shadow part exactly when soft shadows are on and the environment has shadow slots. A part the lever turns off
 // records nothing, so its pass line binds no pipeline.
 public sealed partial class SdfWorldPassesLawTests {
     // Whether each of the ambient and shadow parts bound its pipeline in a view's latest completed frame.
@@ -18,6 +18,7 @@ public sealed partial class SdfWorldPassesLawTests {
         using var view = new SdfTestView(
             device: gpu,
             extent: Extent,
+            hostsOnDirectX: false,
             pipelines: pipelines,
             residency: new SdfWorldResidency(
                 brickPoolVoxelCapacity: 0,
@@ -42,8 +43,8 @@ public sealed partial class SdfWorldPassesLawTests {
             TargetWidth: Extent
         );
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => view.Produce(context: in context),
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason,
             wait: view.Residency.WaitPipelineBuilds
         );
@@ -55,6 +56,25 @@ public sealed partial class SdfWorldPassesLawTests {
         var sample = new GpuWorkSample();
 
         Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
+
+        // The views, sky and composite share the fixed rows and the default look's gradient, whose evaluations stay
+        // distinct from indirect diagnostics even when both kinds of work run in the views pass.
+        string[] skyRows = [.. Enumerable.Range(count: SdfSkyDetails.Runs, start: 0).Select(selector: SdfSkyDetails.RunLabel),
+            SdfSkyDetails.Atmosphere, SdfSkyDetails.Indirect, SdfSky.DefaultGradientLabel];
+
+        foreach (var part in new[] { SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }) {
+            var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
+
+            foreach (var label in skyRows) {
+                Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
+            }
+        }
+        // The shadow pass reports its decision rows, into which it counts each secondary pixel (P18-13).
+        var shadowPass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}");
+
+        foreach (var label in SdfShadowDecisions.Labels) {
+            Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: shadowPass), collection: sample.Details.ToArray());
+        }
 
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
@@ -76,7 +96,82 @@ public sealed partial class SdfWorldPassesLawTests {
 
         return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
     }
+    // The host-visible bytes each part of a view's latest completed frame wrote, by part.
+    private static Dictionary<string, long> HostBytesOf(SdfFrame frame) {
+        var gpu = new FakeGpuDevice();
+        var pipelines = SdfTestPipelines.Cache();
+        using var view = new SdfTestView(
+            device: gpu,
+            extent: Extent,
+            hostsOnDirectX: false,
+            pipelines: pipelines,
+            residency: new SdfWorldResidency(
+                brickPoolVoxelCapacity: 0,
+                frameSource: new FixedFrameSource(frame: frame),
+                height: Extent,
+                kernels: SdfTestPipelines.Kernels(),
+                name: SdfTestView.Instance,
+                pipelines: pipelines,
+                width: Extent
+            )
+        );
+        var context = new FrameContext(
+            AccumulatorTicks: 0UL,
+            DeltaTicks: 0UL,
+            ElapsedTicks: 0UL,
+            FrameDeltaTicks: 0UL,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> {
+                [typeof(IGpuDeviceContext)] = gpu,
+            }),
+            StepTicks: 0UL,
+            TargetHeight: Extent,
+            TargetWidth: Extent
+        );
 
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason,
+            wait: view.Residency.WaitPipelineBuilds
+        );
+        for (var frameIndex = 0; (frameIndex < 3); frameIndex++) {
+            _ = view.Produce(context: in context);
+        }
+
+        var sample = new GpuWorkSample();
+
+        Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
+
+        var column = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.HostVisibleUploadBytes);
+        var bytes = new Dictionary<string, long>();
+
+        for (var pass = 0; (pass < sample.PassLabels.Length); pass++) {
+            _ = sample.TryGetPassCount(column: column, pass: pass, value: out var value);
+            bytes[sample.PassLabels[pass]] = value;
+        }
+
+        return bytes;
+    }
+
+    // A pass block's words that change every frame form one run each; the run list is bounded (GpuRegion.HostRunCapacity),
+    // and a past-the-bound range merges neighbours across the words between them, re-sending them. The work counter row
+    // and the first detail row sit side by side in the block, so a hit pass writing its row adds no run and no
+    // coalescing: its bytes are the mask pass's plus the row word, and the detail word for views.
+    [Fact]
+    public void ADetailRowBesideTheCounterRowAddsNoRunToAHitPassesBlock() {
+        var bytes = HostBytesOf(frame: Frame());
+        var mask = bytes["sdf.world$mask"];
+
+        foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
+            Assert.Equal(expected: (mask + ((part == SdfWorldPackage.Parts.Views) ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
+        }
+    }
+    [Fact]
+    public void ZeroStableSlotsSkipShadowsEvenWithShadowCastingLights() {
+        var frame = Frame();
+
+        frame.Lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+        Assert.Equal(expected: (true, false), actual: StagesOf(frame: frame));
+    }
     [Fact]
     public void TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn() {
         var frame = Frame();
@@ -95,7 +190,7 @@ public sealed partial class SdfWorldPassesLawTests {
         );
         // Soft shadows on, but no light casts them.
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { Environment = new SdfEnvironment() })),
+            actual: StagesOf(frame: (frame with { Lights = new SdfLights() })),
             expected: (true, false)
         );
     }

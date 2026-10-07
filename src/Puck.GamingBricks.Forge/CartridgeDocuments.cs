@@ -15,14 +15,14 @@ public static class CartridgeDocuments {
     // puck.cartridge.v1 spells every expression program as infix text, including the ones inside the shared
     // ActionPredicate/ActionEffect vocabulary a rule's gate carries, so the same converter rides both the parse
     // options and the canonical writer's.
-    private static readonly JsonSerializerOptions Canonical = DocumentJsonOptions.With(new ExpressionSpellingJsonConverter());
-    private static readonly JsonSerializerOptions Json = new() {
+    private static readonly JsonSerializerOptions Canonical = new CartridgeJsonContext(DocumentJsonOptions.With(new ExpressionSpellingJsonConverter())).Options;
+    private static readonly JsonSerializerOptions Json = new CartridgeJsonContext(new JsonSerializerOptions {
         AllowDuplicateProperties = false,
         Converters = { new ExpressionSpellingJsonConverter() },
         MaxDepth = 32,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-    };
+    }).Options;
 
     private static CartridgeDocument Read(ReadOnlySpan<byte> utf8) {
         if (utf8.Length > MaximumSourceBytes) {

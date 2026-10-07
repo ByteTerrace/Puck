@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Shaders.Generator</RootNamespace>
+        <UseAppHost>false</UseAppHost>
+    </PropertyGroup>
+    <!--
+        The build-time host of the shader declaration generator. Every project whose kernels include a declaration the C#
+        model owns (sdf-isa.hlsli, a generated *.interface.hlsli) references this project with
+        ReferenceOutputAssembly="false", so its build runs before that project's kernels compile: build/Shaders.targets
+        compiles kernels after ResolveProjectReferences. The generator reads only the model (Puck.Shaders.Model and
+        Puck.SdfVm.Model), which compiles no shader, so a kernel reading a declaration the model has just gained builds
+        in one pass, with no header seeded by hand. `puck shaders generate` runs the same list (ShaderDeclarations) and
+        stays the one way to write the build's shader recipe and to check the tree.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
+    </ItemGroup>
+    <!-- Reconcile on every build: a file may have been edited, deleted or restored without changing an assembly.
+         Equal declarations are never rewritten, so this does not invalidate unchanged kernels. -->
+    <Target Name="PuckGenerateShaderDeclarations" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot;" />
+    </Target>
+</Project>

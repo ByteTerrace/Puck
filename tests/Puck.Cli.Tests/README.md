@@ -7,6 +7,15 @@ process handling, branding asset synchronization, and MCP behavior. Individual f
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
+`CountersDetailLawTests` holds detail identity through readings and report
+comparisons, including skipped rows, device-aware ceilings and required zeros.
+Reports require explicit detail keys and pass detail labels. Ceilings retain
+those identities in compact measurement layouts. `CountersCeilingsCompactLawTests`
+compares every shipped ledger against fixed reports and exact checker messages
+in `Assets/counters-ceilings-equivalence.zip`, including missing and unexpected
+zero rows, changed classes, exceeded budgets, and device and driver changes.
+It also holds the writer's fixed point, kind defaults and device differences.
+
 `StartupBenchmarkTests` checks that incomplete or failed samples cannot produce
 a corpus average, pending or unrelated captures cannot prove rendered readiness,
 missing overlays fail rendered samples, and process output carries elapsed observation times.
@@ -40,6 +49,19 @@ build. Pruning keeps the most recently used builds and every leased one, and a
 killed run's leftover directories and lock files are removed only after six hours.
 `WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
 and requires every input it names to lie under a keyed path.
+`RunDirectoryLawTests` holds the one run-directory policy: a passing run leaves
+no directory, a failing or unfinished run keeps its own and names its absolute
+path, a directory that holds no evidence is deleted whatever the verdict, and
+the age sweep removes only stale directories of its own prefix. It also checks
+that a recording keeps its inner canary transcript when that run fails, and that
+a law's `TemporaryDirectory` outlives its disposal until the law's verdict.
+`ShaderBuildTargetsLawTests` runs the shared shader targets over isolated projects
+with a CPU-only compiler stand-in. It checks restored include inputs, unchanged
+builds, temporary cleanup, refusal of missing compiler outputs, and collection
+of existing Direct3D 11 kernels without compiling during pack.
+`ShaderDeclarationBuildLawTests` runs the generator targets with the built
+`Puck.Shaders.Generator` host. It checks repair of drift and missing declarations,
+unchanged file times, and explicit checking without generation.
 `CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
 It also checks that a World refusing its listener is classified as an
 infrastructure failure rather than unsupported.

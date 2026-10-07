@@ -55,7 +55,19 @@ one shape drawn many times, not many shapes.
 | `symmetry` | `normal`, `offset` | expands |
 | `repeat` | `spacing`, `limit`, `origin` | only when `limit` is a whole number inside the copy budget; an absent limit is unbounded and does not expand |
 | `polar` | `count`, `axis`, `mirror`, `materialStride`, `origin` | expands, one rigid copy per sector |
-| `wallpaper` | `group`, `cell`, `limit`, `plane`, `materialStride`, `lodDistance` | **never — render only**; a solid row carrying one is refused by name |
+| `wallpaper` | `group` (a mirror group: PMM, P4M, P3M1 or P6M), `cell`, `limit`, `plane`, `materialStride` | **never — render only**; a solid row carrying one is refused by name |
+
+A wallpaper fold builds only through a group whose every cell wall and in-cell
+seam is a mirror, so its field never reads past the nearest copy; the program
+refuses the other thirteen groups by name. Content may cross the mirrors: the
+field then reads short, which costs march steps but skips nothing. A square
+group's `limit` is a whole number of cells; a hex group (P3M1, P6M) takes none,
+since a hex lattice has no continuous clamp, so bound a hex wallpaper by
+intersecting it with a bounding shape inside a field scope (`PushField`); the
+instance's cull bound then composes through the blends (`SdfBoundAlgebra`), so
+the clipped lattice is as cullable as its clipper, while the same lattice with a
+shape unioned in has no bound and is never culled by radius. An absent repeat
+limit is unbounded the same way. A `cell` is refused when its reciprocal exceeds 1e18.
 
 Mirror a part with a `symmetry` fold, never with a negative scale — negative
 scale components are refused by name because emission reads magnitudes.
@@ -116,8 +128,9 @@ for both sides when the band must follow the rendered surface.
 
 ## The three scope rules
 
-The builder allows exactly one level of field scope. Scopes may sequence, never
-nest, and that single depth is what all three rules are competing for.
+The builder allows two levels of field scope. Creation shape and group emission
+uses its existing shared-scope rules below. The extra level isolates a moving
+creation's text and geometry together without flattening its independent groups.
 
 **1. A shape takes its own scope** when it carries any of `dilate`, `onion`,
 `panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
@@ -130,8 +143,8 @@ Shorter steps can affect convergence and the apparent hit threshold; the
 symptom alone does not establish the cause.
 
 **2. A group takes one scope for all its members** when any member wants one.
-Because that consumes the depth, a grouped shape may not carry `panel`, `trims`,
-or `cells`.
+The creation emitter does not lower `panel`, `trims`, or `cells` as grouped
+members, so those combinations remain refused by name.
 
 Only the pooled/body path reads `group` at all. Static emission walks the shape
 list in declaration order and never looks at it, so on a static placement a group
@@ -139,6 +152,9 @@ isolates nothing and every `Subtraction` composes against the whole creation
 accumulator — order each cut to be spatially local instead. `creation stats`
 shows the difference directly: its `static:` line reports one scope over all
 shapes where `pooled:` reports one per group.
+Text-bearing pooled creations wrap those groups and their text in one outer
+scope and one dynamic instance. Engraving therefore cuts the creation, never
+another placement, and a group's cutter still affects only that group.
 
 **3. Static emission takes a creation scope** when it has a `noise` facet, an
 engraved text run, **or any shape blend outside `Union` and `SmoothUnion`**.

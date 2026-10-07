@@ -17,6 +17,57 @@ Consumers must distinguish scaled field distance from world-space length.
 Hit thresholds, AO probes, shadow steps, and bound comparisons must apply the
 conversion documented by the shader contract.
 
+## Tile-pruning certificates
+
+The tape pass encloses each candidate over balls covering a screen tile's
+depth interval. A centre sample `d` and a radius `r` give an interval around
+`d` with reach `L × r`, where `L` bounds the complete world-space candidate.
+Scaling changes both the sample coordinates and the returned distance;
+`distanceScale` alone is therefore insufficient. Domain warps need their own
+bounded contribution to `L`.
+
+The host derives candidate certificates with Puck.Maths' outward interval
+rules. Each certificate also bounds the existing GPU evaluator's float error
+on its admitted coordinate domain. The GPU expands for the errors of both
+the centre evaluation and the eventual ray sample, and rounds the interval
+outward. It does not introduce another shape evaluator. A missing model, an
+unbounded interval, an unsupported operation or a sample outside the admitted
+domain leaves the candidate live.
+
+A dynamic rigid pose transforms the ball before applying the candidate's
+local certificate. Its packed quaternion's polynomial supplies the operator
+norm, including nonunit quaternions, and the pose's float arithmetic contributes
+another outward error margin. Being a rigid-pose instruction alone is not a
+proof that its packed coefficients form an exact isometry.
+
+For superellipsoid exponents between two and three, the existing evaluator
+clamps its power approximation to a certified norm band. With `q = abs(p)/r`,
+the exact norm lies between `(1 − (7/25) × (e − 2)) × length(q)` and
+`length(q)`. Write its lower factor as `alpha`, its gap as `g = 1 − alpha`,
+the distance-scaled minimum radius as `R`, and the arithmetic error as `E`.
+The measured centre value bounds the norm itself, giving the certified reach
+`L × r + (g / alpha) × (abs(d) + R) + 2 × E / alpha`. This includes the whole
+possible norm band without charging a distant world-space origin as shape
+error. It assumes no accuracy bound for the hardware power intrinsic.
+Exponent two keeps its Euclidean norm; other unsupported exponents remain live.
+
+A separated pair of intervals can prove one side of a hard blend irrelevant.
+A smooth blend requires additional separation by its radius, including the
+float arithmetic margin needed to prove its weight saturates. Equal-value
+ties retain the full walk's decision. Each slab has a separate instruction
+mask: a losing shape can be omitted while the segment's point and field
+operations still execute. A segment is omitted only when its point-state and
+field effects permit omission. Material queries also retain ordinary bound
+tests: a bound-skipped smooth loser leaves an earlier seam intact, while an
+evaluated smooth loser clears it. Queries select a containing ball before reading
+its masks, and use them only with the camera mask and the same detail
+selection. Secondary queries and root queries that omit independently marched
+parts retain their complete expressions. Compiled parts
+consume the decisions through their original placement instruction indices;
+pruning never discards a child field because another part beats it. The required result is the full
+walk's distance bit for bit at every sampled point, preserving its march
+steps as well as the visible surface.
+
 ## Composition bounds
 
 A blend's bound is a property of the composition, not of the operands' authored
@@ -101,6 +152,145 @@ Repeat, polar repetition, wallpaper folds, and cell jitter can cross a domain
 boundary between samples. A local Lipschitz factor alone cannot prove that a
 raw step is safe across the discontinuity. The marcher therefore uses
 fold-safe bounds where required.
+
+A wallpaper fold is sound only when its fold is continuous. The fold reduces
+a point to its lattice cell, then applies the group's in-cell isometry, and
+the field reads only that cell's copy. When every cell wall and every in-cell
+seam is a mirror of the group, the fold is built from reflections alone, so it
+never lengthens a distance: for any rendered point q,
+f(p) = d(F(p), S) ≤ |F(p) − F(q)| ≤ |p − q|. The field then never reads past
+the nearest copy. It is exact when the prototype lies in the region the fold
+leaves fixed, and reads short, which slows the march but skips nothing, when
+the prototype crosses a mirror. A fold that jumps, at a translation wall or a
+rotation seam, can read a cell's own copy while a neighbour's lies nearer, so a
+march could step through the neighbour.
+
+So a program folds only through a continuous group, and `SdfProgram` refuses
+the others by name when it builds. `SdfWallpaperFold`, the CPU statement of
+the kernels' fold, measures continuity by folding pairs of points across the
+lattice: PMM, P4M, P3M1 and P6M are continuous; P1, P2, PM, PG, CM, PMG, PGG,
+CMM, P4, P4G, P3, P31M and P6 jump. `SdfWallpaperFoldLawTests` holds every
+accepted group to a brute-force distance to its rendered geometry and to a
+sphere-traced ray, and shows the same sweep catching P2.
+
+A continuous group stays continuous only through the lattice it is given, and
+`SdfWallpaperFold` states what that is. A square lattice's `limit` is a
+non-negative whole number of cells per axis: the clamp then collapses whole
+cells onto the boundary cell of the same lattice row, which is still a
+reflection, where a fractional limit moves the clamped cell off the lattice and
+jumps at the wall. A hex lattice has no continuous clamp, because an edge cell
+has two neighbours inside any boundary and one clamped cell cannot match both,
+so a hex group takes only the unbounded limit and a hex wallpaper is bounded by
+intersecting it with a bounding shape inside a field scope. The reciprocals the
+kernel reads (`Data0.zw`) are exactly one over the cell the fold subtracts, so
+the lattice round and the displacement read one cell, and a cell is refused
+unless it is positive and finite and its reciprocal is at most
+`SdfWallpaperFold.MaximumInverseCell`, which keeps the round finite at any point
+a float resolves a cell. The builder, `SdfProgram` admission and the creation
+canonicalizer state each rule once, through `LimitRefusal` and `CellRefusal`.
+A fold whose limit is unbounded (`SdfWallpaperFold.IsUnbounded`) has copies at every
+distance, so its influence has no bound, and so has an infinite `Repeat` or a
+`RepeatLimited` whose limit reaches `SdfDomainOps.UnboundedRepeatLimit`: such a
+shape's bound is `SdfBoundAlgebra.Unbounded`, and the stamper's reach for it is
+that state, where a million cells of a small pitch would be a radius a camera can
+leave behind. An influence with no bound still composes (see
+[bounds compose through set operations](#bounds-compose-through-set-operations)). The hex reduction
+clamps its fold-plane point to `MaximumHexCoordinate` before the multiply, which
+keeps every axial sum within float's finite range for any cell the rule admits and
+leaves the fold continuous. `SdfWallpaperFoldLawTests` folds pairs across every cell wall of finite,
+fractional and unbounded limits and of cells from ten micro-units to three
+thousand, and holds every configuration a builder accepts to the same stretch.
+
+## Bounds compose through set operations
+
+An instance's cull bound is the radius of a sphere outside which its field is at
+least the distance to the sphere; `SdfBoundAlgebra.Unbounded` stands for no such
+sphere. Unbounded is a state, positive infinity, never a radius: composing it, adding
+a finite margin and scaling it by a positive factor all leave it unbounded, so no
+placement scale overflows it, and only the program's packing turns it into
+`SdfProgram.UnmaskableBoundRadius`, the number the kernels read. An instance
+declares it by authoring `Unbounded` as its radius, and a tree the program finds
+unbounded packs the same bound. `SdfBoundAlgebra` composes the bounds of a field's
+operands through its set operations, and the program and the authoring stamper
+both read it:
+
+| Operation | Field | Bound |
+|---|---|---|
+| Intersection | `max(a, b)` | the smaller: it is at least either operand, so an unbounded operand imposes nothing and unbounded with finite is finite |
+| Subtraction `a - b` | `max(a, -b)` | `a`'s: it is at least `a`, whatever `b` is |
+| Union | `min(a, b)` | the larger: one unbounded operand makes the union unbounded |
+| Smooth variant | the blend's own | the same, plus its blend radius, which is the halo `SdfProgram` adds once to the instance; a scope's compose radius is multiplied by the scope's Lipschitz factor `L`, since the scope's field joins its parent divided by `L` |
+
+Transforms, scales and repeats compose as they always have. The algebra holds over
+a field scope, whose shapes join one field by their blends: inside `PushField` an
+unbounded lattice intersected with a box is as bounded as the box, a box minus a
+lattice keeps the box's bound, and a lattice with a box unioned in is unbounded.
+Outside a scope every intersection, field op and fold with no edge reads the one
+global accumulator, so a flat instance holding one is unmaskable. A bound has two guarantees, and a reader takes the one it needs. It contains the instance's
+surface and the influence of its blends, so a ray that misses it misses the instance: the beam
+cull, the grid binning, the shadow and ambient gathers and the part compiler read it so, and the
+halo carries a scope's soft compose out to its radius times the scope's factor `L`. And the
+instance's field outside it is at least the distance to the bound divided by
+`SdfInstanceCost.FieldRescale`, the largest `L` of a scope that divides its field before the
+parent sees it (1 when none does). The directory's running-minimum skip never reads an instance
+bound for a scope: a segment holding a push or pop is always evaluated, and the CPU evaluator
+culls only an instance that is a pure union with no scope.
+
+Every bound is measured from the world point: a segment starts there, because the
+directory and the instance mask can skip or compile a segment apart from its neighbours and a
+skipped one passes the point before it along, so `SdfProgram` refuses a stream that may
+carry a moved point into a segment that reads it without a `ResetPoint` of its own (a
+shapeless world segment, which is never skipped, is the one reset that holds across a
+boundary). A segment is what the directory says it is: `SegmentRanges` splits before each
+`ResetPoint` and at every instance's first and end instruction, so an empty instance is a
+boundary too, and the refusal and the directory read one definition. A lattice opens an unbounded fold unless its limit gives it an edge; `SdfOpRoles`
+is the one table of which ops move the point, which move the field, and which open a lattice,
+and an op without a row refuses by name. A `Plane` is
+unmaskable wherever it stands, and `SdfBoundAlgebraLawTests` samples the field
+past each packed bound and holds it at least the distance to that bound.
+
+A log-sphere fold changes its field across spheres: each shell holds the
+prototype at its own scale, and the shell boundaries are spheres about the
+fold's local origin. When every operation before the fold on its chain is a
+translation, a rotation or a uniform scale, `SdfProgram` writes the origin into
+the fold's instruction and the boundaries are spheres in world space too. When
+a warp sits before the fold, the boundaries are bent, and the march knows only
+the distance to them. A field value measured on one side of such a wall says
+nothing about the other, so `map()` publishes the walls around each sample: the
+nearest log-sphere shell whose boundaries are world spheres, and the distance
+to every other log-sphere wall. No wall has a floor.
+
+The fine marches (primary, soft shadows and the overshoot view) step through
+one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
+
+- A step that stays inside every wall's distance is unchanged, so a sample far
+  from every wall pays one comparison.
+- A step that would leave a shell with sphere walls stops where the ray meets
+  the wall. When the sample's own side is clear that far, the march crosses:
+  it lands just past the wall, by at most the march's own acceptance distance,
+  and samples the other side there before it steps again. Geometry on the far
+  side within that sliver is within the acceptance distance of the landing
+  sample, so the landing accepts it. When the near side is not clear to the
+  wall, the step is that clearance, which stays inside the shell.
+- A wall known only by its distance is passed by at most the acceptance
+  distance, which makes the same no-skip argument. Near such a wall a march
+  advances at least that distance a step, so a grazing ray spends more steps
+  there than at a sphere wall.
+- A crossing is one step of the march's budget. A line meets a sphere at most
+  twice, every sample of a ray reads the same two intersections, and a crossing
+  lands strictly past its own, so a march crosses each shell wall at most
+  twice, in and out: two for each shell boundary the ray meets.
+
+The beam's cone keeps every log-sphere wall in its clearance and stops its
+proof at them. A ball proof, such as a reprojected march seed, reads
+`sdfMapBallClearance`, which stops at the nearest wall. Soft shadows still
+stride through an occluder thinner than their minimum stride on either side,
+but never across a wall. The rule is exact up to the float rounding of the
+wall test itself: a grazing ray whose landing rounds back onto the side it left
+crosses again from there, a tolerance further on.
+`SdfLogSphereMarchDeviceLawTests` holds the marches on the device, and
+`SdfLogSphereCrossingLawTests` holds a CPU reference march of the rule, over
+both kinds of wall, to its no-skip property and its crossing bound.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not

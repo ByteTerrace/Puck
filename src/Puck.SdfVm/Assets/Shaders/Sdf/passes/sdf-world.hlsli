@@ -1,5 +1,6 @@
 // Shared contract and rendering functions for the world kernels. Beam evaluates tile clearance; primary records
-// camera hits; views reconstructs hit shading and diagnostics into the view's own output image. The scene program and
+// camera hits; views shades the hits and diagnostics into the view's lit image, which the sky and composite passes
+// (passes/sdf-sky-runs.comp.hlsl, passes/sdf-composite.comp.hlsl) put over the sky. The scene program and
 // cameras remain data. KEEP IN SYNC with SdfWorldTables's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
 #define SDF_WORLD_HLSLI
@@ -16,8 +17,8 @@
 #include "../shade/sdf-lighting.hlsli"
 #include "../march/sdf-march-constants.hlsli"
 #include "../surface/sdf-normals.hlsli"
-#include "../shade/sdf-sky.hlsli"
 #include "../march/sdf-cone.hlsli"
+#include "../march/sdf-grid-walk.hlsli"
 #include "../frame/sdf-levers.hlsli"
 #include "../surface/sdf-shadow-gather.hlsli"
 #include "../surface/sdf-ambient.hlsli"

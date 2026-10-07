@@ -14,19 +14,19 @@ bool sdfPartCannotImprove(uint instance, float3 p, float distance);
 float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset, out uint reflected) {
     reflected = 0u;
 #ifndef SDF_STRIP_ALL_EXOTIC
-    uint4 prefix = sdfWords[extensionOffset];
+    uint4 prefix = sdfProgramWord(extensionOffset);
     p -= asfloat(prefix.xyz);
     if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
-        p = rotatePointByInverseQuaternion(p, asfloat(sdfWords[extensionOffset + 1u]));
+        p = rotatePointByInverseQuaternion(p, asfloat(sdfProgramWord(extensionOffset + 1u)));
     }
     uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
-    uint count = min(sdfWords[extensionOffset + 2u].x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
     [loop]
     for (uint step = 0u; (step < count); step++) {
         uint index = (first + step);
-        uint op = SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + index]);
-        float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)]);
-        float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u]);
+        uint op = SDF_INSTRUCTION_OP(sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + index));
+        float4 data0 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)));
+        float4 data1 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u));
         if (op == SDF_OP_SYMMETRY_PLANE) {
             float spT = (dot(p, data0.xyz) + data0.w);
             reflected |= ((spT < 0.0) ? (1u << step) : 0u);
@@ -48,30 +48,38 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset, out ui
 // reverse order (repeats and translates are translations) and the prefix rotation, into the leaf's base frame.
 float3 sdfRigidFoldGradient(float3 g, uint extensionOffset, uint dataOffset, uint reflected) {
 #ifndef SDF_STRIP_ALL_EXOTIC
-    uint4 prefix = sdfWords[extensionOffset];
+    uint4 prefix = sdfProgramWord(extensionOffset);
     uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
-    uint count = min(sdfWords[extensionOffset + 2u].x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
     [loop]
     for (uint step = count; (step > 0u); step--) {
         uint index = (first + step - 1u);
-        uint op = SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + index]);
+        uint op = SDF_INSTRUCTION_OP(sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + index));
         if ((reflected & (1u << (step - 1u))) != 0u) {
-            float3 normal = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)].xyz);
+            float3 normal = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)).xyz);
             g -= ((2.0 * dot(g, normal)) * normal);
         } else if (op == SDF_OP_ROTATE) {
-            g = rotatePointByQuaternion(g, asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)]));
+            g = rotatePointByQuaternion(g, asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index))));
         }
     }
     if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
-        g = rotatePointByQuaternion(g, asfloat(sdfWords[extensionOffset + 1u]));
+        g = rotatePointByQuaternion(g, asfloat(sdfProgramWord(extensionOffset + 1u)));
     }
 #endif
     return g;
 }
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
+    sdfTapeTrackMaterial = trackMaterial;
+    sdfTapeSample(worldPosition, instanceMaskBase);
+    // The root of an independent-part march omits fields present when the camera tape was built.
+    if (sdfPrimaryOmitParts) { sdfTapeSampleActive = false; }
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
     sdfMapStepBound = SDF_STEP_BOUND_NONE;
+    sdfMapFoldGap = SDF_STEP_BOUND_NONE;
+    sdfMapFoldCenter = float3(0.0, 0.0, 0.0);
+    sdfMapFoldInner = 0.0;
+    sdfMapFoldOuter = SDF_STEP_BOUND_NONE;
     // The material blend channel starts CLEARED every call (a previous sample's seam must never leak — the same
     // soundness discipline sdfMapStepBound follows); the shared blend tail rebuilds it as smooth composes execute.
     if (trackMaterial) {
@@ -101,7 +109,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint worldSegmentOffset = sdfProgramLayout.worldSegmentOffset;
     bool hasInstances = sdfProgramLayout.hasInstances;
 
-    if (instanceCount > SDF_MAX_INSTANCES) {
+    if (!sdfProgramLayout.valid || instanceCount > SDF_MAX_INSTANCES) {
         return sdfIsaErrorHit();
     }
 
@@ -120,8 +128,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint pendingInstance = SDF_SEGMENT_NONE;
 
     if (hasInstances) {
-        worldCount = SDF_WORLD_SEGMENT_COUNT(sdfWords[worldSegmentOffset]);
-        worldNext = ((0u < worldCount) ? sdfWords[worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS].x : SDF_SEGMENT_NONE);
+        worldCount = SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset));
+        worldNext = ((0u < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS).x : SDF_SEGMENT_NONE);
         sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
     }
 
@@ -141,12 +149,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
     float laneErodeAmount = 0.0;
-    // The fold-safe step bound accumulator (see sdfMapStepBound): the min, across every radial fold executed by any
-    // chain this call, of the fold's local boundary gap mapped toward world units by the chain's accumulated
-    // distanceScale. Published (times the final stepScale, which conservatively covers any upstream non-conformal
-    // warp's expansion) at the single return. Deliberately NOT reset by RESET: another chain's fold boundary still
-    // bounds where this sample can safely step — a global min is conservative, never unsound.
+    // The ball-wall accumulator (see sdfMapStepBound): the min, across every log-sphere wall executed by any chain this
+    // call and not published as the fold shell, of the fold's local boundary gap mapped toward world units by the
+    // chain's accumulated distanceScale. Published (times the final stepScale, which conservatively covers any
+    // upstream non-conformal warp's expansion) at the single return. Deliberately NOT reset by RESET: another chain's
+    // fold boundary still bounds where this sample can safely step — a global min is conservative, never unsound.
     float walkStepBound = SDF_STEP_BOUND_NONE;
+    // The fold shell (see sdfMapFoldGap), in world units: the similarity fold whose wall lies nearest. Never reset by
+    // RESET, like walkStepBound.
+    float foldGap = SDF_STEP_BOUND_NONE;
+    float3 foldCenter = float3(0.0, 0.0, 0.0);
+    float foldInner = 0.0;
+    float foldOuter = SDF_STEP_BOUND_NONE;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -158,26 +172,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
-    // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
-    // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
-    // so it holds exactly ONE parent — the builder's validator rejects nesting past SDF_MAX_FIELD_SCOPE_DEPTH == 1, and
-    // raising that depth would require turning this pair into an indexed array with push/pop-by-depth stack semantics
-    // (SDF_MAX_FIELD_SCOPE_DEPTH is documentation only — nothing here reads it). Untouched by a scope-free program, so
-    // its codegen and render stay byte-identical.
-    float savedFieldDistance = SDF_FAR_DISTANCE;
-    int savedFieldMaterial = 0;
-    float4 savedFieldLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int savedFieldInstance = -1;
-    int savedFieldSlot = SDF_TRANSFORM_SLOT_NONE;
-    float savedFieldBlendWeight = 0.0;
-    int savedFieldBlendOther = 0;
-
+    // Each validated scope saves its immediate parent's complete field and material seam.
+    SdfHit fieldParents[SDF_MAX_FIELD_SCOPE_DEPTH];
+    float fieldBlendWeights[SDF_MAX_FIELD_SCOPE_DEPTH];
+    int fieldBlendOthers[SDF_MAX_FIELD_SCOPE_DEPTH];
+    uint fieldDepth = 0u;
     // Walk ResetPoint segments in directory order, merging world and visible-instance ranges in ascending order.
     // A Union chain can be skipped when its sphere's lower bound cannot beat the running minimum; the next ResetPoint
     // makes its discarded transform state dead. This preserves the field and material winner even if backends choose
     // different skips. A dynamic sphere's center is offset + entity position; rotation is folded into its baked radius.
+    uint previousSegment = SDF_SEGMENT_NONE;
     [loop]
-    for (;;) {
+    for (uint merge = 0u; merge < sdfProgramLayout.vectorCount; merge++) {
         // Select the next segment. Zero-instance: the plain linear counter (independent of any loaded value, so the
         // per-segment sphere loads pipeline across iterations). Instanced: the two-pointer merge — world segments
         // never fall inside an instance's range, so comparing the next world segment against the next owned segment
@@ -186,6 +192,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         int segmentInstance = -1;
 
         if (!hasInstances) {
+            linearCursor = sdfTapeNextSegment(linearCursor, segmentCount);
             if (linearCursor >= segmentCount) {
                 break;
             }
@@ -194,11 +201,21 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         } else if (worldNext < instanceSegment) {
             segment = worldNext;
             worldCursor++;
-            worldNext = ((worldCursor < worldCount) ? sdfWords[worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldCursor].x : SDF_SEGMENT_NONE);
+            worldNext = ((worldCursor < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldCursor).x : SDF_SEGMENT_NONE);
         } else if (instanceSegment < instanceSegmentEnd) {
+            instanceSegment = sdfTapeNextSegment(instanceSegment, instanceSegmentEnd);
+            if (instanceSegment == instanceSegmentEnd) {
+                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                    maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                continue;
+            }
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
-            if (sdfProgramLayout.partProgramOffset != 0u) {
-                uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + pendingInstance];
+            if (sdfProgramLayout.partProgramOffset != 0u
+#ifdef SDF_TAPE_BUILD
+                && !sdfTapeBuilding
+#endif
+            ) {
+                uint4 part = sdfProgramWord(sdfProgramLayout.partProgramOffset + 1u + pendingInstance);
                 bool partReady = ((part.z & 0x7FFFFFFFu) != 0u);
 #ifndef SDF_DYNAMIC_TRANSFORMS
                 partReady = partReady && ((part.z & 0x80000000u) == 0u);
@@ -227,18 +244,29 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             break;
         }
 
-        uint4 segmentMeta = sdfWords[segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u];
+        if (segment >= segmentCount || (previousSegment != SDF_SEGMENT_NONE && segment <= previousSegment)) { return sdfIsaErrorHit(); }
+        previousSegment = segment;
+        if (sdfTapeNextSegment(segment, segment + 1u) != segment) { continue; }
+#ifdef SDF_TAPE_BUILD
+        sdfTapeBeginSegment();
+#endif
+        uint4 segmentMeta = sdfProgramWord(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u);
+        if (segmentMeta.z > segmentMeta.w || segmentMeta.w > sdfProgramLayout.instructionCount) { return sdfIsaErrorHit(); }
         uint segmentBoundMode = (segmentMeta.x & SDF_SEGMENT_BOUND_MASK);
 
         [branch]
-        if (segmentBoundMode != SDF_BOUND_NONE) {
-            float4 segmentBound = asfloat(sdfWords[segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment)]);
+        if (segmentBoundMode != SDF_BOUND_NONE
+#ifdef SDF_TAPE_BUILD
+            && !sdfTapeBuilding
+#endif
+        ) {
+            float4 segmentBound = asfloat(sdfProgramWord(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment)));
             float3 boundCenter = segmentBound.xyz;
             bool boundReady = (segmentBoundMode == SDF_BOUND_STATIC);
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
             if (segmentBoundMode == SDF_BOUND_DYNAMIC) {
-                boundCenter += sdfDynamicTransforms[3u * segmentMeta.y].xyz;
+                boundCenter += sdfDynamicTransformRow(3u * segmentMeta.y).xyz;
                 boundReady = true;
             }
 #endif
@@ -265,11 +293,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #ifndef SDF_VM_DISABLE_RIGID_PLAN
         [branch]
         if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) != 0u) {
-            uint4 plan = sdfWords[rigidPlanOffset + segment];
+            if (!sdfProgramRange(rigidPlanOffset, segmentCount, 1u)) { return sdfIsaErrorHit(); }
+            uint4 plan = sdfProgramWord(rigidPlanOffset + segment);
+            if (!sdfProgramRange(plan.x, plan.y, 3u)) { return sdfIsaErrorHit(); }
             bool planReady = true;
 
 #ifndef SDF_DYNAMIC_TRANSFORMS
-            planReady = (plan.z == 0u);
+            planReady = (plan.z == SDF_TRANSFORM_SLOT_STATIC_WORD);
 #endif
 
             if (planReady) {
@@ -278,12 +308,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
-                if (plan.z != 0u) {
-                    uint dynamicSlot = (plan.z - 1u);
-                    rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
+                if (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) {
+                    uint dynamicSlot = (uint)SDF_TRANSFORM_SLOT_UNPACK(plan.z);
+                    rigidLanes = sdfDynamicTransformRow(3u * dynamicSlot + 2u);
                     rigidSlot = (int)dynamicSlot;
-                    float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
-                    float4 dynamicOrientation = sdfDynamicTransforms[(3u * dynamicSlot) + 1u];
+                    float4 dynamicPosition = sdfDynamicTransformRow(3u * dynamicSlot);
+                    float4 dynamicOrientation = sdfDynamicTransformRow((3u * dynamicSlot) + 1u);
                     rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), dynamicOrientation);
                 }
 #endif
@@ -291,7 +321,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 [loop]
                 for (uint leaf = 0u; (leaf < plan.y); leaf++) {
                     uint leafOffset = (plan.x + (3u * leaf));
-                    uint4 packedPose = sdfWords[leafOffset];
+                    uint4 packedPose = sdfProgramWord(leafOffset);
                     uint packedShape = packedPose.w;
                     uint shapeIndex = (packedShape & SDF_RIGID_LEAF_SHAPE_MASK);
                     bool folded = ((packedShape & SDF_RIGID_LEAF_FOLDED) != 0u);
@@ -303,9 +333,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // The outer dynamic sphere avoids a forward quaternion by inflating around the entity root. This
                     // tight primitive sphere is baked in the SAME chain frame rigidBasePosition occupies, so it rejects
                     // distant bones before pose/shape payload loads. Negative radius marks a non-Union/unbounded leaf.
-                    float4 leafBound = asfloat(sdfWords[leafOffset + 2u]);
+                    float4 leafBound = asfloat(sdfProgramWord(leafOffset + 2u));
 
-                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)) {
+                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)
+#ifdef SDF_TAPE_BUILD
+                        && !sdfTapeBuilding
+#endif
+                    ) {
                         float3 toLeafCenter = (rigidBasePosition - leafBound.xyz);
                         float leafClearance = max((result.distance + leafBound.w), 0.0);
 
@@ -314,11 +348,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 
-                    uint4 shapeHeader = sdfWords[SDF_PROGRAM_HEADER_VECTORS + shapeIndex];
+                    uint4 shapeHeader = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + shapeIndex);
 
                     if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shapeHeader))) {
                         continue;
                     }
+                    if (!sdfTapeShapeLive(shapeIndex)) { sdfTapeSkippedShape(shapeHeader); continue; }
 
                     float3 leafBasePosition = rigidBasePosition;
 
@@ -330,26 +365,39 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float3 rigidPosition = (leafBasePosition - asfloat(packedPose.xyz));
 
                     if ((packedShape & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
-                        rigidPosition = rotatePointByInverseQuaternion(rigidPosition, asfloat(sdfWords[leafOffset + 1u]));
+                        rigidPosition = rotatePointByInverseQuaternion(rigidPosition, asfloat(sdfProgramWord(leafOffset + 1u)));
                     }
 
-                    float4 shapeData0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex)]);
-                    float4 shapeData1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex) + 1u]);
+                    float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex)));
+                    float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex) + 1u));
                     float candidate = evaluateShape((SDF_INSTRUCTION_SHAPE(shapeHeader) & SDF_SHAPE_TYPE_MASK), rigidPosition, shapeData0, shapeData1);
+#ifdef SDF_TAPE_BUILD
+                    sdfTapeCandidate(segment, shapeIndex, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), shapeData1.x, rigidSlot, shapeData0.w);
+#endif
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
+                    if (sdfTapeDecided(shapeIndex)) { result.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shapeHeader)); }
                     sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
                 }
 
+ #ifdef SDF_TAPE_BUILD
+                sdfTapeEndSegment(segment);
+ #endif
                 continue;
             }
         }
 #endif
 
         [loop]
-        for (uint index = segmentMeta.z; (index < segmentMeta.w); index++) {
+        for (uint index = segmentMeta.z; index < min(segmentMeta.w, sdfProgramLayout.instructionCount); index++) {
+            // The validated layout spans and this loop's index bound admit direct header and payload reads.
             uint4 instructionHeader = sdfWords[SDF_PROGRAM_HEADER_VECTORS + index];
             uint op = SDF_INSTRUCTION_OP(instructionHeader);
+#ifdef SDF_TAPE_BUILD
+            if (op == SDF_OP_DISPLACE || op == SDF_OP_CELL_DISPLACE || op == SDF_OP_NOISE_DISPLACE || op == SDF_OP_PUSH_FIELD) {
+                sdfTapeForgetField(index, op == SDF_OP_PUSH_FIELD);
+            }
+#endif
 #ifdef SDF_VM_EAGER_PAYLOADS
             float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)]);
             float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u]);
@@ -410,21 +458,38 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // exp(w/2) Lipschitz factor (SdfProgram.AnalyzeLipschitz) a sound step clamp for the over-relaxed march.
                 case SDF_OP_LOG_SPHERE: {
                     SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
                     float foldRadius = max(length(localPosition), SDF_LOGSPHERE_MIN_RADIUS);
                     float logRadius = log(foldRadius);
                     float shell = round(logRadius * data0.z);   // nearest shell index k
                     float shellScale = exp(shell * data0.x);    // exp(k*w) = the shell's Cartesian scale = r / rFolded
 
-                    // FOLD-SAFE STEP BOUND (see sdfMapStepBound): the radial distance from this sample to the nearest
-                    // shell BOUNDARY, in the current (pre-fold) local frame. Past a boundary the fold snaps to the
-                    // neighbor shell, so the folded value below is only trustworthy within this gap — beyond it the
-                    // value can overestimate true distance (the neighbor's copy may be closer). The gap maps toward
-                    // world units by the chain's accumulated distanceScale; the floor keeps a sample sitting exactly
-                    // on a boundary from stalling the march.
-                    float boundaryGap = min(
-                        (foldRadius - exp((shell - 0.5) * data0.x)),
-                        (exp((shell + 0.5) * data0.x) - foldRadius));
-                    walkStepBound = min(walkStepBound, (max(boundaryGap, (foldRadius * SDF_LOGSPHERE_GAP_FLOOR)) * distanceScale));
+                    // THE SHELL'S WALLS (see sdfMapFoldGap): spheres about the local origin at the shell's two
+                    // boundary radii. Past one the fold snaps to the neighbor shell, so the folded value below is only
+                    // trustworthy inside them. The host marks a chain that is a similarity (data1.w, with the local
+                    // origin in the chain head's frame in data1.xyz): its walls are world spheres of the radii times
+                    // distanceScale, which a march crosses exactly when they are the nearest. Any other wall maps
+                    // toward world units by distanceScale and joins the ball walls.
+                    float innerRadius = exp((shell - 0.5) * data0.x);
+                    float outerRadius = exp((shell + 0.5) * data0.x);
+                    float wallGap = (min((foldRadius - innerRadius), (outerRadius - foldRadius)) * distanceScale);
+
+                    if ((data1.w > 0.0) && (wallGap < foldGap)) {
+                        float3 center = data1.xyz;
+#ifdef SDF_DYNAMIC_TRANSFORMS
+                        if (currentSlot != SDF_TRANSFORM_SLOT_NONE) {
+                            center = (rotatePointByQuaternion(center, sdfDynamicTransformRow(((3u * (uint)currentSlot) + 1u))) +
+                                sdfDynamicTransformRow((3u * (uint)currentSlot)).xyz);
+                        }
+#endif
+                        walkStepBound = min(walkStepBound, foldGap);
+                        foldGap = wallGap;
+                        foldCenter = center;
+                        foldInner = (innerRadius * distanceScale);
+                        foldOuter = (outerRadius * distanceScale);
+                    } else {
+                        walkStepBound = min(walkStepBound, wallGap);
+                    }
 
                     localPosition /= shellScale;                // fold every shell onto the prototype
 
@@ -457,10 +522,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // row into currentLanes, so a later SDF_OP_LANE_ERODE on this chain reads it.
                     SDF_VM_LOAD_DATA0;
                     uint dynamicSlot = (uint)data0.x;
-                    float4 dynamicPosition = sdfDynamicTransforms[(3u * dynamicSlot)];
-                    float4 dynamicOrientation = sdfDynamicTransforms[((3u * dynamicSlot) + 1u)];
+                    float4 dynamicPosition = sdfDynamicTransformRow((3u * dynamicSlot));
+                    float4 dynamicOrientation = sdfDynamicTransformRow(((3u * dynamicSlot) + 1u));
                     localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
-                    currentLanes = sdfDynamicTransforms[((3u * dynamicSlot) + 2u)];
+                    currentLanes = sdfDynamicTransformRow(((3u * dynamicSlot) + 2u));
                     currentSlot = (int)dynamicSlot;
                     break;
                 }
@@ -651,7 +716,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     SDF_VM_LOAD_DATA0;
                     uint u = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X;
                     uint v = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z;
-                    float angle = data0.x * (localPosition[SDF_INSTRUCTION_BLEND(instructionHeader)] - data0.y);
+                    uint driver = SDF_INSTRUCTION_BLEND(instructionHeader);
+                    if (driver >= 3u) { return sdfIsaErrorHit(); }
+                    float angle = data0.x * (localPosition[driver] - data0.y);
                     float c = cos(angle), sn = sin(angle);
                     float pu = localPosition[u], pv = localPosition[v];
                     localPosition[u] = c * pu + sn * pv;
@@ -670,6 +737,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
                     uint axis = SDF_INSTRUCTION_SHAPE(instructionHeader);
+                    if (axis >= 3u) { return sdfIsaErrorHit(); }
                     float rawT = (data0.z - localPosition[axis]) * data0.w;
                     float t = saturate(rawT);
                     float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
@@ -688,6 +756,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_SHEAR: {
                     SDF_VM_LOAD_DATA0;
                     uint target = SDF_INSTRUCTION_SHAPE(instructionHeader), driver = SDF_INSTRUCTION_BLEND(instructionHeader);
+                    if (target >= 3u || driver >= 3u) { return sdfIsaErrorHit(); }
                     float t = localPosition[driver];
                     localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
                     break;
@@ -749,6 +818,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ONION: {
                     SDF_VM_LOAD_DATA0;
+#ifdef SDF_TAPE_BUILD
+                    sdfTapeUnary(index, op, data0.x);
+#endif
                     result.distance = (abs(result.distance) - data0.x);
                     break;
                 }
@@ -756,6 +828,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_DILATE: {
                     SDF_VM_LOAD_DATA0;
+#ifdef SDF_TAPE_BUILD
+                    sdfTapeUnary(index, op, data0.x);
+#endif
                     result.distance -= data0.x;
                     break;
                 }
@@ -803,7 +878,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float octaveAmplitude = 1.0;
                     float noiseSum = 0.0;
                     uint octaveCount = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    for (uint octave = 0u; (octave < octaveCount); octave++) {
+                    for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
+                        if (octave >= octaveCount) { break; }
                         uint octaveSeed = (SDF_INSTRUCTION_SHAPE(instructionHeader) + octave);
                         noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
                         q *= data0.w;
@@ -823,11 +899,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint plane = SDF_INSTRUCTION_BLEND(instructionHeader);
                     int axisA = ((plane == SDF_PLANE_YZ) ? 1 : 0);
                     int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
-                    // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
-                    // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
-                    bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
                     float2 cellIndex;
-                    float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
+                    float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, cellIndex);
 
                     localPosition[axisA] = folded.x;
                     localPosition[axisB] = folded.y;
@@ -857,23 +930,26 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(instructionHeader))) {
                         break;
                     }
-
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
                     // The per-shape flavour of the segment early-out above (same exactness argument): inside an
                     // EVALUATED segment, a Union shape whose own (tighter) sphere cannot beat the running minimum
                     // skips just its evaluation — always sound, because shape ops never mutate chain state.
-                    uint4 shapeBoundMeta = sdfWords[boundsOffset + (SDF_BOUND_RECORD_VECTORS * index) + 1u];
+                    uint4 shapeBoundMeta = sdfProgramWord(boundsOffset + (SDF_BOUND_RECORD_VECTORS * index) + 1u);
 
                     [branch]
-                    if (shapeBoundMeta.x != SDF_BOUND_NONE) {
-                        float4 shapeBound = asfloat(sdfWords[boundsOffset + (SDF_BOUND_RECORD_VECTORS * index)]);
+                    if (shapeBoundMeta.x != SDF_BOUND_NONE
+#ifdef SDF_TAPE_BUILD
+                        && !sdfTapeBuilding
+#endif
+                    ) {
+                        float4 shapeBound = asfloat(sdfProgramWord(boundsOffset + (SDF_BOUND_RECORD_VECTORS * index)));
                         float3 shapeBoundCenter = shapeBound.xyz;
                         bool shapeBoundReady = (shapeBoundMeta.x == SDF_BOUND_STATIC);
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                         if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
-                            shapeBoundCenter += sdfDynamicTransforms[3u * shapeBoundMeta.y].xyz;
+                            shapeBoundCenter += sdfDynamicTransformRow(3u * shapeBoundMeta.y).xyz;
                             shapeBoundReady = true;
                         }
 #endif
@@ -888,8 +964,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 
+                    if (!sdfTapeShapeLive(index)) { sdfTapeSkippedShape(instructionHeader); break; }
                     uint shapeType = (SDF_INSTRUCTION_SHAPE(instructionHeader) & SDF_SHAPE_TYPE_MASK);
                     float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
+#ifdef SDF_TAPE_BUILD
+                    sdfTapeCandidate(segment, index, candidate, SDF_INSTRUCTION_BLEND(instructionHeader), data1.x, currentSlot, data0.w);
+#endif
 
                     // Hand the DISTANCE-SCALED (plus any pending lane erosion) candidate to the shared blend tail below.
                     composeCandidate = candidate;
@@ -918,19 +998,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
                 case SDF_OP_PUSH_FIELD: {
-                    // Save the parent accumulator into the one-deep slot and reseed a fresh scope. Every accumulator-
-                    // reading op until the matching POP now composes against SDF_FAR_DISTANCE (this scope), not the scene.
-                    savedFieldDistance = result.distance;
+                    if (fieldDepth >= SDF_MAX_FIELD_SCOPE_DEPTH) { return sdfIsaErrorHit(); }
+                    fieldParents[fieldDepth] = result;
+                    fieldBlendWeights[fieldDepth] = trackMaterial ? sdfMaterialBlendWeight : 0.0;
+                    fieldBlendOthers[fieldDepth] = trackMaterial ? sdfMaterialBlendOther : 0;
                     if (trackMaterial) {
-                        savedFieldMaterial = result.material;
-                        savedFieldLanes = result.lanes;
-                        savedFieldInstance = result.instanceIndex;
-                        savedFieldSlot = result.frameSlot;
-                        savedFieldBlendWeight = sdfMaterialBlendWeight;
-                        savedFieldBlendOther = sdfMaterialBlendOther;
                         sdfMaterialBlendWeight = 0.0;
                         sdfMaterialBlendOther = 0;
                     }
+                    fieldDepth++;
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
                         result.material = 0;
@@ -941,6 +1017,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
+                    if (fieldDepth == 0u) { return sdfIsaErrorHit(); }
+                    fieldDepth--;
+                    float savedFieldDistance = fieldParents[fieldDepth].distance;
+                    int savedFieldMaterial = fieldParents[fieldDepth].material;
+                    float4 savedFieldLanes = fieldParents[fieldDepth].lanes;
+                    int savedFieldInstance = fieldParents[fieldDepth].instanceIndex;
+                    int savedFieldSlot = fieldParents[fieldDepth].frameSlot;
+                    float savedFieldBlendWeight = fieldBlendWeights[fieldDepth];
+                    int savedFieldBlendOther = fieldBlendOthers[fieldDepth];
                     SDF_VM_LOAD_DATA1;
                     // The scope's accumulated field IS the candidate — ALREADY in world units (its shapes were
                     // distance-scaled as they blended in), so it is NOT re-multiplied by distanceScale, and the point
@@ -950,6 +1035,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
                     // in data1.z (KEEP IN SYNC with AnalyzeLipschitz and the fixed-point mirror).
                     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
+#ifdef SDF_TAPE_BUILD
+                    sdfTapePop(index, composeBlend, data1);
+#endif
                     bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
                     float candidateScale = data1.y;
                     composeCandidate = result.distance;
@@ -974,6 +1062,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         sdfMaterialBlendWeight = savedFieldBlendWeight;
                         sdfMaterialBlendOther = savedFieldBlendOther;
                     }
+
+                    if (sdfTapeDecided(index)) { sdfTapeSkippedShape(instructionHeader); break; }
 
                     if (composeBlend == SDF_BLEND_MORPH) {
                         SDF_VM_LOAD_DATA0;
@@ -1063,9 +1153,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
+                if (sdfTapeDecided(index)) { result.distance = sdfTapeWinnerSeed(composeBlend); }
                 sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
             }
         }
+#ifdef SDF_TAPE_BUILD
+        sdfTapeEndSegment(segment);
+#endif
     }
 
     // The Lipschitz clamp: scale the FINAL nearest-surface distance by the per-program 1/L so every marcher that funnels
@@ -1084,6 +1178,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
     // non-conformal warp (twist/bend) sits upstream of the fold. SDF_STEP_BOUND_NONE stays effectively unbounded.
     sdfMapStepBound = (walkStepBound * stepScale);
+    sdfMapFoldGap = foldGap;
+    sdfMapFoldCenter = foldCenter;
+    sdfMapFoldInner = foldInner;
+    sdfMapFoldOuter = foldOuter;
 
     return result;
 }
@@ -1117,6 +1215,149 @@ float mapDistance(float3 worldPosition) {
 
 float mapDistanceMasked(float3 worldPosition, uint instanceMaskBase) {
     return mapCore(worldPosition, instanceMaskBase, false).distance;
+}
+
+// The ball clearance of the last map sample: no geometry of any lattice, on either side of any fold wall, lies within
+// it of the sample. A proof by one ball (the beam's cone, a reprojected march seed, the relaxed march's
+// disjoint-sphere test) reads this.
+float sdfMapBallClearance(float distance) {
+    return min(distance, min(sdfMapStepBound, sdfMapFoldGap));
+}
+
+// Where the ray rayOrigin + t * rayDirection (unit; offset = rayOrigin - center, along = dot(offset, rayDirection))
+// meets the sphere of `radius` about a wall's center, in ray parameter; false when it misses. Taken from the ray's
+// origin, never from a sample, so every sample of one ray reads the same two roots. q = -(b + sign(b) sqrt(D)) and
+// c / q avoid the cancellation of -b +- sqrt(D).
+bool sdfWallRoots(float3 offset, float along, float radius, out float nearRoot, out float farRoot) {
+    float c = (dot(offset, offset) - (radius * radius));
+    float discriminant = ((along * along) - c);
+
+    nearRoot = SDF_STEP_BOUND_NONE;
+    farRoot = SDF_STEP_BOUND_NONE;
+
+    if (discriminant < 0.0) {
+        return false;
+    }
+
+    float root = sqrt(discriminant);
+    float q = -(along + ((along >= 0.0) ? root : -root));
+    float other = ((q != 0.0) ? (c / q) : 0.0);
+
+    nearRoot = min(q, other);
+    farRoot = max(q, other);
+
+    return true;
+}
+
+// Where the ray leaves the shell between two concentric walls about `center` that holds the sample, if sooner than
+// `next`: through the outer wall (which the sample lies within, SDF_STEP_BOUND_NONE when none) at its far root, or here
+// at the latest; or into the inner wall (which the sample lies past, 0 when none) at its near root, or here when the
+// ray already runs inside its chord. `after` is where the ray leaves the far side of a wall it enters.
+void sdfShellExit(float3 rayOrigin, float3 rayDirection, float traveled, float3 center, float inner, float outer,
+    inout float next, inout float after) {
+    float3 offset = (rayOrigin - center);
+    float along = dot(offset, rayDirection);
+    float nearRoot;
+    float farRoot;
+
+    if (outer < SDF_STEP_BOUND_NONE) {
+        float exit = (sdfWallRoots(offset, along, outer, nearRoot, farRoot) ? max(farRoot, traveled) : traveled);
+
+        if (exit < next) {
+            next = exit;
+            after = SDF_STEP_BOUND_NONE;
+        }
+    }
+    if (inner > 0.0) {
+        if (sdfWallRoots(offset, along, inner, nearRoot, farRoot)) {
+            float entry = max(nearRoot, traveled);
+
+            if ((nearRoot < farRoot) && (entry < farRoot) && (entry < next)) {
+                next = entry;
+                after = farRoot;
+            }
+        }
+    }
+}
+
+// The next float above a non-negative ray parameter.
+float sdfWallNextUp(float value) {
+    return asfloat(asuint(max(value, 1.0e-30)) + 1u);
+}
+
+// THE MARCH STEP ACROSS A FOLD WALL (see sdfMapStepBound), which the fine marches take (primary, soft shadows and the
+// overshoot view). A marcher samples the field at rayOrigin + traveled * rayDirection and asks here where its next
+// sample goes, in ray parameter:
+//   clearance    how far along the ray the sample's own side is proven clear: the field (a soft shadow passes its own
+//                stride), never limited by a wall's gap;
+//   advance      the step the marcher would take with no wall (over-relaxed, or raised to a minimum stride);
+//   tolerance    the marcher's acceptance distance: a surface within it of a sample is accepted there;
+//   limit        the ray parameter the march ends at.
+// A step that stays inside every wall's ball (sdfMapBallClearance) is returned unchanged with `proven` false, so a
+// relaxed step is still validated by the marcher's own test; so is one the march would relax across a ball wall,
+// which the disjoint-sphere test covers. Otherwise:
+// - THE FOLD SHELL: the ray leaves the sample's shell at a wall's root. When the sample's side is clear to it, the
+//   march CROSSES: it lands `beyond` past the root, the least of the tolerance, half the arrival chord and half the
+//   way to the limit, and samples the arrival side there before stepping on. When it is not, the step is the
+//   clearance, which stays in the shell.
+// - BALL WALLS: a step reaches at most the tolerance past their ball, so arrival-side geometry it passes lies within
+//   the tolerance of the landing sample. Near such a wall a march advances at least the tolerance a step.
+// Either is `proven`: the marcher validates nothing and resets any relaxation. switchAt is the earliest depth the
+// step leaves unproven (the shell wall's root, or a ball wall's gap), SDF_STEP_BOUND_NONE when it proves the whole
+// step.
+// NO SKIP: the sample's side is clear up to the wall, and arrival-side geometry within the beyond segment lies within
+// the tolerance of the landing sample, which accepts it. A chord shorter than twice the tolerance is landed on at its
+// middle, so a grazing pass through a shell wall is still sampled on its arrival side.
+// AT MOST TWO CROSSINGS PER SHELL WALL: a line meets a sphere at most twice, every sample of a ray reads the same
+// roots, a crossing lands strictly past its root, and a marcher never retreats behind a proven step; the next
+// crossing needs a root at or past the sample. A march crosses each shell sphere at most twice (in and out), one
+// budgeted step each. The walls are taken from the sample's side, so a sample a wall test places on the far side of a
+// root by rounding crosses from where it stands: the march never steps a shell's clearance across the wrong side,
+// and only a landing that rounds back onto the departure side (a grazing ray within float spacing of the sphere)
+// spends one more crossing, each a tolerance further on.
+// A sample whose walls lie beyond both its clearance and its advance pays one compare.
+float sdfMarchAdvance(float3 rayOrigin, float3 rayDirection, float traveled, float clearance, float advance,
+    float tolerance, float limit, out bool proven, out float switchAt) {
+    proven = false;
+    switchAt = SDF_STEP_BOUND_NONE;
+
+    float ballGap = min(sdfMapStepBound, sdfMapFoldGap);
+
+    if (max(clearance, advance) <= ballGap) {
+        return (traveled + advance);
+    }
+
+    float next = SDF_STEP_BOUND_NONE;
+    float after = SDF_STEP_BOUND_NONE;
+
+    if (sdfMapFoldGap < SDF_STEP_BOUND_NONE) {
+        sdfShellExit(rayOrigin, rayDirection, traveled, sdfMapFoldCenter, sdfMapFoldInner, sdfMapFoldOuter, next, after);
+    }
+
+    if (!(ballGap < clearance) && ((traveled + advance) < next)) {
+        return (traveled + advance);
+    }
+
+    proven = true;
+
+    float landing = (traveled + clearance);
+
+    if ((next < SDF_STEP_BOUND_NONE) && ((next - traveled) <= clearance)) {
+        switchAt = next;
+        float beyond = ((next < limit) ? min(tolerance, (0.5 * (min(after, limit) - next))) : tolerance);
+
+        landing = max((next + beyond), sdfWallNextUp(next));
+    }
+
+    // A ball wall nearer than the landing: reach at most the tolerance past it, still strictly past a root it crosses.
+    if ((sdfMapStepBound < SDF_STEP_BOUND_NONE) && ((traveled + sdfMapStepBound + tolerance) < landing)) {
+        float reach = max((traveled + sdfMapStepBound + tolerance), sdfWallNextUp(traveled));
+
+        landing = ((reach >= next) ? max(reach, sdfWallNextUp(next)) : reach);
+        switchAt = min(((reach >= next) ? next : SDF_STEP_BOUND_NONE), (traveled + sdfMapStepBound));
+    }
+
+    return landing;
 }
 
 #endif

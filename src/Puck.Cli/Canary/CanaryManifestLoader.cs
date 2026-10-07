@@ -1,10 +1,12 @@
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Cli.Refusals;
 
 namespace Puck.Cli.Canary;
 
 internal static partial class CanaryManifestLoader {
     private const int MaximumFederatedLegTimeoutSeconds = 240;
+    private const int MaximumHeadlessLegTimeoutSeconds = 90;
     private const int MaximumLegTimeoutSeconds = 60;
     private const string UnknownMemberDetail = "strict manifests refuse fields the runner does not read.";
 
@@ -169,7 +171,11 @@ internal static partial class CanaryManifestLoader {
                 context: $"{context} expect[{index}]",
                 element: row
             ),
-                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'lines', 'response', 'sequence', 'relation', 'filesDiffer', 'framesAgree', or 'imageRegion' (casing is significant)."),
+                "imageDifference" => ReadImageDifferenceAssertion(
+                context: $"{context} expect[{index}]",
+                element: row
+            ),
+                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'lines', 'response', 'sequence', 'relation', 'filesDiffer', 'framesAgree', 'imageRegion', or 'imageDifference' (casing is significant)."),
             };
 
             if (!names.Add(item: assertion.Name)) {
@@ -1080,6 +1086,7 @@ internal static partial class CanaryManifestLoader {
                     context: $"{context} extract[{index}]",
                     unknownMemberDetail: UnknownMemberDetail,
                     refusal: Refusal,
+                    "after",
                     "component",
                     "field",
                     "line",
@@ -1133,11 +1140,30 @@ internal static partial class CanaryManifestLoader {
                     }
                 }
 
+                string? after = null;
+
+                if (row.TryGetProperty(
+                    propertyName: "after",
+                    value: out _
+                )) {
+                    after = CliStrictJson.ReadRequiredString(
+                        context: $"{context} extract[{index}]",
+                        element: row,
+                        member: "after",
+                        refusal: Refusal
+                    );
+
+                    if (string.IsNullOrWhiteSpace(value: after) || (line is null)) {
+                        throw new CanaryManifestRefusal(message: $"{context} extract[{index}] after must name the start of a response line, and only beside a line it heads.");
+                    }
+                }
+
                 if (!values.Add(item: valueName)) {
                     throw new CanaryManifestRefusal(message: $"{context} repeats extracted value name '{valueName}'.");
                 }
 
                 extractions.Add(item: new CanaryValueExtraction(
+                    After: after,
                     Component: component,
                     Field: field,
                     Line: line,
@@ -1397,6 +1423,9 @@ internal static partial class CanaryManifestLoader {
         foreach (var relaunch in new[] { positive.Relaunch, discriminating.Relaunch }) {
             if (relaunch is not null) {
                 expected.Add(item: relaunch.ScriptPath);
+                if ((relaunch.WorldSourcePath is { } sourceWorld) && IsWithin(path: sourceWorld, root: canaryDirectory)) {
+                    expected.Add(item: sourceWorld);
+                }
             }
         }
         foreach (var fixture in fixtures) {
@@ -1464,6 +1493,21 @@ internal static partial class CanaryManifestLoader {
 
         return fullPath;
     }
+    // Spells a line expectation's census token as the header the source census computes, so the running World's
+    // reflective scan is held to an independent count rather than to a number written into the manifest.
+    private static CanaryLeg WithRefusalCensus(CanaryLeg leg, string repositoryRoot) {
+        if (!leg.Assertions.Any(predicate: static assertion => ((assertion is CanaryLineAssertion line) && line.Text.Contains(comparisonType: StringComparison.Ordinal, value: RefusalCensus.Token)))) {
+            return leg;
+        }
+
+        var header = RefusalCensus.Header(census: RefusalCensus.Count(repositoryRoot: repositoryRoot));
+
+        return leg with {
+            Assertions = [.. leg.Assertions.Select(selector: assertion => ((assertion is CanaryLineAssertion line)
+                ? (line with { Text = line.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: header, oldValue: RefusalCensus.Token) })
+                : assertion))],
+        };
+    }
     private static bool TryLoadManifest(string repositoryRoot, string directory, string manifestPath, out CanaryManifest manifest, out string error) {
         manifest = null!;
         error = string.Empty;
@@ -1490,6 +1534,7 @@ internal static partial class CanaryManifestLoader {
                 "binding",
                 "bootShape",
                 "discriminating",
+                "exclusive",
                 "fixtures",
                 "id",
                 "positive",
@@ -1544,6 +1589,14 @@ internal static partial class CanaryManifestLoader {
                 member: "timeoutSeconds",
                 refusal: Refusal
             );
+            var exclusive = false;
+
+            if (root.TryGetProperty(propertyName: "exclusive", value: out var exclusiveElement)) {
+                exclusive = exclusiveElement.ValueKind switch {
+                    JsonValueKind.True => true,
+                    _ => throw new CanaryManifestRefusal(message: $"canary '{id}' exclusive must be true when present; a proof that may share the machine leaves it out."),
+                };
+            }
 
             var positive = ReadLeg(
                 element: CliStrictJson.ReadRequiredObject(
@@ -1574,7 +1627,9 @@ internal static partial class CanaryManifestLoader {
             var isFederated = ((positive.Authorities.Count != 0) || (discriminating.Authorities.Count != 0));
             var maximumLegTimeoutSeconds = (isFederated
                 ? MaximumFederatedLegTimeoutSeconds
-                : MaximumLegTimeoutSeconds
+                : ((bootShape == CanaryBootShape.Headless)
+                    ? MaximumHeadlessLegTimeoutSeconds
+                    : MaximumLegTimeoutSeconds)
             );
 
             // The leg ends when its script does (the runner closes every script with wire.errors and quit); this is
@@ -1633,10 +1688,11 @@ internal static partial class CanaryManifestLoader {
                 Binding: binding,
                 BootShape: bootShape,
                 DirectoryPath: directory,
-                Discriminating: discriminating,
+                Discriminating: WithRefusalCensus(leg: discriminating, repositoryRoot: repositoryRoot),
+                Exclusive: exclusive,
                 Fixtures: fixtures,
                 Id: id,
-                Positive: positive,
+                Positive: WithRefusalCensus(leg: positive, repositoryRoot: repositoryRoot),
                 Requirements: requirements,
                 TimeoutSeconds: timeoutSeconds,
                 Title: title
@@ -1675,8 +1731,10 @@ internal static partial class CanaryManifestLoader {
     /// manifest — a dead world path, a stale command claim — must never block every OTHER proof from running, which
     /// is exactly the failure mode that once left the whole gate dark for weeks. A structural refusal that is not
     /// about any one manifest (no canary directory at all, a stray root file, zero directories, zero SURVIVING
-    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.</summary>
-    public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error) {
+    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.
+    /// When <paramref name="only"/> names ids, discovery is restricted to those directories and refuses unknown ids;
+    /// the named manifests still pass every strict load check.</summary>
+    public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error, IReadOnlySet<string>? only = null) {
         var canaryRoot = Path.Combine(
             path1: repositoryRoot,
             path2: "tests",
@@ -1714,6 +1772,17 @@ internal static partial class CanaryManifestLoader {
         }
 
         var directories = Directory.GetDirectories(path: canaryRoot).Order(comparer: StringComparer.Ordinal).ToArray();
+
+        if (only is not null) {
+            var known = directories.Select(selector: static directory => Path.GetFileName(path: directory)).ToHashSet(comparer: StringComparer.Ordinal);
+            var missing = only.Except(second: known, comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
+
+            if (missing.Length > 0) {
+                error = $"unknown canary id(s): {string.Join(separator: ", ", value: missing)}.";
+                return false;
+            }
+            directories = [.. directories.Where(predicate: directory => only.Contains(item: Path.GetFileName(path: directory)))];
+        }
 
         if (directories.Length == 0) {
             error = "canary discovery found zero manifests; an empty suite cannot report green.";

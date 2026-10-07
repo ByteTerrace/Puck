@@ -1,0 +1,16 @@
+# Current shared-cache fences bound both observation legs; counts are cumulative host schedule work.
+world.cadence off
+world.quality medium
+world.indirect medium
+world.wait ready 25
+body.pose 0 0 0 0 0 0 0
+world.wait 2
+world.wait indirect 25
+world.counters sdf.indirect
+body.pose 2 0 0 0 0 0 0
+world.wait 2
+body.where 0
+world.wait indirect 25
+world.counters sdf.indirect
+world.screenshot {run}/control.png
+world.wait captures 5

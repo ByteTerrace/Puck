@@ -33,18 +33,20 @@ public abstract record ShapeDomainOp {
     /// creation origin).</param>
     public sealed record Symmetry(DocumentVector3 Normal, float? Offset = null) : ShapeDomainOp;
     /// <summary>Bounded linear domain repeat — <see cref="SdfDomainOp.Repeat"/>. Expands for contact only when the
-    /// limit is a whole number within the copy budget; an absent limit is <see cref="Repeat.UnboundedLimit"/> and does
-    /// not expand.</summary>
+    /// limit is a whole number within the copy budget; an absent limit is unbounded
+    /// (<see cref="SdfDomainOps.UnboundedRepeatLimit"/> per axis) and does not expand.</summary>
     /// <param name="Spacing">The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the
     /// builder's own floor).</param>
     /// <param name="Limit">The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null =
-    /// <see cref="UnboundedLimit"/> per axis, far past any authored reach).</param>
+    /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> per axis, a lattice with no edge).</param>
     /// <param name="Origin">The point the lattice folds around, creation units (null = the creation origin, the
     /// fold this op has always used). Cell selection centres on this point instead of the creation root — the
     /// lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.</param>
     public sealed record Repeat(DocumentVector3 Spacing, DocumentVector3? Limit = null, DocumentVector3? Origin = null) : ShapeDomainOp {
-        /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means.</summary>
-        public const float UnboundedLimit = 1000000f;
+        /// <summary>Whether the lattice has no edge: its limit, or an absent one, reaches
+        /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> on any axis. The program's own answer
+        /// (<see cref="SdfDomainOps.IsUnboundedRepeat"/>) decides it.</summary>
+        public bool IsUnbounded => SdfDomainOps.IsUnboundedRepeat(limit: (Limit?.Value ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit)));
     }
     /// <summary>Angular domain repeat — <see cref="SdfDomainOp.Polar"/>. Its sectors expand to one rigid copy each,
     /// so contact carries the full ring.</summary>
@@ -57,22 +59,46 @@ public abstract record ShapeDomainOp {
     public sealed record Polar(int Count, SdfAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null, DocumentVector3? Origin = null) : ShapeDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfDomainOp.Wallpaper"/>. Render only: it has no rigid-copy
     /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
-    /// <param name="Group">The wallpaper group.</param>
+    /// <param name="Group">The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see
+    /// <see cref="SdfWallpaperFold.IsContinuous"/>). A program refuses any other group by name when it builds.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane, creation units.</param>
-    /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="UnboundedLimit"/> per axis).</param>
+    /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="SdfWallpaperFold.UnboundedLimit"/> per
+    /// axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by
+    /// intersecting it with a bounding shape instead (<see cref="SdfWallpaperFold.LimitRefusal"/>).</param>
     /// <param name="Plane">The fold plane (null = XZ).</param>
     /// <param name="MaterialStride">The parity-material stride (null = 0, geometric only).</param>
-    /// <param name="LodDistance">The symmetry-LOD distance threshold (null = 0, off).</param>
     public sealed record Wallpaper(
         SdfWallpaperGroup Group,
         DocumentVector2 Cell,
         DocumentVector2? Limit = null,
         SdfPlane? Plane = null,
-        int? MaterialStride = null,
-        float? LodDistance = null
+        int? MaterialStride = null
     ) : ShapeDomainOp {
-        /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means: far past any authored reach.</summary>
-        public const float UnboundedLimit = 1000000f;
+        /// <summary>Returns each member of this op that no program could fold through: an unrecognized or discontinuous
+        /// group, an unrecognized plane, a non-finite cell, and a cell or limit the group's lattice cannot take
+        /// (<see cref="SdfWallpaperFold.CellRefusal"/>, <see cref="SdfWallpaperFold.LimitRefusal"/>). Range clamps are the
+        /// canonicalizer's Normalize; only what it cannot repair is refused here.</summary>
+        /// <returns>The refused member's document name and why.</returns>
+        public IEnumerable<(string Member, string Message)> Refusals() {
+            var defined = Enum.IsDefined(value: Group);
+
+            if (!defined) {
+                yield return ("group", $"group '{Group}' is not recognized.");
+            } else if (!SdfWallpaperFold.IsContinuous(group: Group)) {
+                yield return ("group", $"group '{Group}' folds discontinuously, so its field could read past a neighbouring copy; fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).");
+            }
+            if ((Plane is { } plane) && !Enum.IsDefined(value: plane)) {
+                yield return ("plane", $"plane '{plane}' is not recognized.");
+            }
+            if (!float.IsFinite(f: Cell.X) || !float.IsFinite(f: Cell.Y)) {
+                yield return ("cell", "cell is non-finite.");
+            } else if (defined && (SdfWallpaperFold.CellRefusal(group: Group, cell: Cell) is { } cellRefusal)) {
+                yield return ("cell", $"cell is refused: {cellRefusal}.");
+            }
+            if (defined && (SdfWallpaperFold.LimitRefusal(group: Group, limit: (Limit ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit))) is { } limitRefusal)) {
+                yield return ("limit", $"limit is refused: {limitRefusal}.");
+            }
+        }
     }
 }
 /// <summary>
@@ -109,7 +135,7 @@ public static class ShapeDomainOps {
             Offset: (symmetry.Offset ?? 0f)
         ),
             ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
-            Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
+            Limit: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit)),
             Origin: (repeat.Origin?.Value ?? Vector3.Zero),
             Spacing: repeat.Spacing
         ),
@@ -123,8 +149,7 @@ public static class ShapeDomainOps {
             ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
             Cell: wallpaper.Cell,
             Group: wallpaper.Group,
-            Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
-            LodDistance: (wallpaper.LodDistance ?? 0f),
+            Limit: (wallpaper.Limit ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit)),
             MaterialStride: (wallpaper.MaterialStride ?? 0),
             Plane: (wallpaper.Plane ?? SdfPlane.XZ)
         ),
@@ -157,11 +182,15 @@ public static class ShapeDomainOps {
     /// creation origin, in creation units — the term a render bound adds so a folded lattice is not culled down to
     /// the un-folded shape's own sphere. Ops compose, so each op's displacement bound is summed: a symmetry plane
     /// through the origin is an origin-preserving isometry (0); an offset plane displaces by twice its offset; a
-    /// repeat lattice reaches its per-axis limit times its spacing, unaffected by its own origin (a repeat's fold is
+    /// repeat lattice reaches its per-axis limit times its spacing (an unbounded one, <see cref="ShapeDomainOp.Repeat.IsUnbounded"/>,
+    /// has no bound at all and answers <see cref="SdfBoundAlgebra.Unbounded"/> like an unbounded wallpaper below),
+    /// unaffected by its own origin (a repeat's fold is
     /// a pure translation, so its physical copies sit at the same offsets from the shape's own position regardless
     /// of where cell selection centres — only a polar fold's rotation pivot moves the copies, by twice the pivot's
-    /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing (an
-    /// unbounded limit yields a bound far past any camera, disabling the cull rather than lying to it).</summary>
+    /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing, and one with
+    /// an unbounded limit (<see cref="SdfWallpaperFold.IsUnbounded"/>) has no bound at all: it answers
+    /// <see cref="SdfBoundAlgebra.Unbounded"/>, the bound algebra's state for an influence nothing contains (positive
+    /// infinity, which a margin, a composition and a positive scale all keep).</summary>
     /// <param name="domain">The shape's domain ops, or null/empty for 0.</param>
     /// <returns>The displacement bound, creation units.</returns>
     public static float Reach(IReadOnlyList<ShapeDomainOp>? domain) {
@@ -177,7 +206,9 @@ public static class ShapeDomainOps {
         foreach (var op in ops) {
             reach += op switch {
                 ShapeDomainOp.Symmetry symmetry => (2f * MathF.Abs(x: (symmetry.Offset ?? 0f))),
-                ShapeDomainOp.Repeat repeat => (repeat.Spacing.Value * (repeat.Limit?.Value ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))).Length(),
+                ShapeDomainOp.Repeat repeat => (repeat.IsUnbounded
+                    ? SdfBoundAlgebra.Unbounded
+                    : (repeat.Spacing.Value * repeat.Limit!.Value).Length()),
                 ShapeDomainOp.Polar polar => (2f * (polar.Origin?.Length() ?? 0f)),
                 ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
                 _ => 0f,
@@ -188,7 +219,12 @@ public static class ShapeDomainOps {
 
         static float WallpaperReach(ShapeDomainOp.Wallpaper wallpaper) {
             var cell = wallpaper.Cell.Value;
-            var limit = (wallpaper.Limit?.Value ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit));
+            var limit = (wallpaper.Limit?.Value ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+
+            // A lattice with no edge has copies at every distance: no bound, the program's own sentinel for one.
+            if (SdfWallpaperFold.IsUnbounded(limit: limit)) {
+                return SdfBoundAlgebra.Unbounded;
+            }
 
             return ((wallpaper.Group >= SdfWallpaperGroup.P3)
                 ? ((cell.X * (limit.X + limit.Y)) * HexDiagonal)

@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+basis: "scene"
+documentId: "gi-unsealed"
+placements {
+  placement "planar-receiver" {
+    prototype: "receiver"
+    position [-4, 0, 0]
+  }
+  placement "curved-receiver" {
+    prototype: "receiver"
+    position [4, 0, 0]
+  }
+  placement "exterior" {
+    prototype: "exterior"
+    position [0, 0, 0]
+  }
+}

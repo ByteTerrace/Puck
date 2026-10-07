@@ -243,7 +243,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
                 target: target,
                 tick: tick
             )) {
-                _ = WorldStateMirror.TryConvertNumber(
+                _ = WorldStateReader.TryNumber(
                     number: out number,
                     value: sample.Value
                 );

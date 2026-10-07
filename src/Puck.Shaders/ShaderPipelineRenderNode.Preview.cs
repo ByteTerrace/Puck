@@ -127,7 +127,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_previewBuilding = request;
         var owner = m_name;
 
-        m_previewBuild.Start(build: token => PreviewObjects.Create(
+        m_previewBuild.Start(build: token => PreviewObjects.CreateAsync(
             cancellationToken: token,
             device: device,
             owner: owner,
@@ -234,7 +234,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuImage[] Targets { get; }
         public uint Width { get; }
 
-        public static PreviewObjects Create(GpuDeviceServices gpu, IGpuDeviceContext device, GpuPassPipelineCache pipelines, bool directX, uint width, uint height, uint inFlight, string owner, CancellationToken cancellationToken) {
+        public static async Task<PreviewObjects> CreateAsync(GpuDeviceServices gpu, IGpuDeviceContext device, GpuPassPipelineCache pipelines, bool directX, uint width, uint height, uint inFlight, string owner, CancellationToken cancellationToken) {
             var objects = new PreviewObjects(
                 height: height,
                 inFlight: inFlight,
@@ -251,7 +251,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     )
                 );
 
-                var renderPass = objects.Lease.Wait(cancellationToken: cancellationToken).RenderPass!;
+                var renderPass = (await objects.Lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).RenderPass!;
 
                 for (var i = 0; (i < inFlight); i++) {
                     objects.Targets[i] = gpu.ImageFactory.Create(

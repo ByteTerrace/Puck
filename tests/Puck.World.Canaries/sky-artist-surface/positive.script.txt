@@ -1,0 +1,31 @@
+# Save into this leg's run directory; never change a repository fixture.
+world.cadence off
+world.quality low
+world.temporal off
+world.render-scale 1
+world.wait ready 20
+world.lighting
+world.screenshot {run}/before.png
+world.wait captures 5
+world.compare hold
+world.row.set render sky {"layers":[{"$type":"gradient","name":"artist","stops":[{"elevation":-1,"color":"#0000FF"},{"elevation":1,"color":"#0000FF"}]}]}
+world.row.set render atmosphere.fog.density 0.03
+world.save {run}/saved.puck
+# Loading must recover the saved values, not merely keep the already-live edit.
+world.row.set render sky {"layers":[{"$type":"gradient","name":"artist","stops":[{"elevation":-1,"color":"#FF0000"},{"elevation":1,"color":"#FF0000"}]}]}
+world.row.set render atmosphere.fog.density 0.01
+world.wait ready 20
+world.lighting
+world.screenshot {run}/unsaved.png
+world.wait captures 5
+world.load {run}/saved.puck force
+world.reload
+world.wait ready 20
+world.wait 2
+world.lighting
+world.inspect
+world.compare diff
+world.compare off
+world.screenshot {run}/after.png
+world.wait captures 5
+world.cost sky

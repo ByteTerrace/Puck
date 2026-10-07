@@ -3,52 +3,59 @@
 // and writer goes through the typed load and store functions below and holds only a record address. KEEP IN SYNC with
 // SdfWorldPackage.VisibilityRecordByteLength.
 //
-// A record is sixteen words in six rows:
+// A record is twenty-four words in seven rows:
 // V (4 words): the ray parameter t (Euclidean distance along the normalized camera ray), the identity, the material,
 //    and the march flags (steps in bits 0..7, the saturated query count in bits 8..30).
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
 //    in bits 0..14 and its other material plus one in bits 15..31, so every material from -1 up is exact.
 // L (4 words): the winning SDF shape's transform slot (SDF_TRANSFORM_SLOT_NONE for static geometry), or a mesh hit's
-//    triangle, in the first word. The remaining words are reserved. Anonymous lanes are read exactly from the winning transform row.
+//    triangle, in the first word; the indirect approach's two halves (camera-ray retreat and certified clearance),
+//    then the ambient and shadow passes' replaceable query tallies. Zero clearance means no certified approach.
+//    Anonymous lanes are read exactly from the winning transform row.
 // N (2 words): the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel), and the
 //    gradient magnitude.
 // S (2 words): curvature and ambient occlusion as halves, then the surface flags in bits 0..7 and the surface and
-//    ambient query count, saturated, in bits 8..31. Surface flag bit 0 marks an ordinary lit, non-screen surface, the
+//    query count, saturated, in bits 8..31. Surface flag bit 0 marks an ordinary lit, non-screen surface, the
 //    only kind the ambient pass occludes.
-// K (1 word): the key light's soft-shadow visibility, 1 where no shadow was marched. The shadow stage writes it only on
-//    a frame whose soft shadows are on and that has a shadow light, and views reads it only then.
+// K (1 word): four eight-bit stable-slot visibilities, 1 where no shadow was marched. The shadow stage writes it
+//    only when soft shadows are on and K is nonzero; views reads it only then.
+// I (8 words): the receiver's full float3 launch and clearance, full allocation identity (two words), exact transport
+//    certificate revision, then level/mask and completed-valid bit. Primary clears validity when replacing the surface;
+//    views alone fills this row, preserving the traversal and shading rows. A completed unresolved answer has mask zero.
 // V and the identity in it are exact; the packed fields round only presentation values.
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
-// writes K and adds its queries to S. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
+// writes K and its query word. Views reads the surface sample and publishes I after completing its receiver proof.
 //
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
 // source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
 // is identity 0. An SDF hit's source is the winning instance's program ordinal plus one, so source 0 is
 // geometry outside any instance. A mesh hit's source is its draw.
 //
-// The views set binds the one buffer twice: primary, surface, ambient and shadow write it through
-// sdfVisibilityRecordsRW; views only reads it, through sdfVisibilityRecords. Every function below reaches it through sdfVisibilityRecordBuffer, the
-// binding its kernel uses.
+// Each writing stage reads and writes the one buffer through sdfVisibilityRecordsRW. Views declares its preserving
+// output at every tier, including Off, and writes only I. Resolve and composite use the read-only binding after the
+// planned transition. One dispatch never aliases SRV reads with UAV writes to the same allocation.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
 #include "../field/sdf-octahedral.hlsli"
+#include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
-#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else
 #define sdfVisibilityRecordBuffer sdfVisibilityRecords
 #endif
 
-static const uint SdfVisibilityWords = 16u;
+static const uint SdfVisibilityWords = 24u;
 static const uint SdfVisibilityRowV = 0u;
 static const uint SdfVisibilityRowC = 4u;
 static const uint SdfVisibilityRowL = 7u;
 static const uint SdfVisibilityRowN = 11u;
 static const uint SdfVisibilityRowS = 13u;
 static const uint SdfVisibilityRowK = 15u;
+static const uint SdfVisibilityRowI = 16u;
 static const float SdfVisibilityBlendScale = 32767.0;
 static const uint SdfVisibilityBlendMask = 0x7FFFu;
 static const uint SdfVisibilityBlendOtherShift = 15u;
@@ -184,13 +191,16 @@ SdfVisibilityNormal sdfLoadVisibilityNormal(uint record) {
     normal.gradientMagnitude = asfloat(sdfVisibilityRecordBuffer[word + 1u]);
     return normal;
 }
-// The key light's soft-shadow visibility, which the K row carries.
-float sdfLoadVisibilityKey(uint record) {
-    return asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityRowK]);
+// Four stable-slot visibilities share the K row.
+float4 sdfLoadVisibilityShadows(uint record) {
+    return sdfUnpackShadowVisibility(sdfVisibilityRecordBuffer[record + SdfVisibilityRowK]);
 }
 // A mesh hit's triangle, which its L row carries.
 uint sdfVisibilityMeshTriangle(uint record) {
     return sdfVisibilityRecordBuffer[record + SdfVisibilityRowL];
+}
+uint sdfVisibilityApproach(uint record) {
+    return sdfVisibilityRecordBuffer[record + SdfVisibilityRowL + 1u];
 }
 SdfVisibilitySurface sdfLoadVisibilitySurface(uint record) {
     uint word = (record + SdfVisibilityRowS);
@@ -229,9 +239,6 @@ struct SdfSurfaceSample {
     // The queries the surface, ambient and shadow stages made, and the surface flags.
     float surfaceQueries;
     uint surfaceFlags;
-    // The key light's soft-shadow visibility, current only on a frame whose soft shadows are on and that has a shadow
-    // light.
-    float keyVisibility;
 };
 SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     SdfVisibility visibility = sdfLoadVisibility(record);
@@ -259,16 +266,18 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     sample.ambient = surface.ambient;
     sample.surfaceQueries = surface.queries;
     sample.surfaceFlags = surface.flags;
-    sample.keyVisibility = sdfLoadVisibilityKey(record);
     return sample;
 }
 
-#ifdef SDF_VISIBILITY_WRITABLE
+#if defined(SDF_VISIBILITY_WRITABLE)
 // Writes one word of the pixel's record: every store below goes through it, so a pass that writes any of a pixel's record
 // counts the pixel as a texel it wrote (sdfWorkTexels).
 void sdfVisibilityStoreWord(uint word, uint value) {
     sdfVisibilityRecordBuffer[word] = value;
     sdfWorkTexels = 1u;
+}
+void sdfStoreVisibilityQueries(uint record, uint word, float queries) {
+    sdfVisibilityStoreWord(record + word, min((uint)queries, SdfVisibilitySurfaceQueryMask));
 }
 void sdfVisibilityStoreRow(uint word, uint4 bits) {
     sdfVisibilityStoreWord(word, bits.x);
@@ -288,8 +297,11 @@ void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
 void sdfStoreVisibilityFrameSlot(uint record, int frameSlot) {
     sdfVisibilityStoreWord(record + SdfVisibilityRowL, asuint(frameSlot));
 }
-void sdfStoreVisibilityKey(uint record, float visibility) {
-    sdfVisibilityStoreWord(record + SdfVisibilityRowK, asuint(visibility));
+void sdfStoreVisibilityApproach(uint record, uint approach) {
+    sdfVisibilityStoreWord(record + SdfVisibilityRowL + 1u, approach);
+}
+void sdfStoreVisibilityShadows(uint record, float4 visibility) {
+    sdfVisibilityStoreWord(record + SdfVisibilityRowK, sdfPackShadowVisibility(visibility));
 }
 void sdfStoreVisibilityMeshTriangle(uint record, uint triangleIndex) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowL, uint4(triangleIndex, 0u, 0u, 0u));

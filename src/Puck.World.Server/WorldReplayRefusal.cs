@@ -1,14 +1,22 @@
 namespace Puck.World;
 
-/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary — the tape's shape-identity gate
+/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary, thirteen members — the tape's shape-identity gate
 /// (<see cref="WorldReplaySnapshot.Read"/>'s leading magic/shape-token check), its mount-pin gate
-/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), and its rate pin
-/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), which together are what keeps a
-/// re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
+/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), its rate pin
+/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), its rebuild, transfer-integrity and
+/// mutation-outcome checks, and the crossing and seat-switch records a re-drive cannot reproduce, which together are
+/// what keeps a re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
 /// guards and the plain corruption checks (truncated length prefixes, a duplicate mounted-addon name, an out-of-range
 /// seat slot) stay bare <see cref="InvalidDataException"/>s outside this catalog — see
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
 internal enum ReplayRefusal {
+    /// <summary>A recording was armed after the world stepped, so it would start from a checkpoint of the live state,
+    /// and that state is one no authority checkpoint captures: a mounted or pumped addon guest, a screen operation, a
+    /// stepped machine without checkpoint support, a coupled link or rewind history, a live session, an engagement in
+    /// flight, or an edit not yet applied. Arming refuses rather than produce a tape that cannot re-drive.</summary>
+    [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict, Unsupported = true)]
+    StartNotCheckpointable,
+
     /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>
     [Refusal(door: "replay.tape", condition: "the leading magic or shape token does not match this build's pinned .puckreplay shape", kind: RefusalKind.ProtocolFault)]
     ShapeMismatch,
@@ -59,6 +67,23 @@ internal enum ReplayRefusal {
     /// disagreement is a real determinism finding that a later-tick pose comparison alone could never surface.</summary>
     [Refusal(door: "replay.tape", condition: "a recorded mutation's accept/refuse outcome disagrees with what the replay's own apply pipeline produced for it", kind: RefusalKind.Verdict)]
     MutationOutcomeMismatch,
+
+    /// <summary>A recorded arrival the re-drive's own escrow does not reproduce: a traveler that does not land again
+    /// in the body index or at the generation it landed at live, or a commit that does not roll back where the live
+    /// one did.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded arrival does not land again through the re-drive's own escrow at the body indices and generations, and to the outcome, it landed at live", kind: RefusalKind.Verdict)]
+    ArrivalRefused,
+
+    /// <summary>A recorded departure or its rollback the re-drive cannot reproduce: a departure from an index that
+    /// holds no active body, the same body departing twice, or a rollback with no departure before it on the tape or
+    /// into an occupied index.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded departure or its rollback cannot be reproduced against the re-drive's own population", kind: RefusalKind.Verdict)]
+    DepartureRefused,
+
+    /// <summary>A recorded seat identity switch names a body that is not an active local seat in the re-drive's own
+    /// population at that tick.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded seat identity switch names a body that is not an active local seat in the re-drive's own population", kind: RefusalKind.Verdict)]
+    SeatSwitchRefused,
 }
 /// <summary>Constructs this door's <see cref="InvalidDataException"/>s tagged with the <see cref="ReplayRefusal"/>
 /// each throw site names. <see cref="InvalidDataException"/> is sealed (unlike <c>SdfDocumentException</c> elsewhere

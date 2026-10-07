@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
 
@@ -92,19 +93,66 @@ public static class FixedDual {
             );
         }
 
-        // Dual = (b·log2(e))/a at full width: the raw Q32 product b·log2e over a raw Q16 a scaled by 2^16, so the ratio
-        // is b·log2e/a, with one ties-to-even rounding. The prior round(b·log2e)/a rounded twice.
         return new(
             Real: FixedQ4816.Log2(value: value.Real),
-            Dual: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
-                numerator: FusedArithmetic.Product(
-                    left: value.Dual.Value,
-                    right: FixedQ4816.Log2E.Value
-                ),
-                denominator: (((UInt128)FusedArithmetic.RawMagnitude(value: value.Real.Value)) << FixedQ4816.FractionBitCount)
+            Dual: FixedQ4816.FromRawBits(value: Log2Derivative(
+                dual: value.Dual.Value,
+                real: ((ulong)value.Real.Value)
             ))
         );
     }
+
+    // round(b·log2(e)/a · 2^16) with one ties-to-even rounding, wrapped to the carrier. The exact numerator
+    // |b|·log2(e)·2^62 fits 128 bits and the divisor a is one machine word, so two 128-by-64 divides (the high word's
+    // remainder is below a, so neither can fault) give the exact quotient at Q62 and its remainder; the 46 bits below
+    // Q16, with the remainder as a sticky bit, decide the rounding.
+    private static long Log2Derivative(long dual, ulong real) {
+        var numerator = Math.BigMul(
+            a: FusedArithmetic.RawMagnitude(value: dual),
+            b: ((ulong)FixedQ4816.Log2EQ62),
+            low: out var low
+        );
+        var high = (numerator / real);
+
+        var (quotientLow, remainder) = DivideWord(
+            divisor: real,
+            lower: low,
+            upper: (numerator - (high * real))
+        );
+        var discarded = quotientLow & ((1UL << 46) - 1UL);
+        var result = unchecked((long)((high << 18) | (quotientLow >> 46)));
+        var half = (1UL << 45);
+
+        if ((discarded > half) || ((discarded == half) && ((remainder != 0UL) || ((result & 1L) != 0L)))) {
+            result = unchecked((result + 1L));
+        }
+
+        return ((dual < 0L)
+            ? unchecked(-result)
+            : result
+        );
+    }
+    // The 128-by-64 divide of upper:lower by divisor; upper must be below divisor.
+    private static (ulong Quotient, ulong Remainder) DivideWord(ulong upper, ulong lower, ulong divisor) {
+        if (X86Base.X64.IsSupported) {
+#pragma warning disable SYSLIB5004
+            return X86Base.X64.DivRem(
+                divisor: divisor,
+                lower: lower,
+                upper: upper
+            );
+#pragma warning restore SYSLIB5004
+        }
+
+        var dividend = (((UInt128)upper) << 64) | lower;
+        var quotient = (dividend / divisor);
+
+        return (
+            Quotient: ((ulong)quotient),
+            Remainder: ((ulong)(dividend - (quotient * divisor)))
+        );
+    }
+
     /// <summary>Computes the sine and cosine and their derivatives.</summary>
     /// <param name="angle">The angle in fixed-point radians.</param>
     /// <returns>The pair <c>(sin a + b·cos a·ε, cos a − b·sin a·ε)</c>.</returns>

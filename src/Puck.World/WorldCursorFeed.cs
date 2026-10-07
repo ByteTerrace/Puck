@@ -39,8 +39,8 @@ internal readonly record struct WorldCursorStatus(
     string Buttons
 );
 /// <summary>
-/// The World-side feed behind the unified overlay's drawn-cursor source: once per produced frame (the node's
-/// <c>FeedTick</c>, after the frame's dress resolved each seat's viewport + camera) it reads the pointer store's
+/// The World-side feed behind presentation inspection and the unified overlay's drawn-cursor source: once per composed
+/// frame, after dress resolves each viewport, camera and pane, it reads the pointer store's
 /// NON-DESTRUCTIVE state (position, held buttons — never the drained motion/wheel accumulators, which belong to
 /// <see cref="WorldSeatViewInput"/>), applies THE visibility rule (one place, below), hover-tests the authored HUD
 /// panels' published rects, asks the render graph host's presentation picker which display pane is under the pointer
@@ -277,9 +277,9 @@ internal sealed partial class WorldCursorFeed {
     }
     // The presentation destination's hover: the display pane under the pointer, asked of the render graph host's
     // picker in DISPLAY pixels (the client position scaled by display over client per axis, the same stretch Locate
-    // inverts), whenever the pointer rests on the window and the authored cursor policy shows it, whether or not it
+    // inverts), when the authored cursor policy shows it or the console supplies an explicit inspection point, whether or not it
     // sits inside its seat's own viewport, since a pane can lie beside the seat's view. A steering drag, a hidden
-    // policy or no position hovers no pane.
+    // policy or no position hovers no pane unless the console supplies that inspection point.
     private SourceMapping? ResolvePane(Vector2 position, bool shown) {
         if (!shown) {
             m_panes.ClearHover();
@@ -287,6 +287,9 @@ internal sealed partial class WorldCursorFeed {
             return null;
         }
 
+        return m_panes.Hover(point: DisplayPosition(position: position));
+    }
+    private Vector2 DisplayPosition(Vector2 position) {
         var clientWidth = m_viewports.ClientWidth;
         var clientHeight = m_viewports.ClientHeight;
         var point = position;
@@ -301,7 +304,7 @@ internal sealed partial class WorldCursorFeed {
             );
         }
 
-        return m_panes.Hover(point: point);
+        return point;
     }
     // The world-authored role token mapped onto the overlay's concrete color role (Puck.World.Schema cannot reference
     // Puck.Overlays, so the document speaks its own closed token set and this is the one mapping).
@@ -312,7 +315,7 @@ internal sealed partial class WorldCursorFeed {
         _ => OverlayColorRole.TextPrimary,
     };
 
-    /// <summary>Recomposes and publishes this frame's cursor frame (the overlay's <c>FeedTick</c>).</summary>
+    /// <summary>Recomposes the shared inspection route and this frame's optional drawn cursor.</summary>
     public void Tick() {
         // The process has one pointer, riding the seat of the device that moved it last and none after it left the
         // window, so at most one cursor entry publishes per frame.
@@ -348,7 +351,7 @@ internal sealed partial class WorldCursorFeed {
         );
         var pane = ResolvePane(
             position: position,
-            shown: shown
+            shown: (shown || m_pointerOverride.HasValue)
         );
 
         if (
@@ -366,7 +369,9 @@ internal sealed partial class WorldCursorFeed {
             reason = "visible-false";
         }
 
-        DemandGpuHover(inside: (reason is null), localX: localX, localY: localY, pane: pane, shown: shown, slot: slot);
+        // An explicit console point inspects the rendered image even when no HUD cursor or local seat is drawn.
+        DemandGpuHover(inside: (reason is null), localX: localX, localY: localY, pane: pane,
+            position: position, shown: (shown || m_pointerOverride.HasValue), slot: slot);
 
         if (reason is null) {
             var policy = cursorPolicy!;

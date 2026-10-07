@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -31,6 +32,10 @@ public sealed class ShaderFrameBlockLawTests {
             x: 10.5f,
             y: 11.5f
         ),
+        PlacedExtent: new Vector2(
+            x: 250.5f,
+            y: 500.25f
+        ),
         PointerDown: true,
         PointerPresses: 12,
         Tick: 0x0123456789ABCDEFUL,
@@ -52,6 +57,7 @@ public sealed class ShaderFrameBlockLawTests {
         [ShaderFrameInterface.CameraFov] = [Bits(value: 0.75f)],
         [ShaderFrameInterface.CameraTarget] = [Bits(value: 4.5f), Bits(value: 5.5f), Bits(value: 6.5f)],
         [ShaderFrameInterface.CameraUp] = [Bits(value: 7.5f), Bits(value: 8.5f), Bits(value: 9.5f)],
+        [ShaderFrameInterface.PlacedExtent] = [Bits(value: 250.5f), Bits(value: 500.25f)],
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
@@ -74,6 +80,7 @@ public sealed class ShaderFrameBlockLawTests {
         );
         layout.WriteFrame(
             block: frame,
+            extent: (640, 360),
             frame: 77,
             values: Values
         );
@@ -160,45 +167,41 @@ public sealed class ShaderFrameBlockLawTests {
             reason: "DXC is required to compile the shipped pipeline sources."
         );
 
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-frame-block-");
+        using var cache = new TemporaryDirectory(prefix: "puck-frame-block-");
 
-        try {
-            var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.FullName)).Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: Path.GetFileNameWithoutExtension(path: source),
-                path: RepositoryPaths.Resolve(relativePath: source)
-            );
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.RootPath)).Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: Path.GetFileNameWithoutExtension(path: source),
+            path: RepositoryPaths.Resolve(relativePath: source)
+        );
 
-            Assert.True(
-                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: result.Message
-            );
+        Assert.True(
+            condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: result.Message
+        );
 
-            foreach (var pass in result.Pipeline!.Plan.Passes) {
-                var layout = pass.Parameters;
-                var blocks = HostBlocks(layout: layout);
-                var shader = result.Pipeline.Shaders[pass.Name];
+        foreach (var pass in result.Pipeline!.Plan.Passes) {
+            var layout = pass.Parameters;
+            var blocks = HostBlocks(layout: layout);
+            var shader = result.Pipeline.Shaders[pass.Name];
 
-                foreach (var (_, module) in shader.SpirvByStage) {
-                    var reflected = SpirvInterfaceReader.Read(module: module.Span);
+            foreach (var (_, module) in shader.SpirvByStage) {
+                var reflected = SpirvInterfaceReader.Read(module: module.Span);
 
-                    Assert.Null(@object: layout.Layout.Mismatch(reflected: reflected));
-                    AssertHostBlocks(
-                        blocks: blocks,
-                        reflected: reflected
-                    );
-                }
+                Assert.Null(@object: layout.Layout.Mismatch(reflected: reflected));
+                AssertHostBlocks(
+                    blocks: blocks,
+                    reflected: reflected
+                );
+            }
 
-                if (OperatingSystem.IsWindows()) {
-                    using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+            if (OperatingSystem.IsWindows()) {
+                using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
 
-                    foreach (var (_, container) in shader.DxilByStage) {
-                        Assert.Null(@object: layout.Layout.Mismatch(reflected: dxil.Read(container: container.Span)));
-                    }
+                foreach (var (_, container) in shader.DxilByStage) {
+                    Assert.Null(@object: layout.Layout.Mismatch(reflected: dxil.Read(container: container.Span)));
                 }
             }
-        } finally {
-            cache.Delete(recursive: true);
         }
     }
     [Fact]

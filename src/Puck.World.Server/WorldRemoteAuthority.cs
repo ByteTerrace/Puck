@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -22,6 +23,9 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         authority.Endpoint,
         authority.Definition
     );
+    /// <inheritdoc/>
+    public byte[]? FetchPrototype(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        authority.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
     /// <inheritdoc/>
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         authority.RelayProjectionAsync(
@@ -196,6 +200,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
     private int m_cannotProve;
     private WorldDefinition m_definition;
     private long m_lastObservedTickBits;
+
+    private readonly Lock m_observedRouteGate = new();
+
     private WorldAuthorityRouteDescription? m_observedRoute;
 
     // The physical entry stays fixed even when a traveler's logical destination changes.
@@ -405,6 +412,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         route = default;
         var target = (m_submissionAuthority ?? this);
         var mobility = credential.Mobility;
+        var credentialSource = credential.SourceAuthority;
         var answer = target.AwaitAnswer(
             sourceAuthority: credential.SourceAuthority,
             kind: WorldFederationRequest.Route,
@@ -417,6 +425,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         if (
             (answer.Kind != WorldFederationResponse.Route) ||
             !WorldFederationCodec.TryDecodeRoute(
+            fetch: pin => target.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credentialSource, mobility)),
             body: answer.Body.Span,
             route: out route,
             failure: out _
@@ -675,7 +684,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             )
         );
     private static WorldFederationLane LaneOf(WorldFederationRequest kind) =>
-        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission)
+        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission or WorldFederationRequest.Prototype)
             ? WorldFederationLane.Routed
             : WorldFederationLane.Transaction
         );
@@ -691,6 +700,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await upstream.AuthenticateAsync(
@@ -710,6 +720,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             : WorldFederationRequest.Observe),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        // The projection this session holds: a presentation-tier delta merges over it, and a new session starts from a
+        // whole projection again.
+        byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
+            ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
+        var hold = new WorldProjectionHold(fetch: Fetch);
 
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadResponseAsync(
@@ -745,18 +761,20 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                         !WorldFederationCodec.TryDecodeRoute(
                         frame.Body.Span,
                         out var route,
-                        out _
+                        out _,
+                        fetch: Fetch
                     )
                     ) {
                         return false;
                     }
-                    PublishObservedRoute(route: route);
+                    ObserveRoute(route: route);
                     break;
                 case WorldFederationResponse.Definition: {
                         if (
                             !WorldFederationCodec.TryDecodeDocument(
                             body: frame.Body.Span,
                             definition: out var definition,
+                            hold: hold,
                             tier: out var definitionTier,
                             failure: out var definitionFailure,
                             version: out var definitionVersion
@@ -792,6 +810,46 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                             definition: definition,
                             version: definitionVersion
                         );
+                        break;
+                    }
+                case WorldFederationResponse.ProjectionDelta: {
+                        if (!WorldFederationCodec.TryDecodeProjectionDelta(
+                            body: frame.Body.Span,
+                            definition: out var merged,
+                            failure: out var deltaFailure,
+                            hold: hold,
+                            stamp: out var deltaStamp,
+                            valuesOnly: out var valuesOnly,
+                            version: out var deltaVersion
+                        )) {
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a projection delta ({deltaFailure})]"
+                                );
+                            }
+
+                            return false;
+                        }
+
+                        Volatile.Write(
+                            location: ref m_definition,
+                            value: merged
+                        );
+
+                        if (valuesOnly) {
+                            sink.DeliverState(
+                                definition: merged,
+                                stamp: in deltaStamp,
+                                version: deltaVersion
+                            );
+                        } else {
+                            sink.DeliverDefinition(
+                                definition: merged,
+                                version: deltaVersion
+                            );
+                        }
+
                         break;
                     }
                 case WorldFederationResponse.Snapshot: {
@@ -896,28 +954,53 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             );
         }
     }
-    private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
-        var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
 
-        m_observedRoute = route;
-        if (
-            changed &&
-            (m_submissionCredential is { } credential)
-        ) { InvalidateAcknowledgement(credential: in credential); }
-        Volatile.Write(
-            location: ref m_definition,
-            value: route.Definition
-        );
-        Volatile.Write(
-            location: ref m_authority,
-            value: route.Entity.Authority
-        );
-        _ = Interlocked.Exchange(
-            location1: ref m_lastObservedTickBits,
-            value: unchecked((long)route.Tick)
-        );
-        m_routeChanged?.Invoke(obj: route);
+    /// <summary>Takes one observed route: the latest head of the traveler's route, which this authority's observation
+    /// delivers frame by frame. It becomes the route a later <see cref="PublishClaim"/> redelivers, and is reported to the
+    /// route's owner at once. Serialized with <see cref="PublishClaim"/> by the route gate.</summary>
+    /// <param name="route">The observed route.</param>
+    public void ObserveRoute(WorldAuthorityRouteDescription route) {
+        lock (m_observedRouteGate) {
+            var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
+
+            m_observedRoute = route;
+            if (
+                changed &&
+                (m_submissionCredential is { } credential)
+            ) { InvalidateAcknowledgement(credential: in credential); }
+            Volatile.Write(
+                location: ref m_definition,
+                value: route.Definition
+            );
+            Volatile.Write(
+                location: ref m_authority,
+                value: route.Entity.Authority
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_lastObservedTickBits,
+                value: unchecked((long)route.Tick)
+            );
+            m_routeChanged?.Invoke(obj: route);
+        }
     }
+    /// <summary>Publishes the claim that makes a seat follow this route, then delivers the latest observed route to
+    /// it, both under the route gate. Observation starts before the claim exists, so a route observed earlier reached an
+    /// owner with no seat to update; it is delivered here, once the claim stands. A route observed while the claim is
+    /// published waits on the gate and arrives after this delivery, so an older route can never overtake a newer one.
+    /// The ordering belongs to this one method, never to the threads that happen to call it.</summary>
+    /// <param name="publish">Publishes the seat claim.</param>
+    public void PublishClaim(Action publish) {
+        ArgumentNullException.ThrowIfNull(argument: publish);
+
+        lock (m_observedRouteGate) {
+            publish();
+
+            if (m_observedRoute is { } route) {
+                m_routeChanged?.Invoke(obj: route);
+            }
+        }
+    }
+
     // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
     private static bool TryReadCompletion(ReadOnlyMemory<byte> body, out WorldSubmissionResult? result, out string reason) {
         result = null;
@@ -1154,8 +1237,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
-        accepted = false;
+    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
+        status = WorldTransferStatus.Missing;
         reason = string.Empty;
 
         _ = TryResolveTransferStep(
@@ -1171,9 +1254,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         );
 
         return DecodeCommitAnswer(
-            accepted: out accepted,
             answer: answer,
-            reason: out reason
+            reason: out reason,
+            status: out status
         );
     }
     public void Dispose() {
@@ -1206,6 +1289,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
+            fetch: pin => FetchPrototype(pin: pin, traveler: null),
             body: answer.Body.Span,
             reply: out var decoded,
             failure: out var failure
@@ -1410,6 +1494,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
                 key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
             await m_owner.AuthenticateAsync(

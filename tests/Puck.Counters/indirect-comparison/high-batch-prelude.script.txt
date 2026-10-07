@@ -1,0 +1,6 @@
+world.cadence on
+world.quality high
+world.indirect high
+world.rate pause
+world.wait ready 180
+world.rate resume

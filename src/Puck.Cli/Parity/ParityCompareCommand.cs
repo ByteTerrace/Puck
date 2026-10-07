@@ -94,9 +94,12 @@ internal static class ParityCompareCommand {
             return CliExit.Refused;
         }
 
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var resolvedOutDir = (outDir ?? Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName);
+        // A named --out-dir is the caller's; otherwise the evidence lives in a run directory that a run with no failed
+        // capture deletes and a run with one keeps, named.
+        using var run = ((outDir is null)
+            ? RunDirectory.Create(prefix: ScratchPrefix)
+            : null);
+        var resolvedOutDir = (outDir ?? run!.Path);
 
         Directory.CreateDirectory(path: resolvedOutDir);
         Console.WriteLine(value: $"parity compare: evidence directory {resolvedOutDir}");
@@ -125,6 +128,7 @@ internal static class ParityCompareCommand {
         }
 
         Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, region tick, source where a capture carries one, reference where the station names one, per-tile pixel).");
+        run?.Conclude(passed: true);
 
         return CliExit.Success;
     }

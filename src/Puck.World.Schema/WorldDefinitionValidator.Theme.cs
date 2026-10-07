@@ -2,35 +2,14 @@ namespace Puck.World;
 
 /// <summary>The <c>theme</c> section's validation: every <see cref="BindableColor"/>/<see cref="BindableScalar"/>
 /// field checked for admissibility (a hex literal, or a state binding naming a compatible declared cell), plus the
-/// document's own finite/range checks per field. Two floors live here, engine-side, never authored:
-/// <see cref="WorldThemeCapacity.TypeAbsoluteFloorSize"/> (a plain-float field — always a literal, so a value below
-/// it refuses outright) and <see cref="WorldThemeCapacity.ScrimMinAlpha"/> (a <see cref="BindableScalar"/> — a
-/// literal below it refuses here, but a state binding cannot be checked at boot, so <c>WorldThemeResolve</c> clamps
-/// it to the floor at resolve time instead).</summary>
+/// document's own finite/range checks per field. A bindable scalar is judged against its field's declared domain
+/// (<see cref="WorldValueFields"/>), which also bounds the scrim alphas from below at
+/// <see cref="WorldThemeCapacity.ScrimMinAlpha"/>; <see cref="WorldThemeCapacity.TypeAbsoluteFloorSize"/> floors the
+/// plain-float type sizes.</summary>
 public static partial class WorldDefinitionValidator {
     private static void RequireBindableColor(BindableColor color, WorldDefinition definition, string path, List<string> errors) {
         if (!color.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} '{color.Raw}' {BindableColor.Grammar}.");
-        }
-    }
-    private static void RequireBindableScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
-        if (!scalar.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} {(scalar.Binding ?? (scalar.Literal?.ToString() ?? "(absent)"))} {BindableScalar.Grammar}.");
-        }
-    }
-    private static void RequireBindableUnitScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
-        RequireBindableScalar(
-            definition: definition,
-            errors: errors,
-            path: path,
-            scalar: scalar
-        );
-
-        if (
-            (scalar.Literal is { } literal) &&
-            ((literal < 0f) || (literal > 1f))
-        ) {
-            errors.Add(item: $"{path} {literal} must be in [0, 1].");
+            errors.Add(item: $"{path} '{color}' {BindableColor.Grammar}.");
         }
     }
     private static void RequireScrim(WorldThemeScrim scrim, WorldDefinition definition, string path, List<string> errors) {
@@ -40,19 +19,13 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             path: $"{path}.color"
         );
-        RequireBindableScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.ScrimAlpha,
             path: $"{path}.alpha",
             scalar: scrim.Alpha
         );
-
-        if (
-            (scrim.Alpha.Literal is { } literal) &&
-            ((literal < WorldThemeCapacity.ScrimMinAlpha) || (literal > 1f))
-        ) {
-            errors.Add(item: $"{path}.alpha {literal} must be in [{WorldThemeCapacity.ScrimMinAlpha}, 1] — below it the guaranteed-AA contrast floor (over both a dark corner and a lit CRT) breaks. A state.<row> binding is not refused here; it clamps to the floor at resolve time instead.");
-        }
     }
     private static void RequireBloomHue(WorldThemeBloomHue hue, WorldDefinition definition, string path, List<string> errors) {
         RequireBindableColor(
@@ -493,9 +466,10 @@ public static partial class WorldDefinitionValidator {
             name: "theme.elevation.bloomHaloSpread",
             value: elevation.BloomHaloSpread
         );
-        RequireBindableUnitScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.BloomHaloAlpha,
             path: "theme.elevation.bloomHaloAlpha",
             scalar: elevation.BloomHaloAlpha
         );
@@ -504,21 +478,24 @@ public static partial class WorldDefinitionValidator {
             name: "theme.elevation.bloomRingWidth",
             value: elevation.BloomRingWidth
         );
-        RequireBindableUnitScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.BloomRingAlpha,
             path: "theme.elevation.bloomRingAlpha",
             scalar: elevation.BloomRingAlpha
         );
-        RequireBindableUnitScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.BloomNeutralHaloAlpha,
             path: "theme.elevation.bloomNeutralHaloAlpha",
             scalar: elevation.BloomNeutralHaloAlpha
         );
-        RequireBindableUnitScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.BloomNeutralRingAlpha,
             path: "theme.elevation.bloomNeutralRingAlpha",
             scalar: elevation.BloomNeutralRingAlpha
         );
@@ -532,9 +509,10 @@ public static partial class WorldDefinitionValidator {
             name: "theme.elevation.bloomHeldInsetSpread",
             value: elevation.BloomHeldInsetSpread
         );
-        RequireBindableUnitScalar(
+        JudgeScalar(
             definition: definition,
             errors: errors,
+            field: WorldValueFields.BloomHeldInsetAlpha,
             path: "theme.elevation.bloomHeldInsetAlpha",
             scalar: elevation.BloomHeldInsetAlpha
         );

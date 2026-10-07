@@ -11,7 +11,7 @@ Use the register that matches the audience:
 |---|---|
 | Human-authored READMEs and `docs/`, including a `.puck` source's companion `.md` | Narrative, readable by students |
 | XML comments on code members | Precise API reference |
-| `CLAUDE.md` and `.claude/` material | Operational instructions for agents |
+| `AGENTS.md` and `.claude/` material | Operational instructions for agents |
 
 Legal boilerplate and generated artifacts are outside these registers. Do not
 hand-edit generated Maths registers, generated API output, or other
@@ -57,7 +57,8 @@ when changing those surfaces; do not create a second package copy of the prose.
 Read [references/complete-reference.md](references/complete-reference.md) for
 the complete voice contract and purge list, student floor, XML exemplars and
 tag rules, skill-authoring conventions, rename mechanics, index/scope rules,
-or the surface-specific verification checklist.
+the surface-specific verification checklist, or the procedure for
+evaluating a skill with cases, graders and a train/test split.
 
 ## Route adjacent work
 

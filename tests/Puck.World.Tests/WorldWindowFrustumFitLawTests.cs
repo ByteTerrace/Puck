@@ -28,10 +28,11 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
-public sealed class WorldWindowFrustumFitLawTests {
-    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
+[Collection(AllocationCollection.Name)]
+public sealed partial class WorldWindowFrustumFitLawTests {
+    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
 
-    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
+    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.puck";
     private const float Tolerance = 2e-3f;
 
     // The destination's marker: a ball of radius 0.5 six units behind the arch.
@@ -248,7 +249,7 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         Assert.False(condition: WorldWindowFrustumFit.TryResolveApertures(
             counterpart: out _,
-            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.world.json"),
+            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.puck"),
             local: local,
             screenIndex: DoorScreen(local: local),
             source: out _
@@ -264,7 +265,7 @@ public sealed class WorldWindowFrustumFitLawTests {
     [Fact]
     public void TheSessionViewFramesTheMarkerWhereTheWindowShowsIt() {
         var mirror = new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination));
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: mirror
         );
@@ -360,7 +361,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         var eye = Eyes[0];
 
         bool Picks(float farDistance) {
-            var emitter = new WorldSessionSceneEmitter(
+            var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
                 effectiveCameraName: null,
                 mirror: new WorldSessionMirror(placeholder: (destination with { RenderRaw = new WorldRenderDefaults(FarDistance: farDistance) }))
             );
@@ -396,7 +397,7 @@ public sealed class WorldWindowFrustumFitLawTests {
     // on the glass, passes it and meets the marker beyond.
     [Fact]
     public void AWindowPickPassesWhatStandsBetweenTheEyeAndTheApertureAndMeetsWhatLiesBeyond() {
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination))
         );
@@ -449,12 +450,14 @@ public sealed class WorldWindowFrustumFitLawTests {
     // and frame the marker at the glass's centre each time.
     [Fact]
     public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
-        using var state = new TemporaryDirectory(prefix: "puck-portal-window-eye-");
-        using var host = WorldBootHarness.Compose(
+        using var state = new TemporaryDirectory(
+            prefix: "puck-portal-window-eye-"
+        );
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
@@ -520,12 +523,14 @@ public sealed class WorldWindowFrustumFitLawTests {
     // the marker's image toward the side the camera moved to.
     [Fact]
     public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
-        using var state = new TemporaryDirectory(prefix: "puck-portal-window-spectator-");
-        using var host = WorldBootHarness.Compose(
+        using var state = new TemporaryDirectory(
+            prefix: "puck-portal-window-spectator-"
+        );
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
@@ -556,7 +561,14 @@ public sealed class WorldWindowFrustumFitLawTests {
             var window = fit();
 
             Assert.NotNull(@object: window);
-            Assert.Equal(expected: Fit(eye: spectator.Position), actual: window.Value);
+            Assert.True(condition: WorldWindowFrustumFit.TryFitFromEye(
+                camera: out var fromSpectator,
+                destination: AuthoredGameFixtures.Load(relativePath: Destination),
+                eye: spectator.Position,
+                local: AuthoredGameFixtures.Load(relativePath: Local),
+                screen: DoorRow()
+            ));
+            Assert.Equal(expected: fromSpectator, actual: window.Value);
 
             return (spectator, window.Value);
         }

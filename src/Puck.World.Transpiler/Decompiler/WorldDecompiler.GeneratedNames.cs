@@ -264,7 +264,10 @@ public static partial class WorldDecompiler {
         var first = -1;
 
         for (var index = 0; (index < rows.Count); index++) {
-            if (rows[index]?["verdict"] is not null) {
+            if ((rows[index]?["verdict"] is not null) &&
+                (rows[index]?["name"] is JsonValue nameValue) &&
+                nameValue.TryGetValue<string>(value: out var name) &&
+                GeneratedName.TryStripHead(head: WorldDocumentEmitter.ExpectHead, name: name, rest: out _)) {
                 first = index;
 
                 break;
@@ -408,7 +411,7 @@ public static partial class WorldDecompiler {
         foreach (var item in steps) {
             if (
                 (item is not JsonObject step) ||
-                !CarriesOnly(step, "command", "principal", "tick") ||
+                !CarriesOnly(step, "command", "expect", "principal", "refusal", "tick") ||
                 (step["command"]?.GetValue<string>() is not { Length: > 0 } command) ||
                 command.Contains(value: '\n') ||
                 (step["principal"]?.GetValue<string>() is not { } principal) ||
@@ -423,14 +426,32 @@ public static partial class WorldDecompiler {
                     reason: "a test block's when lines generate seat steps in tick order, each a seat's command at one tick; this schedule carries a row no when line writes"
                 );
             }
+            var refused = ((step["expect"] is JsonValue expectation) &&
+                expectation.TryGetValue<string>(value: out var outcome) &&
+                (outcome == nameof(WorldScheduleExpectation.Refused)));
 
-
-
+            if ((step.ContainsKey(propertyName: "expect") && !refused) ||
+                (step.ContainsKey(propertyName: "refusal") &&
+                    (!refused || (step["refusal"] is not JsonValue refusalValue) ||
+                        !refusalValue.TryGetValue<string>(value: out _)))) {
+                throw new WorldDecompileRefusedException(
+                    name: "schedule",
+                    pointer: "/schedule/rows",
+                    reason: "a test when line writes an ordinary submission or a refused step with optional refusal text; this row carries another outcome shape"
+                );
+            }
             if (tick > cursor) {
                 lines.Append(value: "        ticks ").AppendLine(value: (tick - cursor).ToString(provider: CultureInfo.InvariantCulture));
             }
 
-            lines.Append(value: "        seat").Append(value: seat.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ": ").AppendLine(value: command);
+            lines.Append(value: "        seat").Append(value: seat.ToString(provider: CultureInfo.InvariantCulture));
+            if (refused) {
+                lines.Append(value: " refused");
+                if (step["refusal"] is { } refusal) {
+                    lines.Append(value: ' ').Append(value: PuckStrings.Write(value: refusal.GetValue<string>()));
+                }
+            }
+            lines.Append(value: ": ").AppendLine(value: command);
             cursor = tick;
             last = tick;
         }

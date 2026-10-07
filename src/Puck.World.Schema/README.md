@@ -254,7 +254,7 @@ path (operands, expressions, board queries, pattern words) is what allocates
 nothing on the tick.
 Transfers preserve keys and accept
 `Key`, `First`, `Last`, `Random`, or `Slice` selectors; random selection names a
-redrawable integer `streamDraw` site, and `count` (1..256) moves that many
+redrawable integer `streamDraw` site, and `count` (1..4096) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
 one journal entry; `Slice` moves the keyed token and every token after it as
 one run, in order (a solitaire column from a card to its top), and onto the
@@ -350,10 +350,10 @@ ranges in the pattern's `kind` (overlaps refine into letters; at most 32
 symbols, 64 letters) and `pattern` is the closed node vocabulary `symbol`,
 `any`, `except`, `empty` (the empty word), `none` (the empty language),
 `sequence`, `choice`, `all` (intersection), `not` (complement), `optional`,
-`star`, `plus`, `repeat` (`min`..`max`, at most 64), matched against the
+`star`, `plus`, `repeat` (`min`..`max`, at most 128), matched against the
 whole word. The machine's states are the pattern's
 Brzozowski derivatives, kept canonical by similarity, so stars, complements,
-and intersections are exact at any word length; `maxStates` (1..256, default
+and intersections are exact at any word length; `maxStates` (1..1024, default
 64) is the state budget the compile refuses past, by name, at validation. The
 word is a board ray from the operand key's origin (exclusive) in the named
 direction, an ordered zone's cells read through the pattern's `attribute` row
@@ -462,7 +462,7 @@ legal baseline. Acceptance commits its bookkeeping in one transaction. See the
 [chess authoring notes](../Puck.World/README.md#the-world-as-data) for promotion,
 castling rights, duplicate occupancy, and diagnostic limitations.
 
-The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
 exercise movement, pile order, ray flips, phase progression, and replay through
 the real headless application. The [control script](../../tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)
@@ -575,14 +575,15 @@ live beside the document model while every caller spells them
 
 `WorldDefinition.cs` is one aggregate record with a section record per concern;
 the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
-screens, cameras, spawns, motion, population, render, addons,
+screens, machines, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
-under `../Puck.World/Assets/worlds/`. There is one shipped world,
-`puck.world.json` (the island, the boot default), a `basis` delta over
-`standard.world.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
+under `../Puck.World/Assets/worlds/`. The boot default is
+`puck.world.json` (the island), a `basis` delta over `standard.puck`;
+`pipeline.puck` and `moth-courtyard.puck` are diagnostic scenes a
+`--world` argument names. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
@@ -817,7 +818,7 @@ Every reserved channel is a row of the rewrite's channel table, which carries
 its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
 the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
-two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
+two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck`),
 and an entry with no `as` composes its names unchanged.
 
 **Exports: a module's names are private by default.** A module document may
@@ -875,9 +876,18 @@ load failure.
 table (`WorldModelShape.generated.cs`). The walks that read the model without
 serializing it (`WorldCallArguments` for the language's call-argument forms,
 `WorldModuleNamespace.Visit` for the aliased-import rewrite and the channel
-spelling) read this table, so no process describes a type at run time. `puck
+spelling, and `WorldNameRegistry.Walk` for name registration) read this table.
+Its generated member getters also read document values without reflective
+property access. `puck
 schema` writes it from the resolver's own description of the model and `puck
 schema --check` fails when the two disagree.
+
+If a model rename makes the checked-in getters uncompilable, an existing CLI
+copy can run `schema --bootstrap`. Its private build omits the generated table,
+accepts only the schema verb and refuses any table read; the existing reflective
+generator then writes the current shape. Rebuild normally afterwards. The
+[CLI reference](../../docs/reference/cli.md#puck-schemaworlddef-json-schema)
+owns the bootstrap options and failure logs.
 
 **Identity conventions.** Every row is addressed by a stable string id, with
 two exceptions: screens are position-addressed by index, and grant rows are
@@ -895,8 +905,10 @@ speaker radius the validator refuses in an authored section) never reaches the
 file. A top-level member the document does not author is left out rather than
 written as `null`. The session state a save folds in (`WorldSessionCapture`
 for what the server owns, `WorldSessionLevers.Fold` for the presentation
-levers) lands only in sections the document authors, and a section the session
-left alone is written as authored. `WorldSaveAuthoredDocumentLawTests` saves
+levers) lands in a section the document authors, and a section the session
+left alone is written as authored. Moved render ceilings, per-view quality
+(`views.quality`) and editor values create their valid section when the document
+omits it; session pins never fold. `WorldSaveAuthoredDocumentLawTests` saves
 every shipped world, every world document under `tests/Puck.World.Tests/Fixtures`,
 and every canary world that way and proves each one boots
 again to the definition it was loaded as. One value moves on an otherwise
@@ -958,7 +970,7 @@ from the console.
 
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
-—the shipped `Assets/worlds/standard.world.json` template carries the standard
+—the shipped `Assets/worlds/standard.puck` template carries the standard
 movement and action-wheel document; the engine itself ships none,
 and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds—merged by
@@ -990,8 +1002,9 @@ of `player.bind` and `player.bindings` documents the console surface.
 
 `WorldHud.cs` holds the `hud` section: panels of elements, each element bound
 to a value through `HudBindingVocabulary`—a closed vocabulary (`world.tick`,
-`world.fps`, `seat.<n>.position.*`, `population.active`, `state.<row>`,
-`state.<row>.<key>`), refused by name outside it—and each panel carrying its
+`world.fps`, `seat.<n>.position.*`, `population.active`, `history.cursor`,
+`history.window`, `state.<row>`, `state.<row>.<key>`), refused by name outside
+it—and each panel carrying its
 draw band (`WorldHudLayer`: under, over, or replace) as a document property.
 `state.<row>` binds the row's own SLOT cell (unchanged); `state.<row>.<key>`
 binds one named cell in ANY row shape, with a gauge's fraction still read from
@@ -1199,7 +1212,9 @@ than any other section, deliberately, since a `state` row is genre-authored
 game data an operator may want to hand out per-row (score to one addon,
 inventory to another) rather than all-or-nothing per section. That `Edit`
 row may additionally carry a `MutationKindMask` (`WorldGrant.KindMask`),
-narrowing further to WHICH of the five kinds it admits—the difference
+narrowing further to WHICH of the state section's mutation kinds it admits
+(`UpsertStateRow`, `RemoveStateRow`, `UpsertStateCell`, `RemoveStateCell`,
+`Generate`, `TransformState`, `Batch`)—the difference
 between bumping a row and redefining it, and (with `verbs:Generate`) between
 REDRAWING a draw site and re-authoring it.
 
@@ -1325,8 +1340,10 @@ renderer shows as a CPU-baked distance brick, coloured by `color`. Capacity
 eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
 `MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` 126 (a
 height-bearing row's XZ footprint, and the cross-layer sum where several
-layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. Read
-back with `world.fields`; the exact structural cost (cell count × compiled
+layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. The lattice's
+`cellSize` must quantize to a positive Q48.16 value that keeps the lattice solid's
+contact reach (`FieldLatticeSolid.ReachCells`, 2 cells) inside Q48.16, or the
+document is refused. Read back with `world.fields`; the exact structural cost (cell count × compiled
 full-cell passes, plus body capacity × body passes, at the authored cadence)
 folds into `world.budget`.
 
@@ -1394,8 +1411,7 @@ bit-identically with nothing to reconcile.
 `generate` refuses by name), `tickPeriod`, or `event`. The latter two both stay
 redrawable through the SAME `Generate` mutation (ordinal 49); the actual cadence
 or gate is spelled with the ordinary `rules` vocabulary (a `$tick`-scheduled Edge
-rule, an event-flag-gated one), so timing costs NO mutation ordinal—the catalog
-stays 64/64.
+rule, an event-flag-gated one), so timing costs NO mutation ordinal.
 
 **The seed ladder is four rungs** (`GeneratorEngine.ComputeSeedState`), each
 LENGTH-DELIMITED before its bytes so no two rung sequences can fold to one
@@ -1513,7 +1529,9 @@ since a slot's one cell has no separate default of its own to override.
 Timing state — the epoch, a dynamics follower's sampled position/velocity, a
 cycle's carried substep remainder — lives on the CELL, in `clock`
 (`StateCellClock`, `{epochTick?, epochEngineTick?, y0?, v0?, substepTicks?}`,
-every field optional), never on the trait: a key a write mints later starts
+every field optional, a zero field left out, and the same form wherever a
+clock travels: a row's cell, a pool value, a disclosed observation), never on
+the trait: a key a write mints later starts
 its own clock from the tick (and engine tick) it was created, and a slot
 row's timing state is authored as a `clock` object beside its bare `value`
 sugar. The two epochs are independent: `epochTick` is a simulation tick, read
@@ -1650,7 +1668,7 @@ node, a power of zero, and a power at or past the order are refused. One step
 lasts `ticksPerStep` ticks from the carrying cell's own `clock.epochTick`.
 `output` names what the cell reads: `Step` (0..order−1), `Node` or `Ring`
 (the node's ring, 0..7) on an `int` row; `Turns` (`⌊step·2^16/order⌋` raw, so
-it wraps once per loop the way `render.cycle` keys read a row), `Cos`, `Sin`
+it wraps once per loop the way a state clock reads its row), `Cos`, `Sin`
 (the order's root of unity at the step), `ProjectionX` or `ProjectionY` on a
 `fixed` row. The lattice outputs read through `Puck.Maths.SymmetryLattice`:
 the stored value is the node (0..239) the orbit walk starts from, carried
@@ -1706,11 +1724,11 @@ bound color moving rebuilds the program or rebakes the decal that baked it. `Wor
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against—the world validator resolves it at the
-placement). `render.lighting`/`render.sky`/`render.environment` colors and
-every `render.cycle` key's speak `BindableColor` instead—the theme
-vocabulary's generalized form of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
-the render path is opaque), resolved at emit by `WorldRenderCycleTrack`
-against the routed definition with no re-bake, so a cell write recolors the
+placement). `render.lighting`/`render.sky`/`render.environment` colors speak
+`BindableColor` instead—the theme vocabulary's generalized form of the
+identical binding grammar, which may also be keyed on a clock (an accepted
+`#RRGGBBAA` alpha is ignored; the render path is opaque), resolved at emit by
+`WorldEnvironmentResolve` against the routed definition with no re-bake, so a cell write recolors the
 sky on the next frame. Identity, profile, and `seatDefaults` neutral colors
 stay literal: they persist per identity and travel between worlds. A bound
 color is live—`world.state.cell.set colors sage #C0392B` re-registers
@@ -1750,7 +1768,10 @@ still names a cell is refused by name at the decode door. Law suite:
 
 The resolver caches traversal metadata by runtime type and omits branches whose
 sealed types cannot contain bound values. It still reads current document contents
-on every walk, including mutable collections and polymorphic members. Reference
+on every walk, including mutable collections and polymorphic members. Types
+in the document model use `WorldModelShape`'s generated getters. The graph
+API also accepts caller-owned shapes: it binds their getters once, omitting
+non-boxable properties, then invokes delegates on every walk. Reference
 searches do not construct diagnostic paths; resolution and flattening retain their
 named error paths. Every walk reuses one visited set per thread.
 `CollectReferencedRows` names every referenced row in one walk, and
@@ -1811,6 +1832,19 @@ hosted read. `TryLoadFileForAdmission` is the only door that admits a document f
 so the owned-world catalog, its cloud-sync gate and `puck creation stats` read through
 it too (an owned world drawn for its own id); `WorldDefinitionFileSource.TryReadContentPin`
 returns a file's content pin alone, for a caller comparing bytes against a recorded pin.
+A refusal about an imported or basis document names it by file name (`WorldDocumentLabel`)
+and a storage failure by its kind, never by the host's directory or an exception message
+that quotes one; `TryLoadFileForAdmission` takes a `displayName` for a host (the owned-world
+catalog) that must call the root document by something other than its path.
+
+A document path names a document, not a file format: a `<name>.world.json` path whose
+`<name>.puck` source stands beside it reads as the document that source lowers to
+through the local document source (`WorldDefinitionFileSource.TryReadDocumentFile`, the
+source winning over a document file beside it as it does for every name). Every door
+that takes a document by name or path (a neighbour, a crossing's or a session screen's
+destination, `WorldFileNeighbourResolver`) reads through it, so a world authored as a
+source resolves exactly as the document it compiles to, and keeps the `.world.json`
+name as its identity.
 A release publishes a definition undrawn, since draws are instance state:
 `WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
 drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the
@@ -1956,7 +1990,8 @@ read one as `$local:<name>` wherever a state name is accepted; an earlier local
 cannot, so the list is feed-forward by construction. The value lives on the
 evaluation alone—an effect that changed the cells it was computed from does
 not change it, which is what lets `min(damage, hp)` be dealt and then recoiled
-from in the same rule. At most 16 per rule; each expression prices into
+from in the same rule. At most 64 per rule (`RuleCapacity.MaxLocalsPerRule`,
+counting the implicit key locals); each expression prices into
 `world.budget` like an effect's. A local that cannot evaluate closes the gate
 for that evaluation and reports an `Arithmetic` refusal; so does a
 `compareValue` conjunct whose expression faults—the conjunct reads false and
@@ -3071,10 +3106,18 @@ carries the projection's `observations` into the hydrated document as plain
 rows as state. A disclosed vector row names its space, and the projection's
 `spaces` carries the declaration of every space a disclosed vector row names (a
 model, a revision, and a dimension count) and no other, so the row hydrates as a
-vector row of that space.
+vector row of that space. The projection's `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` in place of the row; `WorldClockAnchorLedger` and
+`WorldProjectionFeed` keep one recipient's anchors and deltas, dropping a held
+anchor that stands ahead of the authority's tick (a history seek or a restored
+checkpoint moved the authority back past it) and carrying what a fresh recipient
+would be sent, and `WorldProjectionHold` is the receiving half. The
+[worlds manual](../../docs/architecture/worlds.md#observation-and-display) states
+the anchor rule.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
-the five `WorldOverlapTerms` the overlap derivation reads from its side.
+the six `WorldOverlapTerms` the overlap derivation reads from its side.
 `WorldCounterpartAttestationProtocol.TryVerify` verifies a signed claim against
 the reading world's own `admission` keys and returns what it attests; it does
 not yet bind the verified subject to the document the attestation names.
@@ -3087,9 +3130,16 @@ corner (`WorldDefinitionValidator.ValidateDerivedAdjacencyCorners`) names a
 third authority, so it accepts only `Resolved` or `VerifiedAttested`—never a
 plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 
-`WorldIdentityProjection` (`WorldIdentity.cs`) is what an identity discloses
-when it walks into another authority: id, name, colour, and the two motion
-rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
+`WorldIdentityProjection` (`WorldIdentity.cs`) is everything an identity
+discloses when it walks into another authority: id, name, colour, the two
+motion rates, the records `identity.records` selects, and the facts row
+(`WorldIdentityFacts.Validate` admits a carried one). An empty row preserves
+the owner's authored row name and capacity before its first fact. An identity rebuilt from
+it (`WorldIdentity.FromProjection`) has no document; its records and facts are
+its travelling state, and `WorldIdentity.TryAdopt` folds them back into the
+owned identity on a durable colocated home arrival. Remote home adoption is
+deferred because a remote incarnation claim is unauthenticated.
+`WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy—the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
 `Puck.World.Protocol`, since it operates on the wire snapshot shape. Its

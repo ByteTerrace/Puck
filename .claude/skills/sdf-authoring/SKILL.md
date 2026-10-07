@@ -198,6 +198,10 @@ or cells. Static emission ignores `group` entirely — it walks the list in orde
 so a group cannot be used to keep a subtraction off its siblings on a static
 placement.
 
+A text-bearing pooled creation keeps its shapes, groups and glyphs in one
+dynamic instance. Its outer field scope isolates engraving from other placements;
+the groups retain their own inner scopes. The VM admits two scope levels.
+
 ## The budget
 
 `MaxShapesPerStamp` is 367. The count is not the length of the shapes list:
@@ -215,7 +219,7 @@ are still charged.
 ## Surface and look
 
 The palette carries far more than a color: `specular`, `roughness`, `metal`,
-`coat`, `sheen`, `emissive`, plus `wrap` and `soften` for skin, `bounce` for a
+`coat`, `sheen`, `emissive`, plus `wrap` and `soften` for skin, `fill` for a
 warm interior fill, `weathering` for chips and scratches over a revealed
 substrate, and `inset` for a refracted layer beneath the surface — which is how
 an eye is authored, as color stops at radii rather than a dark sphere. Ranges,

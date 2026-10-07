@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Puck.Assets;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -319,23 +320,14 @@ public sealed partial class ShaderCompilerTests {
     }
 
     private sealed class Fixture : IDisposable {
-        public Fixture() {
-            Path = System.IO.Path.Combine(
-            path1: System.IO.Path.GetTempPath(),
-            path2: ("puck-shader-tests-" + Guid.NewGuid().ToString(format: "N"))
-        ); Directory.CreateDirectory(path: Path);
-        }
-
-        public string Path { get; }
-
-        public void Dispose() {
-            try {
-                Directory.Delete(
-            path: Path,
-            recursive: true
+        private readonly TemporaryDirectory m_directory = new(
+            bestEffortDelete: true,
+            prefix: "puck-shader-tests-"
         );
-            } catch (IOException) { }
-        }
+
+        public string Path => m_directory.RootPath;
+
+        public void Dispose() => m_directory.Dispose();
     }
     private sealed class FakeRunner : IShaderProcessRunner {
         public readonly ConcurrentBag<(string FileName, string Arguments)> Calls = [];

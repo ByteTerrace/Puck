@@ -7,12 +7,12 @@
 // SDF_DYNAMIC_TRANSFORMS) and radius. Mirrors the per-segment/per-shape bound resolve in mapCore.
 float4 sdfInstanceBoundAt(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
-    float4 bound = asfloat(sdfWords[entryBase]);
-    uint4 meta = sdfWords[entryBase + 1u];
+    float4 bound = asfloat(sdfProgramWord(entryBase));
+    uint4 meta = sdfProgramWord(entryBase + 1u);
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
     if (meta.x == SDF_BOUND_DYNAMIC) {
-        bound.xyz += sdfDynamicTransforms[3u * meta.y].xyz;
+        bound.xyz += sdfDynamicTransformRow(3u * meta.y).xyz;
     }
 #endif
 
@@ -26,7 +26,7 @@ float4 sdfInstanceBoundAt(uint instanceOffset, uint index) {
 bool sdfInstanceShadowTransparent(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
 
-    return (0u != (sdfWords[entryBase + 1u].w & SDF_INSTANCE_SHADOW_TRANSPARENT_BIT));
+    return (0u != (sdfProgramWord(entryBase + 1u).w & SDF_INSTANCE_SHADOW_TRANSPARENT_BIT));
 }
 
 // Whether instance `index` is CAMERA-HIDDEN (SDF_INSTANCE_CAMERA_HIDDEN_BIT, i1.w's second-highest bit): the tile
@@ -35,7 +35,7 @@ bool sdfInstanceShadowTransparent(uint instanceOffset, uint index) {
 bool sdfInstanceCameraHidden(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
 
-    return (0u != (sdfWords[entryBase + 1u].w & SDF_INSTANCE_CAMERA_HIDDEN_BIT));
+    return (0u != (sdfProgramWord(entryBase + 1u).w & SDF_INSTANCE_CAMERA_HIDDEN_BIT));
 }
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -47,9 +47,9 @@ bool sdfInstanceCameraHidden(uint instanceOffset, uint index) {
 // so no participation flag gates this (unlike the enumeration skip, which the camera/AO marches share).
 bool sdfInstanceShadowSuppressed(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
-    uint4 meta = sdfWords[entryBase + 1u];
+    uint4 meta = sdfProgramWord(entryBase + 1u);
 
-    return ((meta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * meta.y].w > 0.5));
+    return ((meta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransformRow(3u * meta.y).w > 0.5));
 }
 #endif
 

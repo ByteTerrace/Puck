@@ -7,10 +7,11 @@ using Puck.Maths;
 namespace Puck.World;
 
 /// <summary>
-/// What travels with an identity across a federation seam: the appearance a destination renders it with and the
-/// motion-envelope rates it claims and its explicitly owned records. Other owned state — chat allow-list grants, controller
-/// history, cross-game state rows, bindings, the private HUD panel — stays at home, so walking into a stranger's
-/// world discloses none of it.
+/// Everything that travels with an identity across a seam, on every path a crossing takes and in every leaf it writes:
+/// the appearance a destination renders it with, the motion-envelope rates it claims, its explicitly owned records and
+/// its facts. Other owned state — chat allow-list grants, controller history, cross-game state rows, bindings, the
+/// private HUD panel, the seat look — stays at home, so walking into a stranger's world discloses none of it. A field
+/// a destination needs is disclosed by adding it here.
 /// </summary>
 /// <param name="Id">The stable identity id.</param>
 /// <param name="Name">The display name.</param>
@@ -20,13 +21,17 @@ namespace Puck.World;
 /// envelope.</param>
 /// <param name="TurnSpeed">The claimed turn rate, or <see langword="null"/>, clamped the same way.</param>
 /// <param name="Records">Only the explicitly identity-owned typed record pools and their dependencies.</param>
-public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed, WorldStateSection? Records = null);
+/// <param name="Facts">The identity's facts row (<see cref="WorldIdentityFacts"/>), or <see langword="null"/> when it
+/// carries no fact.</param>
+public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed, WorldStateSection? Records = null, WorldStateRow? Facts = null);
 /// <summary>A live identity backed by one owned <see cref="WorldDefinition"/>.</summary>
 public sealed partial class WorldIdentity {
     private readonly string m_neutralColor;
     private readonly float m_noseFactor;
 
     private int m_factsRevision;
+    private WorldStateRow? m_emptyFacts;
+    private WorldStateRow? m_travelFacts;
     private FixedQ4816? m_moveSpeed;
     private FixedQ4816? m_turnSpeed;
 
@@ -40,29 +45,12 @@ public sealed partial class WorldIdentity {
         ArgumentNullException.ThrowIfNull(argument: defaults);
         var identity = (document.Identity ?? throw new InvalidOperationException(message: "an owned world requires identity"));
 
-        Document = document;
         Id = identity.Id;
         Name = identity.Name;
         ColorHex = identity.Color;
-        Color = ParseColor(
-            hex: identity.Color,
-            fallbackHex: defaults.NeutralColor
-        );
-        m_moveSpeed = ReadFixed(
-            document.State,
-            identity.MoveSpeedState
-        );
-        m_turnSpeed = ReadFixed(
-            document.State,
-            identity.TurnSpeedState
-        );
-        Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
-        Hud = document.Hud.Panels.FirstOrDefault();
-        // Control feel travels with the profile exactly as the two layers above do: read off this identity's OWN
-        // document, delivered on the same selection that delivers its bindings and HUD.
-        SeatLook = document.PlayerDefaults.SeatLook;
         m_noseFactor = defaults.NoseFactor;
         m_neutralColor = defaults.NeutralColor;
+        Load(document: document);
     }
 
     private WorldIdentity(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
@@ -88,20 +76,29 @@ public sealed partial class WorldIdentity {
     public Vector3 Color { get; private set; }
     /// <summary>Gets the authored color.</summary>
     public string ColorHex { get; private set; }
-    /// <summary>Gets the owned world, or <see langword="null"/> for a replay-pinned identity.</summary>
+    /// <summary>Gets the owned world, or <see langword="null"/> for a traveler rebuilt from its projection or a
+    /// replay-pinned identity.</summary>
     public WorldDefinition? Document { get; private set; }
-    /// <summary>Gets the facts row this identity carries, or <see langword="null"/> when no fact was ever written or
-    /// there is no owned document to carry one.</summary>
+    /// <summary>Gets the facts row this identity carries — its owned document's row, or a traveler's travelling row —
+    /// or <see langword="null"/> when no fact was ever written.</summary>
     public WorldStateRow? Facts => ((Document is { } document)
         ? WorldDefinitionRows.FindStateRow(
             rows: document.State,
             name: FactsDefinition.State
         )
-        : null
+        : m_travelFacts
     );
-    /// <summary>Gets the facts row name and capacity this identity's document declares, or the default for one
-    /// declaring none.</summary>
-    public WorldIdentityFacts FactsDefinition => (Document?.Identity?.FactsOrDefault ?? WorldIdentityFacts.Default);
+    /// <summary>Gets the facts row name and capacity this identity's document declares, a traveler's travelling row's
+    /// own, or the default for an identity declaring none.</summary>
+    public WorldIdentityFacts FactsDefinition => ((Document is { } document)
+        ? (document.Identity?.FactsOrDefault ?? WorldIdentityFacts.Default)
+        : ((m_travelFacts is { Capacity: { } capacity } row)
+            ? new WorldIdentityFacts(
+                Capacity: capacity,
+                State: row.Name
+            )
+            : WorldIdentityFacts.Default)
+    );
     /// <summary>Gets a counter that moves on every change to <see cref="Facts"/> — the one reference a server holds
     /// to know whether a body's lane still mirrors this identity's row.</summary>
     public int FactsRevision => m_factsRevision;
@@ -121,10 +118,10 @@ public sealed partial class WorldIdentity {
     public Vector3 NoseColor => (Color * m_noseFactor);
     /// <summary>Gets this identity's control feel — the orbit response its seat wakes with, carried on the identity so
     /// it follows the player rather than the world.</summary>
-    /// <remarks>Null for exactly one case: a replay-pinned identity (<see cref="Pinned"/>), which has no
-    /// <see cref="Document"/> to carry one. A pinned identity exists to re-drive a recorded tape offline, where there
-    /// is no camera and nothing reads a feel, so the absence is a statement that this identity HAS no feel rather than
-    /// a value left unset. Null resolves to the world document's own
+    /// <remarks>Null for an identity with no <see cref="Document"/> to carry one: a traveler rebuilt from its
+    /// projection (<see cref="FromProjection"/>), since the seat look is owned state that never crosses a seam, and a
+    /// replay-pinned identity (<see cref="Pinned"/>), which re-drives a recorded tape offline where there is no camera
+    /// and nothing reads a feel. Null resolves to the world document's own
     /// <see cref="WorldPlayerDefaults.SeatLook"/> — the portable input preference selected by the occupied seat.
     /// That is also the answer BEFORE a profile has been delivered for a seat, which is the same
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
@@ -209,11 +206,14 @@ public sealed partial class WorldIdentity {
     }
 
     /// <summary>Rebuilds an arriving traveler's identity from its projection alone. <see cref="Document"/> is
-    /// null; only explicitly transferred <see cref="RecordState"/> is available as typed durable state.</summary>
+    /// null; the explicitly transferred <see cref="RecordState"/> and <see cref="Facts"/> are its travelling durable
+    /// state, which a destination writes in place and the next crossing carries on.</summary>
     /// <param name="projection">The projection the wire carried.</param>
     /// <param name="defaults">The destination's player defaults.</param>
     /// <returns>The arriving identity.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="defaults"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The projection's records or facts are not a shape a projection
+    /// carries.</exception>
     public static WorldIdentity FromProjection(in WorldIdentityProjection projection, WorldPlayerDefaults defaults) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
@@ -227,7 +227,9 @@ public sealed partial class WorldIdentity {
         );
 
         WorldIdentityRecords.Validate(section: projection.Records);
+        WorldIdentityFacts.Validate(row: projection.Facts);
         identity.m_travelRecords = projection.Records;
+        identity.m_travelFacts = projection.Facts;
         return identity;
     }
     /// <summary>Parses a hex color with a fallback.</summary>
@@ -264,14 +266,84 @@ public sealed partial class WorldIdentity {
             ColorHex: ColorHex,
             MoveSpeed: m_moveSpeed,
             TurnSpeed: m_turnSpeed,
-            Records: RecordState
+            Records: RecordState,
+            Facts: (Facts ?? EmptyFacts())
         );
+
+    // The row an identity that has written no fact projects, so its first fact abroad meets its declared name and
+    // capacity. It is kept while that declaration holds: a profiled body projects every tick its continuation is
+    // hashed, and the same instance writes without building a row.
+    private WorldStateRow EmptyFacts() {
+        var definition = FactsDefinition;
+
+        if (
+            (m_emptyFacts is not { } row) ||
+            (row.Name != definition.State) ||
+            (row.Capacity != definition.Capacity)
+        ) {
+            row = new WorldStateRow(
+                Name: definition.State,
+                Kind: CellKind.Int,
+                Capacity: definition.Capacity,
+                Cells: []
+            );
+            m_emptyFacts = row;
+        }
+
+        return row;
+    }
+
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
     public void ReplaceDocument(WorldDefinition document) {
         Document = document;
         m_factsRevision++;
     }
+    /// <summary>Replaces this owned identity's document with another of the same id, and re-reads from it everything
+    /// the document decides: the name, the color, both rates, the bindings, the HUD and the seat look. An id names one
+    /// live object, so every seat bound to this identity follows the replacement.</summary>
+    /// <param name="document">The replacing document.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="document"/> declares no identity, or another id.</exception>
+    public void ReplaceOwnedDocument(WorldDefinition document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+        if (
+            (document.Identity is not { } identity) ||
+            !string.Equals(a: identity.Id, b: Id, comparisonType: StringComparison.Ordinal)
+        ) {
+            throw new ArgumentException(message: $"a replacing document must declare identity '{Id}'", paramName: nameof(document));
+        }
+
+        Load(document: document);
+        m_factsRevision++;
+    }
+
+    // Reads everything an owned document decides about its identity.
+    private void Load(WorldDefinition document) {
+        var identity = document.Identity!;
+
+        Document = document;
+        Name = identity.Name;
+        ColorHex = identity.Color;
+        Color = ParseColor(
+            hex: identity.Color,
+            fallbackHex: m_neutralColor
+        );
+        m_moveSpeed = ReadFixed(
+            document.State,
+            identity.MoveSpeedState
+        );
+        m_turnSpeed = ReadFixed(
+            document.State,
+            identity.TurnSpeedState
+        );
+        Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
+        Hud = document.Hud.Panels.FirstOrDefault();
+        // Control feel travels with the profile exactly as the two layers above do: read off this identity's OWN
+        // document, delivered on the same selection that delivers its bindings and HUD.
+        SeatLook = document.PlayerDefaults.SeatLook;
+    }
+
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>
@@ -414,9 +486,9 @@ public sealed partial class WorldIdentity {
         );
         return (row is not null);
     }
-    /// <summary>Writes one fact on this identity's own facts row — minting the row on the first write — and reports
-    /// whether the row changed. A write of the value the row already holds changes nothing and touches no
-    /// document.</summary>
+    /// <summary>Writes one fact on this identity's facts row — its owned document's row, or a traveler's travelling row
+    /// — minting the row on the first write, and reports whether the row changed. A write of the value the row already
+    /// holds changes nothing.</summary>
     /// <param name="key">The fact key.</param>
     /// <param name="value">The fact's integer value.</param>
     /// <param name="changed">Whether the row changed.</param>
@@ -424,12 +496,6 @@ public sealed partial class WorldIdentity {
     /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
     public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
         changed = false;
-
-        if (Document is null) {
-            reason = "this identity carries no owned document to persist a fact into";
-
-            return false;
-        }
 
         var definition = FactsDefinition;
         var row = Facts;
@@ -463,7 +529,7 @@ public sealed partial class WorldIdentity {
                     Key: key,
                     Value: CellValue.Int(value: value)
                 );
-                WriteState(row: declared with { Cells = replaced });
+                WriteFacts(row: declared with { Cells = replaced });
                 changed = true;
                 reason = string.Empty;
 
@@ -476,14 +542,14 @@ public sealed partial class WorldIdentity {
                 return false;
             }
 
-            WriteState(row: declared with {
+            WriteFacts(row: declared with {
                 Cells = [.. cells, new StateCell(
                     Key: key,
                     Value: CellValue.Int(value: value)
                 )],
             });
         } else {
-            WriteState(row: new WorldStateRow(
+            WriteFacts(row: new WorldStateRow(
                 Name: definition.State,
                 Kind: CellKind.Int,
                 Capacity: definition.Capacity,
@@ -499,6 +565,19 @@ public sealed partial class WorldIdentity {
 
         return true;
     }
+
+    // The facts row lives on the owned document, or on the travelling row of an identity that arrived as a projection.
+    private void WriteFacts(WorldStateRow row) {
+        if (Document is null) {
+            m_travelFacts = row;
+            m_factsRevision++;
+
+            return;
+        }
+
+        WriteState(row: row);
+    }
+
     /// <summary>Replaces or adds one durable state row.</summary>
     /// <param name="row">The state row to write.</param>
     public void WriteState(WorldStateRow row) {

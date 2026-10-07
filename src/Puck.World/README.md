@@ -25,10 +25,34 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
 ## Presentation inspection
 
+Both windowed and offscreen GPU hosts use the same inspection feed and rendered
+view picker. `world.view.pointer <x> <y>` supplies a Console-only inspection
+point in client pixels (display pixels offscreen); `clear` returns to hardware
+input. The point follows the published pane or whole-display view even without
+a local seat or drawn HUD cursor. A true headless host refuses GPU inspection.
+
 `world.inspect on|off` toggles the acting seat's editor panel; bare
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,
 camera, ticks, render levers, counted work, capacity and reload refusal.
+The acting seat's sky and air use the same text as `world.lighting`, followed
+by its named clocks' presented ticks, phases, holds and rates. Long sky text
+uses the panel's ordinary wrapping and elision.
+`world.explain` takes one surfaced sample through the acting seat or pane's
+existing pointer picker. It holds only the issuing console session's next line
+until the sample completes or names its cancellation, and reports that verdict
+once through the terminal, operator transcript and refusal count. It waits for
+that sample's fence and evaluates its
+captured cache publication with the independent CPU irradiance reference once.
+The echo and inspector share the actual receiver, corner weights and stamps,
+source categories, allocation, epoch, published sweep depth and fenced probe
+census. These rows take priority over optional presentation rows within the
+panel's fixed reservation. Steady inspection reuses their text and reference;
+it does not run another estimator. Unsupported screen/cone sources, dynamic
+field operations and unresolved paths name their refusal and show no numeric
+divergence. A missing pixel or a current route that has not rendered refuses immediately;
+registering its picker does not establish a rendered view. Changing seat or pane, a newer
+pixel request or closing presentation settles an outstanding explanation.
 Point and normal read `unavailable` until an inspector surface sample completes;
 an ordinary hover still reports its measured identity, distance and pixel cost.
 A passthrough pane follows its own rendered residency, scale and shading quality;
@@ -36,6 +60,11 @@ its placement costs and pass timings use that same view.
 `world.cost <placement>` reads live placement ownership; bare `world.cost`
 uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
 Shared program overhead is reported separately and reconciles to `world.budget`.
+`world.cost sky` prints each node's latest completed sky, composite and
+environment passes, including the gradient, disc, stars and clouds detail
+rows. Evaluations, hashes and texture loads are counted where they run. Fog's
+environment-map reads belong to the gradient row. A skipped pass has no
+counts; a retained submission keeps its identity and reports historical work.
 These are presentation queries and never submit simulation input.
 
 Every inspector line fits the panel's 96 columns: a long line wraps onto
@@ -47,10 +76,14 @@ document directory.
 `world.gpu-timing on|off` enables optional observational per-pass timestamps;
 bare reads completed means over at most 32 pairs. The inspector's FPS and timing
 rows follow that toggle. Timing starts off and creates no timestamp objects or
-commands until requested. A device without timestamps, or a timestamp pool or
+commands until requested; dynamic resolution (see [Graphics options](#graphics-options))
+also requests them while it reads the views' GPU frame time, in which case the
+toggle controls only the readout and bare `world.gpu-timing` reports
+`off (recording for dynamic resolution)`. A device without timestamps, or a timestamp pool or
 readback the device will not create, refuses timing for that render-graph
 instance by name (`<instance>: refused <reason>`); the graph keeps rendering and
-nothing is tried again until timing is turned on anew. An offscreen host
+nothing is tried again until timing is turned on anew or the operator's
+`gpu.faults` change. An offscreen host
 supports explicit placement costs and timing; the panel and pointer feed belong
 to the windowed presentation.
 
@@ -337,10 +370,18 @@ it and never builds a swap chain against it—see
 `WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Camera and
 session screens render as in the windowed shape, through the views
 `WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
-`Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
-per host-loop iteration, paced by the fixed-step pump rather than vsync) are
-the seams; the server steps exactly like `host.presentation: none`
-(`HeadlessWorldSimulation`).
+`Puck.Launcher.OffscreenTickHostedService` are the seams; the server steps
+exactly like `host.presentation: none` (`HeadlessWorldSimulation`). The
+offscreen host's time is its tick count, never the wall clock: it steps one
+tick per rendered frame, so a slow frame delays the next tick instead of
+letting the simulation catch up several ticks in one iteration. Until the
+render graph reports the tick's frame rendered (a cold pipeline build, a graph
+rebuilding, an input with no output for the frame), the host composes the same
+tick again and steps none, narrating the hold once as `[offscreen] holding
+tick T until its frame renders: <reason>`. A script that waits N ticks has N rendered frames behind it,
+and a capture's frame reprojects from the frame of the tick before. The wall
+clock only keeps the host from running faster than the world's rate
+([host pacing](../../docs/reference/hosting.md#host-pacing)).
 
 An offscreen display has no window whose size could change, so
 `world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
@@ -357,27 +398,31 @@ refuses until the renderer is ready, and with no argument it echoes the current
 extent. A windowed display keeps its document extent, which
 presentation scales to the window.
 
-Because its frames are its only output, the offscreen host holds its clock
-for them: it never steps past an armed capture's tick until that capture is
-served or refused. Whatever keeps the render chain from serving the capture
+Both rendered hosts, windowed and offscreen, hold their clock for captures:
+neither steps past an armed capture's tick, a scheduled row's or a
+`world.screenshot`'s, until that capture is served or refused. Whatever keeps the render chain from serving the capture
 (the engine's pipelines still building on a cold driver shader cache, the
 creation bakes still settling, or a device being rebuilt), the host keeps
 producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded, and counts
+so serving the capture releases no burst. The offscreen host's own hold on a
+frame that has not rendered spends the same budget, so a capture armed during
+a long build is refused once it is spent, while that frame hold continues
+until the frame renders. The hold is bounded, and counts
 from readiness: while the engine's pipeline set builds (or rebuilds after a
 device loss), the run may hold its clock for 180 seconds in all
 (`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
 for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`). Past either,
 the capture is refused as `unserved` and the run steps on; a refusal the build
 caused names it and its progress, such as "the engine's pipeline set is
-building (5 of 14 pipelines created)", and a later capture the chain still
+building (12 of 14 pipelines created; waiting on sdf-world-surface,
+sdf-world-views)", and a later capture the chain still
 cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
-capture waited, which stays 0 offscreen). A capture still waiting when the run
-ends is refused as `unserved` before the render chain is disposed. The windowed
-host paces to its display and never holds.
+capture waited, which stays 0 in both rendered hosts). A capture still waiting
+when the run ends is refused as `unserved` before the render chain is disposed.
+A headless host has no render chain and never holds.
 
 A capture row can set `converge` to 1–256 to render that many temporal samples
 at its armed tick before writing the last one; zero, the default, captures the
@@ -396,12 +441,12 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-Pressing the left stick toggles the `run` channel; West and Left Shift retain
-hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
-through the `forward` channel; the chord consumes that press, so it does not
-also flip the bare-stick run toggle.
-Holding LT + RB temporarily makes the standard right stick camera-only free
-look; left-stick movement remains relative to character heading while held.
+The island binds the left stick to `player.move.strafe`, the right stick to
+`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
+and South and Space to `jump`; East and West switch the view layout. It binds
+no run channel, no autorun and no free-look chord. An author gets autorun from
+a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
+`player.look.free` command suppresses body steering while camera look continues.
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -468,6 +513,21 @@ are refused by name at the tick boundary as they are from the console.
 | `world.place [<creation>] [<id>]` | Enter, South | Puts a placement down where the seat aims. |
 | `world.nudge [<placement>] x\|y\|z <steps>` | WASD, R, F, d-pad | Moves a placement by whole grid steps. |
 | `world.turn [<placement>] <steps>` | Q, E, shoulders | Turns a placement by whole angle steps. |
+| `world.history step -1\|step 1` | Z, X | Steps the in-session history a tick back or on. |
+| `world.history resume` | V | Continues live input from the history's cursor, discarding the recorded future. |
+| `world.history branch kept` | B | Continues live input from the cursor and keeps the recorded future as the branch `kept`. |
+| `world.history.drag` | Left mouse button | Held over the scrubber row, seeks to the tick under the pointer. |
+
+While `world.history` is on, a building seat's view draws the history's window
+as a scrubber row along its lower edge. The bar is the window, each keyframe is
+a tick on it, each kept branch is a fork raised above it, and the cursor is
+labelled with its tick; `world.history row` echoes the same facts. The history
+forms run under the seat's own principal and need `control` over the `history`
+grant subject, which every seat holds through its seeded `control all` until it
+is revoked (`world.grant control history seat2` grants it alone). `world.history
+on` itself, `switch`, `save`, `diff` and the other forms stay the operator's;
+the [state reference](../../docs/reference/state/worlds.md#travel-through-recorded-time)
+lists them.
 
 `world.grid` and `world.snap` echo the seat's whole state with no argument and
 after every change. They move presentation state only: each value a verb has
@@ -547,7 +607,7 @@ pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
 is gone. Every edit carries the activation of the world whose document its base
 came from, and a world refuses one composed on another's
-(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+(`world.mutation.activation-mismatch`), so an edit sent while a traveler's link
 has already moved on to the next world rolls back instead of landing there. The
 row doors that read a row before writing it (`world.row.add`, `.remove`, the
 literal `.set`, `.step`) and `creation.sculpt` carry it too.
@@ -608,7 +668,7 @@ reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 Start the three-pass feedback example from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.puck --state-dir artifacts/pipeline/state
 ```
 
 The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer
@@ -656,7 +716,7 @@ keeps running.
 from now, or the next one, before the call reaches the device, so a reload can
 be refused partway through its allocation on real hardware. The kinds are
 `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
-`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+`command-pool`, `bindings-pool` and `timestamp-pool`. The refusal is `GPU_CREATION_FAULT`, naming
 the kind and the creation's number; the node releases what the candidate
 created and the installed graph keeps running. A fault fires once.
 `gpu.faults lose [<n>]` loses the device on the nth frame from now, or the next
@@ -806,7 +866,7 @@ Facts a script needs:
   a completed view, the GPU has completed a frame of every instance that has
   rendered and the root has produced one more frame, so a pick or counted pass
   read after it waits on no cold device and a few ticks after it are a few
-  frames, and the bake schedule has reconciled and, while the
+  frames (offscreen, every tick is a frame of its own), and the bake schedule has reconciled and, while the
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
@@ -816,7 +876,13 @@ Facts a script needs:
   `[captures: settled at tick T]` on standard error. A script that takes one
   capture after another waits on it between them, since `world.screenshot`
   refuses while a capture is still pending and frames can trail ticks on a busy
-  machine.
+  machine. `world.wait indirect <seconds>` instead waits for a frame produced
+  after arming and every active shared indirect cache's actual current-source
+  completion fence. Its settled stderr verdict retains each residency's
+  allocation, epoch, generation, publication stamp and source sequence. This
+  proves shared-cache convergence, not every view's receiver admission. It
+  refuses without an active indirect cache; a deadline reports not-settled.
+  Pause simulation through that warm-up, then resume before a fixed tick wait.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The
@@ -893,8 +959,8 @@ Facts a script needs:
   `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
   (not in this project) owns the accumulator both boot shapes' hosted services
   drive it through.
-- `WorldInstanceHost.cs` / `WorldInstance.cs`—the process's running world
-  instances. The boot world is one entry (name `boot`) beside every instance
+- `WorldInstanceHost.cs` / `WorldInstance.cs` (in `Puck.World.Server`)—the
+  process's running world instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
   `WorldServer`/`WorldPopulation`/`WorldOwnedWorlds` and an empty
   `WorldMachineHost`, shares no singleton with the boot world, and advances on
@@ -930,16 +996,17 @@ Facts a script needs:
   there too: `screen.insert`/`.eject` apply through the ordered domain headless exactly as windowed, and
   `screen.source <index> camera|capture|desktop|probe|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
-  rather than refusing as unknown; `world.screens` and `world.view-refresh`
-  read only the screen binder, so every shape answers them), and
+  rather than refusing as unknown; `world.screens`, `world.nesting` and
+  `world.view-refresh` read only the screen binder, so every shape answers
+  them), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
   the fly camera application included—see above);
   `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
   occlusion, far field, cadence, render scale, quality and the rest) is
   composed by both the windowed and the offscreen shapes; `WorldOffscreenCommandModule.cs`
   (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
-  (frame rate, FPS target, cameras, shader reload),
-  `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
+  (frame rate, FPS target, cameras), `WorldShaderReloadCommandModule.cs`
+  (`world.shaders.reload`/`.status`), `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
   `WorldWheelCommandModule.cs`, `WorldViewCommandModule.cs`, and
@@ -974,7 +1041,7 @@ Facts a script needs:
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.world.json` (the standards as
+  boot default), a delta over `worlds/standard.puck` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
@@ -1358,8 +1425,11 @@ change. A producer registers twice, once per half:
   names it. A registration is refused unless its id, content class and
   transport match the shape's, and a feed that declares another producer,
   content class or transport than its registration is disposed and refused by
-  name when it opens. The binder registers the shipped four; a host adds its
-  own as `IWorldImageProducer` services. The ids `machine` and `probe` are
+  name when it opens. The binder registers the shipped five (`testPattern`,
+  `qr`, `color`, `camera`, `capture`); a host adds its own as
+  `IWorldImageProducer` services. `color` shows one flat `#RRGGBB` colour, a
+  one-pixel image a screen stretches over its face; a session screen past the
+  nesting depth shows its `fallback` colour through it. The ids `machine` and `probe` are
   closed to document producers: they name the typed arms' source instances.
 
 A source is a render-graph instance. `WorldSourceInstances` derives one
@@ -1375,7 +1445,7 @@ renames no source. Screens showing equal sources read one instance, which the sc
 its producer's cadence and negotiated extent, and the instance's `SourceHandle`
 is its identity. `WorldImageProducers.RegisterPackages` registers one factory
 per producer under its source package, which opens the instance's feed from
-the instance's settings: an uploaded producer's (`testPattern`, `qr`) is an
+the instance's settings: an uploaded producer's (`testPattern`, `qr`, `color`) is an
 upload, whose instance the render-graph runtime converts once a frame at most
 from the region its feed writes, through the shipped conversion its format
 names. A `views.graphs` row names an uploaded producer's source package with
@@ -1394,7 +1464,9 @@ presentation verb bound over the row (`screen.source <index> <kind>`, a
 each frame its `sdf.world` passes bind the image the runtime hands them for a
 source to every screen showing it, under a lease their node holds until the
 submission that sampled it has finished. A live bind publishes its source's
-mapping as a row does. A screen
+mapping as a row does. `screen.source <index> row` drops the live bind and the
+screen shows its row's source again, releasing a camera view the bind
+registered and re-binding the row's own view when the row authors one. A screen
 showing a view or a session reads that view's own `sdf.world` instance
 (`WorldViewInstances`), which renders at its footprint's extent.
 
@@ -1405,15 +1477,16 @@ the drawn image, none exists:
 | Arm | Reproduced by | Held by |
 |---|---|---|
 | `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
-| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick, read from the host of the world instance its `world` setting names | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), `WorldNestedScreensLawTests` (a presented world's machine is its own instance), the `uploaded-sources`, `instrument-clock-source` and `portal-sources` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
-| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
-| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
-| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
-| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; the `uploaded-sources` canary shows and captures one |
-| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
-| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
+| `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
+| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
+| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it; in a presented world, a view of the residency that world renders through, named under its level (`WorldViewNames.NestedCamera`) | `WorldViewPaneMappingLawTests.Views`, `WorldNestedScreensLawTests`, `WorldPresentedSourcesLawTests` (a presented world's cameras read each other at their previous frame), the `view-screens` and `portal-sources` canaries |
+| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
+| `text` | no image: the decal tier draws its lines (`WorldScreenDecals` over `WorldScreenTextDecal`, through `TextSourceAt`, or a presented world's own rows and font catalog in its session emitter) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`), `WorldPresentedSourcesLawTests` (a destination's text through its own fonts); the `uploaded-sources` and `portal-sources` canaries check its glyphs' ink |
+| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`); only the boot world runs a probe host, so a presented world's probe opens with a fault naming its world | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
 
 A producer a host adds needs no schema, planner or runtime change:
 `ImageProducerLawTests.AThirdProducerRegistersWithNoChangeToTheDocumentModel`
@@ -1421,15 +1494,29 @@ registers a third, fake producer whose documents validate and round-trip, and
 `AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
 installs its screen's source instance through its own registration.
 
-The engine ships four producers, each with its settings record in
+The engine ships five producers, each with its settings record in
 `WorldImageProducerSettings`:
 
 | Id | Settings | Transport | Content class |
 |---|---|---|---|
 | `testPattern` | `width`, `height` | uploaded | deterministic |
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
+| `color` | `color` (`#RRGGBB`) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
+
+A capture selects its format and encoding from its display when it opens. An
+HDR toggle, a move to a display that differs in it, or failed display discovery
+ends the feed, which the consumer reopens with fresh metadata; unknown discovery
+refuses the open. An SDR
+display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
+shared targets the screen samples and a Vulkan host converts through
+`source-rgba`. An HDR display is captured in half-float scRGB, which a
+Direct3D 12 host copies into half-float shared targets and converts on the GPU
+through `source-scrgb`, and a Vulkan host converts on its CPU tier through
+`source-transfer`, both into working values at the host section's
+`paperWhiteNits`, so its highlights keep their luminance above SDR white. On an SDR output those highlights clip at the display encode,
+as any working value above 1 does.
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
@@ -1572,8 +1659,9 @@ boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert` and `forge.play` use that executor for named producers,
-while `screen.eject` detaches the display. Legacy screen operations remain in the
-protocol. Generic provider operations are refused during recording until the tape
+while `screen.eject` detaches the display. The screen operations (insert, eject,
+select, options, link, unlink) remain their own ordered payload kind beside the
+generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
 render-graph source instance (package `source.machine`), an uploaded source:
 once per completed tick its upload (`MachineVideoSourceUpload`, made by the
@@ -1594,7 +1682,8 @@ screen index removed and later restored by `world.reset`/`.load` exactly as
 world's residency binds every frame through the binder's `ISdfScreenSources`). It still
 OWNS the genuinely presentation sources bound through `screen.source <index>
 <kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
-present machine first, through the ordered domain)—a jumbotron view it renders
+present machine first, through the ordered domain, and `row` returns the
+screen to its row's source)—a jumbotron view it renders
 itself, any other a source instance it shows over the row—and `screen.eject`
 (which routes to whichever half—machine or presentation source—actually holds
 the slot). A camera source row picks its
@@ -1837,10 +1926,14 @@ seat-relative probe resolves to the enclosing instance's own seat's target
 instance, or the single instance when the target is not seat-relative.
 Shipped kinds are
 the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
-luminance of the above-threshold pixels over the FaceAuth infrared stream)
-and `faerie` (relights the color frame from a light orbiting an authored
-anchor, with the infrared strobe pair's lit-minus-unlit response as the
-height field; see `src/Puck.Shaders/README.md`)—GPU-tier only today.
+luminance of the above-threshold pixels over the FaceAuth infrared stream),
+`ir-marker` (an oriented rectangle over the strobe pair's bright mass, whose
+four corners another probe's sockets can bind), `faerie` (relights the color
+frame from a light orbiting an authored anchor, with the infrared strobe
+pair's lit-minus-unlit response as the height field) and `average` (the
+smallest texture-writing kind); the
+[shader reference](../../docs/reference/shaders.md#probe-kinds-puckprobemanifestv1) describes each kernel—GPU-tier
+only today.
 
 `probe.status` echoes every live instance's run state (or fault), tier, rate,
 cycles/drops, latest capture age, channel values and confidence, every
@@ -1877,11 +1970,26 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
+`world.temporal`, `world.indirect`, `world.upscale-sharpness`, `world.sky-quality`, `world.sky-field-scale`,
+`world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+`world.debug-view`, `world.sky-layer`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
+temporal-reconstruction switch, a dynamic-resolution switch, render-scale
+ceiling and floor tiers and a sky tier. Its four shadow-policy fields apply together as one
+settings change. `world.sky-quality low|medium|high` sets the sky's tier: a sky
+layer whose `tier` lies above it writes no entry and counts no work, and below
+`high` each kind draws its reduced form (clouds take one thickness tap and three
+octaves at `low`, shaded flat; stars stop twinkling at `low`). The render
+section's `skyQuality` sets it at boot, and `world.save` folds it back.
+`world.sky-field-scale 1|0.5` independently selects the field grid: one half
+uses ceil-half dimensions and the composite reconstructs those field texels.
+Scene resolution and point sky layers keep their own grids. The field images
+retain their full allocation capacity, so this lever reduces evaluated and
+written texels without reducing the retained bytes reported by `world.budget`.
+The `render.skyFieldScale` boot value and a preset's `skyFieldScale` default
+to one; preset application and `world.save` retain the selected fraction. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1890,15 +1998,87 @@ without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale
 to both seat views and named cameras as each view's ceiling. A layout
 transition's `transitionRenderScale` multiplies only the grid rendered inside
 that ceiling, which allocates and rebuilds nothing, so it has no effect at the
-native tier, where a view reconstructs nothing.
+native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
+the world's own views over time at any render scale: each jitters its samples,
+resolves them over its history, and under `world.cadence on` stands once a still
+view has converged; `world.upscale-sharpness` then sharpens what it resolves.
+Camera and session views never reconstruct over time. The render section's `temporal`
+member sets it at boot, and `world.save` folds it back.
+`world.indirect off|medium|high` selects the session's residency-owned traced
+and partitioned cache. It boots at `render.indirect.tier`, Medium when absent;
+an explicit `off` disables it. The shared quality presets select Off at Low,
+Medium at Medium and High at High, and a preset can author an `indirect` override.
+`world.save` folds the live tier back into its authored home. Enabled views of one residency share one
+cache, and a completed cache schedules no more rays until demand or geometry
+changes. `world.debug-view indirect-probes` shows probe
+classes across the whole view, including empty sky, with scene hits occluding
+the spheres. `world.debug-view indirect-cells` colours each hit by the stored
+partition component of its nearest cell corner, with no field evaluation.
+`world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
+reports the actual cache slices, upload regions, retiring caches and light-view
+fragment allocations. The cache total includes the depth banks it lends to light
+graphs; the fragment total counts graph-owned scratch and regions. Each bank is
+counted once, including while a retiring graph's readers still hold it.
+
+`world.indirect-method [cache|screen|cone]` reads or selects the live indirect
+comparison method for every consuming view. It starts at `cache`; `screen` and
+`cone` select the engine's comparison paths with the residency cache as their
+fallback. This operator presentation override changes no cache tier, saved
+document or authoritative session state. Camera and session views keep the
+method while applying their quality restrictions, and infinity views retain
+each consuming camera's method alongside the layer's own shading levers.
+
+`world.lighting` appends that same host inventory, including exact allocation,
+epoch, submission and lighting-publication identities, each level's allocated
+and placed bricks and submitted strata, pending host work and valid light maps.
+GPU probe classifications and solve results require a fenced readback. The last
+explicit `world.explain` census is appended separately with its captured
+residency, allocation, epoch and publication, even after live host inventory
+changes. Host schedule counts never stand in for those GPU classifications.
+`world.indirect-freeze [on|off]` pauses new update admission in every active
+residency while views retain its cache. An already admitted frame may finish.
+`world.indirect-reset` queues their reset for the next renderable frame; while
+frozen it withdraws the old publication without admitting replacement work.
+These two operator-only controls affect presentation objects, change no
+authoritative document or replay state, and refuse when no indirect residency
+is active. Headless `world.lighting` names the absent renderer.
+`world.render-scale [view]` echoes the selected view's ceiling, saved quality
+floor, grid, budget and signal. With no target it echoes the primary view;
+ceiling and floor changes write the defaults that named rows inherit, while
+pin and automatic-mode changes apply to every player view (`world`, `world$2` on).
+A camera or session view keeps its native extent until a lever or a `views.quality`
+row names it.
+A named tier or numeric fraction/percentage sets the scalar allocation ceiling.
+`world.render-scale [view] floor <tier>` authors the floor through
+`views.quality`, whose rows name view instances; `*` supplies defaults.
+A row can select a `tier` from the world's quality presets or override its
+`renderScaleFloor` directly. Quarter is the default floor, and a preset's
+`renderScaleFloor` applies when `world.quality` selects that tier. Ceilings and
+floors survive `world.save` exactly; `renderScale` has only a scalar form.
+`world.render-scale [view] auto` releases a pin and enables adaptation;
+`auto off` stops it. Defaults and shipped presets leave adaptation off.
+`world.render-scale [view] pin <scale>` is bindable and holds a grid for a
+sweep. A pin outside the floor and ceiling is refused by name, and changes to
+the bounds clamp an existing pin. Pins enter neither saves nor replay. Auto
+continues from the pinned grid within one policy step.
+Each view uses the same resolution policy: fresh GPU frame time against the
+display period, then fresh present timing, then counted march steps against
+the budget from committed floor evidence per output pixel. A sample within
+10% of its budget holds the grid; otherwise it moves by at most 1/16 of itself
+down or 1/32 up. The grid moves inside its ceiling without allocating or
+resetting history. An adaptive native view allocates at three-quarter, since
+a native view reconstructs nothing. The scheduler supplies the only grid
+quantizer; readings from another grid do not move the policy. Between grids
+that bracket the budget the policy holds the cheaper one, reporting the
+measured dearer grid as `over=`.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
-distance with its reach multiplier, horizon-ray step tax, and far-plane fog
-remnant, the field lattice program's node/cadence counts and exact
+distance with its reach multiplier, horizon-ray step tax, far-plane fog
+remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—
 how an authored choice's price becomes legible instead of a silent frame tax.
 Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
@@ -1909,6 +2089,10 @@ domains contribute their aggregate per-tick budget once, not once per follower.
 `body.targets <body>` includes the selected route's status and waypoint. Both
 `world.navigation` and `world.budget` are server-safe under `--headless`;
 the latter names the absent renderer while retaining all authoritative costs.
+In a rendered host, each live infinity root adds its planned view count against
+the cap and its named depth or capacity fallbacks. Cameras sharing that root
+share its plan entry; removing the root withdraws it. The ordinary render
+budget reports those instances' allocations and completed dispatch counts.
 
 `world.counters [<source-or-prefix>] [--json]` is the one work-counter
 readout, registered in every host shape. It discovers every
@@ -1917,7 +2101,10 @@ per source, sorted by name: the source's dotted name, then a `<kind> <value>`
 line per kind it counts. The boot server registers its own sources:
 `state.arena` and `state.search`, whose totals carry across a definition
 rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
-and search behind them, so a reading never goes down, and `state.rules`. A
+and search behind them, so a reading never goes down, and `state.rules`. Every
+authoritative shape registers `physics.sweep`: the certified sweeps that prove
+each moving body's travel, the bounds queries they spend, and how many ended in
+contact or exhausted their budget. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's SDF kernel loads,
 `shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its
@@ -1925,9 +2112,12 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, and the field evaluations the bakes spent. The
+baked, refused and switched to drawing, the held bakes that could not be decoded (`undecodable`, each named
+once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
+mesh draws (`near`) and impostor cards (`far`) of baked placements the views
+recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
-presented host registers `sdf.transforms`: the dynamic-transform rows packed,
+presented host registers `sdf.transforms`: pacing counts of the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the
 frame source each session view composes for itself. A released session view's
 totals stay in the sum. The
@@ -1952,7 +2142,7 @@ completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
 nothing is refused and lists the sources. `--json` prints one line:
-`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
+`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"capabilities":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
 The `kinds` legend gives every reported kind's unit and class
 (`deterministic`, `per-backend-deterministic` or `pacing`), which
 `puck counters` reads to tag each count.
@@ -1970,37 +2160,83 @@ not a loadable or durable asset format.
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
 below—geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless the `render.sky` fog layer absorbs it first.
+a horizon curve there unless the `render.atmosphere` fog absorbs it first.
 
-Two document sections author the scene's lighting instead of a verb, re-read
-on every definition revision (a live edit lands on the next frame).
-`render.lighting.lights[]` is a typed list, at most eight, each `$type`
-`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadows`—the
-one shadowing light drives the soft-shadow march, whose penumbra is the tangent
-of its angular radius; the rest are scaled by ambient occlusion), `hemisphere`
-(`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
-the material shade); absent, the pinned sun and hemisphere render.
-`render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
-read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
-`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
-`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
-star hash-dealt its own blackbody colour and apparent luminosity;
-`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
-and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
-—a hashed, warped noise layer over everything above it, all on the tick clock),
-composited in that order whatever order they are authored in. Every field is
-optional individually. `world.lighting` echoes both sections. `render.cycle`
-keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
-"lighting": {…}, "sky": {…} }, … ] }`—the row's live value (its fractional
-part, so an advancing row wraps once per unit) picks the two bracketing keys
-and every lighting/sky lane interpolates between them (directions along the
-arc; counts, kinds, seeds and flags held); a key states only the fields it
-moves, addresses a light by slot and a stop by index with the kinds the statics
-author, and the rest hold from the previous key. The clock is simulation
-state (an advancing `state` row—deterministic, replayed, settable with
-`world.row.set state`); the interpolation is presentation. A key may not move
-a cloud layer's `drift`, `shear` or `spin`: each is a rate integrated from the
-tick, and a state row's value can jump between two ticks.
+The lighting, sky, atmosphere and environment sections are re-read on every definition
+revision. `render.lighting.lights[]` holds at most eight typed lights:
+`directional`, `point`, `occluder` and `rim`. An absent list supplies the
+pinned sun. `render.lighting.curvature` adds cavity darkening, ridge light and
+an ink outline through the `inkLow`/`inkHigh` curvature band.
+
+`render.sky.layers[]` is the authored-order stack of repeatable `gradient`,
+`sunDisc`, `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama`
+and `panel` layers, with opacity, blend, visibility, masks, transforms and
+quality tiers. `render.atmosphere` controls the air outside that stack: a
+`fog { density, color, height { base, falloff } }` in-scatters the sky or its
+authored colour; a `haze { amount, anisotropy, height }` scatters the sky and
+directional lights; a `medium { surface, extinction, color }` fills the space
+below a level surface. An absent section supplies the default fog, and a
+present section contains exactly its authored kinds. A bounded volume's
+`scatter` is the share of its extinction that scatters directional light.
+Lighting-visible layers supply the shared environment map and second-order
+spherical harmonics. `render.environment.ambient` scales the sky irradiance
+through AO; `reflection` scales map reflections with analytic rectangular
+panels. Both gains default to one and skip their shading work at zero.
+A `panel` defaults to lighting-only visibility and additive blending; its
+colour, intensity and blur use the same bindings and key clocks as the sky.
+The [frame rendering guide](../../docs/rendering/sdf/handbook/frame-rendering.md)
+describes the environment's refresh threshold and counted work.
+
+A directional's
+`shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
+require a unique light `name`; `never` consumes no shadow slot. Each delivered
+tick selects `always` lights first, then `auto` lights by their tick-state color
+and weight's luminance. Among equally ranked lights, current slot holders win;
+authored order breaks ties among non-holders and on a fresh selection. A pure
+reorder keeps the holder, and selected names retain their slots when ranking
+or list order moves.
+`world.lighting` echoes both sections and reports each selected light's slot
+and reason, including an `auto` light's rank. It also reports active handoffs
+and queued crossings with their capacity, identity or slot reason.
+
+The boot render settings and each quality preset carry four shadow-policy
+fields: `shadowLights` (K, 0..4), `shadowFadeSlots` (F, 0..2),
+`shadowFadeTicks` (nonnegative engine ticks) and `shadowOverflow` (`queue` or
+`instant`). The boot row defaults to 1/0/0 with `instant`; without authored
+lights, the named pinned sun occupies slot 0 as an `always` candidate. A load
+refuses positive K
+and positive fade ticks with no F, positive F with zero fade ticks, and a
+queue policy that cannot progress, at every reachable tier including `auto`.
+The shipped quality table currently selects K = 0/1/2, F = 0, zero fade ticks
+and instant overflow for low/medium/high. Final sky defaults remain the
+[P18-14 decision](../../docs/plans/rendering.md#p18--sky-and-atmosphere).
+
+The allocator detects a crossing at a delivered tick and holds at most F CPU
+handoffs. Each reports the outgoing and incoming light indices, stable slot
+and progress computed from the presented tick and `shadowFadeTicks`. Reading
+never advances a fade, so repeated frames at one frozen tick agree. With
+`queue`, a crossing waits for its slot's active handoff (`SlotInHandoff`),
+its desired light's participation in another handoff (`IdentityInUse`), or
+busy fade capacity (`FadeCapacity`). Current targets are recomputed only at
+delivered boundaries, and a still-needed crossing starts at the first
+delivered tick its blocker clears. Queued targets take newly free fade capacity
+before fresh crossings, oldest first, with slot index breaking equal-age ties.
+`instant` resolves overlap and exhausted
+capacity atomically, releasing all old participants. F = 0 or zero fade
+duration also chooses instant behavior. A seek, reload,
+structural revision, backward delivery or policy change installs without fades.
+Names still selected keep the slots they held; new names take freed slots in
+rank order. Reusing a light-table index for a different name is a crossing.
+
+The frame carries the full K selection and active handoffs, at most K + F
+march slots. Each selected light casts its own shadow with its own angular
+radius; directionals outside the slots shade unshadowed. During a handoff,
+the outgoing light's shadow deficit fades out and the incoming light's fades
+in, each retaining its radiance. `world.counters gpu` reports each slot's
+march steps separately. Incoming visibility storage is provisioned by F:
+absent at 0, one byte per pixel at 1 and two bytes per pixel at 2. Starting a
+handoff allocates no texture. The [P18-7 contract](../../docs/plans/rendering.md#p18--sky-and-atmosphere)
+owns the packed visibilities, counted controls and K + F bound.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick
@@ -2012,8 +2248,100 @@ names presentation clocks: `{ "clocks": [ { "name": "day", "periodSeconds":
 "state": "tide" } ] }`. A tick clock's period is a whole number of engine
 ticks and its span is what one period reads as (in `.puck`, `periodSeconds:
 20min, spanSeconds: 24h`); a state clock's phase is its Fixed or Int row's
-fractional part. `world.timeline` echoes each clock's source, its period and
-start in engine ticks, and its phase and reading at the authority's tick.
+fractional part, read eased like every binding.
+
+Any colour, scalar, angle, direction or vector a presentation section
+authors (the lights, the sky, the theme, markers, camera programs,
+`views.graphs` parameters) may instead be keyed on a clock:
+`{ "clock": "day", "keys": [ { "at": 0, "value": 0.2 }, { "at": 43200,
+"value": 1, "ease": "Smooth" } ] }`, written in `.puck` as a block,
+`intensity { clock: day  keys [ { at: 0h, value: 0.2 } { at: 12h, value: 1,
+ease: Smooth } ] }`; a clock is a declared name, written bare wherever a key or
+a section names it, and a quoted one is refused naming the bare spelling. A key's `at` is a time on its clock's span, ascending, in
+`[0, span)`; the last key wraps into the first. Between two keys the value
+blends by its type—a colour in linear light, an angle along the shorter arc
+across a whole turn, a direction along the great circle, a scalar or vector
+linearly—and the earlier key's `ease` (`Linear`, `Smooth` or `Step`) shapes
+the time. `render.lighting` and `render.sky` may also be keyed whole: a
+section's `clock` and `keys` hold partial records that address a light or a
+layer by its `name`, of its own kind (`keys [ { at: 0, layers { sun:
+sunDisc(intensity: 0) } } ]`), each field keyed through the keys that state it. A
+key states values only: a count, a seed, a kind, a name, a light's shadowing,
+the sun disc's light slot and a gradient's stop count are structure and
+refused by name, as is a field keyed both by its own keys and by the
+section's. Values that must hold an order (a gradient's stop elevations, the
+ink band's `inkLow` below its `inkHigh`) key on one clock and bind no state
+row, and are judged over every phase of that clock, between keys as well as at
+them: a pair that may meet anywhere is refused by name. A cloud's `drift`, `shear` and `spin` and a twinkle's `rate` are
+rates the tick integrates in closed form, so a key changing one never jumps
+the layer; a rate keys only on a tick clock and binds no state row. Keys are
+presentation: a clock reads the tick or a state row and nothing keyed feeds
+the simulation. A presentation-tier projection carries the tick clocks, which
+the recipient evaluates at the tick it presents, and each state clock a value
+keys on as an anchor of its phase, re-sent only at the ticks the recipient's
+prediction misses the authority's phase. `world.timeline` echoes each clock's source, its period and
+start in engine ticks, its phase and reading at the authority's tick, and how
+many keyed values the presentation has resolved, which rises only while a
+clock a key reads moves.
+
+`world.timeline hold <clock>` keeps the current presented reading;
+`world.timeline at <clock> <engine-tick>` scrubs to an exact unsigned engine
+tick and holds it. `world.timeline rate <clock> <multiplier>` selects a finite,
+nonnegative rate without moving the current reading, and `world.timeline run
+<clock>` resumes from it. A state clock samples the delivered row at the
+requested tick and holds that phase; this is a preview of the row's current
+prediction, not a stored simulation history. The controls affect presentation
+keys and their integrated rates. The simulation, its state rows and its tick
+continue normally. Clock previews never save or enter replay.
+
+`world.sky-layer solo <index>` auditions one authored sky row; `solo off`
+restores the stack. `world.sky-layer mute <index> on|off` toggles a row, with
+mute taking precedence over solo. Indices are the zero-based `sky[index]`
+rows in `world.lighting`. These render levers apply across World views and
+session screens and never save. Solo removes the default gradient; muting an
+authored gradient keeps that contribution absent. Atmosphere remains the
+separate fog, haze and medium authored under `render.atmosphere`.
+
+`world.debug-view sky-cost` shows evaluations in red (one quarter per layer or atmosphere
+evaluation), procedural hashes in green (one sixty-fourth per hash), and
+texture loads in blue (one sixteenth per load), clamped at one. Field-run
+cost is filtered with the field's pixels and combined with the output
+pixel's point and atmosphere work. It is cost attributed to a pixel; `world.cost sky`
+reports exact completed pass totals. `world.debug-view off` restores the image.
+
+Sky edits use the ordinary authoring loop: `world.compare hold`, edit the
+sky's `.puck` rows, `world.reload`, then `world.compare diff`, `split` or
+`wipe`. `world.save <path.puck>` writes the live sky back through the source
+printer and preserves unrelated authored text. The CPU sky-edit law drives
+those commands with the reference environment map; rendered comparisons and
+the held-clock submission gate remain GPU verification legs.
+
+Every scalar or angle a presentation section authors declares one domain
+(`WorldValueFields`): a light's weight, radius, power and angular radius, the
+curvature gains and ink band, a stop's elevation, the sun disc's radius and
+intensity, the stars' brightness and twinkle, the clouds' coverage, softness
+and scale, the atmosphere's fog density, height falloff, haze amount and
+anisotropy and medium extinction, the theme's bloom and scrim alphas, a marker's
+chip and ring alphas, and a camera program's operands (blend weight, path
+fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
+its field's domain by name, and a load refuses a field bound to a state row
+whose starting value, the one the binding presents (the eased follower, or the
+stored value for `.$target`), lies outside it. A row a rule or a console write later
+moves outside the domain refuses nothing: a finite value beyond a closed end is
+clamped to it, and a value that is not finite or lies at or beyond an open end holds
+the last value the binding presented from a valid one. A cloud's softness, a layer's
+or a volume's, lies in `[SdfSky.MinCloudSoftness, 1]`: its floor, 1e-6, keeps the
+kernel's `smoothstep` band two distinct edges wide at every threshold, so a
+softness written to 0 presents 1e-6. A camera's field of view lies in
+`[CameraSnapshot.MinFieldOfViewRadians, π)`, the angles a camera is built with. A
+held value is the one thing that makes the mapping depend on history: a
+presentation rebuilt from state alone (a seek, a replay, a capture) has no last valid
+value yet and presents the field's engine default until the row is valid. Each
+binding is reported twice at most per excursion, once when it leaves its domain and
+once when it returns, on stderr, the console and a toast, as
+`[world.value: render.sky.layers[3].softness reads 0 from state.cloudSoft,
+outside [1E-06, 1]; presenting 1E-06]` and `[world.value: … within [1E-06, 1];
+recovered]`.
 
 ## Engine boundaries worth knowing
 
@@ -2031,7 +2359,7 @@ start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Verifying
 
-`Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
+`Puck.World` is greenfield (`AGENTS.md` rule 3): verify by RUNNING the game
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance
@@ -2059,7 +2387,11 @@ the root because nothing is drawn over it. The root reads the frame the display 
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
-request still outstanding when the run ends prints a `WARNING` naming it. A
+request still outstanding when the run ends is refused as `[capture] refused
+<path>: the run ended before any frame served it …` before the render root is
+disposed. A rendered host steps no tick past the one a capture was armed
+after until a frame serves it or its hold budget refuses it, so a
+`world.wait <ticks>` after it has the capture behind it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or
@@ -2095,7 +2427,7 @@ calling principal's explicitly disclosed literal observations.
 `world.state.similar <row> <key> <table> [top]` ranks a vector table's cells
 against a query vector by cosine similarity and dot product, reading through
 the caller's visibility and writing nothing. The headless
-[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 
 [Decision policies](../Puck.World.Schema/README.md#decision-policies) let a world

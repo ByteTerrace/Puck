@@ -4,10 +4,10 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
-        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Scripting/Puck.Scripting.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

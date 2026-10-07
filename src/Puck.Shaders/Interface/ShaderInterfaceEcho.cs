@@ -168,6 +168,33 @@ public static partial class ShaderInterfaceEcho {
 
         return text.ToString();
     }
+    /// <summary>Generates a block echo whose last member's first word deliberately expects the next word's
+    /// sentinel. Every preceding member retains its ordinary check, giving a one-pixel discriminator.</summary>
+    /// <param name="shaderInterface">The perturbed pass's interface, including its echo output.</param>
+    /// <returns>The generated HLSL with exactly one sentinel changed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The interface has no block or echo output, or includes native records;
+    /// this discriminator addresses block members only.</exception>
+    public static string GeneratePerturbed(ShaderInterface shaderInterface) {
+        var groups = BlockGroups(shaderInterface: shaderInterface);
+
+        if (groups.Any(predicate: static group => group.Resources.Any(predicate: static resource => (resource.Member.Structure is not null)))) {
+            throw new ArgumentException(message: "The last-block-member discriminator requires a block-only echo.", paramName: nameof(shaderInterface));
+        }
+        var group = groups.Last(predicate: static item => (item.BlockMembers.Count != 0));
+        var member = Members(group: group).Last();
+        var word = (member.Offset / 4);
+        var generated = Generate(shaderInterface: shaderInterface);
+        var lastLine = $"    {OutputName}[uint2({Number(value: (Width(shaderInterface: shaderInterface) - 1))}, 0)] = ";
+        var start = generated.IndexOf(comparisonType: StringComparison.Ordinal, value: lastLine);
+        var expected = $"0x{Sentinel(set: group.Set, word: word).ToString(format: "X8", provider: CultureInfo.InvariantCulture)}u";
+        var at = generated.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: start, value: expected);
+        var replacement = $"0x{Sentinel(set: group.Set, word: (word + 1)).ToString(format: "X8", provider: CultureInfo.InvariantCulture)}u";
+        var perturbed = string.Concat(str0: generated[..at], str1: replacement, str2: generated[(at + expected.Length)..]);
+
+        return ($"// The echo pass of shader interface '{shaderInterface.Name}' ({shaderInterface.Hash}), generated with its last member's first word expecting the sentinel of the word after it."
+            + perturbed[perturbed.IndexOf(value: '\n')..]);
+    }
 
     private static string Access(ShaderInterfaceGroupLayout group, ShaderInterfaceBlockMember member, uint word) {
         var components = member.Type.ComponentCount();

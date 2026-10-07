@@ -1,0 +1,107 @@
+schema: "puck.world.definition.v1"
+basis: "../indirect-cadence/fixture"
+documentId: "indirect-body-motion"
+render {
+  farDistance: 12
+  ambientOcclusion: false
+  temporal: false
+  dynamicResolution: false
+  environment {
+    ambient: 0
+    reflection: 0
+  }
+  sky {
+    layers [gradient(stops: [{ elevation: -1, color: "#000000" }, { elevation: 1, color: "#000000" }])]
+  }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  lighting {
+    lights [directional(name: "sun", direction: [0, 1, 0], color: "#FFFFFF", weight: 1, shadow: never, bounce: 1)]
+  }
+}
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+  }
+}
+prototypes {
+  prototype "floor" {
+    document {
+      schema: "puck.creation.v1"
+      name: "floor"
+      palette [{ color: "#FFFFFF", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
+      shape Box "receiver" {
+        material: 0
+        position [0, -0.05, 0]
+        scale [5, 0.05, 5]
+      }
+    }
+  }
+  prototype "moving-body" {
+    document {
+      schema: "puck.creation.v1"
+      name: "moving-body"
+      palette [{ color: "#FF0000", roughness: 1, specular: 0, fill: "#000000", bleed: "#FFFFFF", receive: 1 }]
+      shape Sphere "actual-body" {
+        material: 0
+        position [0, 0.4, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+    }
+  }
+}
+
+bodies {
+  localSeats: 1
+}
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+  seatRig "body-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      anchor(subject: worldPoint(point: [0, 0.5, 0]))
+      orbit(distance: 10.5475, pitch: 0.5486, yaw: 0)
+      lookAt(subject: worldPoint(point: [0, 0.5, 0]))
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
+channels [
+  { name: "forward", shape: Bipolar, role: MoveAdvance }
+  { name: "strafe", shape: Bipolar, role: MoveStrafe }
+  { name: "turn", shape: Bipolar, role: Turn }
+]
+bodyMotionPrograms [{name: "traverse", version: "puck.body.program.v1", kind: Motion,
+    operations [ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, SnapYawToPlanarIntent, IntegratePlanarAndVerticalVelocity, CommitPose]
+  }
+]
+kits {
+  rows [{name: "stander", bodyMotionProgram: "traverse",
+      motion { speed { value: 4 }, turn { rate: 2.5 }, holds [{ name: "air", bond: Free, hold: None }] },
+      collider: sphere(radius: 0.25), bodyContact: Overlap
+    }
+  ]
+}
+defaultSeatKit: "stander"
+
+looks {
+  rows [{name: "moving-body", source: creation(prototypeId: `moving-body`), scale: 1,
+      motion { gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+  ]
+}

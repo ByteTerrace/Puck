@@ -98,6 +98,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         foreach (var (presented, expected) in ((ReadOnlySpan<(ulong, ulong)>)[((period * 7UL), 7UL), (((period * 8UL) - 1UL), 7UL), ((period * 8UL), 8UL)])) {
             layout.WriteFrame(
                 block: written,
+                extent: node.Extent,
                 frame: 0UL,
                 tickRate: RequestedTickRate,
                 values: (node.Frame with { Tick = presented })
@@ -119,10 +120,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var hostTick = 5UL;
 
         FrameCaptureResult CaptureAt() {
-            var request = new FrameCaptureRequest(path: Path.Combine(
-                path1: Path.GetTempPath(),
-                path2: $"{Guid.NewGuid():N}.png"
-            ));
+            var request = CaptureRequest();
 
             node.RequestCapture(request: request);
             _ = Produce(node: node);

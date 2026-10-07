@@ -7,7 +7,8 @@ namespace Puck.Cli.Shaders;
 /// <summary><c>puck shaders interface</c>: prints or writes the frame-block declarations a pipeline's passes or an
 /// engine package read through their generated interface, and optionally each interface's echo pass. A pipeline pass
 /// compiles against its declarations without a file; an engine package's shaders compile at build, so their
-/// declarations are written beside their sources and checked in.</summary>
+/// declarations are written beside their sources and checked in. The fixture mode synchronizes the interface-echo
+/// canary's model-derived graph blocks, echo sources and capture extents, or checks them without writing.</summary>
 internal static class InterfaceCommand {
     // Every interface the source names, with the directory its declarations resolve in.
     private static IReadOnlyList<(ShaderInterface Interface, string Directory)> InterfacesOf(string path) {
@@ -37,20 +38,31 @@ internal static class InterfaceCommand {
     }
 
     public static Command Create() {
-        var source = new Argument<string>(name: "source") { Description = "The graph document or one-off shader source; with --package, the directory its shaders live in." };
+        var source = new Argument<string>(name: "source") { Description = "The graph document or one-off shader source; with --package, its shader directory; with --echo-fixtures, the interface-echo canary directory." };
         var package = new Option<string>(name: "--package") { Description = "The engine package (such as overlay or sdf.film-grain) whose declared interface to generate, rather than a document's." };
-        var write = new Option<bool>(name: "--write") { Description = "Write each interface's declarations beside its source, as <interface>.interface.hlsli, rather than printing them." };
+        var write = new Option<bool>(name: "--write") { Description = "Write generated declarations beside the source, or synchronize the canary files with --echo-fixtures." };
         var echo = new Option<bool>(name: "--echo") { Description = "Also generate each interface's echo pass, as <interface>.echo.hlsl." };
+        var fixtures = new Option<bool>(name: "--echo-fixtures") { Description = "Synchronize the interface-echo canary directory: current SDF package graph blocks, every declared echo and its one-word discriminator, and capture extents. Requires --write or --check." };
+        var check = new Option<bool>(name: "--check") { Description = "With --echo-fixtures, compare all generated fixture files without writing; exit 1 on drift." };
         var command = new Command(
             description: "Print or write the frame-block declarations a pipeline's passes or an engine package read, and their echo passes.",
             name: "interface"
-        ) { source, package, write, echo };
+        ) { source, package, write, echo, fixtures, check };
 
         command.SetAction(action: result => {
             var path = Path.GetFullPath(path: result.GetRequiredValue(argument: source));
             var packageId = result.GetValue(option: package);
             RenderGraphPackage? declared = null;
 
+            if (result.GetValue(option: fixtures)) {
+                if ((packageId is not null) || result.GetValue(option: echo) || (result.GetValue(option: write) == result.GetValue(option: check))) {
+                    return CliExit.Refuse(verb: "shaders interface", what: "--echo-fixtures", why: "use exactly one of --write or --check, without --package or --echo.");
+                }
+                return InterfaceEchoFixtures.Run(directory: path, check: result.GetValue(option: check));
+            }
+            if (result.GetValue(option: check)) {
+                return CliExit.Refuse(verb: "shaders interface", what: "--check", why: "the check mode requires --echo-fixtures.");
+            }
             if (packageId is not null) {
                 if (!Directory.Exists(path: path)) {
                     return CliExit.Refuse(

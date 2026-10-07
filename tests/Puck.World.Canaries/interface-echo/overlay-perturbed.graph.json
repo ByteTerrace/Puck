@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 17,
+        "width": 19,
         "height": 1
       }
     }
@@ -28,7 +28,8 @@
         "counts": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's counts value." },
         "misc": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's misc value." },
         "sdf": { "type": "float4", "default": [0, 0, 0, 0], "description": "The overlay recorder's sdf value." },
-        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." }
+        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." },
+        "workCounterRowDetail": { "type": "uint", "default": 0, "description": "The pass's first named detail row of the work counters." }
       }
     }
   ],

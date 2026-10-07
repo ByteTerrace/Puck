@@ -2,17 +2,17 @@
 
 One pair per repaired way a test world could pass when it should fail: a world
 that reproduces the hole, and a control that differs only in the thing the
-repair made authorable. They are not curated test worlds — `puck test` over
-[the parent directory](../README.md) does not glob this one, and a law runs each
-of these by path instead.
+repair made authorable. A `puck test` directory sweep includes these worlds
+because it recurses into subdirectories. Run each fixture by path to choose
+the expected passing or failing outcome; the owning laws do the same.
 
 | World | Reproduces | After the repair |
 |---|---|---|
-| `unexpected-outcome.world.json` | a scheduled row the world refused, with the verdict still passing because the gate never depended on the row | exit 1, naming the row's index, its command and the recorded outcome |
-| `expected-outcome.world.json` | the same row declaring `expect: "Refused"` and the text the refusal must carry | exit 0 |
+| `unexpected-outcome.puck` | a scheduled row the world refused, with the verdict still passing because the gate never depended on the row | exit 1, naming the row's index, its command and the recorded outcome |
+| `expected-outcome.puck` | the same row declaring `expect: "Refused"` and the text the refusal must carry | exit 0 |
 
 Both are basis deltas over the parent directory's self-contained
-`phase-fixture.world.json` and act as `seat1` under the same two authored grants.
+`phase-fixture.puck` and act as `seat1` under the same two authored grants.
 
 `wrong-expectation.puck` is the `test` construct's red half: the same world and
 the same step as `../sources/seat-writes-a-cell.puck`, claiming a value the step

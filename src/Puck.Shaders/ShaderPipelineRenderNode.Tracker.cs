@@ -18,8 +18,18 @@ public sealed partial class ShaderPipelineRenderNode {
     // downstream reader of a published image, possibly still in flight.
     private static ShaderPipelineAccessState Discarded => ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined);
 
-    // The instance a reference reaches: this frame slot's, or the previous slot's for a previous-frame read. A host-owned
-    // storage has one instance every slot shares; owned transient and retained storage do too.
+    // A package-owned published buffer can be updated by an imported ComputeReadWrite port between submissions.
+    // Preserve its contents and reacquire through the existing override on its first actual access, even when earlier
+    // passes stand. Subsequent passes use their precise planned barriers as usual.
+    private void ReacquireBorrowedBuffers() {
+        foreach (var resource in m_resources) {
+            if (resource.Borrowed) {
+                resource.SetOverride(instance: 0, state: ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined));
+            }
+        }
+    }
+    // History follows its successful writer; other storage follows the submission slot. Host-owned, transient and
+    // retained storage each share one instance across slots.
     private static int InstanceIndex(RuntimeResource resource, int slot, bool previous) =>
         (resource.Spec.IsExternal
             ? 0
@@ -109,6 +119,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 slot: slot
             );
             var barrier = access.Barrier;
+            var prior = (resource.HasOverride[instance] ? resource.Override[instance] : access.Prior);
 
             if (access.PriorKind == ShaderPipelinePriorKind.Host) {
                 // A host-owned instance starts every frame in the host's hands, whatever the last frame left.
@@ -140,6 +151,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 resource: resource
             );
 
+            // History can remain in a read role for arbitrarily many submissions. Remember its actual last access
+            // using the existing override, since the plan alone assumes a write on every submission.
+            if (resource.History) {
+                resource.SetOverride(instance: instance, state: ((barrier.Kind == ShaderPipelineBarrierKind.None) ? prior.Then(use: access.Use) : access.Use));
+                resource.OverridePlanned[instance] = true;
+            }
             // A written instance holds contents from here on, so history carried into a replacing graph is never
             // cleared as if it were new.
             if (access.Use.Writes) {
@@ -156,6 +173,8 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             var resource = m_resources[access.Storage];
+
+            if (resource.History) { continue; }
             var instance = InstanceIndex(
                 previous: access.PreviousFrame,
                 resource: resource,
@@ -257,7 +276,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // An output a package that drew nothing leaves standing for an input publishes that input: an owned one moved into the
     // output layout, a host-owned one handed back in its host's layout with the rest.
     private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuRecorder recorder) {
-        var (published, _, instance) = PublicationOf(
+        var (published, publishedName, instance) = PublicationOf(
             selected: selected,
             slot: slot
         );
@@ -267,6 +286,10 @@ public sealed partial class ShaderPipelineRenderNode {
         m_publishedLayout = (published.Spec.IsExternal
             ? m_externalImages[published.Spec.Name].Layout
             : outputLayout);
+        // An external output that stands for nothing publishes the preview the node encodes it into, an image of its own.
+        m_publishedBinding = (((selected.Alias.Target is not null) && published.Spec.IsExternal)
+            ? publishedName
+            : null);
 
         if (
             !published.Spec.IsExternal &&
@@ -331,6 +354,10 @@ public sealed partial class ShaderPipelineRenderNode {
             if (resource.Spec.IsExternal) {
                 continue;
             }
+            // Graphics writers run every submission; retain their installed attachment offset when Reset zeros the
+            // frame counter. Initialization clears the selected previous instance before it is read again.
+            resource.HistoryLatest = (((resource.HistoryLatest + resource.Count) - ((int)(m_frame % ((ulong)resource.Count)))) % resource.Count);
+            resource.HistoryWriting = false;
             for (var instance = 0; (instance < resource.Count); instance++) {
                 resource.SetOverride(
                     instance: instance,
@@ -344,7 +371,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // The state each instance of carried history is in under the graph it came from: its override, or, with none, the
     // old plan's frame end for the instance the last frame wrote and the old plan's steady start for the rest.
     private void CarryStates(RuntimeResource old, RuntimeResource current, ShaderPipelinePlan oldPlan) {
-        var written = ((int)(((m_frame + ((ulong)old.Count)) - 1UL) % ((ulong)old.Count)));
+        var written = old.HistoryLatest;
         var start = old.Storage.FrameEnd;
 
         foreach (var pass in oldPlan.Passes) {

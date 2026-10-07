@@ -3,6 +3,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Puck.Assets;
 using Puck.Cli.Architecture;
 
 namespace Puck.Cli.Affected;
@@ -17,6 +18,8 @@ namespace Puck.Cli.Affected;
 internal static partial class AffectedCoverage {
     /// <summary>The coverage index's schema id.</summary>
     public const string Schema = "puck.canary.coverage.v1";
+    /// <summary>The file in a recording's run directory that holds the inner canary run's exit code and streams.</summary>
+    public const string CanaryTranscriptName = "canary.transcript.txt";
 
     [GeneratedRegex(pattern: @"^canary (?<id>\S+) .*transcripts (?<directory>.+)$")]
     private static partial Regex TranscriptLine();
@@ -130,7 +133,12 @@ internal static partial class AffectedCoverage {
                 if (File.Exists(path: pdb)) {
                     var provider = MetadataReaderProvider.FromPortablePdbStream(stream: File.OpenRead(path: pdb));
 
-                    entry = (provider, provider.GetMetadataReader());
+                    try {
+                        entry = (provider, provider.GetMetadataReader());
+                    } catch {
+                        provider.Dispose();
+                        throw;
+                    }
                 }
 
                 m_readers[assembly] = entry;
@@ -166,23 +174,28 @@ internal static partial class AffectedCoverage {
     }
 
     /// <summary>Records the index: builds the recording World, runs the full canary set on it through this CLI, and
-    /// writes <see cref="AffectedCommand.CoveragePath"/>.</summary>
+    /// writes <see cref="AffectedCommand.CoveragePath"/> only when the inner run succeeds.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="cli">This CLI's entry assembly, which runs the canaries as a child process.</param>
-    /// <param name="scratch">A directory the recording World is built into.</param>
+    /// <param name="scratch">The recording's run directory: the recording World is built into it, and the inner canary
+    /// run's transcript is written to <see cref="CanaryTranscriptName"/> in it.</param>
+    /// <param name="canaryExit">The inner canary run's exit code, or <see cref="CliExit.Refused"/> when it never ran.</param>
     /// <param name="error">The refusal, or empty.</param>
+    /// <param name="execute">The build and canary process boundary, substituted by laws.</param>
     /// <returns><see langword="true"/> when the index was written.</returns>
-    public static bool TryRecord(string repositoryRoot, string cli, string scratch, out string error) {
+    public static bool TryRecord(string repositoryRoot, string cli, string scratch, out int canaryExit, out string error, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? execute = null) {
+        canaryExit = CliExit.Refused;
+
         var build = Path.Combine(path1: scratch, path2: "world");
-        var compile = CliProcess.RunCaptured(
-            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
-            fileName: "dotnet",
-            input: string.Empty,
-            timeout: TimeSpan.FromMinutes(minutes: 30),
-            workingDirectory: repositoryRoot
+
+        execute ??= (arguments, timeout) => CliProcess.RunCaptured(fileName: "dotnet", arguments: arguments,
+            input: string.Empty, timeout: timeout, workingDirectory: repositoryRoot);
+        var compile = execute(
+            arg1: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
+            arg2: TimeSpan.FromMinutes(minutes: 30)
         );
 
-        if (compile.ExitCode != 0) {
+        if (compile.TimedOut || (compile.ExitCode != 0)) {
             error = $"the recording World did not build:{Environment.NewLine}{compile.Stdout}";
 
             return false;
@@ -190,27 +203,59 @@ internal static partial class AffectedCoverage {
 
         Console.Error.WriteLine(value: "affected: running the full canary set on the recording World.");
 
-        var run = CliProcess.RunCaptured(
-            arguments: [cli, "canary", "--merge", "--world-artifact", Path.Combine(path1: build, path2: WorldArtifactBuild.ArtifactName)],
-            fileName: "dotnet",
-            input: string.Empty,
-            timeout: TimeSpan.FromHours(hours: 3),
-            workingDirectory: repositoryRoot
+        var run = execute(
+            arg1: [cli, "canary", "--merge", "--keep-transcripts", "--world-artifact", Path.Combine(path1: build, path2: WorldArtifactBuild.ArtifactName)],
+            arg2: TimeSpan.FromHours(hours: 3)
         );
 
-        if (run.ExitCode != 0) {
-            Console.Error.WriteLine(value: $"affected: the canary run exited {run.ExitCode}; its legs still record what they executed.");
+        canaryExit = run.ExitCode;
+        KeepCanaryTranscript(
+            directory: scratch,
+            run: run
+        );
+
+        if (run.TimedOut || (run.ExitCode != 0)) {
+            error = $"the inner canary run exited {run.ExitCode}{(run.TimedOut ? " (timed out)" : string.Empty)}; coverage is unchanged; transcript kept: {CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch, path2: CanaryTranscriptName))}.";
+            return false;
         }
 
+        var legs = new List<string>();
+        var report = string.Empty;
+        bool published;
+
+        try {
+            published = Publish(repositoryRoot: repositoryRoot, build: build, output: run.Stdout, legs: legs, report: out report, error: out error);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or BadImageFormatException)) {
+            published = false;
+            error = $"could not read or publish coverage: {exception.Message}";
+        }
+        if (!published) {
+            error += $"; coverage is unchanged; transcript kept: {CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch, path2: CanaryTranscriptName))}.";
+            return false;
+        }
+        // Reading and publishing must both succeed before any leg evidence is discarded.
+        foreach (var leg in legs) {
+            RunDirectory.Conclude(passed: true, path: leg, report: Console.Error);
+        }
+        Console.Out.WriteLine(value: report);
+        return true;
+    }
+
+    private static bool Publish(string repositoryRoot, string build, string output, List<string> legs, out string report, out string error) {
+        report = string.Empty;
         var runs = new SortedDictionary<string, SortedSet<string>>(comparer: StringComparer.Ordinal);
         using var map = new SourceMap(buildDirectory: build, repositoryRoot: repositoryRoot);
 
-        foreach (var line in run.Stdout.Split(separator: '\n')) {
+        foreach (var line in output.Split(separator: '\n')) {
             var match = TranscriptLine().Match(input: line.TrimEnd(trimChar: '\r'));
 
-            if (!match.Success || !Directory.Exists(path: match.Groups["directory"].Value)) {
-                continue;
+            if (!match.Success) { continue; }
+            if (!Directory.Exists(path: match.Groups["directory"].Value)) {
+                error = $"the named leg transcript directory is missing or unreadable: {CliPaths.ToDisplay(fullPath: match.Groups["directory"].Value)}";
+                return false;
             }
+
+            legs.Add(item: match.Groups["directory"].Value);
 
             var id = match.Groups["id"].Value;
 
@@ -246,7 +291,9 @@ internal static partial class AffectedCoverage {
 
         _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: index)!);
 
-        using (var stream = File.Create(path: index)) {
+        using var stream = new MemoryStream();
+
+        {
             using var writer = new Utf8JsonWriter(utf8Json: stream);
 
             writer.WriteStartObject();
@@ -276,10 +323,31 @@ internal static partial class AffectedCoverage {
             writer.WriteEndObject();
         }
 
-        File.AppendAllText(contents: "\n", path: index);
-        Console.Out.WriteLine(value: $"affected: recorded {runs.Count} canary run(s) over {sources.Count} World source(s) into {AffectedCommand.CoveragePath}.");
+        stream.WriteByte(value: ((byte)'\n'));
+        AtomicFile.WriteAllBytes(bytes: stream.GetBuffer().AsSpan(start: 0, length: checked((int)stream.Length)), path: index);
+        report = $"affected: recorded {runs.Count} canary run(s) over {sources.Count} World source(s) into {AffectedCommand.CoveragePath}.";
         error = string.Empty;
 
         return true;
+    }
+
+    /// <summary>Writes the inner canary run's exit code, standard output and standard error to
+    /// <see cref="CanaryTranscriptName"/> in <paramref name="directory"/>.</summary>
+    /// <param name="directory">The recording's run directory.</param>
+    /// <param name="run">The finished canary run.</param>
+    /// <returns>The transcript's path.</returns>
+    internal static string KeepCanaryTranscript(string directory, CliProcessResult run) {
+        var path = Path.Combine(
+            path1: directory,
+            path2: CanaryTranscriptName
+        );
+
+        File.WriteAllText(
+            contents: $"exit {run.ExitCode}{(run.TimedOut ? " (timed out)" : string.Empty)}\n--- stdout\n{run.Stdout}\n--- stderr\n{run.Stderr}\n",
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            path: path
+        );
+
+        return path;
     }
 }

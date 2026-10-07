@@ -64,7 +64,7 @@ public sealed class WorldHudRoutedSeatLawTests {
         seat: seat,
         text: out var text
     )
-        ? text
+        ? text.ToString()
         : null
     );
 
@@ -92,6 +92,7 @@ public sealed class WorldHudRoutedSeatLawTests {
                 new NoNeighbours()
             ),
             frameRate: new FrameRateMonitor(),
+            history: null,
             population: new WorldPopulation(definition: home),
             seatBindings: seats
         );

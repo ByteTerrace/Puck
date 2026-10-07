@@ -1,6 +1,7 @@
 using Puck.Cli.Firmware;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -8,9 +9,9 @@ namespace Puck.Cli.Tests;
 public sealed class FirmwareCommandTests {
     [Fact]
     public async Task AgbMissingSourceRefusesBeforeTouchingOutputAsync() {
-        using var directory = new FirmwareTestDirectory();
+        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
         var image = Path.Combine(
-            path1: directory.Path,
+            path1: directory.RootPath,
             path2: "existing.bin"
         );
         byte[] previous = [9, 2, 6, 5];
@@ -22,7 +23,7 @@ public sealed class FirmwareCommandTests {
         // Both tool paths exist, but must never launch: required source validation comes first.
         var executable = Environment.ProcessPath!;
         var result = await AgbFirmwareCommand.RunAsync(
-            source: directory.Path,
+            source: directory.RootPath,
             output: image,
             clang: executable,
             linker: executable,
@@ -37,18 +38,18 @@ public sealed class FirmwareCommandTests {
             expected: previous,
             actual: File.ReadAllBytes(path: image)
         );
-        Assert.Single(collection: Directory.GetFiles(path: directory.Path));
+        Assert.Single(collection: Directory.GetFiles(path: directory.RootPath));
     }
     [Fact]
     public void HgbGenerationAndVerificationCoverEveryRevision() {
-        using var directory = new FirmwareTestDirectory();
+        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
 
         Assert.Equal(
             expected: 0,
-            actual: PuckRootCommand.Invoke(args: ["firmware", "hgb", "--output", directory.Path])
+            actual: PuckRootCommand.Invoke(args: ["firmware", "hgb", "--output", directory.RootPath])
         );
         var expectedNames = Enum.GetValues<ConsoleModel>().Select(selector: static model => (model.ToString().ToLowerInvariant() + ".bin")).Order(comparer: StringComparer.Ordinal).ToArray();
-        var actualNames = Directory.GetFiles(path: directory.Path).Select(selector: static file => Path.GetFileName(path: file)).Order(comparer: StringComparer.Ordinal).ToArray();
+        var actualNames = Directory.GetFiles(path: directory.RootPath).Select(selector: static file => Path.GetFileName(path: file)).Order(comparer: StringComparer.Ordinal).ToArray();
 
         Assert.Equal(
             actual: actualNames,
@@ -57,7 +58,7 @@ public sealed class FirmwareCommandTests {
 
         foreach (var model in Enum.GetValues<ConsoleModel>()) {
             var path = Path.Combine(
-                path1: directory.Path,
+                path1: directory.RootPath,
                 path2: (model.ToString().ToLowerInvariant() + ".bin")
             );
 
@@ -71,7 +72,7 @@ public sealed class FirmwareCommandTests {
 
         Assert.Equal(
             expected: 0,
-            actual: PuckRootCommand.Invoke(args: ["firmware", "hgb", "--output", directory.Path, "--verify"])
+            actual: PuckRootCommand.Invoke(args: ["firmware", "hgb", "--output", directory.RootPath, "--verify"])
         );
     }
     [Fact]
@@ -91,9 +92,9 @@ public sealed class FirmwareCommandTests {
     }
     [Fact]
     public void VerificationDoesNotCreateMissingArtifactsOrRepairDrift() {
-        using var directory = new FirmwareTestDirectory();
+        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
         var missingDirectory = Path.Combine(
-            path1: directory.Path,
+            path1: directory.RootPath,
             path2: "not created"
         );
         var image = Path.Combine(
@@ -138,29 +139,5 @@ public sealed class FirmwareCommandTests {
             path: missingDirectory,
             searchPattern: "*.tmp"
         ));
-    }
-
-    private sealed class FirmwareTestDirectory : IDisposable {
-        public string Path { get; } = Directory.CreateTempSubdirectory(prefix: "puck firmware tests ").FullName;
-
-        public void Dispose() {
-            var actual = System.IO.Path.GetFullPath(path: Path);
-            var parent = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: System.IO.Path.GetTempPath()));
-
-            Assert.Equal(
-                expected: parent,
-                actual: System.IO.Path.GetDirectoryName(path: actual),
-                ignoreCase: OperatingSystem.IsWindows()
-            );
-            Assert.StartsWith(
-                expectedStartString: "puck firmware tests ",
-                actualString: System.IO.Path.GetFileName(path: actual),
-                comparisonType: StringComparison.Ordinal
-            );
-            Directory.Delete(
-                path: actual,
-                recursive: true
-            );
-        }
     }
 }

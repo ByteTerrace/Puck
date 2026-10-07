@@ -15,8 +15,8 @@ none of them, but the mirror reads the state substrate and
 [the presentation view](runtime-and-delivery.md#the-presentation-view), so P9
 and P10 are scheduled against those.
 
-The programme ends with the frame graph at the centre of rendering. Today the
-SDF renderer still hosts nested cameras and screens inside its own passes. It
+The programme ends with the frame graph at the centre of rendering. The
+SDF renderer's nested cameras and screens are graph instances. It
 is a prototype, and the pipeline that replaces it has to be better at everything it does. P11 to P17 make the frame graph a document
 that every view is an instance of, and nest those instances efficiently. They
 feed the graph from image sources such as emulators, desktop capture, cameras,
@@ -25,7 +25,9 @@ pixels, and turn the SDF engine into one pass package among others. They also
 add temporal reconstruction, a minimal HDR output path, and meshes and textures
 derived from SDFs. P18 rebuilds the sky and the atmosphere as typed, layered
 parts an artist composes and keys on clocks, evaluated once where they are seen
-and counted per layer and per shadowed light.
+and counted per layer and per shadowed light. P19 lifts the wallpaper fold's
+refusal of its thirteen discontinuous groups with a bound on the neighbouring
+cells' content, and rebuilds the symmetry LOD on it.
 
 The implemented contract is owned by
 [the shader guide](../reference/shaders.md#shader-pipelines-and-live-development)
@@ -35,10 +37,48 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P4, P5, P7, P8, P9, P10, P11 and P12 are complete; P1a, P1b, P6 and P13
-to P18 are not. Of P18, step 2 has landed: the sky and the bounded media
-animate on the presented engine tick, and the `timeline` section names
-presentation clocks. The programmable compute and graphics foundation has functional GPU
+P2, P3, P4, P5, P8, P9 and P11 are complete. P1a, P1b, P6, P7, P10, P12, P13 and
+P14 to P18 are open. A package closes only when nothing it promises remains
+open: a check that waits for a particular machine, device or environment keeps
+its package open and is listed under [deferred to the end](#deferred-to-the-end)
+beside the package that owns it. The open parts are:
+
+- **P1a:** its four slices have landed; the windowed boot on a machine with no
+  usable GPU driver has not run against the current teardown.
+- **P1b:** the reference-GPU qualification on the RTX 4070 and the AMD devices
+  (the Direct3D 12 cells included), the driver-removal exercise, and the peak
+  device-local thresholds the published-package readings set.
+- **P6:** the representation experiments remain open. P6-GI's cache, light
+  views, finite lighting solve, change classes, source closure, diagnostics,
+  near field and comparison methods are implemented. Their remaining physical
+  qualification and the counted choice of defaults keep G2 to G10 open.
+- **P7:** every step of P7b has landed; the Linux and Windows shader-bytecode
+  comparison has not run.
+- **P10:** all nine steps have landed; the parity stations at the floor tier on
+  floor hardware have not run.
+- **P12:** every step of P12b has landed; P12b-4's recorded camera run on both
+  backends has not been made.
+- **P13:** P13b steps 1, 2, 3, 5 and 6 have landed; step 4's owner-recorded
+  Windows click and focus return is the one remaining item.
+- **P14:** all fifteen steps have landed; the residency, routed-world and
+  device-recording follow-ups in [open items](open-items.md) remain.
+- **P15:** P15-1 to P15-7 have landed or been decided; P15-8 and the recorded
+  Steam Deck run are open.
+- **P16:** the display transform, the HDR swapchain selection, paper white and
+  the HDR desktop capture have landed; the HDR-display checks have not run.
+- **P17:** the bake and impostor implementation and sampling evidence hold;
+  the extended handover and paused-state World observations remain open.
+- **P18:** the cadence, lighting, atmosphere, live panorama, infinity-layer
+  routing and artist controls are implemented. Remaining image, admission and
+  counted-default checks are named under their steps. P18-11's part-two binder
+  work uses the existing layer and prototype vocabulary; P18-7's separate
+  celestial body vocabulary remains open.
+
+Of P18's landed steps, the sky and the bounded media animate on the presented
+engine tick, the `timeline` section names presentation clocks, the sky block and
+the lights table are regions with generated decoders, and the `sky` and
+`composite` passes evaluate the sky once, where it is seen. The programmable
+compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
@@ -70,18 +110,18 @@ allocation and replacement laws, run through its factory seams on a device-free
 fake. A failure is injected at each of a replacement's 48 allocations, and each
 refused candidate disposes exactly what it created. An over-budget candidate
 allocates nothing. Steady-state frames allocate zero managed bytes, including
-over a buffer handoff between two passes, whose barrier prior uses are now
-planned with the graph instead of every frame. The old graph retires once the
-node's latest submission has completed, never through a device drain. The candidate build now
+over a buffer handoff between two passes, whose barrier prior uses are planned
+with the graph instead of every frame. The old graph retires once the
+node's latest submission has completed, never through a device drain. The candidate build
 allocates every per-slot object before the old graph retires. The canary and
 parity runners build the World artifact outside the checkout's `bin`
 directories ([where the World artifact is built](../reference/cli.md#where-the-world-artifact-is-built)). A
 windowed boot with no usable device is meant to exit 2 with the unsupported
-line, as the offscreen shape does. Its first no-driver run exposed a teardown
-defect, which is now fixed: disposing the render root threw from GPU consumers
-that had never allocated, and that error replaced the device failure. That
-boot has not been rerun on a machine without a driver since the fix; the rerun
-is [deferred to the end](#deferred-to-the-end).
+line, as the offscreen shape does. Disposing the render root releases GPU
+consumers that never allocated without throwing, so the device failure is the
+error reported. No boot on a machine without a driver has run against that
+behavior; the rerun keeps P1a open and is listed under
+[deferred to the end](#deferred-to-the-end).
 
 The third slice adds three canaries, each running on both backends.
 `pipeline-supersede` loads two valid edits back to back on a paused instance.
@@ -133,18 +173,18 @@ with the zero clears in the first pass and the preview and output finalization
 outside every pass. `pipeline.inspect` prints the newest completed
 submission's per-pass counts and the node's creation counts, `pipeline.status`
 its counters, and `pipeline.wait <name> counted <n>` waits for the nth
-completed submission since the last reset; the node reports no milliseconds.
+completed submission since the last reset; none of these reads a duration.
 The node's laws derive the feedback graph's exact per-pass counts
 at the initialization, second and steady-state submissions without a device, and
 check the `pipeline-counters` canary's expected lines against the same fixtures,
 and the canary reads exactly those lines on both backends. The
 node writes its own `pipeline.inspect` record
 (`ShaderPipelineRenderNode.TryAppendInspection`), so the law replays the text the
-verb prints. GPU timestamp timing and every CPU and GPU millisecond readout
-are deleted: the neutral timing contracts and both backends' pools and
-recorders, the render engine's and views' pass timing, and the World's timing
-verb, host timing, and CPU digests. Every
-`world.counters`, `pipeline.inspect`, and `pipeline.status` reading is a
+verb prints. No count is a duration. Optional GPU pass
+timestamps live apart from the counted work: `world.gpu-timing` reads them for
+inspection, they are off by default and create no timestamp objects until a
+reader asks, and dynamic resolution asks for them as its load signal (P15-6).
+Every `world.counters`, `pipeline.inspect`, and `pipeline.status` reading is a
 deterministic per-pass count. `world.counters` discovers every
 `IWorkCounterSource` registered in the World (each carries a stable dotted
 `Name`) and folds the render nodes' GPU work into its `gpu`
@@ -152,8 +192,11 @@ section, with a filter and a one-line `--json` form. The `gpu` section's header
 carries the device's `GpuDeviceIdentity` (backend, adapter, PCI ids, driver and
 API versions, Vulkan's driver properties), recorded at device creation and
 never branched on. A live `world.counters` prints the identity on both
-backends and, windowed on Vulkan, the `presentation.vulkan` section with its
-`presentation.skipped` count.
+backends and a `presentation.vulkan` or `presentation.directx` section with its
+`presentation.skipped` count, the presenter's counts registered in the composition
+under the backend's key, so a readout never resolves a renderer. Vulkan counts a
+frame its swapchain could not take this tick; Direct3D 12 counts a present that
+reached the compositor before it had a swap chain.
 
 The counter collector has landed. Every `WorkKind` declares its
 `WorkClass` (deterministic, per-backend-deterministic, or pacing), and
@@ -164,7 +207,7 @@ names the GC mode. The World registers the server's `state.arena`,
 `state.rules` and `state.search` sources; the arena and search sit behind
 forwarders that carry a retired instance's totals across a definition rebuild,
 so their readings never go down. `puck counters` boots
-`tests/Puck.Counters/counters.world.json` offscreen once per backend through
+`tests/Puck.Counters/counters.puck` offscreen once per backend through
 the leg machinery it shares with `puck parity`, writes a
 `puck.counters.report.v1` report whose schema `puck schema` generates, and exits
 1 naming the kind, pass and node of any deterministic count or pass state the
@@ -299,11 +342,11 @@ P5 is complete. P8 extended the manifest: each pass entry records its
 interface hash, and the package carries its precompiled binaries.
 
 P7's gate spike has run its build-time half and its GPU half, the `binding`
-parity station. P10 is complete: all nine of its steps have landed, step 2's
-shared row regions, step 8's field rows and step 9's `bound` parity station
-included. Its one open check is the floor-tier parity leg on floor hardware, a
-deferred hardware check. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
-lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
+parity station. P10 stays open on one check: all nine of its steps have landed,
+step 2's shared row regions, step 8's field rows and step 9's `bound` parity
+station included, and the floor-tier parity leg on floor hardware is listed
+under [deferred to the end](#deferred-to-the-end). The spike's
+[pass interface](../reference/shaders.md#pass-interfaces) lives in `src/Puck.Shaders.Model/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
 at set and space 0 and a pass group at set and space 3, because a group's
@@ -328,9 +371,9 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg is not yet proven: one build on Linux compared byte for byte with the
-Windows build of the same commit, which CI runs as `verify.yml`'s
-`shader-bytecode` job (see P7's gate). It is
+One leg is not yet proven, and keeps P7 open: one build on Linux compared byte
+for byte with the Windows build of the same commit, which CI runs as
+`verify.yml`'s `shader-bytecode` job (see P7's gate). It is listed under
 [deferred to the end](#deferred-to-the-end).
 
 P8 is complete: the `interface-echo` canary echoes every shipped interface
@@ -419,7 +462,7 @@ compiled once per document from every section that carries a state binding: HUD
 element bindings and template placeholders, overlay `state` predicates, the
 binding bar's layout and model cells, every bindable scalar and color (camera
 program operands, markers, render lighting, sky and environment colors, the
-theme), and a render cycle's position row. The manifest finds a surface by the
+theme), and the state row of a clock a keyed value reads. The manifest finds a surface by the
 type that carries it, walking the generated model shape, so a section that gains
 a bindable member needs no new walker; re-installing a document whose manifest
 the mirror already holds registers nothing and allocates nothing, and installing
@@ -456,7 +499,7 @@ routed world and mirror. Consumers only look a registered slot up
 (`WorldStateMirror.SlotOf`, by binding or by token, whose parse the mirror keeps
 while the slot is looked up afresh), which registers, reads and allocates
 nothing: the HUD resolver, camera rigs, markers, render colors, the theme, the
-render cycle, the binding bar, overlay predicates, the radial wheel and the
+keyed-value resolver, the binding bar, overlay predicates, the radial wheel and the
 bar's icon row, the last two through `WorldStateCells`. A lookup of a binding
 nothing registered answers -1, which reads nothing, so after an install every
 consumer's first frame reads no cell and adds no slot. A read made on behalf of a body or a seat acquires its slot through a
@@ -519,9 +562,9 @@ group at set 1 and the pass group at set 3, each register number the Vulkan
 binding and each group's ordinal its register space, so no pass source assigns
 a register by hand.
 
-P7 is complete: its adapter memory profile, residency selector, consumer
-migration and binding groups have landed, all twenty-two steps of P7b among
-them; its gate's Linux bytecode leg is
+P7 stays open on one check. Its adapter memory profile, residency selector,
+consumer migration and binding groups have landed, all twenty-two steps of P7b
+among them; the gate's Linux bytecode leg is listed under
 [deferred to the end](#deferred-to-the-end).
 `IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
@@ -554,10 +597,9 @@ a pass binds a field row to an array as `state.<field>`, and `WorldFieldEmitter`
 bakes each height field's brick from the same mirror slot, uploading one field
 per produced frame through the brick pool's staged region.
 
-P11's CPU half has landed. Its second half, P11b, runs beside P7b. The binding
-groups it waited on have landed: the overlay is a package on groups, and
-pipelines are on groups, which the per-device pass-pipeline cache needed. The
-frame graph is a document, `puck.render.graph.v1`
+P11 is complete, its CPU half and P11b alike. The overlay is a package on binding
+groups and pipelines are on groups, which the per-device pass-pipeline cache
+needs. The frame graph is a document, `puck.render.graph.v1`
 (`RenderGraphDefinition` in `src/Puck.Shaders/Graph`), and it is the one
 pass-graph document: a pipeline is a graph of shader passes that a world
 names, and a lone `.hlsl` source reads as a one-pass graph. Its members are
@@ -958,7 +1000,7 @@ world: each composed view rendered through its own dispatch set into its own
 output, and the root places each output into its seat rect with `place` (the
 decision and its rejected alternatives are in
 [the rendering decisions](../decisions/rendering.md#the-frame-graph-and-nesting)).
-It deleted the SDF engine's composite, and it has landed; P14-6 then made each
+It deleted the SDF engine's split-screen composite kernel, and it has landed; P14-6 then made each
 view an `sdf.world` instance of its own over the world's one residency.
 
 - 10a: each view rendered through its own dispatch set. `Record` recorded sky,
@@ -974,8 +1016,8 @@ view an `sdf.world` instance of its own over the world's one residency.
   sky and views kernels write one bound `output`, and a view's
   viewport row carries its render extent, read through `worldViewDims`. A
   view's output was sized to the extent the render graph scheduled for it, or
-  before that to `SdfWorldEngine.DefaultViewExtent` (its rect at its render
-  scale, quantized by `RenderGraphExtent`), and was reallocated only when that
+  before that to `SdfWorldEngine.DefaultViewExtent` (its rect's native extent,
+  quantized by `RenderGraphExtent`), and was reallocated only when that
   extent changed. A cadence-skipped frame recorded no view set, so each view's
   previous output stood. `SdfEngineNode` was the producer `world` (view 0), and
   `SdfEngineNode.ViewProducer` gave the producers `world$2..world$K`, each
@@ -983,10 +1025,12 @@ view an `sdf.world` instance of its own over the world's one residency.
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
   with no fixed cap. With K above one, the scene `main` runs one
   `place` pass per view ahead of the pane passes, and
-  `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
-  its render scale, so `place` also does the render-scale reconstruction. A
-  lone full-window view at native scale is not placed, so `main` stands for
-  `world` and parity holds. The `split-seats` canary shows two seats of the
+  `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect's
+  native extent; a view below native reconstructs its reduced grid in its own
+  `resolve` pass, and `place` copies or resamples the result. A
+  lone full-window view is not placed unless a temporal view's sharpening
+  or the filmic tonemap needs the pass, so `main` stands for `world` and
+  parity holds. The `split-seats` canary shows two seats of the
   split layout drawing different content.
 - 10c: a chain of package passes that draw nothing resolves to the first input
   it stands for, since a later package pass reading a stand-in's output is
@@ -1139,8 +1183,9 @@ validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
-source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+source through the producer's camera through at most a depth limit of screens,
+normally the set's declared `RenderGraphInstanceSet.NestingDepth` (the boot
+world's `views.nestingDepth`), entering at the topmost pane under a
 display point by the one rule `SourcePanes.Topmost` states: the last pane in
 drawing order whose face holds the point, a letterbox bar or bezel covering what
 is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
@@ -1156,9 +1201,9 @@ off the source picks nothing. The pipeline pane's pointer
 P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
-flag byte on every intent path, so an absent ray costs one byte; the tape's
-`ShapeToken` is 4, the checkpoint's `SupportedVersion` 14 and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED5`, each strict. The server keeps each
+flag byte on every intent path, so an absent ray costs one byte. The tape's
+shape token, the checkpoint version, the handshake key and the federation key
+each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -1279,13 +1324,14 @@ outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 one asynchronous visibility read, with the frame's dispatch box so a pixel the
 frame did not write answers nothing, resolves the winning SDF instance or mesh
 draw through the frame's immutable `WorldPickMapBuilder` map. The
-64-byte visibility record keeps that identity in V and the exact winning
+96-byte visibility record keeps that identity in V and the exact winning
 shape transform slot in L.x; material lanes read the existing transform row.
 The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with
 debug layers, including clear removing the hovered pane's accent border.
 The recorded Windows run, a click reaching
 a captured editor window at the mapped point and the chord returning input to
-the game, is [deferred to the end](#deferred-to-the-end).
+the game, keeps P13 open and is listed under
+[deferred to the end](#deferred-to-the-end).
 
 Rendering today runs the default render graph `WorldRootGraph` composes,
 through `RenderGraphRuntime` behind `RenderGraphRuntimeNode`, the host's render
@@ -1312,16 +1358,18 @@ instances the scheduler renders by demand at their footprint's extent and the
 `world.view-refresh` divisor. A view that would see itself reads its own
 previous frame, and a chain of different views lags one frame per hop.
 
-`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; CPU
-pixels and a shared handle carry the two 8-bit RGBA formats, and a same-device
-image also the float working format every SDF view and the root graph render
-into (`R16G16B16A16Float`). Both swapchains choose a display output through
+`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; a
+shared handle carries the two 8-bit RGBA formats, and CPU pixels and a
+same-device image also the float formats: the working format every SDF view and
+the root graph render into (`R16G16B16A16Float`), which a capture of an HDR
+display hands its CPU pixels over in. Both swapchains choose a display output through
 `DisplayOutput.TrySelect` and take an HDR one only when the host section's
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is each
-view's place pass in the root graph, over the view it reconstructs.
-There is no jitter, motion vector, or history in the SDF kernels; render scale
-is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
+view's place pass in the root graph, over the view it places.
+A temporal view jitters its rays, derives motion from the visibility record and
+resolves over its own history; a spatial view resolves to its output extent
+without history, and the graph's `place` pass places the result.
 
 P12's source contract, producer registration and conversion passes have
 landed, and so have P12b's steps 1 to 7: sources are graph instances,
@@ -1355,10 +1403,11 @@ described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
 encoding, cadence, presentation stamp, content class and capture fill. A world
 document names a producer by id, as a `producer` source with a settings object,
-so the four shipped producers (`testPattern`, `qr`, `camera`, `capture`) and any
-a host adds register a shape in `WorldImageProducerVocabulary` and a runtime in
-`WorldImageProducers` with no schema change. `testPattern`, `qr`, `camera` and
-`capture` are producer ids rather than source kinds, and no `console` source
+so the five shipped producers (`testPattern`, `qr`, `color`, `camera`,
+`capture`) and any a host adds register a shape in
+`WorldImageProducerVocabulary` and a runtime in `WorldImageProducers` with no
+schema change. `testPattern`, `qr`, `color`, `camera` and `capture` are producer
+ids rather than source kinds, and no `console` source
 exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
@@ -1374,8 +1423,9 @@ An uploaded source's pixels travel as one region, `ImageSourceUploadLayout`'s
 header and planes. The shipped kernels in `src/Puck.Shaders/Assets/Shaders/Sources`
 convert a region into the image a consumer samples. `source-palette` and
 `source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
-carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
-linear light. `ImageSourceConversion` is their CPU reference, and the
+carries a BGRA swizzle, and `source-transfer` decodes sRGB, scRGB's linear
+scale or PQ, in BT.709 or BT.2020, into working values relative to the paper
+white. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
 test pattern and the QR code convert through graph regions: each writes a
 region that an uploaded source instance's one-pass graph converts in the
@@ -1404,7 +1454,8 @@ the simulation destination feeds a seat's pointer ray on a world surface
 settled carves into 128-cubed bricks (`SdfWorldTables.BrickBake.cs`).
 
 P17's CPU half and the device half of its sampling check have landed, and so
-has drawing a bake's geometry; its textures are open. `SdfBaker`
+has drawing a bake's geometry, textures and impostor; the impostor's device
+runs are open. `SdfBaker`
 (`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
 into an indexed mesh, five surface textures and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
@@ -1416,7 +1467,10 @@ while material identity stays uncompressed with majority mips. The encoders writ
 bytes on every machine and each has an exact decoder as its test oracle.
 Dual contouring won the extraction: it strays from the field about half as far
 as surface nets did, for about a tenth more evaluations over a whole bake, and
-surface nets is deleted. A bake is keyed by the creation pin, `SdfBaker.Version`
+surface nets is deleted. It places a vertex per surface patch of a cell, so a
+plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
+shares an edge among more than two quads, at 0.26% more vertices than one vertex
+per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1429,6 +1483,11 @@ worlds, so a creation several worlds share is baked and shipped once. A bake is
 the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
+
+The bake key's code fingerprint is kept by `puck derivations` ([CLI
+reference](../reference/cli.md#puck-derivationscode-provenance-keys)). The open
+derivation-key slices are owned by
+[runtime and delivery](runtime-and-delivery.md#derivation-keys).
 
 Both backends put a bake's textures on the GPU as they are stored.
 `GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
@@ -1452,24 +1511,41 @@ pipeline budget all read. `ImagePixelFormat` stays apart: it is the code an
 uploaded source's region header carries for its conversion kernel, including
 the palette-indexed and NV12 host layouts no GPU image is created in.
 
-P17 still owes:
+A ready bake's mesh draws textured in place of its static placements' fields: the
+field is kept camera-hidden, the switch counted as `sdf.bakes.drawn`, its five
+textures sampled from the mesh atlases with the albedo decoded from sRGB in the
+shader (held by `CreationBakeLawTests`, `SdfMeshAtlasLawTests`,
+`MeshTextureDeviceLawTests` and the `sdf-bake-switch` canary). Bakes draw by default
+when the loaded world's `BAKE` chunk supplies every bake from its pack (a released
+or compiled tree, the parity world); a source boot draws fields unless `world.bakes
+on`, and a live bake then switches when ready, which is the authoring path. Under
+the default rule, captures do not depend on local baking. `world.bakes off` forces
+fields. The parity world ships its bakes: `puck parity` compiles its tree with the
+World artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
+every bake from the pack, and refuses a leg that resolved a bake on the device.
 
-- the rest of drawing a bake: its impostor. A ready bake's mesh draws textured
-  in place of its static placements' fields: the field is kept camera-hidden,
-  the switch counted as `sdf.bakes.drawn`, its five textures sampled from the
-  mesh atlases with the albedo decoded from sRGB in the shader (held by
-  `CreationBakeLawTests`, `SdfMeshAtlasLawTests`, `MeshTextureDeviceLawTests`
-  and the `sdf-bake-switch` canary). Bakes draw by default when the loaded
-  world's `BAKE` chunk supplies every bake from its pack (a released or
-  compiled tree, the parity world); a source boot draws fields unless
-  `world.bakes on`, and a live bake then switches when ready, which is the
-  authoring path. Under the default rule, captures do not depend on local
-  baking. `world.bakes off` forces fields. The parity
-  world ships its bakes: `puck parity` compiles its tree with the World
-  artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
-  every bake from the pack, and refuses a leg that resolved a bake on the
-  device. Choosing per placement between a bake and the field by measured cost
-  is P6's.
+The impostor draws as a card. A baked placement emits two draws bounded by one
+sphere, its mesh and a card (`SdfMeshCard.Mesh`, `SdfMeshDraw.Impostor`), and a
+view records exactly one of them (`SdfMeshLodSelector`, `SdfMeshLod`): the card once
+the sphere's projected diameter falls under the impostor's view edge in render
+pixels (sixteen at the standard tier), the mesh again once it passes that edge by a
+quarter. The choice is the CPU's, made per view from that view's camera and counted
+as `sdf.mesh.lod.near` and `sdf.mesh.lod.far`. The card is a quad on the plane
+touching the sphere's near side; its fragment stage, a second pipeline beside the
+mesh pass's, marches the camera's ray through the three impostor views nearest the
+direction toward the camera against their depth, discards what no majority of them
+covers, and writes the surface's ray parameter and depth, so a card pixel sorts
+against meshes and the field as the surface does. The hit passes shade it from the
+same views: albedo, normal and emission weighted by view and coverage, with the
+each texel's own material (the impostor stores a material plane). The CPU oracle `SdfImpostorOracle` states the trace,
+`SdfImpostorLawTests` hold it to the field's sphere and box within a stated share of
+the bounding radius, `SdfMeshLodLawTests` hold the selection and its handover, and
+`ParityBakeSelectionLawTests` hold the parity world's captures to meshes, so its
+references change with no impostor. The `sdf-bake-impostor` canary is the device
+check; it, `puck parity`, the bake canaries, `kernel-counters`, `counters --check`
+(the mesh pass gains a descriptor write, and a pipeline bind and a draw when a card
+is recorded) and `device-loss` have not run since the impostor landed. Choosing
+per placement between a bake and the field by measured cost is P6's.
 
 The SDF frame's values and its environment are members of the generated pass
 block (P14-7): `SdfWorldPackage.Values` declares them, `puck shaders generate`
@@ -1506,10 +1582,11 @@ shown on two screens renders once per frame; the mirror shows the previous
 frame; the editor pane receives a click at the mapped point and appears only as
 the redaction fill in every capture; a recorded Steam Deck run renders the
 world with temporal upscaling on; and the HDR path passes P16's check on the
-desktop. The recorded Steam Deck run and the HDR-display checks are
-[deferred to the end](#deferred-to-the-end). Whether the Steam Deck run holds a
-frame-time target is not checked: wall-clock and GPU timing are deferred with no
-date.
+desktop. The recorded Steam Deck run and the HDR-display checks keep P15 and
+P16 open and are listed under [deferred to the end](#deferred-to-the-end).
+Whether the Steam Deck run holds a frame-time target is not checked: performance
+is judged by counted work, and the pass times that `world.gpu-timing` reads are
+for inspection, never a check.
 
 ## Packages
 
@@ -1528,13 +1605,17 @@ graphics in `src/Puck.Abstractions/Gpu`,
 engine's cull, primary, surface, and views passes. Load `rendering` for GPU
 work and read the contributing guide before touching a backend.
 
-To pick up a package, recheck its **Starts from** facts against the current
-commit first, because they record what the code did when the package was
-written. Then confirm that everything under **Depends on** has landed, deliver
-what the package lists, and close it with its **Check**. Tick it here and in
-[open items](open-items.md) in the same change. Packages P1a to P10 predate the
-**Starts from** and **Depends on** labels; for them, the implementation status
-above and the sequencing below carry that information.
+An open package's **Starts from** describes the code the package starts from,
+so it changes in the change that moves that code; a package that has
+landed carries none, because the implementation status and the owning guides
+describe its code. To pick up a package, confirm that its **Starts from** facts
+still hold, that everything under **Depends on** has landed, deliver what the
+package lists, and close it with its **Check**. A package closes only when
+nothing it promises remains open: a check deferred to the end keeps the package
+open. Tick it here and in [open items](open-items.md) in the same change.
+Packages P1a to P10 predate the **Starts from** and **Depends on** labels; for
+them, the implementation status above and the sequencing below carry that
+information.
 
 ### P1a — Durable functional fixtures
 
@@ -1583,6 +1664,12 @@ failure cases on both backends with independent expected results and explicit
 unsupported-environment outcomes; near-budget replacement refusal and
 recovery.
 
+**Open:** every fixture and canary the delivery lists has landed. The one item
+left is the unsupported-environment outcome of a windowed boot on a machine with
+no usable GPU driver, which exits 2 with the unsupported line; its rerun is
+listed under [deferred to the end](#deferred-to-the-end), and P1a stays open
+until it passes.
+
 ### P2 — Per-pass work counters and the collector
 
 **Owns:** the one deterministic work-counting model in `Puck.Abstractions` and
@@ -1594,10 +1681,11 @@ engine, and the overlay node; `pipeline.inspect`, `pipeline.status`, and
 `world.counters`; and the Puck CLI counter collector.
 
 **Delivers:** performance is judged by code, disassembly, and deterministic
-counts. Wall-clock and GPU timing are deferred with no date, so the timestamp
-query pools, timing recorders, the pass-timing source interface, and their
-per-pass millisecond readouts are deleted rather than kept dormant; that
-retirement is done. A counter is a
+counts. Wall-clock time and GPU timestamps never decide a count, a ceiling or a
+check; the editor's `world.gpu-timing` readout reads paired timestamp queries per
+render node for inspection (`ShaderPipelineRenderNode.Timing.cs`), and dynamic
+resolution (P15-6) reads the same timestamps as its load signal, which moves a
+render grid and never a count. A counter is a
 named count owned by one instance; it only goes up and is never reset, and a
 reader takes a window by reading it twice. Any engine service can expose
 counters through one source interface, and a collector reads them without
@@ -1656,7 +1744,7 @@ meaning.
 On both backends, the `pipeline-counters` canary reads exact per-pass counts
 for the feedback graph at its initialization and steady-state submissions,
 identical on Vulkan and Direct3D 12, with a changed graph as the negative
-control. `puck search -M 0` finds no timing type left.
+control. No count carries a duration.
 
 ### P1b — Foundation qualification
 
@@ -1680,12 +1768,11 @@ loss is refused as `deviceLost` in the capture manifest, and a run that gives up
 refuses it first too. `gpu.faults lose` injects a loss on a real device, and the
 `device-loss` and `device-loss-windowed` canaries recover from one on both
 backends with a capture armed at it. Exercising a driver-initiated removal (a
-timeout detection and recovery) on real hardware is
-[deferred to the end](#deferred-to-the-end).
+timeout detection and recovery) on real hardware keeps P1b open and is listed
+under [deferred to the end](#deferred-to-the-end).
 
-Thresholds for frame-time median and tail and for reload stalls are deferred.
-They need wall-clock and GPU timing, which the owner has deferred with no date,
-so P1b sets none of them and does not wait for them.
+P1b sets no threshold for frame-time median and tail or for reload stalls:
+performance is judged by counted work, so it does not wait for them.
 
 **Check:** both-backend functional and stability matrix plus the agreed
 memory thresholds on the shipping candidate, or explicitly blocked checks.
@@ -1738,7 +1825,7 @@ an armed capture's tick until the capture is served or refused, so a cold first
 boot lengthens a `puck parity` leg instead of losing its first capture. The
 hold counts from readiness: while the engine is not ready it spends a
 180-second pipeline-build budget (`WorldCaptureScheduler.BuildHoldBudgetSeconds`),
-and once it is ready the 60-second capture hold, each summed over the run; a
+and once it is ready the 60-second capture hold, each summed for that request; a
 capture still unserved past either is refused as `unserved`, and a refusal the
 build caused names it and its progress. `world.wait ready <seconds>` is the
 console's wait on the same readiness (`IWorldEngineReadiness`, over the world's
@@ -1823,7 +1910,12 @@ cell leaves it null until a reading of the published package on the reference
 devices sets it. A leak at teardown fails a cell on both backends: the Vulkan
 validation layer reports every object alive at `vkDestroyDevice`, and the
 Direct3D 12 device context prints each object its debug layer still holds as a
-`[d3d12-debug] live` line.
+`[d3d12-debug] live` line. A cell on a backend the profile lists under
+`debugLayers` that never prints its backend's live line (`[vulkan] validation
+layer live` or `[d3d12] debug layer live`) fails, as does a `puck canary
+--debug-layers` leg that never prints it, since nothing validated the run
+(`DebugLayerOutput.Verdict`; [the CLI reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
+and [qualifying a package](../development/qualification.md) own the rule).
 
 The pipeline threshold is the `ink` graph's exact planned peak, 96 bytes a
 pixel. On the NVIDIA floor card the whole profile passes on both backends with
@@ -1835,8 +1927,8 @@ surface upload, a Vulkan shared-surface import or a Direct3D 12 exportable
 image released after its device throws, with its owner's release on the stack,
 rather than leaking.
 
-The runs on the RTX 4070 and the AMD devices, Direct3D 12 cells included, are
-[deferred to the end](#deferred-to-the-end).
+The runs on the RTX 4070 and the AMD devices, Direct3D 12 cells included, keep
+P1b open and are listed under [deferred to the end](#deferred-to-the-end).
 
 ### P3 — Attachments and indexed geometry
 
@@ -1878,16 +1970,6 @@ references` finding no consumer of `IGpuRenderTarget`,
 `IGpuExportableRenderTarget`, or `IGpuVertexBuffer`.
 
 ### P4 — Shared opaque visibility
-
-**Starts from:** the SDF engine's private hit record, `PrimaryHits` in
-`frame/sdf-visibility.hlsli`: five 16-byte rows per pixel of each viewport's full extent.
-The primary pass writes the hit, lanes and blend rows, the surface pass the
-normal and curvature rows, the ambient pass updates the last, and the views pass
-reads all five, including a neighbour's record for the silhouette sky blend
-behind a `TileEmpty` test. Primary traversal (`sdf-primary.hlsli`) exits at the
-far bound or the far distance after at most 128 steps, with its ray parameter
-the Euclidean distance along the normalized camera ray. A P3 graph's depth attachment
-clears to its resource's `clearDepth` (1 when omitted), and a `Geometry` pass's vertex stage takes no parameters.
 
 **Owns:** the SDF engine's passes and the shared visibility records (P4-1);
 the SDF primary traversal and hybrid fixtures (P4-2).
@@ -2160,7 +2242,8 @@ passes without P4 or an importer.
 ### P6 — Representation experiments
 
 **Owns:** animation, lighting, and representation experiments after P4, each
-individually scoped.
+individually scoped, and global illumination as a programme of its own inside
+the package.
 
 **Delivers:** representations chosen by editing needs, silhouette, repetition,
 animation, and measured cost, never "all environments are SDFs". Five
@@ -2172,12 +2255,15 @@ experiments are in scope:
 - capsule or ellipsoid proxies on a character's bones for approximate shadows
   and ambient occlusion that never silently become the contact surface;
 - glossy reflections marched through the field, one bounce;
-- short-range soft global illumination gathered from the field.
+- global illumination gathered from the field, planned in full below as
+  [P6-GI](#p6-gi-global-illumination-from-the-field).
 
-The last two start once P14-5 has put the SDF passes on their declared
-interfaces, and stay off the critical path. Each lands with a counted-cost
-report, the deterministic counters P14's ceilings use, and a quality-tier
-switch that turns it off, so a floor-tier world pays nothing for it.
+The reflection experiment starts once P14-5 has put the SDF passes on their
+declared interfaces, which has landed, and stays off the critical path. Each
+experiment lands with a counted-cost report, the deterministic counters P14's
+ceilings use, and a quality-tier switch that turns it off, so a floor-tier
+world pays nothing for it. Global illumination is held to the same rule, slice
+by slice.
 
 Distance-field particle collision, destructible fields, mesh import, skinning,
 foliage, and hair stay out until a scene shows the need. When one returns,
@@ -2197,6 +2283,1140 @@ the correctness reference.
 its measured cost before becoming a default. The reflection and global
 illumination experiments each show their counted-cost report and a capture with
 their tier switch off matching the capture without them.
+
+#### P6-GI, global illumination from the field
+
+Light that leaves one surface and lands on another: the sunlit floor that warms
+the underside of a table, the red wall that tints the corner beside it, the
+open doorway that lights a dark room, and the portal whose destination spills
+its light into the room it opens from. The reasoning behind the technique, and
+the alternatives it was chosen over, are in
+[the decisions register](../decisions/rendering.md#global-illumination).
+
+**Starts from:** indirect light as the code holds it.
+
+- **Ambient is unoccluded beyond a hand's width.** The sky's second-order
+  spherical-harmonic irradiance (P18-9) lights
+  every surface as if nothing stood between it and the sky. The only occlusion
+  on it is `calcAO`'s normal ladder (`surface/sdf-occlusion.hlsli`): three field
+  evaluations along the normal out to 0.13 world units, one at the fleet tier,
+  paid by the `ambient` pass for every lit pixel and applied to the ambient fill,
+  unslotted directionals and point lights. A room with one window reads as bright
+  as a terrace.
+- **No light reaches one surface from another.** A directional light lights
+  what faces it, under its own shadow-slot visibility when selected and
+  scaled by ambient occlusion outside the slots; a point light is never
+  occluded. Nothing a light reaches passes any of it on.
+- **The bounce is painted.** A palette's `bounce` colour
+  (`SdfMaterial.Bounce`) adds `albedo × bounce × (1 − n·key) × ao` on the side
+  the key light misses: a warm fill an artist places by hand. Only the Moth
+  authors it.
+- **Screens light the room, views do not.** A bound screen is an area light
+  (`SdfLightScreen` in `shade/sdf-light.hlsli`) whose colour the host computes
+  on the CPU (`ISdfScreenSources.Light`): a producer's feed light, a machine's
+  `EmittedLight`, or a capture fill's. A screen showing a view, a portal's
+  window among them, lights nothing, because "a view films an already-lit world"
+  (`WorldScreenBinder.Light`).
+- **Meshes are shaded neutral.** A mesh pixel's surface carries its bake's
+  occlusion texel or one, and no shadow march.
+- **Secondary rays cost more than primary ones.** The primary march reads a
+  per-tile instance mask the beam built for coherent camera rays; the ambient
+  and shadow passes build a mask per 8×8 group around a cone or a box and
+  evaluate the whole interpreter per sample. A design that marches the field
+  per pixel for indirect light multiplies the most expensive work the frame
+  already does.
+- **What a world shares is already shared.** One `SdfWorldResidency` serves
+  every view of a world (the seats, every camera view, every routed window onto
+  a live local endpoint), and the brick pool is a residency-owned buffer that
+  `sdf.bricks` publishes to every view through a buffer edge. The sky's
+  environment map and its coefficients are one pair a residency keeps, which
+  its upload renders and every view of it reads through the World set (P18-5).
+- **The CPU can answer every transport question exactly.** `SdfFieldEvaluator`
+  casts rays (`Raycast`), tests segments (`LineOfSight`, which folds a march
+  that gives up into an obstruction) and reads distances, materials and
+  gradients in fixed point, so a CPU model of any rule below can be held to an
+  exact answer before a kernel exists.
+
+**Owns:** indirect diffuse light for every SDF and mesh surface: the cache
+that holds it, the passes that trace, partition, light and integrate it, the
+light views its shadowed lights are seen through, the receiver proofs, the term
+the views pass applies, its document surface, its levers, debug views and
+explanation, its counted rows and ceilings, and the light that crosses a portal
+into the world it opens from.
+
+**The contract.** Global illumination is presentation, so it makes exactly two
+promises and states a measured bound for everything else:
+
+1. **No light through sealed geometry.** A receiver reads only probes its own
+   point is joined to by straight segments the field proves clear, and every
+   ray launches from a point the field proves joined to its own surface by
+   free space, down to one fixed-point tick (2⁻¹⁶ m), the field's position
+   resolution, below which the format holds no geometry. A receiver that
+   cannot be proven reads no light, never unproven light.
+2. **Energy is conserved.** Every reconstruction step (a probe's mean over its
+   rays, the trilinear weights of a cell, a continuation's weights, a light
+   view's lookup) is a normalized convex combination, gains are bounded at one,
+   and the solve is finite, so a closed furnace reads its finite-bounce series
+   exactly at every level.
+
+Everything else carries a number and a law that fails when the number is
+exceeded, held against `IrradianceReference`:
+
+| Property | Bound | Law |
+|---|---|---|
+| Sealed geometry | Exact: 0 (below 10⁻¹²) inside sealed rooms with 0.05 m planar and curved walls, a sealed pocket inside one cell, a slab inside a receiver's launch interval, a slab 0.00005 to 0.00015 thick wholly beneath a launch's first sample | `IrradianceVisibilityLawTests`, `IrradianceProofLawTests`, `IrradianceLatticeLawTests.ALaunchNeverStepsOverAThinSlab`, `IrradianceAdversarialLawTests.ALaunchCannotJumpASlabBeforeItsFirstSample` |
+| Energy | Exact: the furnace series to 10⁻⁹ at ρ = 0, 0.5 or 0.6 and 1, on one level and on two with continuation, with unresolved grazing rays present, and unchanged by sweep order or splitting | `IrradianceFeedbackLawTests`, `IrradianceBoundLawTests.EnergyIsConserved*` |
+| Hit position | Within 0.001 of a zero the field brackets, whatever the travel and however conservative the gauge; a grazing ray marches on or ends unresolved | `IrradianceLatticeLawTests.AHitIsAcceptedOnlyWithinTheSurfaceEpsilon`, `IrradianceAdversarialLawTests.ALowerBoundFieldDoesNotProveAHitWithinTheSurfaceEpsilon` |
+| Interpolation within a cell (angular parallax, light round a small occluder, overshoot beside an opening) | Under a table within 0.05 of the reference; beside a doorway within 0.06, against an exterior of 1; a small object under an off-axis emissive plate within 0.13, against the plate's 1, at the 1.5 m spacing | `IrradianceVisibilityLawTests`, `IrradianceBoundLawTests.InterpolationAtTheRoomSpacingStaysWithinItsBound` |
+| Continuation merging | Within 0.03 of the reference against an emitter of 1, at the test layout (0.5 into 2) and at `medium`'s (1.5 into 4.5); the nearest ray by direction exceeds it | `IrradianceBoundLawTests.ContinuationMergingStaysWithinItsBound` |
+| Light-view sampling | Never lit where the reference is shadowed by a caster farther than the bias; shadowed where the reference is lit only within two texels of the exact shadow; a lookup outside the swept depth or on an unresolved texel marches its own shadow ray | `IrradianceBoundLawTests.ALightViewNeverLightsAShadowedReceiverAndWidensShadowsByAtMostTwoTexels`, `IrradianceAdversarialLawTests.ALightViewDoesNotAnswerBeyondItsSweptDepth`, `IrradianceAdversarialLawTests.AnUnresolvedLightViewTexelRequiresItsOwnShadowRay` |
+| Grazing (unresolved) rays | Excluded from their probe's mean: error at most their cosine share times the radiance range, plus 0.03 of quadrature, against a fully resolved reference and the analytic open-floor answer of 0.5; share 0.029, under a ceiling of 0.1 on the open-floor fixture | `IrradianceBoundLawTests.AProbeEstimatesAroundItsUnresolvedRaysWithinTheirShare` |
+| Proof allowance | At most the allowance a frame; an unproven receiver reads zero that frame and its proven value once proven; a failed proof is never cached, so it darkens no neighbour | `IrradianceProofLawTests.AFrameIssuesAtMostItsAllowanceAndTheRestDarken`, `IrradianceAdversarialLawTests.AFailedProofCannotSuppressANearbyProvableReceiver` |
+
+Each law's red leg is a mutation of the model that the law shows failing; the
+landing commit lists them.
+
+**Target shape.** Each residency owns a **radiance cache**: a sparse lattice of
+probes in world space, placed against the field and traced through it, which
+every view of that residency with the same lighting inputs reads. A probe
+stores what its rays hit, not what they saw, so the cache relights without
+retracing: a light changing colour re-shades the stored hits, and only geometry
+changes re-trace. A world whose geometry and lighting inputs, portal source
+cameras included, are still finishes a fixed number of lighting sweeps and then
+spends nothing updating the cache; a view that renders still pays only for its
+apply's reads.
+
+```text
+upload (the sky's environment with it) → light view (depth only, cycling its slots and regions)
+       → indirect (classify → trace → shade)
+       → each view: mask → beam → cull-args → mesh → primary → surface → ambient → shadow
+                    → views (applies the cache) → [resolve] → sky → composite
+```
+
+`resolve` runs in a view that renders below its output extent or reconstructs
+over time.
+
+`indirect` is an instance of its own per residency, ordered before the views
+that read it by a buffer edge, as
+`sdf.bricks`'s brick pool reaches them today. It exists only while some view
+of its residency has indirect light on; with none it is absent from the graph,
+so it records nothing and holds no memory. Its parts:
+
+- **`classify`** runs for each newly allocated or geometry-dirtied brick. It
+  evaluates the field at each probe and decides its class: **dormant** when
+  the clamped distance proves no surface lies within its eight cells widened by
+  the relocation allowance, so no receiver reads it and a continuation never
+  stops on it; **relocated** when it sits inside or against geometry and a
+  gradient step of less than half a spacing, rechecked for clearance, gets it
+  clear; **inactive** when none does; **active** otherwise. A relocation
+  invalidates every ray from the old position. It then **partitions each cell**
+  that holds a surface: it traces the 28 segments between the cell's eight
+  corner probes (12 edges, 12 face diagonals and 4 body diagonals) through the
+  clamped field, connecting two corners only when the trace reaches its end
+  (a march that gives up counts as blocked), and traces each blocked segment
+  again from its other end. The connected corners form the cell's components.
+  Where exactly two remain and the blocked segments' first hits fit one plane
+  within a tenth of the spacing, the cell stores that plane, but only as the
+  order a receiver tries components in: a plane proves nothing about free
+  space.
+- **`trace`** marches one stratum of a probe's rays: one 64-lane workgroup per
+  probe and stratum, every lane a ray from the same origin. Within the level's
+  reach the group's instance mask is the instances whose bound meets the reach
+  ball around the probe, built cooperatively over the instance grid as the
+  shadow gather builds its cone's; a masked step is clipped at the ball's
+  boundary, and beyond it the ray marches the full field, so no excluded
+  occluder is jumped. A ray accepts a hit only within an absolute 0.001 of a
+  zero the field brackets (`IrradianceAcceptance`): a small clamped distance is
+  a lower bound, which a conservative gauge reads far from any surface, so a
+  candidate is accepted only where the field's sign changes within 0.001 along
+  the gradient; a ray grazing a surface keeps marching. Past its reach it seeks support (the continuation rule below). Its
+  64-step budget covers the whole ray, support-seeking and the support's proof
+  included; a ray whose budget ends first is **unresolved** and carries no
+  light, never sky and never an invented surface. At a hit it reads the
+  gradient through `mapGradCore` (one evaluation) and the winning material,
+  launches along the hit's normal (the launch rule below), proves the hit's
+  own lookup cell for the next bounce's feedback, and stores a hit record.
+  A ray reaching the residency's far distance stores a world exit.
+- **The light view** sees each shadowed directional light. One depth-only
+  `sdf.world` camera view per residency cycles through every held and fading
+  shadow slot and two regions each (the bounds of the finest running level's
+  allocated bricks, and of the coarsest level's), one region a frame. Its camera
+  uses a nearby finite orthographic plane, so its parallel rays have zero
+  divergence from the light, within half its positive penumbra. Its near and
+  far bounds cover every caster between the light and the region without a
+  distant float camera origin. Its march accepts any surface
+  within a texel's half-diagonal of a pixel's ray, so a caster thinner than a
+  texel is still recorded, and it writes each pixel's distance as 32 bits into
+  one map per slot and region, stamped with the light's and the geometry's
+  generations. A hit's visibility toward the light is its texel's comparison
+  with a slope-scaled bias, `r (1 + sin θ) / cos θ` plus 0.002, r the
+  half-diagonal and θ the hit's angle to the light; a hit outside both regions
+  marches its own shadow ray from a counted, budgeted allowance, as does a hit
+  beyond the view's swept depth and one whose texel's sweep did not finish. Point and spot
+  lights are unshadowed, as in the direct path, and need no view.
+- **`shade`** turns a probe's stored hits into light, evaluating the field
+  nowhere. Each hit's outgoing light is the diffuse term the views pass would
+  shade it with, from every source below, and the cache's irradiance at the
+  hit from the preceding complete sweep, read through the hit's stored proof.
+  A continuation reads its stored coarser rays' radiance; a world exit reads
+  the sky. The pass keeps each ray's radiance on any level a finer level
+  continues into, convolves the rays into the probe's irradiance texels and
+  copies every map's octahedral border. Irradiance and ray radiance have a read
+  generation and a write generation; the graph publishes a generation only
+  once its whole sweep and its borders are written, and no workgroup reads a
+  neighbour's sweep in progress.
+- **The views pass applies the cache** where a lit surface shades. It finds the
+  finest level whose cell holding the receiver is allocated and launches the
+  receiver's point q off its surface. It reads the cell's corners through a
+  receiver proof from the proof cache, issuing one within the frame's allowance
+  when none covers q; a receiver past the allowance reads zero this frame. It
+  weights the proven component's lit, traced corners by trilinear position and
+  facing, renormalized over them, and adds the irradiance to the diffuse
+  radiance the material shades by. A receiver that reaches no component, or a
+  component with no traced corner, reads the next coarser level, and past the
+  coarsest the view shades as with indirect light off. A still view evaluates
+  the field nowhere: its launches come from its own primary march, and its
+  proofs from the cache.
+
+**The launch rule.** A ray, a hit's feedback lookup or a receiver starts from a
+point the field proves joined to its surface point by free space. From the
+surface point p with normal n, the interval below the first sample, at the
+accept threshold (0.001), is certified first by a descent: each next sample
+sits at the bottom of the previous sample's clear ball, until a ball reaches
+within one fixed-point tick of p. The descent closes geometrically at the rate
+the field's gauge grows off the surface, within a budget of 64 samples over
+the program's step scale σ. A sample with no positive clearance, or a spent
+budget, means geometry lies beneath the first sample that the field cannot rule
+out, so the launch fails and the receiver reads no light: a slab thinner than
+the accept threshold is resolved and blocks, never stepped over. Only a solid
+wholly within one tick of p goes unseen, and the format holds no geometry that
+thin. Samples then step outward from the first sample, each at the end of the
+previous sample's clear ball, and each must read a positive clamped distance,
+so the balls overlap to the launch height. Lipschitz continuity bounds how fast
+the field changes, not how fast it grows, so neither march demands a minimum
+clearance at a height; a conservative gauge reads small but positive and still
+launches. A sample with no positive clearance has another surface inside the
+interval; the launch stops at the last certified sample, short of that
+surface. The launched point carries a lower bound on its clearance. On the CPU this is
+`IrradianceCells.Launch`; once Puck.Maths' interval evaluation over the
+instruction set (M4) exists, one interval evaluation over the segment
+certifies the same interval in a single query. A view's receiver needs no
+launch samples of its own: its primary march already sphere-traced toward p,
+so the march's last sample with a positive clearance within half a spacing of
+p is a launched point the camera ray joins to p, and the
+primary records its distance and clearance in the visibility record's reserved
+L words. A mesh pixel, or a march whose approach was too grazing to leave such
+a sample, launches along its normal from the counted fallback allowance.
+
+**Receiver proofs are world-space and cached.** A proof is an anchor point, its
+certified clearance and the corner mask its own traces reached: from the
+anchor to the nearest corner of each of the cell's components in turn, the
+plane's side first, the first component reached. Proofs live in a hash keyed by
+the level, the cell and the anchor's eighth-of-a-spacing slot, and are geometry
+static: they are invalidated with the cell's partition and never by lighting.
+A receiver q with clearance c reuses an anchor a with clearance c_a when
+`|q − a| ≤ c + c_a`: the two balls meet, so the segment from q to a is clear and
+q reaches every corner a reached. A still scene proves each patch of visible
+surface once; a camera cut fills the cache over the frames its allowance
+takes; a hit's feedback proof is issued at trace time and stored with the hit.
+Transitive reading within a component is sound for promise one (a chain of
+clear segments is a free path) and is bounded as interpolation error.
+
+**Continuation.** A ray that reaches its level's reach keeps marching through
+empty space, cheap where the clearance is large, until its point stands in a
+coarser cell whose component holding the point (proven as a receiver's is) has
+traced support. It then reads, from each supporting corner, the stored ray
+whose own end best continues it: among the corner's rays within 0.5 rad of
+its direction, the one whose hit or continuation point, seen from the finer
+ray's end, lies nearest that direction and beyond the end
+(`dot(h − e, ω) > 0`), or an exit by its direction alone. Each candidate's
+terminal record is stored, so the test applies to individual rays before any
+filtering; a radiance texel is never read for continuation. The weights are
+trilinear at the end and renormalized over accepted corners. A ray whose
+candidates all fail keeps marching. Sky is read only at the far distance.
+
+**The artist's model.** Global illumination is a typed section with three kinds
+of layer, each counted, each with the lowest tier it runs at, and each an
+off-switch: the **levels** of the cache, the **sources** that feed it and the
+**apply** that puts it on a surface. Every world, authored or not, gets the
+default look from `medium` up; it is data in `WorldRenderDefaults` and in a
+shipped `.puck` module beside `quality.puck`, as P18's sky presets are, and a
+world overrides any field of it:
+
+```puck
+render {
+  indirect {
+    levels [
+      { name: "near",  spacing: 0.5m, reach: 3m, radius: 12m, tier: high }
+      { name: "room",  spacing: 1.5m, reach: 9m, radius: 36m, tier: medium }
+      { name: "world", spacing: 4.5m, tier: medium }   // no reach: to the far distance; no radius: every brick near geometry
+    ]
+    sources {
+      lights: 1        // light bounced off what the lights reach
+      emission: 1      // emissive materials
+      screens: 1       // screens, and portals onto other worlds
+      sky: 1           // the sky through the cache, in place of unoccluded sky ambient
+      feedback: 1      // light re-entering the cache: 0 keeps one bounce
+    }
+    bounces: 2         // complete feedback sweeps after the direct sweep, capped by the tier
+    apply { intensity: 1, tint: "#FFFFFF", contact: 1 }   // contact: today's AO on the indirect term
+    bodies: receive    // simulated bodies receive indirect light; `cast` also traces them
+  }
+}
+```
+
+A palette entry gains `bleed`, a colour multiplying its albedo in the light it
+sends into the cache (default white), and `receive`, a gain on the indirect
+light it takes (default one); a near-black costume can glow-receive, a
+saturated floor can bleed less. A light gains `bounce`, the share of it that
+bounces (default one): a stage key light can light without bouncing while a
+lantern keeps its full bounce. A placement gains `indirect: cast | receive |
+off`, which overrides the section's `bodies` for its instances through an
+instance flag beside the shadow-participation flags
+(`field/sdf-instance-flags.hlsli`); `receive` and `off` apply only to whole,
+independently composable placements, so dropping one never removes an operand
+of another placement's subtraction or intersection. Every gain and colour is a
+bindable value, so it keys on a clock as every presentation value does after
+P18-3; a level's spacing, reach, radius and tier, the count and order of levels
+and `bounces` are structure and are never keyed, because changing one
+reallocates the cache or its solve. The validator bounds every gain at one and
+every value to what the maps' formats represent, before anything allocates or
+shades.
+
+The palette's `bounce` is renamed `fill`, which is what it is, and every
+authored use (the Moth's) migrates in the same change. A fill is the floor
+tier's stand-in for indirect light: it is applied exactly as today while a
+view has indirect light off, and not at all while it is on, so the painted
+bounce and the computed one are never added together.
+
+**Decisions.**
+
+- **A world-space cache traced through the field.** Probe tracing is paid per
+  residency and per change; receiver lookups are paid by each view that
+  renders, and a still view pays reads only. Four seats, every camera view, a
+  mirror and a routed portal window read one cache, and a mirror, a portal
+  window and the main view agree on how bright a wall is. The lights and the
+  sky are regions of the residency's tables that every view of it reads (P18-4),
+  with no view-local light scale left, so they are the residency's solve
+  inputs: views with equal inputs share it, and a view lit differently would
+  need source-separated radiance or a cache of its own.
+- **Levels.** A level is a lattice of one spacing. Fine levels trace short rays
+  and dense probes near the views, coarse levels long rays over everything near
+  geometry. Each level allocates bricks of 4×4×4 probes from a pool of its own
+  size, demanded within `radius` of each view's camera, or everywhere near
+  geometry with no radius, wherever an instance bound or a world segment meets
+  the brick's box widened by a cell and the relocation allowance. The host
+  keeps each level's brick table as a region (a brick coordinate to a pool
+  slot), so allocation is deterministic and costs no readback; a level whose
+  demand exceeds its pool keeps the bricks nearest a camera and counts the rest
+  refused, and their surfaces read the coarser level.
+- **Probes are placed against the field.** A probe whose clamped field distance,
+  which never overstates the distance to a surface, is at least its spacing
+  times √3 plus the relocation allowance has no surface in any of its cells and
+  is dormant. The de-scaled distance the shading walks compare against world
+  lengths can overstate and is never used for this.
+- **The field partitions every cell, and every receiver proves its component.**
+  Moment-based probe visibility, as irradiance fields use it, is an estimate: a
+  texel that mixes a 0.1 m hit and a 10 m one has a 5 m mean, and a surface 1 m
+  behind the near wall gets full weight, which renormalization then makes
+  worse. The cache keeps no distance moments. A cell's components come from
+  exact traces between its corners, and a receiver reads a component only
+  through a proof of its own (or a cached proof whose ball meets its own), so a
+  sealed wall, a sealed pocket inside one cell, or two sheets close enough to
+  fit one plane all separate a receiver from the corners beyond them. The
+  proofs are cached in world space, so their cost follows the surface a view
+  newly sees, not its pixels.
+- **A probe stores hits, so the cache relights without retracing.** Each probe
+  has fixed strata of 64 directions: a spherical Fibonacci base set the host
+  computes once in double precision, turned by one of the cube's 48 symmetries
+  chosen by an integer hash of the probe's key, so every machine turns it
+  exactly. A stored hit is a distance, a normal, a material, the hit's feedback
+  proof and its state, so a probe's radiance is a function of its hits and the
+  solve's lighting snapshot. A light's colour or intensity, a material's colour,
+  an emission, a screen's image or the sky re-shades the stored hits while
+  their material identities stay valid; a reassignment or compaction of the
+  material table invalidates the identities even where the distances are
+  unchanged. There is no hysteresis, so there is nothing to ghost; budgeted
+  updates still take frames.
+- **Lighting is a finite solve over two generations.** A solve is one direct
+  sweep from zero and then `bounces` complete feedback sweeps, each reading the
+  preceding generation and writing the next, coarsest level first so that a
+  finer level's continuation reads ray radiance of the same sweep. A live solve
+  pins one lighting snapshot and queues the newest later one, so a clock that
+  changes every frame cannot restart it forever; geometry invalidation still
+  withdraws invalid paths at once. `feedback: 1` is unit gain within this finite
+  solve, not an infinite-bounce limit. Stopping early on equal display codes is
+  not a residual bound, so the solve never does it.
+- **Direct light at a hit goes through the one light interface.** The shade
+  pass builds a surface at the hit with ambient occlusion one and calls
+  `sdfLightResponse` for each light, so a new light kind or a new body light
+  reaches indirect light with no change here, and `SdfLightInterfaceLawTests`
+  keeps holding that no kernel branches on a kind elsewhere. A light's diffuse
+  term is scaled by its `bounce`; the hit's diffuse albedo is its albedo times
+  `(1 − metal)`, as `sdfMaterialShade` has it, times `bleed`; the response's
+  attenuation scales reflected light and never self-emission. Shadowed lights
+  take the hit's visibility from the light view; unshadowed lights stay
+  unshadowed, as in the direct path. A hit uses the material's base albedo:
+  weathering, insets and paint stops are not resolved at hits.
+- **Visibility belongs to the bounce source.** A probe under a table and the
+  sunlit floor its rays hit do not share a view of the sun, so a probe's
+  visibility can never stand in for a hit's. Marching a shadow ray from every
+  stored hit is the reference, and costs a march per lit-facing hit per slot,
+  about a million at `medium`, each time a shadowed light turns; the light view
+  answers every hit by position from one depth-only render a region, about a
+  quarter of a million rays through the engine's own march and beam. Its
+  dilation to a texel's half-diagonal records every caster however thin, so it
+  errs by widening shadows, never by lighting a shadowed hit.
+- **What it gathers, each source counted once.**
+  - *Lights:* each light's diffuse term at each hit, through the one interface.
+    The floor-tier `fill` is never a source, and ambient belongs to the sky
+    source, never to `lights`.
+  - *Emission:* `albedo × emissive` at a hit, the view's own `selfEmission`
+    term, times `bleed`.
+  - *Screens:* a screen reaches a hit either as its analytic area light or as
+    the emission a ray hits on its face, never both. Until G7, screens light
+    hits through their existing analytic light alone. From G7 a ray hitting a
+    screen's face reads the screen's emission, a 4×4 grid of its image's
+    averages, at the hit's place on the face, and the analytic screen light
+    lights only the view's own surfaces. A screen showing another world (a
+    session, a routed window, an infinity view) emits; a screen showing a
+    camera view of its own world does not, an explicit rule against recursive
+    views rather than a claim about real displays.
+  - *Sky:* world exits read the residency's environment map in the ray's direction, so
+    with the sky source on the cache holds sky light occluded by the world, and
+    the views pass applies it in place of the unoccluded harmonic ambient. With
+    the sky source off the view keeps the harmonic ambient and the cache holds
+    bounce alone. A lighting-visible sky `view` layer reaches the cache through
+    the same map, so another world's sky can light this one.
+  - *Feedback:* the cache's irradiance at each hit, scaled by `feedback`.
+- **Indirect light is normalized as ambient light is.** A probe's irradiance
+  texel is the cosine-weighted mean of the radiance arriving around its
+  direction over its resolved rays, so a surface surrounded by an environment of
+  uniform colour c receives c, exactly as an ambient light of colour c gives it
+  today. The furnace is a closed enclosure whose every surface has diffuse
+  albedo ρ and uniform outgoing self-emission e, with other sources and contact
+  occlusion off; its normalized incident irradiance after n feedback sweeps is
+  `e·(1 − ρ^(n+1)) / (1 − ρ)` for `0 ≤ ρ < 1` and `(n+1)·e` at `ρ = 1`.
+- **Occlusion is layered by scale.** The cell partition carries occlusion at
+  the lattice's spacing, and the sky source the world's occlusion of the sky.
+  Below the finest spacing, `calcAO`'s contact ladder stays, scaled by
+  `apply.contact` and applied to the indirect term only, never to direct light.
+  The ambient pass is not deleted: at `low` it is today's ambient occlusion,
+  and above it the contact term on the cache. Mesh pixels, which shade neutral
+  today, receive indirect light through the same lookup.
+- **Bodies receive and do not cast at `medium`.** A simulated body moves every
+  tick; re-tracing every probe it can reach would spend the trace budget on
+  characters while the world waits. At `medium` the trace mask leaves out
+  instances on dynamic transform slots, so a character is lit by the cache and
+  grounded by its direct shadow and contact occlusion, but bounces nothing. At
+  `high`, `bodies: cast` traces them. A placement's `indirect` overrides either
+  way.
+- **Changes fall in P18-6's classes.** The cache's revision joins the
+  lighting-visible signature of `views`, so a view re-shades while the cache
+  solves and stands once it has:
+
+  | Change | The cache | A view |
+  |---|---|---|
+  | Visual-only (stars, clouds, fog, a camera-only layer) | stands | `sky` and `composite` |
+  | Lighting-visible (a light's colour or intensity, a keyed material colour or emission, a screen's image, a lighting-visible sky value) | a new solve over valid hits | `views` onward |
+  | Shadow direction (a shadowed light turning past P18-13's fraction of its penumbra; its reach, penumbra or slot ownership changing) | its light-view regions re-render, then a new solve | `shadow` and `views` onward |
+  | Geometry (a program upload, a carve, a moved casting body) | invalidate the hits, partitions, proofs and light-view regions it reaches; `classify` and `trace` them, then a new solve | every pass |
+  | Camera | new bricks and the proofs of newly seen surface; from G7, a changed portal source image also queues a lighting snapshot | every pass |
+
+  A geometry change invalidates every probe whose traced paths can meet the
+  changed bounds' previous or current sphere, rays that missed or sought
+  support beyond their level's reach included: until a conservative bound on
+  those paths is stored, that is every probe within the far distance plus the
+  relocation allowance, so a geometry change invalidates the residency's whole
+  cache. It invalidates every partition and proof of the cells its spheres
+  reach, and every light-view region whose casters' volume (from the light to
+  the region) it meets. The hits of that geometry epoch and every radiance
+  derived from them are withdrawn before the next apply. A positional light
+  dirties the probes whose stored hits meet its old or new influence, bounded
+  at its full strength, since its falloff has no finite zero. Changed radiance
+  reaches every reader through continuation and feedback, so until a
+  reverse-dependency bound is proved, any lighting change restarts the
+  residency's whole solve, which reuses every valid hit. Shadow slots carry
+  their light's identity and generation, both sides of a fade included, so a
+  reassigned slot never reuses another light's visibility, and a solve reads
+  only light-view regions valid for its pinned snapshot.
+- **History contains the applied indirect light.** P15's resolved colour
+  includes the cache's result. Each published generation restarts the view's
+  settling period and marks the pixels whose indirect light changed as
+  reactive, because the neighbourhood's colour box does not reject a stale
+  value that lies inside it.
+- **Screens cross the capture gate with their light.** From G7 a screen's
+  emission is one GPU reduction per bound screen, made from the image the views
+  already sample under the screen's lease, so its taint is the screen's, and
+  the direct screen light and the cache read that one reduction. Taint follows
+  the light everywhere it goes: through the analytic screen light at ordinary
+  hits, every feedback generation and P15's history. On a capture-gate change
+  the dependent radiance and histories reset, the filled inputs are pinned, and
+  the capture's fixed solve finishes before readback; valid geometry hits stay
+  reusable. Replacing the producers' CPU colours with the reduction moves
+  pixels with indirect light off, so that replacement is its own explained
+  baseline, not part of the off switch.
+- **Portals use previous outputs in a finite closure.** A cache that sees a
+  screen showing another world reads a completed reduction through the graph's
+  previous-frame edge, so mutual portals form no same-frame cycle. That edge
+  alone promises neither one frame of latency nor convergence: a destination
+  can render less often, a solve spans frames, unit albedo is legal, and view
+  gains and direct screen images can make a loop's gain reach one. So live
+  rendering and captures run a fixed count of portal iterations, two by
+  default, recorded with a capture. An external lighting or camera change
+  starts one frozen snapshot of the dependency closure; derived portal outputs
+  do not restart it. The initial reductions and dependent radiance and view
+  histories are zero, valid geometry records reusable. Each iteration pins the
+  preceding reductions, finishes every residency's whole finite solve, renders
+  the destination views and their reductions, and publishes them together
+  before the next; no member advances on whichever completion happens first.
+  The final generation stands, and later display renders feed no further
+  iteration. A moving portal image therefore has a reported age in completed
+  solves, not a promised one-frame delay. Routing changes, cuts and crossings
+  withdraw inputs from the wrong view epoch, and pending light is a reported
+  dark fallback. On a capture frame a tainted destination's previous output
+  binds nothing (`RenderGraphRuntime.Withholds`), so its emission is zero until
+  an untainted iteration publishes.
+- **Each world's cache is its own, and nested views are budgeted by what they
+  show.** A session residency, an infinity view (P18-11) and a routed scene's
+  endpoint each own a cache when a view of theirs has indirect light on, under
+  the union of its readers' demand and their highest quality; one residency
+  reached at several depths owns one cache. At nesting depth one, when no root
+  reader demands more, a cache runs its coarsest level only, with a trace
+  budget of at most a quarter of the root's scaled by the portal's share of the
+  display footprint the graph already computes, never below a minimum progress
+  quantum. At depth two and beyond a reader asks for no indirect work and shades
+  as with indirect light off. A seat's follow in place keeps the destination's
+  cache, its finer levels demanded from the crossing frame; a cold or refused
+  destination is a reported fallback until it is ready.
+- **Off is exact.** With indirect light off for a view, the views pass takes the
+  direct path unchanged, on a uniform pass-block flag, and with it off for every
+  view of a residency neither `indirect` nor the light view exists. A capture
+  with the tier switch off is therefore the capture without global
+  illumination, byte for byte on each backend, and the parity world's levers
+  pin it off. P18's direct-path corrections and G7's screen-light replacement
+  carry their own explained baselines.
+- **The schedule is the host's, and a capture's solve is fixed.** Each frame
+  the host computes, from the views' cameras, the instance bounds, the moved
+  set (`SdfMovedTransforms`), the change class and the tier's budgets, an
+  ordered update list: a first stratum anywhere before a later stratum
+  anywhere, then the coarsest level, the nearest camera and the full lattice
+  key, so repeated new demand never starves a generation's work. The list is a
+  region the passes read and the dispatch sizes come from it, so the scheduled
+  counts are `Deterministic`; what the kernels do inside a dispatch is
+  `PerBackendDeterministic`, like every march. A capture starts its dependency
+  closure cold from one frozen presentation snapshot (materials, poses, slot
+  fades, filled screens and view cameras), runs a fixed trace schedule, a
+  complete solve and its portal iterations, fills its receiver proofs without
+  an allowance, then P15's fixed samples, and serves; its manifest entry
+  records the unresolved rays. A timeout refuses rather than serving an
+  intermediate image. Pixels compare under the tile tolerance; the simulation
+  hash must equal the indirect-off control at the capture's tick and at the
+  ticks after it under the same command snapshots. While the world is not ready,
+  or a capture holds the clock, the budgets are four times the tier's and
+  counted apart.
+- **The cache is a cache.** As the brick pool is, it is derived from the
+  analytic program, session-transient, never written to a document, a replay or
+  a content-addressed store, never read by the simulation, and rebuilt from
+  scratch on a reload. Deleting it reproduces the image with indirect light
+  off.
+
+**Tiers and budgets.** The RTX 2060 is the floor device and records every
+ceiling. `low` is the floor tier, where indirect light is off and every row is
+a required zero; `medium` and `high` run it by default, the owner's decision. At
+`medium` the views render at three quarters of 1920 by 1080, 1,166,400 pixels,
+about 700,000 of them lit at a hit share of 0.6. P18-7's fade slots count: K + F
+slots, never K alone.
+
+| | `low` | `medium` | `high` |
+|---|---|---|---|
+| Indirect light | off | on | on |
+| Levels (default look) | none | `room` (1.5 m), `world` (4.5 m) | `near` (0.5 m), `room`, `world` |
+| Probe pool | 0 | 192 + 64 bricks, 16,384 probes | 256 + 192 + 64 bricks, 32,768 probes |
+| Rays per probe | — | 128 (2 strata) | 256 (4 strata) |
+| Trace budget a frame | 0 | 128 probe strata, 8,192 rays | 512 probe strata, 32,768 rays |
+| Steps a ray, whole ray | — | 64, plus one gradient at a hit | 64, plus one |
+| Classify budget a frame | 0 | 4 bricks | 8 bricks |
+| Light-view slots (held + fade) | 0 | 1 + 1, 512² a region, one region a frame | 2 + 1, 512² a region |
+| Shade budget a frame | 0 | 4,096 probes, 524,288 hits | 8,192 probes, 2,097,152 hits |
+| Receiver proofs a frame, all views | 0 | 32,768 | 65,536 |
+| `bounces` at most | — | 2 | 4 |
+| Bodies | — | receive | cast |
+| Near field (G9) | — | off | on |
+
+*Planned complete solve memory at `medium`, every resource:*
+
+| Resource | Bytes |
+|---|---|
+| `room` probes: 12,288 × (128 hits × 16 + two generations of 8×8 irradiance texels × 5 source words × 4 + a 12-byte cell record + 16 bytes of state + two publication words) | 57,065,472 |
+| `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 5 source words × 4, because `room` continues into it) | 39,993,344 |
+| Light-view maps: 2 slots × 2 regions × 512² × 4 | 4,194,304 |
+| Light view's depth-only fragment: the 96-byte visibility record, 16-byte mesh target and 4-byte depth at 512² | 30,408,704 |
+| Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
+| Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
+| Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
+| Shared per-frame receiver-proof admission counter | 4 |
+| **Total before qualification** | **≤ 137,429,000** |
+
+A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
+height in the terminal word; the view's launch uses the visibility record's
+reserved L word. Each irradiance generation also stamps its probes, so a reused
+brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
+probe and the same full identities require 562,167,812 cache bytes, including
+proofs, both irradiance generations and all High levels' directional radiance. Three
+slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
+total to 600,965,124 bytes. Held fading owners add their explicitly counted map
+regions. The tables and constant rings must satisfy the recorded bounds; these
+are allocation counts, not a claim that the tier has passed hardware qualification.
+The receiver certificate adds 32 bytes per allocated ordinary-view pixel beyond
+its surface fields: 66,355,200 bytes per native 1920×1080 consumer, in addition
+to these residency and light-view totals. Each allocated completion-readback
+slot also owns four host-visible bytes, and each enabled view owns a separate
+four-byte device-local deferred counter. Graph memory includes these additions.
+
+G2's traced cache uses a 16-byte hit record: full float distance, an octahedral
+normal word, the full material identity and a terminal/proof/launch word. The
+launch uses a twenty-bit fraction of spacing, rounded toward the hit; the proof
+is issued at the point reconstructed from that fraction and the stored normal.
+Its successful
+proof entries also carry a publication sequence, 28 bytes each. The current raw
+geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
+G4's declared layout retains those records and reserves both lighting generations
+and their stamps, giving 100,728,840 bytes at `medium` and 562,167,816 at `high`,
+plus the region rings, counters and descriptors that `world.budget` reports.
+Lighting stores five nonnegative R11G11B10 words per ray or irradiance texel:
+direct, feedback, emission, sky and screens. Contributions are accumulated and
+weighted independently, so inspection reads their actual quantized RGB and energy
+shares; it never divides the final RGB into guessed sources. Feedback identifies
+the last reflection from the preceding sweep, and continuations preserve each
+category. Quantization changes values within the packing format's bounds, not
+their source identities. No material identity or hit distance is compressed.
+Pinned lighting snapshots and readbacks add their actual counted allocations;
+the table's small-buffer estimates remain subject to those final counts.
+The earlier eight-byte hit estimate cannot preserve the accepted
+geometry contract and is replaced by these actual layout counts. G4's solve and
+apply are implemented; their physical observations and floor-device counted
+qualification keep the step open.
+
+*Field evaluations in the `medium` cache path, against today's ambient occlusion
+(about 2,100,000 a frame whenever `ambient` runs):*
+
+| Work | A still, solved world | The worst frame |
+|---|---|---|
+| `trace`: 8,192 rays × (64 + 1) | 0 | 532,480 |
+| Hit launches and feedback proofs: 8,192 × (8 launch samples + 2 proof traces × 16) | 0 | 327,680 |
+| `classify`: 4 bricks × (64 cells × 28 segments × 2 directions × 16 steps + 192 probe samples) | 0 | 230,144 |
+| Light view: eight rows of a 512² region, plus intersecting beam tiles | 0 | 526,912 |
+| `shade`: directional map misses use bounded full-field rays | 0 | 851,968 |
+| Receiver proofs: 32,768 × 32 steps | 0 | 1,048,576 |
+| Launch fallbacks (meshes, grazing approaches): at most eight samples per admitted receiver | 0 | 262,144 |
+| Apply: one cell record, one proof-hash read, eight filtered texel reads a lit pixel | reads only | reads only |
+| **Field evaluations before instruction-cost admission** | **0** | **3,779,904** |
+
+By count, a still world costs the apply's reads and nothing else, and the worst
+frame (a camera cut while a sun refresh, new bricks and a full proof allowance
+coincide) also pays for directional shadow misses during shading. Shade batches
+and light-camera rectangles each fit the existing transport evaluation ceiling;
+completed light maps can reduce actual fallback work but never raise admission.
+The [instruction-cost admission](../rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+also prices every field evaluation by the submitted program's instruction count,
+and bounds shade's cache traversal. Heavy programs reduce these counts further
+and amortize their work over more frames. Diagnostic submission logs expose both
+the query count and its cost estimate.
+These are counts, not times: whether the work fits the RTX 2060's
+`medium` frame is decided from the rows G2 to G5 record. If it does not,
+`medium` steps down this ladder in order, each step re-recorded, keeping the
+owner's 1.5 m `room` spacing throughout: half the proof allowance (a cut fills
+over twice the frames, receivers reading zero meanwhile); 64 rays a probe
+(halving hit bytes, trace and shade); a 24 m `room` radius; half the trace and
+shade budgets (twice the latency); one bounce; 384² light-view regions. If the
+2060 still cannot hold `medium` after the ladder, the honest answer is that
+`medium` becomes the `world` level alone and the `room` level moves to `high`,
+which is the owner's call, raised with the rows that force it.
+
+Latency at `medium` depends on the pinned directional channels. With one channel,
+a shade batch admits at most 52 probes; the schedule visits every probe in the same order
+and publishes only complete sweeps. Without a directional query, cache traversal
+still limits admission below the tier's 4,096-probe ceiling. A light field's region
+needs 64 successful row submissions; heavier fields split those into rectangles.
+Geometry or light invalidation restarts that region. A cold pool needs at least 256 trace
+frames and 64 classification frames, which overlap, before dependent work
+finishes; a camera cut admits at most 32,768 receiver proofs a frame.
+
+**Counted rows.** Every indirect pass counts through the node's kernel
+counters, as every SDF pass does since P15-1, and each row carries its level
+or slot as the detail label P18 adds to the ledger:
+
+- `gpu.march.steps` under `indirect$classify`, `indirect$trace` (gradients,
+  launches and feedback proofs included, by detail) and `views` (proofs and
+  launch fallbacks, detail `indirect`), and the light view's march rows under
+  its own instance; `gpu.texels.written` under `indirect$shade`;
+- `gpu.indirect.hits`, the hits `shade` lit, `gpu.indirect.samples`, the cache
+  lookups `views` made, and `gpu.indirect.unresolved` (rays, unresolved or
+  deferred receivers, light-view texels and shadow fallbacks by detail), all
+  `PerBackendDeterministic`;
+- in a `sdf.indirect` `WorkCounterSet` on the host, all `Deterministic`:
+  `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason (`demand`,
+  `geometry`, `light`, `shadow`, `screen`, `converge`),
+  `indirect.bricks.allocated`, `.evicted` and `.refused` per level,
+  `indirect.sweeps.completed` and `.restarted`. These are residency schedule
+  counts. Receiver proof costs appear in the GPU field-evaluation and unresolved
+  rows above; the fenced deferred-receiver word controls completion and is not a
+  cumulative proof-event counter.
+
+The ceilings file records at the floor device, at `medium`, a ceiling per row
+and a required zero wherever no work is allowed: every indirect row at `low`;
+every `indirect$trace` and `indirect$classify` row on a lighting-visible,
+shadow-direction or visual-only frame; every light-view row on a
+lighting-visible or visual-only frame; every field-evaluation row on a frame of
+a completed still world with a still camera; and `gpu.indirect.samples`
+wherever `views` does not run.
+
+**Build sequence.** Each slice lands alone, in order unless its dependencies
+say otherwise, with its counted rows, its laws and canaries, and any parity
+re-record explained in the same change.
+
+1. **G1, the reference and a CPU model of the transport.** It touches no file an
+   in-flight lane touches and changes no frame.
+   - Delivers, in `src/Puck.SignedDistance/Illumination`:
+     - **The reference** (`IrradianceReference`). An irradiance estimator over a
+       program that every law holds the cache to: cosine-weighted directions
+       from a Halton sequence, a fixed pair of prime bases a bounce, rays
+       through `SdfFieldEvaluator.Raycast` (the one CPU march; no second
+       interpreter, as the bake rule requires) from certified launches, normals
+       from `TryFieldGradient` (six samples on the CPU, not the GPU's one), a
+       stated number of bounces, and the surfaces, direct light and sky as
+       functions its caller supplies (`IrradianceSurfaces`, which also builds
+       them from a program's materials: diffuse albedo `albedo × (1 − metal)`,
+       self-emission `albedo × emissive`). It accumulates in scalar double
+       arithmetic in a written order. A program the evaluator refuses is refused
+       by name, and a `Bounded` hit or a failed gradient is counted unresolved,
+       never shaded.
+     - **The CPU model** (`IrradianceCacheModel`, over `IrradianceField`,
+       `IrradianceLattice`, `IrradianceCells`, `IrradianceAcceptance` and
+       `IrradianceLightView`): the GPU's reference, as `ImageSourceConversion`
+       is the conversion kernels'. Levels, bricks, keys and positions; the
+       direction strata and their exact orientations; the octahedral layouts
+       and border rule; classification and relocation on the clamped distance;
+       the cell partition and its plane order; the certified launch; receiver
+       proofs with their world-space cache (successful proofs only), two-ball
+       reuse and per-frame allowance; absolute acceptance against a bracketed
+       zero and unresolved rays, excluded from a
+       probe's mean; support-seeking continuation with the beyond-the-end test
+       and hit reprojection; the light view's swept-sphere depth map and its
+       slope-scaled comparison, with shadow rays beyond its swept depth and
+       under unresolved texels; and the finite two-generation solve. Segments
+       are cast end to end with `Raycast`, never `LineOfSight`, whose 0.05 skin
+       would miss a wall that close to a corner. The model reads a probe's
+       irradiance as the cosine-weighted mean of its resolved rays' radiance, the
+       quantity the GPU's irradiance texels store; G4's device law holds the
+       texel lookup to it.
+     - **The schedule** (`IrradianceSchedule`). Demand, allocation and eviction
+       (the nearest bricks kept), geometry invalidation over each probe's
+       possible path (the far distance plus the relocation allowance until path
+       bounds are stored), the priority order, the budgets and the update list,
+       as pure functions of plain inputs.
+   - Touches: only the new folder and new test files in
+     `tests/Puck.SignedDistance.Tests`, with its README.
+   - Done when: every law the contract's table names passes with its red leg
+     shown by mutation, together with `IrradianceReferenceLawTests` (the
+     furnace's series at ρ = 0, 0.5 and 1; a floor under a constant sky; a
+     finite wall's form factor by quadrature; a disc's `R²/(R² + h²)`; the
+     evaluator's own hit point; a segment ending on a surface blocked; an
+     unresolved grazing ray named; a warp refused by name),
+     `IrradianceLatticeLawTests` (bricks and keys, the 28 corner pairs, strata
+     spanning the sphere, exact orientations, the octahedral round trip and
+     borders, classification keeping a corner 2.4 units from a surface in its
+     cell), `IrradianceContinuationLawTests` (a sealed hall's middle reading the
+     hall exactly, with and without a coarse level; a continuation stopping at
+     the far distance; no interval counted twice) and
+     `IrradianceScheduleLawTests` (budgets, order independence, idle plans, a
+     shared brick, the nearest bricks kept, invalidation over continuation and
+     relocation). G2 uses the lattice, layout and schedule from the live cache.
+   - Counted-cost gate: no GPU row moves.
+   - Status: landed, with the review corrections and the round-three
+     contract. Every law passes on the CPU, and the whole
+     `Puck.SignedDistance.Tests` suite with it.
+2. **G2, the cache traced and partitioned.** Extends P18-4's package declarations
+   and P18-5's World group.
+   - The implementation provides the `indirect` package and its one instance per residency;
+     `SdfWorldTables.Indirect.cs`, the residency-owned pools, cell records,
+     brick tables and proof hash, published as buffer outputs a view reads
+     through a buffer edge; G1's schedule writing its update list and brick
+     tables as regions; `classify` (with the cell partition) and `trace` (with
+     absolute acceptance, clipped masked steps, support-seeking continuation,
+     hit launches and feedback proofs, unresolved rays) as `SdfKernel` members;
+     one instance-grid walker over a query shape (a cone, a ball, a box)
+     shared by `collectInstanceGridMask`, the shadow gather and the trace;
+     an epoch reset of the whole cache on every program upload, which
+     G5 narrows; the `world.indirect off|medium|high` lever; and the debug
+     views `indirect-probes` (each probe a small sphere coloured by its class)
+     and `indirect-cells` (each hit coloured by its stored cell partition: the
+     component of the cell corner nearest it, read with no field evaluation).
+     Nothing is lit or applied.
+     The lever defaults to `off`; G4 owns enabling tier defaults. Placement and
+     partitioning are two ordered dispatches of the classify kernel. G1's
+     schedule waits for allocated neighboring corners to be placed before it
+     partitions a boundary cell, and invalidates neighboring partitions when
+     brick residency changes. A placement spends at most three field queries;
+     a failed relocation stays inactive. Proof entries use the existing cell-slot
+     lookup and eight buckets keyed by level and the anchor's eighth-spacing slot.
+     Only that cell's first ray publishes
+     its successful proof, once per epoch, and readers consume publications from
+     earlier submissions. This makes reuse independent of workgroup arrival order.
+     Continuations read an immutable host region of earlier submissions' completed
+     strata, so they cannot race another workgroup publishing this frame's rays.
+   - Touches: `SdfWorldPackage` (a partial file), `RenderGraphPackages`,
+     `SdfKernel`, `passes/` and a new `indirect/` kernel module directory, the
+     shared grid walk in `march/` and `surface/sdf-shadow-gather.hlsli`,
+     `SdfWorldTables`, `SdfWorldResidency`, `DebugViewModes` and
+     `debug/sdf-debug-views.hlsli`, `WorldSessionLevers`,
+     `WorldRenderLeverCommandModule`, `SdfPassPlanLawTests`,
+     `tests/Puck.Counters`.
+   - Checks: `SdfIndirectTraceDeviceLawTests` hold stored hits, partitions,
+     classes, launches and proofs on G1's fixtures to the CPU model on both
+     backends (red leg: a mask that drops an instance inside the reach);
+     `SdfIndirectGatherLawTests` hold the masked march's hits and cleared
+     intervals to the full field, with folds, CSG, an instance just outside
+     the reach and one met only after marching past it (red legs: a ball one
+     spacing short, the mask kept past the reach); `SdfPassPlanLawTests` plan
+     the instance, its edge and its barriers; an `indirect-cadence` canary reads
+     scheduled rays only until the cache is traced and none after, and none on a
+     pan with no new bricks (red leg: a schedule that re-traces what a camera
+     sees); parity is unchanged; `puck counters --check` holds every indirect
+     row's required zero in every recorded workload.
+   - Counted-cost gate: at `medium` at most 8,192 rays and 860,160 trace
+     evaluations a frame (rays, gradients, launches and feedback proofs), at
+     most four bricks and 230,144 classification evaluations, the unresolved
+     share within the fixtures' ceilings, none on a completed still world or a
+     pan with no new demand, every byte of the memory table in `world.budget`,
+     and every row zero with the lever off.
+   - Verification state: the gather, trace and debug device laws and the
+     cadence canary have retained passing evidence. The finite-lighting
+     extensions and measured comparison rows are judged by the checks below;
+     their presence in the tree is not evidence that those checks pass.
+3. **G3, the light view.** After G2.
+   - Source state: the residency schedule, finite orthographic camera,
+     depth-only graph, map metadata and resource accounting are implemented.
+     The depth bank belongs to the cache; graph scratch uses the light camera's
+     render extent. Ownership, replacement, installation and dormant retirement
+     have CPU laws with withheld-fix evidence. Actual device visibility and
+     counted runtime qualification remain distinct requirements.
+   - Delivers: the one depth-only camera view per residency cycling its held
+     and fading slots' two regions, its zero-divergence orthographic rays, its
+     caster-volume near and far bounds, its march accepting within a texel's
+     half-diagonal, its 32-bit distance maps with their light and geometry
+     generations, its refresh on P18-13's rule, the hits' slope-scaled lookup,
+     a counted, budgeted per-hit march for hits outside both regions, the
+     depth-only `SdfWorldPackage` fragment with its resource ledger, and the
+     `indirect-light` debug view.
+   - Touches: `WorldViewInstances`, `WorldViewNames` and its reversal law, the
+     view quality, the depth-only fragment, `indirect/`.
+   - Done when: a device law holds every stored hit's light-view visibility on
+     G1's light-view fixture to the CPU model's map (never lit where the
+     reference is shadowed beyond the bias; shadowed where it is lit only
+     within two texels), with the subtexel rod recorded (red leg: an
+     acceptance radius of zero loses it); a zero penumbra is refused by the
+     validator; a resource law matches the fragment's allocation to the table
+     (red leg: only the visibility record counted); a region refreshes only
+     past the rule's threshold and only regions valid for the pinned snapshot
+     are read.
+   - Counted-cost gate: the light view's rows under its own instance, one
+     region a frame, zero on a frame whose slots' lights and casters have not
+     moved.
+4. **G4, bounce from lights and emission, on by default.** After G3.
+   - Source state: the finite solve, receiver certificates, authored source
+     gains, bounce depth and apply gain are implemented. `low` is off;
+     `medium` and `high` select their matching cache tiers. The shared proof
+     allowance remains per residency, while each view owns its four-byte
+     deferred count. Each actual Views dispatch has an ordered reset and
+     fenced readback of that count; a capture waits only for the current receiver scope of views it
+     actually demands. Static primary results retain valid certificates across
+     cadence-off frames. The furnace holds its finite-sweep formula, zero-feedback
+     discriminator and reset image on both backends. Sealed-room, bleed and
+     indirect-off observations and the current receiver-work qualification
+     remain open.
+   - Delivers: `shade` with its finite solve and its generations, the views
+     apply with proofs from the cache and launches from the primary march (the
+     visibility record's L words), `fill` not applied while it is on; the
+     `render.indirect` section with its levels, its `lights`, `emission`,
+     `screens`, `sky` and `feedback` sources, `bounces`, its apply and its `bodies`
+     policy, the validator's bounds, vocabulary rows, generated schema and the
+     default look; palette `bleed` and `receive` and the `bounce` to `fill`
+     rename with the Moth migrated; a light's `bounce` in the light record;
+     screens through G7's acquired-image emission; P15's reactivity and
+     settling restart on a published generation; the `indirect` debug view
+     (indirect light alone over white albedo); a `captures` row's
+     `indirect: on`, with its fixed cold solve; and `quality.puck`'s `indirect`
+     row on at `medium` and `high`, with the `medium` ceilings recorded on the
+     RTX 2060 in the same change.
+   - Touches: `indirect/` and `passes/`, `march/sdf-primary.hlsli` (the
+     approach launch), `frame/sdf-visibility.hlsli` (the L words),
+     `passes/sdf-light-stage.hlsli` (the apply), `shade/sdf-light.hlsli`
+     (compiled into `shade` as well as `views`), `SdfMaterial` and
+     `SdfProgram.Materials.cs`, the light record, `WorldRenderDefaults`,
+     `WorldDefinitionValidator`, `src/Puck.World.Transpiler/Vocabulary/`,
+     `moth.puck`, `quality.puck`, `WorldCaptureRow`, `WorldCaptureScheduler`,
+     `tests/Puck.Parity`, `tests/Puck.World.Canaries`.
+   - Done when: a `gi-furnace` canary holds a uniformly emissive diffuse
+     enclosure's incident irradiance to the finite-sweep formula at
+     `feedback: 1` and to the one-bounce value at `feedback: 0`; a `gi-sealed`
+     canary renders G1's sealed rooms on both backends dark inside (red leg:
+     the partition off); a `gi-bleed` canary reads the floor beside a red wall
+     redder than across the room (red leg: the wall's `bleed` black); a device
+     law holds probe irradiance and the texel lookup to the CPU model (red leg:
+     a π left in the normalization); a device law holds the approach launch's
+     point joined to its hit by the camera ray (red leg: a launch taken from a
+     sample farther than half a spacing); an `indirect-off` canary turns the
+     lever on and off and holds the off frame equal, pixel for pixel on both
+     backends, to a boot with it off (red leg: `fill` skipped while off); a
+     source-accounting law checks a pure metal, an occluder light, ambient
+     alone and a screen alone; a temporal law turns coloured indirect light off
+     while the old value lies inside the new neighbourhood's colour box (red
+     leg: rectification alone); a cold-capture law repeats with different warm
+     histories, frame batches and completion delays and holds the schedule and
+     pixels fixed (red leg: a display-code stop); `SdfLightInterfaceLawTests`
+     still pass; parity holds every existing station unchanged, and its
+     `indirect: on` stations hold under their own tile contract with the
+     simulation hash of the indirect-off control at their tick and after.
+   - Counted-cost gate: the memory and evaluation tables above at `medium`,
+     zero field evaluations in `shade` and in a still view's apply, at most the
+     proof allowance in a moving view's, and every row zero at `low`.
+5. **G5, change classes and standing.** After G4 and P18-6; slots after
+   P18-7.
+   - Source state: geometry, material, lighting and shadow changes reach their
+     existing owners separately. Body and placement participation, nested
+     budgets, slot identities and actual transformed contents are implemented.
+     The corresponding physical motion and relighting canaries and counted
+     rows remain qualification work.
+   - Delivers: the dirty rules in place of G2's epoch reset, with stored path
+     bounds where they narrow it; the cache's revision in `views`'
+     lighting-visible signature; positional lights by their influence over
+     hits; slot identities and generations, both sides of a fade; partition,
+     proof and light-view-region invalidation; `bodies: cast` and the
+     placement `indirect` field through the instance flag.
+   - Touches: the schedule's host wiring in `SdfWorldResidency`,
+     `SdfWorldTables.Cadence.cs`, `SdfWorldPasses`,
+     `field/sdf-instance-flags.hlsli`, `CreationStampEmitter` and the
+     placement records, `tests/Puck.Counters`.
+   - Done when: a law over the fake device drives one change of each class over
+     a still camera and holds each frame to its class's work;
+     `IrradianceInvalidationLawTests` insert an occluder on a previous miss
+     beyond a probe's level reach, move one onto a hit-to-light segment outside
+     every trace's reach, move a point light beside a hit whose probe is outside
+     its influence, recolour then reassign a material, reassign a slot, and
+     move geometry through a cell whose proofs are cached, comparing each
+     completed result with a cold solve (red legs: origin-only light dirtiness,
+     a light-view region left valid, a proof left valid, no restart after a
+     coarse level changed); an `indirect-moving` canary removes a wall by a row
+     edit and reads its old bounce withdrawn at once and the room relit after
+     its solve; an `indirect-day` canary keys a light's colour and reads zero
+     march steps in the cache and the march group; an `indirect-orbit` canary
+     re-renders a light-view region only past the threshold; an
+     `indirect-body` canary at `high` dirties only what a moving body reaches,
+     counted by reason.
+   - Counted-cost gate: per class against G4's rows: no trace, classify or
+     light view on a lighting-visible frame, no trace or classify on a
+     shadow-direction frame, nothing on a completed still world, and K + F
+     slots charged during a fade.
+6. **G6, the sky through the cache.** After G4 and P18-9.
+   - Source state: one environment producer per residency reads acquired image
+     publications. A finite solve pins both declared map and coefficient
+     buffers with that publication and its fence. Certified world exits read
+     the physical sky, before artistic ambient or reflection gains; a new
+     publication starts a new solve rather than relabelling a completed bank.
+     Physical sky transport and its counted rows remain to be qualified.
+   - Delivers: world exits reading the residency's environment map; the `sky` source,
+     which when on replaces the harmonic ambient at the views pass and at hits;
+     a sky change reaching the cache as lighting-visible; a lighting-visible
+     panorama of an acquired screen lighting the world through the map.
+     The fitted `view` and `far` layer arms remain camera-only.
+   - Done when: a law holds an empty fixture's explicitly allocated support
+     under a constant sky to the sky's colour, and a two-colour sky to its
+     cosine-weighted value (red leg: uniform weighting); an `indirect-sky`
+     canary reads a room with one window darker inside than its harmonic
+     ambient and a terrace beside it within tolerance of it (red leg: the sky
+     source off); parity's `indirect: on` stations re-recorded, explained.
+   - Counted-cost gate: a sky change retraces no stored ray.
+7. **G7, portals, screens and other worlds.** After G4; infinity views after
+   P18-11.
+   - Source state: acquired screen pixels feed the shared reduction and its
+     pinned lighting snapshot. Authored source gains admit or exclude that
+     contribution. The finite component holds independent image copies across
+     two feedback rounds, recomposes derived screen and panorama inputs, then
+     waits for the final solve and its actual image publication before release.
+     Taint follows the pinned sources as well as current graph reads. These
+     lifecycle laws do not replace the actual portal-lighting and capture
+     qualification below.
+   - Delivers: the screen emission reduction for every bound screen, read by the
+     direct screen light and the cache, and the deletion of
+     `ISdfScreenSources.Light`'s rendering readers, with that direct-light move
+     re-recorded as its own baseline; screen emission at ray hits in place of
+     the analytic light at hits; emission from screens that show another world,
+     read through the previous-frame edge; the finite portal iterations with
+     closure-wide publication barriers and cold resets; taint through every
+     dependent light and history; caches for session, routed and infinity
+     residencies with the nested budgets; the follow in place keeping the
+     destination's cache.
+   - Touches: `SdfWorldResidency.BindScreens`,
+     `SdfWorldTables.ScreenContent.cs`, `WorldScreenBinder`,
+     `WorldSessionSceneEmitter`, `WorldRoutedScene`, `WorldViewInstances`,
+     `WorldCaptureGate`, `RenderGraphRuntime`'s previous-output handling.
+   - Done when: an `indirect-portal` canary reads the floor before a portal onto
+     a red-lit destination tinted red (red leg: `screens` at zero); a
+     mutual-portal law finishes exactly the declared iterations even with unit
+     albedo and amplified view gains, then schedules nothing, and serves a cold
+     capture identically from different warm histories, cadence divisors and
+     completion orders (red legs: an iteration advanced before every solve
+     finishes, derived portal revisions restarting the solve); a capture law
+     holds a world whose screen shows a filled external source to a cold solve
+     with that fill after its light has bounced off ordinary surfaces and
+     through history (red leg: only screen-face hits reset); a law holds the
+     nested budgets, minimum progress and depth caps; `portal-walk` crosses
+     with indirect light on and a warmed crossing reads the destination's
+     coarsest level (red leg: the cache dropped on crossing).
+   - Counted-cost gate: the reduction's texels a bound screen a frame its image
+     changed; each nested cache's rows under its own instance within its
+     budget; a depth-two reader adds no work.
+8. **G8, asking why a surface is lit.** After G4 and the editor's E2, E4, E5
+   and E6.
+   - Source state: the console, inspector, pick provenance, retained cache
+     inventory, budget, freeze and reset paths are implemented. Their CPU
+     evidence includes real offscreen and windowed World composition. Physical
+     source explanations must still agree with the rendered fixtures.
+   - Delivers: `world.explain`'s indirect line, which reads the cached value at
+     the pointer's hit through the shared GPU pick and runs G1's reference at
+     that point where its program is supported, and names the level, the cell's
+     proven component, the probes active, inside geometry and untraced, each
+     source's share and the document field that changes the answer;
+     `world.lighting`'s echo of each cache (levels, bricks by state, probes by
+     class, the solve's sweep, the frame's scheduled rays and proofs, the light
+     view's texel sizes and divergence); the cache's bytes in `world.budget`;
+     the inspector's indirect rows; and the `world.indirect-freeze` and
+     `world.indirect-reset` levers.
+   - Done when: `WorldExplainLawTests` gain planted indirect reasons (a black
+     `bleed` on the wall that lights a dark floor, a receiver no corner reaches),
+     each with a red leg; the inspector's text equals the echo; a frozen cache
+     records no update row after one frame.
+   - Counted-cost gate: inspection adds no update row; freeze stops updates
+     while the apply is still counted.
+9. **G9, the near field at `high`.** After G4; P15-5 has landed.
+   - Source state: the bounded near interval, certified continuation, explicit
+     source shading and captured-ray CPU comparison are implemented. A failed
+     proof retains the original cache estimate; it does not add an uncertified
+     light contribution. The near-field physical canaries remain open.
+   - Delivers: per-pixel field rays no longer than the finest spacing (one for
+     every four render pixels a frame, interleaved by the jitter index, 0.5 m,
+     12 steps, absolute acceptance, exhaustion unresolved) launched from the
+     approach launch, which replace the cache's estimate over that interval
+     rather than adding to it; a ray's end continuing into the finest level by
+     the continuation rule; a hit lit by explicit diffuse shading at the hit,
+     never from P15's colour history, which holds specular, rim, grid and fog;
+     accumulation through P15's history with its reactivity.
+   - Done when: an `indirect-near` canary reads a small coloured object's bleed
+     onto the surface beside it, finer than the finest spacing, within a stated
+     tolerance of G1's reference; a uniform enclosure keeps its energy with the
+     near field on (red leg: added on top of the cache); a glossy, fogged
+     surface adds no highlight or fog to the bounce (red leg: colour history
+     reused); `temporal-ghosting` and `temporal-disocclusion` hold.
+   - Counted-cost gate: at most one ray every four render pixels and 12 steps a
+     ray; zero below `high`.
+10. **G10, the tier defaults and the comparison.** The lead's call from the
+    counted rows, beside P15-8 and P18-14.
+    - Source state: cache, screen and cone methods use the same authored source
+      controls and physical source helpers. The paired comparison workloads and
+      completion-aware collector are implemented. Actual recorded rows, their
+      interpretation and the resulting default decision remain open; no source
+      implementation or successful build supplies those measurements.
+      Live Medium Vulkan comparison runs on the RTX 4070 lose and recreate
+      the device, including with the native pipeline cache already populated.
+      Those runs supply no qualifying rows or defaults. Frozen continuous
+      views hold, but freezing disables both receiver admission and renewed
+      producer work, so it does not identify the cause. Isolated full-volume
+      admission holds on both backends. The next step is a diagnostic that
+      separates direct-field, wrapped-field and admission-plus-field work on
+      each backend. Close the live failure before repeating the
+      comparison or the remaining physical campaign.
+    - Delivers: the indirect legs of the counters workload recorded at each
+      tier on the RTX 2060 and the RTX 4070; the ladder applied as far as the
+      rows require; `quality.puck`'s `indirect` rows as decided; and the
+      comparison the decision record names, run on the same fixtures: the
+      cache against screen-space indirect light over a probe fallback and
+      against cone occlusion extended to one diffuse bounce, each counted
+      across every view, light slot, history and byte.
+    - Done when: the chosen defaults' ceilings are recorded,
+      `puck counters --check` passes on the RTX 2060, and the comparison's rows
+      are recorded with the bound that decided each alternative.
+
+**Sequencing with other lanes.**
+
+- **P18.** G1's reference takes light callbacks and new files, so it touches
+  none of P18's records, declarations or laws. G2 extends P18-4's World-group
+  tables and P18-5's package layout, which have landed, because it adds to the
+  same declarations. G4 reads the light record P18-4 generates and walks
+  slot 0's shadow light; P18-7's additional slots and fades reach the light view in G5,
+  which also needs P18-6's change classes and signatures. G6 needs P18-9's
+  harmonic ambient and the map's lighting-visible layers; until then the sky source is absent, a view keeps its
+  ambient as its own term, and ambient is never a bounce source. G7's infinity
+  views follow P18-11. P18-13's light-motion rule is the light view's refresh
+  rule, one rule with two readers. G4 applies to P18-5's premultiplied lit
+  surface before the resolve, the sky, the fog and the bounded media, and keeps
+  coverage; it brings no sky or fog work back into `sdfLightStage`.
+- **P15.** G4 joins cache publication to P15-5's reactivity and settling and
+  orders a capture's fixed solve before P15's fixed samples; cadence gaps alone
+  do not reset history. G9's result accumulates through P15-5; its hit lighting
+  never reads that colour history. G10 is decided beside P15-8.
+- **Puck.Maths' certified queries (M4).** Interval evaluation over the
+  instruction set certifies a launch interval, a partition segment or a proof
+  segment in one query, where the CPU model marches ball by ball. Nothing here
+  waits for it; when it lands, the CPU model's certificates move onto it and
+  the GPU keeps its float marches with the same κ margin.
+- **P6's reflection experiment** reads the stored rays as its far field: a
+  glossy ray that leaves its reach continues into the cache by the same rule a
+  fine level's ray does.
+- **P18-10's atmosphere** may read the cache's irradiance at a medium's sample
+  for its ambient in-scatter, and the light view's maps for its shafts; those
+  readers are P18-10's to add.
+- **The editor.** G8 follows E2, E4, E5 and E6 and adds only the indirect rows
+  to each.
+- **The portal flagship.** G7 makes a portal a light source in the room it
+  opens from and keeps a crossing lit; it adds no portal mechanism of its own.
+
+**Settled by the owner.** Each was a matter of taste, decided as the plan
+proposed.
+
+- **Indirect light is on by default from `medium`,** for every world, through
+  the default look; `low` stays off.
+- **Bodies receive at `medium` and cast at `high`,** so a character in a red
+  coat bleeds no red onto the wall beside it at `medium` unless its placement
+  authors `indirect: cast`.
+- **The `room` level's spacing is 1.5 m.** The floor-device ladder keeps it.
+- **`bounce` becomes `fill`,** the floor tier's stand-in, never added to
+  computed indirect light.
+
+**Open decision for the lead.**
+
+- **The tier defaults (G10).** Record, at 1920 by 1080 on the RTX 2060, every
+  indirect row for the `indirect-cadence`, `indirect-day`, `indirect-orbit`, a
+  pan and a camera-cut leg at `medium` and `high`, with bodies receiving and
+  casting, step down the ladder as far as the rows require, and choose
+  `quality.puck`'s `indirect` rows beside P15-8 and P18-14.
+
+**Check:** every slice's own check above, and together: a world shows light
+bounced from its lights, its emissive surfaces, its screens, its sky and
+through its portals, from `.puck` and in the running World on both backends; a
+sealed room stays dark beside a bright exterior through walls as thin as the
+fixtures', a sealed hall reads no sky, and a closed furnace reads its series; a
+completed still world with a still camera evaluates the field nowhere for
+indirect light; a capture with indirect light off is the capture without it,
+byte for byte; the counted-cost ceilings at the floor device hold every
+indirect row and its required zeros, re-recorded only in the change that
+explains the move and never from wall-clock or GPU timing.
+
+**Depends on:** P14 for the pass package; P15-1 for the counted steps, texels
+and ceilings; P11's graph instances, buffer edges and previous-frame edges;
+P18-4, P18-5, P18-6, P18-7, P18-9 and P18-11 as the sequencing above states;
+P15-5 for G4's history integration and G9; and E2, E4, E5 and E6 for G8.
 
 ### P7 — The binding contract and the adapter memory profile
 
@@ -2238,8 +3458,8 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
 `SdfViewGpuServices` are deleted. The pipeline factories have merged into the
-one `IGpuPipelineFactory`: both swapchain compositors lease their blit from the
-pass-pipeline cache, which creates it through it for a render pass in the
+one `IGpuPipelineFactory`: both swapchain compositors lease the display encode from
+the pass-pipeline cache, which creates it through it for a render pass in the
 swapchain's format.
 The closed set of binding kinds replaces `GpuComputeBindingKind`,
 `ShaderSetManifestBindingKind` and every binding index set by hand, such as the
@@ -2263,7 +3483,7 @@ It runs only in CI: on every pull request and every push to `main`, through
 **Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
 is proven when that job passes; a difference it names, such as DXIL the Linux
 compiler hashes or signs differently, is the gate's failure toward Slang. The
-leg's run is [deferred to the end](#deferred-to-the-end).
+leg's run is listed under [deferred to the end](#deferred-to-the-end).
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -2512,7 +3732,7 @@ Phase 3, the groups, follows phase 2:
       every Direct3D 12 canary: the coverage index is recorded on Vulkan and
       does not map Direct3D 12 sources.
       The surface compositor and the surface upload create no shader-visible
-      heap of their own: the compositor's blit set is a pool of the device's
+      heap of their own: the compositor's encode set is a pool of the device's
       heaps, and the upload holds no descriptor
       ([P16](#p16--display-output)).
 
@@ -2597,12 +3817,13 @@ Phase 3, the groups, follows phase 2:
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug
       layer.
-    - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
-      image and sampler in the pass group, set 3 (the image at binding 0, the
-      sampler at 1, each register equal to its binding). `SurfaceCompositor`
-      creates its blit through `IGpuPipelineFactory` from that one group; its
-      ring sets are allocated against the
-      pass group's set layout, each takes the sampler once, a blit writes only
+    - 14b-2, done: the Vulkan presenter. `display-encode.frag.hlsl` (the shader
+      that began as the blit) reads a separate image and sampler in the pass
+      group, set 3 (the image at binding 0, the sampler at 1, the encode block
+      at 2, each register equal to its binding; `DisplayEncodeLayout`). The
+      compositor creates its encode through `IGpuPipelineFactory` from that one
+      group; its ring sets are allocated against the
+      pass group's set layout, each takes the sampler once, a draw writes only
       the image, and a `VulkanDrawCommand` binds its set at its
       `DescriptorSetGroup`. Canaries: the 14b-1 set without
       `world-seat-binding-recompose`, and the windowed `post-pass`,
@@ -2613,9 +3834,9 @@ Phase 3, the groups, follows phase 2:
       `Layout`, which pushes nothing but a 4-byte index, so the node's sources
       split their samplers as their frame block moved into the frame group.
       Every document pass reads a `Texture2D` and a `SamplerState` its
-      generated interface declares; the float preview
-      (`pipeline-preview.frag.hlsl`) reads a separate image and sampler in
-      the pass group, set 3. Canaries: `no-device-compile`, every
+      generated interface declares; the float preview draws the display
+      encode (`display-encode.frag.hlsl`), which reads a separate image and
+      sampler in the pass group, set 3. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
     - 14b-4, done with step 18: the overlay. `overlay-unified.frag.hlsl`
       reads its source image, its eight frame-slot images and one
@@ -2721,8 +3942,9 @@ Phase 3, the groups, follows phase 2:
     package's include to the generator by name.
 19. Done: the SDF tables upload through `GpuRegion`
     (`SdfWorldTables.Regions.cs`). Their program words, dynamic
-    transforms, frame instance grid, screen surfaces, screen lights, volumes,
-    glyph decals and mesh draws are each a region under the policy
+    transforms, frame instance grid, screen surfaces, screen mappings, screen
+    lights, volumes, glyph decals, mesh draws, lights, and the sky's block
+    and layers are each a region under the policy
     `GpuResidency.Select` chooses for its size with a reader in
     flight (a view's viewport row went to a region of its pass's own in P14-6),
     a ring's buffers in the memory `GpuResidency.RingMemory` chooses: the
@@ -2759,8 +3981,8 @@ Phase 3, the groups, follows phase 2:
     external destination and its retarget), `SdfWorldTablesUploadLawTests`
     (restated in words owed, headers and run entries; a program past 4.19M words
     uploads byte-exact; an aperture profile's rings live in the aperture and a
-    unified one's in host memory), `SdfWorldTablesWorkLawTests` (eight copies
-    and eight transitions in a first frame's upload, which also counts the
+    unified one's in host memory), `SdfWorldTablesWorkLawTests` (thirteen copies
+    and thirteen transitions in a first frame's upload, which also counts the
     region writes, and nothing written on the second), `CountersLawTests` and
     `GpuWorkReportLawTests` (the pass class on the wire and in comparison),
     `GpuDeviceMemoryWorkLawTests` (the aperture role counts),
@@ -2768,7 +3990,7 @@ Phase 3, the groups, follows phase 2:
     `SdfFrameBufferPlanLawTests` held too until P14-6 deleted that plan).
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
-    generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
+    generated from `SdfKernelInterfaces` and owned by `puck shaders generate`,
     and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
@@ -2789,9 +4011,9 @@ Phase 3, the groups, follows phase 2:
 22. Done: the P7 deletions no earlier step owns. Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
     pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
-    compositors bind one group, `SurfaceBlitLayout` (the source at `t0` and its
-    sampler at `s1`, space 3), and lease their blit from the device's
-    `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
+    compositors bind one group, `DisplayEncodeLayout` (the source at `t0`, its
+    sampler at `s1` and the encode block at `b2`, space 3), and lease the display
+    encode from the device's `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
     and with the neutral dynamic viewport the presenter's recorder sets. A
     Vulkan swapchain is created only in a `DisplayOutput`
     (`VulkanSwapchain.Output`): `VulkanSwapchainFactory.SelectOutput` chooses
@@ -2851,7 +4073,8 @@ words), so the region-copy kernel pushes nothing. The SDF engine's groups
 landed with P7b-20, and P12b-8 made the screens one image array read through a
 sampler array with per-screen filtering. The test fakes
 consolidate as the surface shrinks. The gate's Linux build, which CI's
-`shader-bytecode` job runs, is [deferred to the end](#deferred-to-the-end).
+`shader-bytecode` job runs, keeps P7 open and is listed under
+[deferred to the end](#deferred-to-the-end).
 
 ### P8 — The shader package, and one source language
 
@@ -2998,7 +4221,7 @@ beside it. The frame group carries the deterministic tick from
 the source the shader push-constant vocabulary already specifies, ticks divided
 by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
-the offscreen host renders at most one frame per step, and `puck parity` gains a
+the offscreen host renders one frame per step, and `puck parity` gains a
 verdict that the frame shows the tick it was armed for, ordered after the state
 hash and before the pixel verdict. A scheduled capture already ends the pump's
 catch-up burst at its armed tick (`IFixedStepSimulation.AwaitsFrame`), and one
@@ -3124,17 +4347,18 @@ follow it.
    carries no tick of its own.
    `puck parity` holds it to the armed tick in a tick verdict between the state
    and pixel verdicts (`TICK-OK`, `TICK-FAILED` naming both sides' ticks). The
-   offscreen host composes at most one frame per step
-   (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again only
-   while a capture waits for it, each frame's interval spanning every host
-   iteration since the frame before it (`OffscreenFrameInterval`). Laws:
+   offscreen host steps one tick per produced frame (`FixedStepPump.TryStep`)
+   and composes a frame for every step
+   (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again,
+   advancing nothing, only while a capture waits for it, each frame's interval
+   the simulation time it advanced (`OffscreenTickPacingLawTests`). Laws:
    `ShaderPipelineRenderNodeLawTests.Tick` (one delivered tick writes identical
    bytes at three presentation clocks; a non-dividing rate refuses by name; a
    paused instance's capture records the tick its image was rendered at),
    `ParityComparatorTests` (a mid-burst
    capture fails the tick verdict rather than the pixel verdict),
    `WorldCaptureSchedulerLawTests` (a landed entry records its region tick) and
-   `OffscreenFrameCadenceLawTests`; every `puck parity` station holds its tick
+   `OffscreenTickPacingLawTests`; every `puck parity` station holds its tick
    verdict on both backends, and `rulepush-board` reads its tiles through the
    shared row region on both.
 6. Done: the presentation dimension. The cost report prices every binding
@@ -3213,14 +4437,10 @@ follow it.
    either literal or the default fails the capture it does not match, and a
    parameter naming a field the reference does not read, a step key that is not
    a tick or a value that is not a whole number is refused by name). The floor-tier
-   leg, the same stations at `low` on floor hardware, is a deferred hardware
-   check.
+   leg, the same stations at `low` on floor hardware, keeps P10 open and is
+   listed under [deferred to the end](#deferred-to-the-end).
 
 ### P11 — The frame graph document and nested views
-
-**Starts from:** the `IRenderNode` tree and the fixed-capacity composition
-described in the implementation status: SDF view slots, 32 screen slots,
-the `ViewStack` round-robin budget, and the test card for self-reference.
 
 **Owns:** the `puck.render.graph.v1` schema, its validation, and its world
 document section; graph instances and their scheduling; the replacement of
@@ -3281,12 +4501,6 @@ binding groups.
 
 ### P12 — Image sources
 
-**Starts from:** `Surface`'s three kinds, the producers named in the
-implementation status (`IMachineVideoOutput`, `Win32GraphicsCaptureFeed`, the
-Media Foundation camera graphs), `WorldScreenBinder`, the `WorldScreenSource`
-kinds in `src/Puck.World.Schema/WorldScreen.cs`, and the external-memory types
-in `src/Puck.Abstractions/Gpu/Sharing`.
-
 **Owns:** the source contract, producer registration, the conversion passes,
 upload and import on both backends, and the migration of every
 `WorldScreenSource` kind onto registered producers.
@@ -3345,7 +4559,9 @@ palette-indexed source and an NV12 source convert to arithmetically expected
 pixels; a capture of a world containing a desktop source shows the fill and
 never desktop pixels; an emulator source's image matches the emulator's
 framebuffer exactly on both backends; a test registers a third producer with no
-schema or planner change.
+schema or planner change; a real camera feeding a screen on both backends,
+recorded. The recorded camera run keeps P12 open and is listed under
+[deferred to the end](#deferred-to-the-end).
 
 **Depends on:** P11 and P7.
 
@@ -3363,10 +4579,10 @@ same way. Four facts shaped the order:
   included, is sampled under a lease its producer cannot overwrite (step 2).
 - Only the test pattern and the QR code write upload regions, which a source
   instance's graph converts and a screen showing the source samples.
-- Few canaries reach this path. The coverage index maps no canary to the
-  capture feed, the camera converter, the QR binder or the descriptor, and the
-  62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
-  index is per file. By document, `hud-frame-slots` names a camera producer
+- Few canaries reach this path. The coverage index maps one canary
+  (`uploaded-sources`) to the Windows capture feed and none to the camera
+  converter or the QR binder, and the 99 it maps to `WorldScreenBinder.cs`
+  mostly construct the binder, because the index is per file. By document, `hud-frame-slots` names a camera producer
   (offscreen, it opens no device), `instrument-clock-source` a machine output,
   `view-screens` view screens, and `source-conversion` the palette and NV12
   kernels; no canary names a test pattern, a QR code, a capture, a probe or a
@@ -3425,7 +4641,7 @@ Each commit is marked with what it waits on.
    installed in the live set, the instance's latest completed image handed to
    `SdfEngineNode` with the screen's other reads) and then deleted the feed's
    `CpuSurfaceSource` upload and `IWorldImageFeed.Publish`/`AcquireFrame` for
-   uploaded feeds, leaving `IWorldUploadFeed.TryWrite` their one image path.
+   uploaded feeds, leaving `IWorldUploadFeed.Write` their one image path.
    Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds
@@ -3590,7 +4806,8 @@ Each commit is marked with what it waits on.
    on it unretired until the Direct3D 11 signal, and skips by name on a device
    without the extension. WARP's Direct3D 11 device opens the shared fence, so
    the WARP case orders its write by the fence rather than a CPU wait, and the
-   WARP reader reads the pattern. A recorded camera run on both backends on real hardware is
+   WARP reader reads the pattern. A recorded camera run on both backends on real
+   hardware keeps P12 open and is listed under
    [deferred to the end](#deferred-to-the-end).
 5. The capture gate over the graph. Landed. The gate fills while a capture is
    pending on `RenderGraphRuntime` (`PendingCapturePath`, which the binder reads
@@ -3703,7 +4920,7 @@ Each commit is marked with what it waits on.
    `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
    `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`,
    `SourceMappingLawTests.TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs`,
-   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`,
+   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutARequiredBaseFeatureIsRefusedByName`,
    `WorldFaceCatalogLawTests.AFaceRowsFilterReachesItsDerivedScreenAndAnUndefinedOneIsRefused`
    and the sampler lane of
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
@@ -3732,10 +4949,6 @@ Each commit is marked with what it waits on.
    drawn glyphs, each against a discriminating leg.
 
 ### P13 — Hit-to-source mapping and input destinations
-
-**Starts from:** `WorldFramePresenter.UpdatePipelinePointer`, which maps the
-pointer into a pipeline pane, and `WorldCursorFeed`, which hover-tests HUD
-rectangles only. Nothing maps a hit on a world surface to a source's pixels.
 
 **Owns:** the published mapping for every source placement, its fixed-point
 inversion, the three input destinations, and the passthrough permission rule.
@@ -3810,10 +5023,11 @@ Each commit is marked with what it waits on.
      (submission, held channels, authority checkpoints, federation, the tape),
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
-   - The format moved with it, strictly and with no reader for the old shape:
-     the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14,
-     `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
-     `WorldFederationCodec.WireKey` `PUCKFED5`. No tape is checked in.
+   - Every format that carries an intent is strict and has no reader for an
+     earlier shape: the tape's shape token, the checkpoint version
+     (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
+     (`WorldProtocol.WireProtocolKey`) and the federation key
+     (`WorldFederationCodec.WireKey`). No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent. A
@@ -3914,7 +5128,8 @@ Each commit is marked with what it waits on.
      events back at their client points; a recording window reads a key's
      message sequence, Alt's system messages, each modifier side, and a drag
      held by the child it was pressed on).
-   - Its check, the recorded Windows run on real hardware, is
+   - Its check, the recorded Windows run on real hardware, is the one item that
+     keeps P13 open; it is listed under
      [deferred to the end](#deferred-to-the-end).
 5. The GPU draws from the mapping. Landed. `ISdfScreenSources.MappingOf` hands
    each screen's published mapping to `SdfWorldTables.SetScreenMapping`, which
@@ -3933,27 +5148,34 @@ Each commit is marked with what it waits on.
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
    panes, with each view's seat camera and each pane's paired camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
-   producer reports the published screens as the surface placements inside its
-   world, so a walk continues from a view through a screen into its source (step
-   1's screen half). A portal's window is a session view: a walk through its
-   glass continues through the camera the window last rendered from
-   (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
-   shear) into the destination, which reports no placements under the depth-one
-   policy, and ends on the surface its ray meets among the destination's static
-   placements (`RenderGraphHitPath.Surface`). The portal check's laws are
-   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`
-   and `WorldWindowFrustumFitLawTests`, and the `portal-window` canary picks the
-   destination's marker through a live window on both backends.
+   producer reports the screens of the world it renders as the surface
+   placements inside that world, so a walk continues from a view through a
+   screen into its source (step 1's screen half); a seat presented in another
+   world reports that world's screens. A portal's window is a session view: a
+   walk through its glass continues through the camera the window last rendered
+   from (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
+   shear) into the destination, which reports its own screens, so the walk
+   continues through a portal inside it, each world tested against its own
+   screens, through at most the set's nesting depth of screens, and ends on the
+   surface its ray meets among the last world's static placements
+   (`RenderGraphHitPath.Surface`). The portal check's laws are
+   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`,
+   `WorldViewPaneMappingLawTests.ASeatPresentedElsewhereIsHitTestedAgainstThatWorldsScreens`,
+   `RenderGraphHitWalkLawTests.AHitWalksThroughTwoNestedLevelsEachWorldAgainstItsOwnScreens`
+   and `WorldWindowFrustumFitLawTests`; the `portal-window` canary picks the
+   destination's marker through a live window, and the `portal-nested` canary
+   picks a third world's wall two levels deep, on both backends.
 
 ### P14 — The SDF engine as a pass package
 
-**Starts from:** every SDF view as an `sdf.world` instance of the render graph,
-running `SdfWorldPackage.Fragment`'s passes over the tables of an
+**Starts from:** every SDF view is an `sdf.world` instance of the render graph,
+running the passes of `SdfWorldPackage`'s fragments over the tables of an
 `SdfWorldResidency` (`SdfWorldTables`), with the planner deciding every barrier
-(step 6); the hand-written frame data, `SdfEnvironment`'s separate packing, the
-SDF pipeline set and its own cache, `SdfShaderSetVerification`, and the prose
-sync pairs in the `rendering` skill's reference. The kernels nothing dispatched
-are already deleted.
+(step 6). The frame's values are members of the generated pass block
+(`SdfWorldPackage.Values`), the lights and the sky are World-group regions with
+generated decoders, the kernels build as entries of the pass-pipeline cache, and
+`SdfKernel` is the one kernel table. The tile tape and selected-gradient walks
+use these same passes, tables and interpreter.
 
 **Owns:** the capability matrix, the SDF pass package, its generated frame
 block, the HLSL module tree and its layering check, staged shading, and the
@@ -3971,10 +5193,11 @@ until its row is green.
 Then:
 
 - Each SDF dispatch becomes a declared pass with a P8 interface.
-- `SdfFrame` and `SdfEnvironment` become one generated frame block. The
-  instruction-set enums and packed-layout constants are generated from the C#
-  model. Any coupling a generator cannot express gets a mechanical check rather
-  than a line in a prose table.
+- `SdfFrame`'s values are one generated frame block, the pass block, and the
+  lights and the sky are regions with generated decoders. The instruction-set
+  enums and packed-layout constants are generated from the C# model. Any coupling
+  a generator cannot express gets a mechanical check rather than a line in a
+  prose table.
 - `sdf-vm.hlsli` and `sdf-world.hlsli` split by responsibility into modules for
   the instruction set and interpreter, field operations, marching, surfaces,
   shading, and passes. A check fails when a lower module includes a higher one.
@@ -4002,7 +5225,7 @@ tables, and each view's passes are the package's. A `views.graphs` instance's
 node and a `views.post` pass both draw through their device context's services,
 so the post passes hold no graphics bundle of their own.
 
-**Check:** every capability-matrix row green; `puck parity` recorded before the
+**Check:** `puck parity` recorded before the
 move and re-recorded after, with any moved pixels explained in the change; P2's
 per-pass work counts recorded on both backends before and after the move, with
 every changed count explained in the change and no speedup promised; the
@@ -4011,7 +5234,7 @@ layering check shown failing once on a deliberate upward include; `puck search
 Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
-(`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
+(`tests/Puck.Counters/counters.puck`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. P15-1
@@ -4025,27 +5248,31 @@ The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
-floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.world.json`
+floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.puck`
 presents offscreen with its one camera at that extent, and the floor tier is the
 world's own `low` preset (shadows off, ambient occlusion off, render scale
 `half`), which `tests/Puck.Counters/counters.script.txt` selects with
 `world.quality low` before anything is read. Half is 181/255 of each axis, which
 the extent quantization rounds up to 0.75, so the view renders 1440x810 and
-`place` reconstructs it to 1920x1080.
+`resolve` reconstructs it to 1920x1080 and `place` copies it.
 
-**Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
+**Shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
-barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
+barriers its passes: mask, beam, cull arguments (indirect arguments and
 bounds), mesh, primary (dispatched indirectly, writing visibility version 0),
-surface (version 1), ambient (version 2), shadow (version 3), then views, the
-light stage with the volumes composited last, into the view's color. A host-baked brick (a height field's,
+surface (version 1), ambient (version 2), shadow (version 3), views, which shades
+the hits into the lit image, `sky`, which evaluates the sky's field runs where
+the lit coverage is below one, and `composite`, which writes the view's color. A
+view that renders below its output extent or reconstructs over time runs
+`resolve` after `views`: it writes the lit image and each pixel's surface
+transport at the output extent, and `sky` and `composite` follow it. A host-baked brick (a height field's,
 `WorldFieldEmitter`) reaches the brick pool in the residency's own upload (`SdfWorldTables.UploadBrick`), which the
 views read; no live instance renders `sdf.bricks`, and the GPU brick bake (`RequestBrickBake`, the bake kernel,
-`SdfCarveBakePlanner`) has no live producer, both pending a design decision. The view writes its float working
-color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
-through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
+`SdfCarveBakePlanner`) has no live producer, both pending a design decision. The view's float working
+color is `composite`'s output; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
+through `GpuRegion`. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
-decals, the glyph atlas, the brick pool, the mesh atlases), group 2 the instance (empty and
+decals, the lights and the sky, the glyph atlas, the brick pool, the mesh atlases), group 2 the instance (empty and
 reserved), and group 3 the pass (its block, holding the frame's values, then
 masks, tiles, arguments, bounds, visibility, shadow, color, and the screen
 sources, an image array read through a sampler array). Each frame source's half
@@ -4064,7 +5291,7 @@ item 2 landed.
    `SdfWorldRenderSpec`, to exactly one capability row, named each row's graph
    equivalent and check, mapped every pass label to the graph pass that
    replaces it, and held the rows without a check to a named list of gaps,
-   each of which now has a check or is recorded as unwired in the open items. A console verb is covered
+   each of which has a check or is recorded as unwired in the open items. A console verb is covered
    through the member it drives rather than enumerated, because the verbs live
    in `Puck.World`, which the SDF tests do not reach. The members nothing
    called are gone: the pipelined preview path, the cadence diagnostics and the
@@ -4079,17 +5306,16 @@ item 2 landed.
    `SdfShaderLayeringLawTests` (`tests/Puck.SdfVm.Tests`) refuses an include of
    a higher layer, a use of a function, constant, global or macro that only a
    higher layer declares, a source outside every layer and an include that
-   resolves nowhere. The frame's row decoders (the environment rows, the
-   lights and the levers, `frame/sdf-environment.hlsli`, `frame/sdf-lights.hlsli`
-   and `frame/sdf-levers.hlsli`), the shadow and ambient gather
+   resolves nowhere. The frame's decoders (the screen tables,
+   `frame/sdf-environment.hlsli`, the lights, `frame/sdf-lights.hlsli`, and the
+   levers, `frame/sdf-levers.hlsli`), the shadow and ambient gather
    (`surface/sdf-shadow-gather.hlsli`) and the query tally sit in the lowest
    layer that uses them, and the surface pass asks `sdfScreenSurfaceShades`
    whether a screen covers a hit.
 3. Landed, the generated instruction-set declarations: `puck shaders generate`
    writes `sdf-isa.hlsli` from the C# model through `SdfIsaHlsl`, covering
    every ISA enum member and the packed-layout constants,
-   and `--check` fails CI on a stale file. Item 7 adds the environment's row
-   layout to it.
+   and `--check` fails CI on a stale file.
 4. Landed, the planner's vocabulary: a pass's `dispatch` (`Extent`, `Groups`,
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
@@ -4124,9 +5350,10 @@ item 2 landed.
    name (`ShaderFrameValues.StateTick`), which `WorldViewGraphHost` fills from
    the state mirror, and `FrameCaptureRequest` has no tick source of its own.
 6. Landed, the cutover: every SDF view is a render-graph instance of
-   `sdf.world`. Its fragment (`SdfWorldPackage.Fragment`) is what the graph
-   compiler splices in place of the pass naming it, ten passes, `sdf.world$sky`
-   through `sdf.world$views`, planned as `SdfPassPlanLawTests` holds them. The
+   `sdf.world`. Its fragment (`SdfWorldPackage.NativeFragment`, with the reduced
+   and temporal forms P15 adds) is what the graph compiler splices in place of
+   the pass naming it, eleven passes, `sdf.world$mask` through
+   `sdf.world$composite`, planned as `SdfPassPlanLawTests` holds them. The
    package records into the instance's command buffer, so Direct3D 12's
    promotion from `COMMON`, the indirect-argument state and the scratch hazards
    are the planner's; the scratch is transient, one allocation per instance
@@ -4146,21 +5373,17 @@ item 2 landed.
    differs from the engine's by the keys it is counted under (`sdf.world$<part>`
    under the instance, the upload under `sdf:<name>`). Done when parity and
    `puck counters compare` hold and both debug layers stay silent on the
-   RTX 2060, with Vulkan validation repeated on the RTX 4070; the RTX 2060
-   debug-layer run remains.
-7. Landed, the frame block: `SdfFrame`'s values and `SdfEnvironment` are
-   members of the pass block every SDF pass already reads, declared once as
-   `SdfWorldPackage.Values` and generated into `sdf-world.interface.hlsli`. The
-   view's camera, far distance, scene time and debug mode, every shading and
-   grid lever, and the environment, a block array of `SdfEnvironment.RowCount`
-   float4 rows, are written by `SdfFrameBlock` at the offsets the generated
-   declarations read; `SdfFrameBlock.BakeEnvironment` is the host bakes, and the
-   rows' indices, light kinds and tonemaps reach the kernels generated
-   (`SDF_ENV_*`, `SDF_LIGHT_*`, `SDF_TONEMAP_*` in `sdf-isa.hlsli`). The
-   viewport table, the environment and lever rows of the screen-light table and
-   their hand-kept HLSL row constants are gone, and the mesh pass's interface
-   lays out the world pass block member for member, so it binds the block its
-   node writes. A block value and a config field may be an array of
+   RTX 2060, with Vulkan validation repeated on the RTX 4070.
+7. Landed, the frame block: `SdfFrame`'s values are members of the pass block
+   every SDF pass already reads, declared once as `SdfWorldPackage.Values` and
+   generated into `sdf-world.interface.hlsli`. The view's camera, far distance
+   and debug mode, the jitter and previous view, and every shading and grid
+   lever are written by `SdfFrameBlock` at the offsets the generated
+   declarations read, and the light kinds reach the kernels generated
+   (`SDF_LIGHT_*` in `sdf-isa.hlsli`). The lights and the sky are not pass-block
+   members: they are World-group regions with generated decoders (P18-4). The
+   mesh pass's interface lays out the world pass block member for member, so it
+   binds the block its node writes. A block value and a config field may be an array of
    four-component vectors (`length`), which the interface echo reads element by
    element. The frame's tables (dynamic transforms, volumes, mesh draws, the
    instance grid) stay regions.
@@ -4211,10 +5434,12 @@ item 2 landed.
    at its own quality, and the binder resolves a window into the scene's one
    residency (`WorldScreenBinder.TryResolveWindowView`;
    `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
-   Open work: session screens attach through that door. Each reads its
-   own observation of the destination and renders its own residency, so a
-   portal window and a traveller's routed view of one destination keep two
-   residencies until the window reads the endpoint's mirror.
+   A portal window attaches through that door at every depth while its
+   session discloses everything (`WorldSessionWindowRoute`), so a traveller's
+   routed view and every fully disclosed window onto one destination, at any
+   level of nesting, render from the endpoint's one residency; a window disclosed
+   less renders its own. Each view of that residency binds the screens of the
+   level it renders (`ISdfScreenSources.ReadOf` takes the view).
    A camera view renders a view of the world's own residency at its own
    quality. A diegetic screen showing a live camera (a race billboard)
    costs its instance's passes, output and scratch while sharing the world's
@@ -4263,22 +5488,16 @@ item 2 landed.
     SDF view's color and sky and every version of the synthesized root graph
     are `RenderGraphPackageCatalog.WorkingFormat` (`R16G16B16A16Float`), and a
     node publishes an image output as itself, a float one included, so place,
-    screens and exports sample the working image. The tonemap left the views:
-    `render.tonemap` `Filmic` sets the `place` config's `tonemap` on each view's
+    screens and exports sample the working image. The tonemap is not a view
+    stage: `render.tonemap` `Filmic` sets the `place` config's `tonemap` on each view's
     place pass in the root, which tonemaps the view it reconstructs and nothing
     else, so the scene is tonemapped once, and the letterbox color, a pane,
     which is display-referred (the moth studio's applies its own filmic curve),
-    and the HUD never are. The R2 dither left the
-    views too, for the display encode (`SurfaceEncoder`), which every swapchain
-    compositor draws as its write and a capture of a float output reads through
-    in SDR. Parity held without a
-    re-record: against the step-9 images every station moved at most one code
-    (the view's color stored in half floats before the encode quantizes it), and
-    the state hashes are unchanged. `puck counters compare` moves only
-    per-backend-deterministic kinds: the device-local bytes allocated grow by
-    about 116 MiB on both backends, the float view color and the root graph's
-    versions taking eight bytes a pixel in each frame slot where they took four,
-    and the SDF kernels' bytecode shrinks by the dither they no longer compile.
+    and the HUD never are. The R2 dither belongs to the display encode
+    (`SurfaceEncoder`), which every swapchain compositor draws as its write and
+    a capture of a float output reads through in SDR, not to the views. The
+    float view color and the root graph's versions take eight bytes a pixel in
+    each frame slot.
 11. Staged shading. Primary, surface and ambient are stages over the
     visibility record, which is the surface sample record (the decisions
     below): primary writes its V, C and L rows, surface the N and S rows, and
@@ -4290,11 +5509,11 @@ item 2 landed.
        views a textured mesh's atlas albedo, material and emission among it.
        Each stage is its own function over one
        pixel context (`SdfPixel`, `march/sdf-pixel.hlsli`): `sdfPrimaryStage`,
-       `sdfSurfaceStage`, `sdfAmbientStage`, and `sdfViewsStage`, which reads
-       the record once as one surface sample (`SdfSurfaceSample`) and runs the
-       light stage (`shade/sdf-light-stage.hlsli`), the volumes and the debug
-       views (`debug/sdf-debug-views.hlsli`); the one body the four passes
-       compiled through pass macros is gone. `SdfPassPlanLawTests` holds each
+       `sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage` and
+       `sdfViewsStage`, which reads the record once as one surface sample
+       (`SdfSurfaceSample`) and runs the light stage
+       (`passes/sdf-light-stage.hlsli`) and the debug views
+       (`debug/sdf-debug-views.hlsli`); each pass compiles its own stage. `SdfPassPlanLawTests` holds each
        stage's declared reads and writes.
     b. Landed, the lights through one interface. Every light, the
        environment's and each bound screen's, is one `SdfLight`
@@ -4305,21 +5524,23 @@ item 2 landed.
        kind has a response.
     c. Landed, the shadow stage. A `shadow` pass between ambient and views
        (`sdf-world-shadow.comp`, `surface/sdf-shadow.hlsli`) gathers each
-       workgroup's shadow candidates and marches the key light's soft shadow
-       into the record's K row, which grows it to sixteen words (64 bytes a
+       workgroup's shadow candidates and marches each selected light's soft shadow
+       into the record's K row, four 8-bit visibilities within twenty-four words (96 bytes a
        pixel); views reads the row and marches nothing, and holds no
        groupshared mask. Each costed stage is off for a frame whose quality
        levers turn it off: the shadow pass skips a frame whose soft shadows
-       are off or that has no shadow light, and the ambient pass a frame whose
+       are off or that has no marched slot light, and the ambient pass a frame whose
        ambient occlusion is off, whose neutral occlusion the surface pass
        already wrote (`IRenderGraphPackageRecorder.Skips`). Which levers a
        tier sets is the world's quality settings'; the counters workload's
        `low` tier turns both off. `SdfPassPlanLawTests` holds the order and
        the record's edges.
 
-    Volume shading stays the views stage's last composite: a pass of its own
-    would read and write the working color once more per pixel and save no
-    work.
+    Volume shading belongs to the `composite` pass (P18-5), which integrates a
+    bounded volume over the surface share to its transport's distance and over
+    the sky share to the far distance. The views stage neither shades nor
+    reacts to a volume, so a moving medium never enters a temporal view's
+    history.
 12. Landed, post passes as the root graph's own passes: a world names them in
     `views.post`, each row a graph document's `packages` row less its ports
     (`name`, `package`, `config`), which the synthesized root `main` runs in
@@ -4348,7 +5569,7 @@ item 2 landed.
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
     generate --check` refuses that file stale against the C# model. The
-    instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
+    instruction set's fingerprint (`SdfIsaFingerprint.Value`) hashes the include,
     which generates every lane enum, header lane accessor and vector count the
     kernels read, and the model's described encoding (`SdfEncodingProbe`: where
     the builder and packer put every field, bitfield and table entry, found by
@@ -4368,7 +5589,11 @@ item 2 landed.
     folds, log-spheres, cell jitter, axial profiles, lane erosion, dynamic
     transforms, non-uniform scales and the shapes the evaluator refuses (regular
     polygons, stars, ellipses, glyphs, sampled regions, paths and multi-strand
-    sweeps) have no device reference yet. A reload reads only the kernels a
+    sweeps) have no case in that field-value law.
+    `SdfMarchLodDeviceLawTests` holds the primary march, the beam's cone and the
+    soft shadow across a wallpaper fold's symmetry-LOD switch and a log-sphere
+    fold's shell on both backends, against an analytic oracle; it checks marches,
+    not field values. A reload reads only the kernels a
     tree carries and compiles each carried `.comp.hlsl` source with the World's
     `ShaderCompiler` (`SdfKernelSet.Overlaid`), so editing a kernel and
     reloading is one step; the `sdf-shader-reload` canary installs a baker
@@ -4376,6 +5601,97 @@ item 2 landed.
     stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
+14. Per-tile instruction pruning, landed. A `tape` pass in `sdf.world`, between `beam`
+    and `primary`, proves which masked segments cannot decide any ray of a
+    tile and leaves them out of the march.
+    - Delivers: for each 16-pixel tile, the pass walks the tile's masked
+      segments over eight depth slabs, from the beam's entry to the far
+      bound. It evaluates each `ShapeBlend` once at the slab ball's centre,
+      bounded by the world-space ball's radius times a certified Lipschitz
+      bound for that candidate, including its transforms and domain warps.
+      Host certificates use Puck.Maths' outward interval rules and bound the
+      existing GPU evaluator's float error. The pass includes the error at
+      both the centre and the later ray sample, rounding the bounds outward.
+      The interpreter's `distanceScale` alone is not that bound: a scale also
+      changes the coordinates at which the shape is evaluated. A candidate
+      without a finite certified bound stays live. The pass tracks which side
+      each union, smooth union, intersection and subtraction chooses over the
+      ball. Each slab keeps a live-instruction mask and a live-segment mask with summary words,
+      which `mapCore` and `mapGradCore` read through the existing
+      instance-mask walk. A shape can be omitted inside a retained segment,
+      and compiled parts read their placement's original instruction decisions.
+      Fourth-power depth spacing concentrates the eight balls near the beam entry.
+      Samples outside the covered balls retain the full
+      walk. Every pass counts `gpu.shapes.evaluated` and
+      `gpu.shapes.gradients` beside `gpu.march.steps`, including tape building,
+      winner selection and primitive finite-difference taps. The gradient counter counts analytic derivatives;
+      finite-difference taps count scalar shape evaluations. The pass is off for a program under about thirty
+      masked instructions per tile, where pruning saves under 10%.
+    - Soundness: the pass builds on Puck.Maths' certified interval rules
+      (`FixedInterval` and the SDF interval rules over it), never on a second,
+      float-based evaluator. Every deletion requires a certified enclosure
+      that selects one branch throughout the covered ball. Outward rounding
+      is part of that proof; an uncertified bound can silently change what is drawn.
+    - Done when: on the Nexus workload at the floor tier, primary's shape
+      evaluations fall by at least 40%; on every dense workload, the tape
+      pass's own evaluations stay under 25% of those it saves,
+      `gpu.march.steps` is unchanged, and parity passes.
+    - Measured on the RTX 2060 at the floor tier: Vulkan primary shape
+      evaluations fall from 398.8 million to 228.7 million on the Nexus
+      (42.7% fewer); the tape evaluates 2.6 million shapes, 1.5% of those saved.
+      Courtyard primary falls from 683.0 million to 667.7 million (2.2% fewer);
+      its tape evaluates 1.3 million shapes, 8.6% of those saved. Direct3D 12
+      shape counts are within about 1,000 evaluations. March steps are equal
+      with and without the tape on each backend, and parity passes.
+    - Courtyard's pruning is limited by its structure. The exact certified
+      CPU study drops 308,529 of 1,267,576 candidate/slab pairs (24.3%) with
+      eight slabs; 714,040 remain live solely because of the ball radius.
+      All courtyard shapes have finite certificates. Actual march samples
+      concentrate near surface tiles whose superellipsoid clusters all remain
+      live, so the march-weighted saving is much smaller. A 60% primary-saving
+      estimate inferred from per-candidate figures overstates the saving:
+      candidate/slab pairs do not carry the ray march's sample frequencies.
+      The CPU study uses the initial composed frame, near-plane entry and
+      authored far bound; it has no GPU beam readback and is not a measured
+      GPU saving.
+    - Open experiment: retain the first four production slabs and split each
+      of the last four in two. These twelve slabs drop 760,783 of 1,901,364
+      courtyard candidates (40.0%) and 2,987,504 of 4,532,340 Nexus candidates
+      (65.9%) in the exact CPU study. They cost 50% more tape evaluations and
+      about 33 MB more courtyard tape storage. This partition is not built
+      into the renderer; it replaces eight slabs only if floor-GPU
+      march-weighted counts justify its extra work and storage.
+    - The [Nexus and courtyard counters workloads](../../tests/Puck.Counters/README.md)
+      inherit the real scenes and pin the camera, floor tier and 1440×810
+      extent. Their production and compiled-reference reports supply the
+      measured comparison; the CPU study explains its structural limits.
+15. Winner-only gradients, landed. `mapGradCore` takes a hit's gradient from the
+    shape that decides its value, rather than walking every shape's gradient,
+    wherever one shape decides it: a hard blend, or a smooth blend outside its
+    radius. Inside a smooth blend's band it keeps every shape the blend weighs.
+    The existing interpreter first records final signed blend weights, dropping
+    a leaf when a later decision gives it zero weight, then replays only the
+    selected derivatives through its transform and field rules. More than
+    thirty-two simultaneous contributors falls back to the full dual walk,
+    with both attempts counted. The scalar result is the first walk's exact
+    result; weighted gradient reconstruction may reassociate floating-point
+    operations, so the device laws hold its vector to the full walk's tolerance.
+    - Evidence: on the Nexus a hit's gradient walk costs 71.6 shape
+      evaluations, where the deciding shapes alone cost 6.0.
+    - Done when: on the same Nexus camera, extent and hit samples, the count
+      of analytic shape-gradient evaluations equals the count of shapes with
+      nonzero blend weight in a reference full walk. The shapes-evaluated
+      count (step 14), including work to find the winners, must also be lower
+      than with this optimization off. `SdfFieldDeviceLawTests` holds the
+      gradients, and parity passes.
+    - The device laws use compiled full-gradient and selected-gradient
+      variants over identical hit samples. Their Nexus sample lattice uses
+      the presenter's composed program and posed transforms at the pinned
+      counters camera and extent. The full counters workloads also retain the
+      scenes' actors and animation. The gradient device laws hold on Vulkan
+      and Direct3D 12: analytic counts match the full walk's nonzero-weight
+      shapes, total shape work including winner selection falls, and the
+      gradients remain within the reference tolerance. Parity passes.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4394,11 +5710,21 @@ reduced render scale into its seat rect; cropping a source is P13's mapping,
 not a resample config. The pixelate
 interface fixture under `tests/Puck.Shaders.Tests` stays. `sdf.world` is no
 external producer: each view is a package instance whose node runs the
-fragment's passes (step 6). Before P12, a screen's
-matrix row is green when host leases and instance reads serve it. With no
-composite, N split-screen seats render as N instances' passes rather than one
-dispatch whose Z dimension is N; counters on the RTX 2060 measure that cost, and
-layered views return only if the counts call for them.
+fragment's passes (step 6). Each split-screen seat is an instance of its own, so
+N seats render as N instances' passes rather than one dispatch whose Z dimension
+is N (the pass block's `viewportCount` is one); counters on the RTX 2060 measure
+that cost, and layered views return only if the counts call for them.
+
+**Not adopted.** The interval-pruning study also weighed these, and none is
+planned:
+
+- An interval-culled octree in the baker: it saves 20.9% of a bake's sign
+  evaluations, 0.5% of the whole bake's.
+- A compiled or SIMD CPU evaluator: the CPU evaluator answers fixed-point
+  queries and bakes, a different domain from the GPU march the study prices.
+- An interpreter rebuilt on the studied design: step 14 takes its pruning as a
+  pass in front of the existing interpreter, whose instruction set, kernel
+  variants and device law already stand.
 
 **Depends on:** P2, P8, P11, P12, P4 for the visibility record, and P7b: at
 most four group layouts, separate sampler tables, the world group at a fixed
@@ -4411,18 +5737,19 @@ as a reduced extent and a resample pass; and buffer edges.
 
 ### P15 — Temporal reconstruction
 
-**Starts from:** no jitter, motion vectors, or history in the SDF kernels.
-Render scale is a spatial upsample: each view renders into its own output at a
-quantized fraction of its region (`SdfViewSnapshot.RenderScale`, rounded up by
-`RenderGraphExtent.Quantize`), and the graph's `place` pass scales it back up
-into the view's rect, blending from bilinear toward clamped Catmull-Rom by
-`world.upscale-sharpness`. A change of that extent is a resize, which rebuilds
-the instance's graph beside the installed one. The pieces P15 builds on are in
-place:
+**Starts from:** P15-1 to P15-7 have landed or been decided (below), so the SDF
+kernels carry jitter, derived motion and per-instance history. A view below its
+native render ceiling renders inside that ceiling
+(`SdfViewSnapshot.RenderScale`, rounded up by `RenderGraphExtent.Quantize`) and
+resolves once to its output extent; a change of the ceiling is a resize, which
+rebuilds the instance's graph beside the installed one, and `place` blends the
+output from bilinear toward clamped Catmull-Rom by `world.upscale-sharpness`.
+P15-8 starts from the counted rows these leave. The pieces P15 builds on:
 
-- P4's camera contract, `ViewProjection` (`src/Puck.Abstractions/Cameras`):
-  the mesh projection and the march agree on every pixel, `Jitter` is zero, and
-  `WithPrevious` carries a previous frame's matrices that nothing reads yet.
+- P4's camera contract, `ViewProjection` (`src/Puck.Abstractions/Cameras`): the
+  mesh projection and the march agree on every pixel, and `Jitter` carries the
+  instance's jitter. The temporal path keeps its previous-frame view in
+  `SdfTemporalHistory` (`PreviousView`), not in `ViewProjection`.
 - The visibility record: each pixel's ray parameter, its identity (an SDF hit's
   instance ordinal plus one, a mesh hit's draw), its material, and its march
   steps and queries in the V row's flags. The L row retains the winning shape's
@@ -4443,8 +5770,8 @@ place:
   ceilings (P15-1). Besides the host-side API calls, every SDF compute pass's
   kernels count their march steps and texels written (`gpu.march.steps`,
   `gpu.texels.written`) into the node's kernel counters, and the upload counts
-  its fillers, brick writes and region copies under passes of their own
-  (`fillers`, `bricks`, `upload`).
+  its fillers, brick writes, region copies and the sky's environment under
+  passes of their own (`fillers`, `bricks`, `upload`, `environment`).
 - A converging capture freezes the armed tick's first presentation snapshot:
   animation, camera followers and pass-block inputs remain fixed while only
   its jitter index advances. Dependency frames that are not ready do not count,
@@ -4457,13 +5784,16 @@ place:
 dynamic resolution, temporal reuse inside the SDF march, and the counted-cost
 ceilings P14 and P15 are gated by.
 
-**Target shape.** Reconstruction lives inside each view's own instance. The
-`sdf.world` fragment gains a `resolve` pass after `views`; the instance renders
-at its **output extent**, the view's rect at native scale, while every pass
-before `resolve` renders a **render extent** inside it. `resolve` writes the
-instance's output from the current frame's color, the visibility record and the
-instance's history, and `place` then puts that output into the view's rect with
-at most the quantization's resample. Because the history is the instance's own
+**Shape.** Reconstruction lives inside each view's own instance. The
+`sdf.world` fragment of a reduced or temporal view has a `resolve` pass after
+`views`; the instance's output is at its **output extent**, the view's rect at
+native scale, while every pass up to `views` renders a **render extent** inside
+it. `resolve` writes the lit image and each pixel's surface transport at the
+output extent from the current frame's color, the visibility records and the
+instance's history; `sky` evaluates its field runs on the render grid; and
+`composite` writes the instance's output from the lit image, the transport and
+the runs. `place` then puts that output into the view's rect with at most the
+quantization's resample. Because the history is the instance's own
 fragment resources, every view has its own: the world's views (`world`,
 `world$n`), each camera view, and each session view, a portal window's
 included. Nothing in the root graph holds per-view history, and a pane is not
@@ -4505,7 +5835,7 @@ resolution, and stay there.
   twice as long. It is in pixels of the render extent, starts at the pixel
   center, and is applied by the one ray generator (`worldView` in
   `frame/sdf-viewport.hlsli`) and the one mesh projection, from a `jitter`
-  pass-block value. `ViewProjection.Jitter` becomes the instance's. The index
+  pass-block value. `ViewProjection.Jitter` is the instance's. The index
   is the number of frames the instance's history has accumulated since its last
   reset, modulo the period, never the wall clock and never the tick, so the
   same history produces the same sequence on every run and backend. While a
@@ -4518,8 +5848,9 @@ resolution, and stay there.
   writes fresh history from the current frame. A reset is never a clear and
   never a reallocation. The history resets when:
   - the view the instance resolves changes (`SdfWorldPasses`' binding count
-    moves), which covers a residency switch, a follow in place (S25's portal
-    crossing and every other `CanFollow` follow) and a new view index;
+    moves), which covers a residency switch, a follow in place (a seat's
+    portal crossing into the destination's residency and every other
+    `CanFollow` follow) and a new view index;
   - the camera cuts: the view's camera frame source moves a cut revision when
     a camera program reseeds (`SdfCameraProgram`'s drop of its eased value) or
     a layout change swaps what a slot shows;
@@ -4535,39 +5866,46 @@ resolution, and stay there.
 
   Everything else, including a large camera move, is left to per-pixel
   rejection.
-- **Crossing and following hold no frame.** A follow in place keeps the
-  instance's passes, scratch and history storage, so S25's crossing still shows
-  the destination in the crossing frame; the reset makes that frame the
-  destination's spatial resolve, with no trace of the departed world. A session
-  view's history is its own and resets on the same rules; a routed seat view and
-  a portal window's session view of the same destination keep separate
-  histories while they keep separate residencies.
+- **A follow in place holds no frame.** When the destination's ready tables
+  satisfy `SdfWorldPasses.CanFollow` (matching layouts and instance capacity),
+  a seat's portal crossing keeps the instance's passes, scratch and history
+  storage and shows the destination in the crossing frame. Otherwise its passes
+  rebuild. The reset makes the first destination frame a spatial resolve, with
+  no trace of the departed world. A session view's history is its own and
+  resets on the same rules, at every level of nesting: each level is an instance
+  of its own, so a routed seat view, a portal window's view and a deeper level's
+  view of the same destination keep separate histories whether they share an
+  endpoint residency or use separate residencies, and no level reprojects
+  another's frames.
 - **Reprojection is validated by identity and depth.** History keeps, beside
   the color, each output pixel's ray parameter and identity (a history surface).
   A history sample whose identity differs from the current pixel's, or whose
   reprojected depth disagrees beyond a relative tolerance, is rejected, and the
   pixel is resolved from the current frame alone. Surviving history is
   rectified against the current frame's neighbourhood before it blends.
-- **Content that motion cannot describe is reactive.** The views stage writes
-  each pixel's reactivity into a one-channel `reactivity` image of its own at
-  the render extent, never into the working color's alpha, which P18 gives to
-  coverage: a screen, a pixel a bounded volume covers, and animated emission
-  are reactive. `resolve` weights history down by it for color and coverage
-  alike, and consumes it: nothing after `resolve` reads it, and a view with
-  reconstruction off writes none. Once P18-5 moves bounded volumes into the
-  composite after `resolve`, a volume is never reconstructed and is no longer
-  reactive.
-- **`resolve` writes a resolved surface in both modes once it has a reader.**
-  Beside the color it writes, at the output extent, the pixel's ray distance,
-  chosen as the nearest of the render-extent samples it reads and never
-  filtered, so fog never blends two depths, and carries coverage in the color's
-  alpha, filtered and reprojected with the color as premultiplied alpha. The
-  spatial mode writes it too, so a view with reconstruction off still hands
-  P18's `composite` a depth and a coverage at the output extent. The surface is
-  allocated and written from the change that lands its first reader (P18-5's
-  `composite`, or P15-5's history, whichever lands first); until then
-  `resolve` writes the color alone. Before P18-5 lands the coverage is one
-  everywhere.
+- **Content that motion cannot describe is reactive.** The views pass, the only
+  writer, writes each pixel's reactivity into a one-channel `reactivity` image
+  of its own at the render extent, never into the working color's alpha, which
+  carries coverage: a screen is fully reactive and an emissive surface is
+  reactive by its emissive share (`passes/sdf-light-stage.hlsli`). `resolve`
+  weights history down by it for color and coverage alike, and consumes it:
+  nothing after `resolve` reads it, and a view with reconstruction off writes
+  none. The composite alone integrates bounded volumes, after `resolve`, so a
+  volume is never reconstructed and is never reactive.
+- **`resolve` writes the lit image and a filtered surface transport in both
+  modes.** At the output extent it writes the lit image (the color premultiplied
+  by coverage and by the fog's transmittance over each hit's ray distance, with
+  coverage in alpha) and one transport word for each output pixel
+  (`SdfWorldPackage.Parts.Transport`, `shade/sdf-transport.hlsli`): the fog's
+  in-scatter weight and the coverage over the ray distance, reconstructed from
+  the render samples with the color's own weights, so a pixel's fog is its
+  samples' coverage-weighted fog and the transport is not a nearest, unfiltered
+  depth. A pixel the resolve copies whole from one render sample carries that
+  sample's ray distance in its word instead, and the composite derives its
+  transport with the arithmetic a native view runs, so the first frame of an
+  epoch equals the spatial path to the bit. The spatial mode writes both too, so
+  a view with reconstruction off hands `composite` a lit image and a transport at
+  the output extent.
 - **Sharpening is `place`'s.** With a source at its rect's extent, `place`
   applies a contrast-adaptive sharpen by `world.upscale-sharpness` instead of
   its exact copy, so sharpening adds no pass and no texel written. At sharpness
@@ -4578,12 +5916,12 @@ resolution, and stay there.
   The mechanism is the one cadence already applies to every temporal input:
   `SdfWorldPasses.IsUnchanged` lets an instance stand only while a render taken
   now would feed its passes the inputs its standing output was rendered with
-  (`SdfTemporalHistory.Stands`). Today that holds the jitter, so a still view
+  (`SdfTemporalHistory.Stands`). That holds the jitter, so a still view
   renders once at the pixel center after a converging capture ends, and, for
   the `motion` debug view, the previous view and previous poses, so that view
   renders until its motion settles.
 - **Parity boots with reconstruction off.** The parity world's render levers
-  pin reconstruction, dynamic resolution and march seeding off, so every
+  pin reconstruction and dynamic resolution off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its
   own: a `captures` row may state `converge: N`, which resets the captured
   instance's history on the armed tick and serves the Nth frame composed at that
@@ -4597,26 +5935,34 @@ resolution, and stay there.
   presentation, jitter indices 0 to N-1, on both backends and at any speed, and
   the tick verdict still reads the armed tick.
 - **Every costed stage has an off-switch at the floor tier.** Reconstruction
-  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`), march
-  seeding (`world.march-seed`) and sharpening (`world.upscale-sharpness 0`) are
-  session levers (`WorldSessionLevers`), and the quality presets in
-  `quality.puck` gain a row for each of the first three. Which of them `low`
+  (`world.temporal`), dynamic resolution (`world.render-scale auto`) and
+  sharpening (`world.upscale-sharpness 0`) are session levers
+  (`WorldSessionLevers`), and the quality presets in `quality.puck` gain a row
+  for each of the first two. Which of them `low`
   turns on is the lead's decision from the counted rows, below.
 - **Camera and session views reconstruct only when asked.** A camera view or
   a session view, which screens show at their declared extent, reconstructs
   only when its residency's levers turn reconstruction on; by default it does
   not, so it renders at its render extent with the spatial resolve and keeps no
   history storage. The world's own views follow `world.temporal`.
-- **Dynamic resolution follows present timing.** One controller consumes one
-  load signal and sets each view's per-frame render extent from it. The signal
-  is the presenter's confirmed-present timing (`IPresentTimingFeedback`) at
-  runtime: presentation-only, read by nothing in the simulation, and outside the
-  determinism contract. It reaches the controller through an injectable timing
-  source, so laws drive the controller with a fake. Where present timing is
-  unavailable (`PresentTimingSample.Unavailable`, an offscreen host, a
-  presenter without the capability), the same controller reads the previous
-  frame's counted `gpu.march.steps` against a per-tier step budget instead.
-  The counters workload and the parity world pin dynamic resolution off.
+- **Dynamic resolution follows the GPU's frame time.** One controller
+  (`WorldDynamicResolution`) consumes one load signal and sets each view's
+  per-frame render extent from it. Against a known display rate the signal is
+  the GPU's own time for the world's views' latest timed frame, the pass
+  timestamps `world.gpu-timing` reads (`ShaderPipelineRenderNode.Timings`), held
+  to the display period: a present-paced (FIFO) swapchain reports every kept
+  present as exactly its period, so present timing can lower the grid on a miss
+  but never shows the headroom to raise it again. Where the device times
+  nothing, the signal is the presenter's confirmed-present timing
+  (`IPresentTimingFeedback`) against the period; where neither is available
+  (an offscreen host has no display rate and presents nothing), the previous
+  frame's counted `gpu.march.steps` against the step budget. Every signal is
+  presentation-only, read by nothing in the simulation, and outside the
+  determinism contract. It reaches the controller through an injectable source
+  (`IWorldFrameLoadSource`), so laws drive the controller with a fake; the
+  World's source (`WorldFrameLoadSource`) asks `WorldGpuTiming` for timestamps
+  only while dynamic resolution is on against a known display rate. The
+  counters workload and the parity world pin dynamic resolution off.
 - **Dynamic-resolution policy.** A fresh load sample within 90–110% of its
   budget leaves the scale unchanged. Outside that band the scale falls by at
   most 1/16 or rises by at most 1/32 per fresh sample, clamped to the view's
@@ -4627,8 +5973,31 @@ resolution, and stay there.
   Counted fallback budgets derive from the committed RTX 2060 ceiling rows
   and scale by output pixel area, so recording new floor evidence also updates
   the controller's budgets. No copied numeric budget constants are maintained.
-  The timing trace and counted fallback hold the same exact response,
-  including both step bounds and floor/ceiling clamps. Extent changes allocate
+  The GPU time, the present timing and the counted fallback hold the same exact response,
+  including both step bounds and floor/ceiling clamps. A sample is taken only
+  at the quantized grid the views render now: each node records the grid of
+  every submission it renders, a reading names its renders' common grid, and a
+  reading from another grid, as one delayed past a grid move is, moves
+  nothing. A present names no frame, so a present interval is a sample only
+  while every view render completed from its start to its end was at the
+  current grid: each node keeps a summary of every render completed since it
+  was last read (`ShaderPipelineRenderNode.TakeCompletions`), not only the
+  newest, and the interval needs every view's summary to name the current
+  grid. A view that leaves the graph hands its completed renders to the
+  runtime by instance name (`RenderGraphRuntime.TakeRetiredCompletions`), but
+  only for the names its reader declares (`RenderGraphRuntime.AccountFor`: the
+  world load source declares its views while dynamic resolution is on and
+  none once it is off), so a pane or source keeps no entry: a
+  disposed node waits out its submissions first, and a node a kept consumer
+  still holds stays polled until it owes nothing or is released. So a removed
+  view's render still counts, across any number of reconfigurations between
+  reads, and each render is handed over once. When the budget falls between two adjacent grids the
+  controller settles on the cheaper one: an over-budget sample marks its grid,
+  and a rise stops below the mark until a sample, scaled by the two grids'
+  area ratio, predicts the marked grid within the budget itself, which clears
+  the mark. The grids are dyadic, so the prediction is compared exactly: the
+  load times the marked grid's area against the budget times the current
+  grid's, as exact products of the doubles given, inclusive at the budget. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
   P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into
@@ -4657,9 +6026,16 @@ counted rows recorded in the same change.
      `tests/Puck.Counters` (a `puck.counters.ceilings.v1` document with its
      generated schema), exiting 1
      and naming the kind, pass and node over its ceiling; `puck counters --record`
-     rewrites it. Deterministic kinds are judged on any device; a
-     per-backend-deterministic kind is judged only on the device identity the file
-     was recorded on, the RTX 2060, and reported as not judged elsewhere.
+     records nonzero budgets and compact measurement layouts into it. A layout
+     requires every recorded row, including rows whose implicit budget is zero;
+     an unexpected row fails even when it reads zero. Deterministic kinds and
+     nonconflicting kernel zeros are shared by every device of their backend.
+     A fresh required zero whose count another retained device owns stays a
+     strict zero in the newly recorded device's record, preserving the other
+     device's readings.
+     Every other per-backend-deterministic kind is judged against the record of
+     the device the run is on, one record per device, and a device with no
+     record fails by name.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
@@ -4699,8 +6075,8 @@ counted rows recorded in the same change.
      presentation snapshot it composes from: the presenter holds presentation
      time, animation, the camera followers and the frame values at the first
      composition of the armed tick and composes every converging frame at a zero
-     interval, advancing only the jitter index. Nothing turns jitter on outside
-     a `converge` capture until P15-5 adds the lever.
+     interval, advancing only the jitter index. Jitter is on only for a temporal view (`world.temporal`)
+     and inside a `converge` capture.
    - Touches: `SdfWorldPackage.Values`, `SdfFrameBlock`,
      `frame/sdf-viewport.hlsli`, `sdf-mesh.vert.hlsl`, `ViewProjection`,
      `SdfCameraProgram`, `WorldScreenBinder.FilmViews`, `SdfWorldPasses`,
@@ -4727,7 +6103,8 @@ counted rows recorded in the same change.
      pixels. Parity passes with reconstruction off. RTX 4070 ordinary counter
      reads keep dispatches, binds, barriers, steps, texels, uploads and
      allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
-     1456 on Vulkan. The floor-machine recording remains owner-assisted.
+     1456 on Vulkan. The default workload's ceilings are recorded on the RTX 2060 at
+     the floor tier.
 3. **P15-3, motion.** Landed. Every visible pixel's previous position is derived
    from the record.
    - Delivers: the previous view in the pass block (the instance's last render's
@@ -4759,12 +6136,12 @@ counted rows recorded in the same change.
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
    - Landed: the render-scale ceiling alone selects a view's fragment and is the
-     whole render-extent revision. Views at a native ceiling keep the ten-pass
+     whole render-extent revision. Views at a native ceiling keep the eleven-pass
      fragment and ignore the active grid. Views below it allocate traversal
      storage at their render ceiling, shade into one transient render-grid
-     color, and run one output-sized spatial resolve that writes the color
-     alone; coverage remains in color alpha, and the resolved surface waits for
-     its first reader. Changing the active grid inside the ceiling
+     color, and run one output-sized spatial resolve that writes the lit image
+     (coverage in its alpha) and the surface transport, after which `sky` and
+     `composite` run. Changing the active grid inside the ceiling
      (`ResolvedRenderScale`) neither allocates nor rebuilds, and a layout
      transition's dip is exactly that change; a view at a native ceiling does
      not dip. Changing the ceiling uses the normal graph replacement path, which
@@ -4776,8 +6153,8 @@ counted rows recorded in the same change.
    - Delivers: a fragment resource dimension resolved from a render extent the
      package states per instance (as it states counts through `CounterOf`),
      every pass before `resolve` running at that extent, the `resolve` pass in
-     its spatial mode writing the output (with coverage in the color's alpha;
-     the resolved surface lands with its first reader), and a
+     its spatial mode writing the lit image (with coverage in its alpha) and the
+     surface transport at the output extent, and a
      view's footprint at its rect's
      native extent (`WorldViewGraphHost.PlaceView`). The render extent is a
      ceiling allocation and a per-frame extent inside it; a change of the ceiling
@@ -4796,23 +6173,81 @@ counted rows recorded in the same change.
      output beside the render targets.
    - Counted-cost gate: at reduced scale the resolve writes the output texels
      once; a placement with no other work stands in for that output. The
-     counted 1080p low workload moves its 2,073,600-texel dispatch from `place`
-     to `resolve`, with the existing SDF passes unchanged. Resolve adds its
-     output storage, bindings and one pipeline: a reduced view owns what the
-     native graph at its render ceiling owns, with the render-grid color held
-     once rather than once a frame slot, plus one output color a frame slot,
-     41,472,000 bytes at 1920x1080 and half scale over three frame slots
-     (`SdfPassPlanLawTests`). A layout transition allocates and builds nothing.
+     counted 1080p low workload's rows are in
+     `tests/Puck.Counters/counters.ceilings.json`: `resolve` and `composite`
+     each write 2,073,600 texels, and `sky` the render grid's 1,166,400. Resolve
+     adds its output storage, bindings and one pipeline: a reduced view owns what
+     the native graph at its render ceiling owns, with the render-grid color held
+     once rather than once a frame slot, plus the resolved lit image, the
+     surface transport and one output color (`SdfPassPlanLawTests` holds the
+     plan). A layout transition allocates and builds nothing.
      Native allocation
      and work rows remain unchanged. The accepted exception is one immutable
-     `SdfKernelSet` bytecode load: 16,020 bytes on Vulkan and 11,492 on DirectX.
-     Keeping the kernel in that set preserves its existing atomic reload and
-     interface validation; GPU resources are still created only on demand.
+     `SdfKernelSet` bytecode load, the resolve kernel's, which
+     `shaders.sdf-kernels` counts. Keeping the kernel in that set preserves its
+     existing atomic reload and interface validation; GPU resources are still
+     created only on demand.
    - Authored extents are exact. A camera or session that states a pixel size
      keeps that output size through reader scale, split layouts and display
      resizing. Its camera uses the authored aspect on its first capture.
      Unspecified extents keep the scheduler's quantization and hysteresis.
-5. **P15-5, the temporal resolve.** Reconstruction on.
+5. **P15-5, the temporal resolve.** Landed. Reconstruction on.
+   - Landed: a temporal view runs the temporal fragment, whose resolve reads
+     the history color and surface the previous frame wrote at the output
+     extent and writes this frame's. It weights the 3x3 render samples around
+     each output pixel, reprojects history through `sdfReprojection`, rejects it
+     where the identity differs or the ray distance differs by more than 5%,
+     clips it to the neighbourhood's YCoCg box and caps its weight at eight
+     samples; `reactivity`, written by `views` alone (a screen is fully
+     reactive, an emissive surface by its emissive share), lowers that weight.
+     An epoch's first frame, and any pixel whose history is rejected, is the
+     spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
+     one period after its last change. `place` sharpens a source at its rect's
+     extent by `world.upscale-sharpness` when the view reconstructs.
+     `world.temporal` and the render section's `temporal` member turn it on for
+     the world's own views; `quality.puck` turns it off at `low` and on at
+     `medium` and `high`; camera and session views never ask for it. A view
+     following a crossing into another residency requests that residency's
+     resolve pipeline, so `portal-walk` crosses with reconstruction on. The
+     canaries hold `temporal-convergence` within 1.5 codes of the supersampled
+     reference over its subject, `temporal-ghosting` within 2 codes of the
+     still frame over the vacated strip, `temporal-disocclusion` within 4 codes
+     of the spatial path over the revealed pixels, and `temporal-reset`'s first
+     frame after a cut to the spatial path exactly; the parity world's
+     `converge` station holds on both backends under its vocabulary contract.
+     The resolve binds the World set as well as the frame and pass sets, one
+     more descriptor-set bind a resolve dispatch, and writes its pass set once a
+     frame slot. `portal-walk` crosses with reconstruction on and holds its
+     crossing frame to a relaunch's spatial crossing frame exactly, while a
+     frame with gathered history differs from the spatial one; no world can
+     author a crossing that keeps history, so the epoch reset on a crossing is
+     held by law (P15-2). The runtime counts the frames each instance's
+     schedule leaves it unread and absent from displayed outputs, including
+     held consumer outputs, and hands the count to the package's cadence
+     question and recordings, and the count is part of the epoch, so a parked
+     view shown again resets while a spatial view's still output stands.
+   - History follows one rule across the render graph: a slot advances only
+     when its writer pass records and submits successfully. A history read
+     creates no demand for its writer, including P11 self-references and
+     previous-frame reads between instances. A failed or skipped write keeps
+     the last successful history; recording and submission failures roll back
+     the pending cursor and access state, and device loss discards history so
+     the replacement device starts with no history. Temporal resolve uses the
+     same rule as every other previous-frame resource, with no private mode.
+     History remains eligible for publication and export. A successful
+     submission commits before an export handoff, so a later handoff failure
+     keeps the submitted history and consumes its submission slot. Demand a
+     consumer needs is stated where it is shown, never implied by a history
+     read: a camera the display shows directly (a HUD frame or a probe export)
+     that films the world reads the views the world's screens show at their
+     previous frame, so `WorldViewGraphHost` roots those views while the camera
+     is a root, at the camera's fraction times each view's declared extent and
+     at the camera's refresh (`RenderGraphRoot.Refresh`, which the scheduler
+     honours like an instance's own: an instance only roots show renders no
+     more often than its most frequent root asks), so a filmed view renders no
+     more often than the camera consumes it; the rooting ends with the camera's. A paused node presents its last image
+     on purpose: its scheduled frame is spent, so its refresh and the demand it
+     passes to its producers keep their cadence, though it writes no history.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image
@@ -4837,55 +6272,71 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
-6. **P15-6, dynamic resolution.** The render extent moves inside its ceiling
-   each frame.
-   - Delivers: one controller that sets each view's per-frame render extent
-     between a floor and the tier's ceiling, never reallocating, and resets no
-     history (the resolve reads the extent each frame). It writes
-     `SdfViewSnapshot.ResolvedRenderScale`, the grid a layout transition's dip
-     already moves, composing with that dip rather than adding a second grid.
-     A view at a native ceiling reconstructs nothing and ignores that grid, so
-     dynamic resolution on a native tier gives its views a ceiling below
-     native for as long as it is on (one rebuild when the lever moves), never a
-     per-frame choice of fragment; its one load signal,
-     present timing through an injectable timing source with the counted
-     march-step budget where present timing is unavailable; the lever with its
-     presets.
-   - Touches: `WorldFramePresenter`, `WorldRenderSettings`, `SdfFrameBlock`, the
-     controller in `src/Puck.World.Client`, `WorldSessionLevers`,
-     `quality.puck`.
-   - Done when: a law drives the controller through a fake timing source over a
-     scripted signal and holds its extents, and a second law makes the fake
-     unavailable and holds the controller to the step budget; a `dynamic-resolution` canary forces a sweep of extents through the
-     lever and reads no `gpu.created.*` rise and no rebuild across it, each
-     forced extent's capture within tolerance of its reference.
-   - Counted-cost gate: zero created objects across the sweep; per-frame counts
-     scale with the render extent the frame chose.
-7. **P15-7, march seeding.** The previous frame's depth starts the march where
-   it is safe to.
-   - Delivers: primary takes a candidate start from the history surface's ray
-     parameter, reprojected by the camera's motion, and starts there only when a
-     ball test proves the segment from the beam's tile start to the candidate
-     empty: one field evaluation at the segment's midpoint whose distance,
-     divided by the program's Lipschitz bound (`SdfProgram.Lipschitz.cs`),
-     covers half the segment. Otherwise it starts at the tile start, as today. A
-     program without a finite bound never seeds. By construction it cannot skip
-     a surface nearer than the candidate, including one that has moved in front
-     since the previous frame.
-   - Touches: `march/sdf-primary.hlsli`, `march/sdf-pixel.hlsli`,
-     `SdfWorldPackage.Values`, `SdfProgram.Lipschitz.cs` (the bound in the pass
-     block), `tests/Puck.Counters` (a panning leg).
-   - Done when: a CPU law over `SdfFieldEvaluator` holds the ball test's claim
-     against adversarial occluders placed inside the segment; a `march-seed`
-     canary's occluder moving in front of a seeded surface shows the same
-     identity census as seeding off and pixels within the stated tolerance.
-   - Counted-cost gate: primary's `gpu.march.steps` falls on the still and
-     panning legs, and its ceiling is re-recorded lower in this change; the ball
-     test's evaluation counts as a step.
+6. **P15-6, dynamic resolution.** Landed. The decision is A: `renderScale` is a
+   scalar ceiling, with no object form. Per-view `views.quality` rows author
+   the floor through `renderScaleFloor` or an authored quality `tier`;
+   Quarter is the default. `quality.puck` supplies each preset's floor.
+   Ceilings and floors are saved. One parser owns
+   `world.render-scale [view] [<scale>|floor <tier>|pin <scale>|auto [on|off]]`
+   and the bare echo. A pin is bindable, bounded by the floor and ceiling,
+   excluded from save and replay, and released by auto within one policy step.
+   A sweep at an unchanged ceiling allocates nothing and resets no history.
+   - Policy: `WorldDynamicResolution` owns the response for every view.
+     Fresh GPU frame time is the first signal, fresh present timing the second,
+     and fresh counted march steps the fallback. Committed floor evidence
+     supplies the budget per output pixel. The ±10% hold and relative steps
+     of at most 1/16 down and 1/32 up remain. `RenderGraphExtent.Quantize` is
+     the only quantizer. A native ceiling becomes three-quarter while the view
+     adapts, because a native view reconstructs nothing. Defaults are off.
+   - State: the policy belongs to the view. Its grid is
+     `SdfViewSnapshot.ResolvedRenderScale`, multiplied by the layout transition
+     dip. The world-wide ceiling, automatic mode and default pin
+     govern the player views (`world`, `world$N`); a camera or session view
+     renders native until a lever or a `views.quality` row names it. The allocation remains `RenderScale`; a reading at another grid
+     moves nothing. The cheaper of two grids bracketing the budget holds until
+     fresh evidence permits a rise. The echo reports ceiling, floor, grid,
+     `over=`, budget and signal.
+   - Held by: `WorldRenderScaleGrammarLawTests`,
+     `WorldDynamicResolutionLawTests`, `WorldFrameLoadAggregateLawTests`, and
+     the `dynamic-resolution` canary. The canary sweeps pins through the
+     unified lever and compares each capture with its tier allocated alone,
+     holding `gpu.created.*` and graph revision unchanged across the sweep.
+   - GPU evidence: the dynamic-resolution canary on both backends with debug
+     layers and parity judge the rendered grid and its counted work, and
+     `quality.puck` carries `dynamicResolution: false` in every preset.
+7. **P15-7, march seeding.** Investigated and not pursued; the engine has no
+   march seeding ([rendering decisions](../decisions/rendering.md)).
+   - What was measured: primary took a candidate start from the history
+     surface's ray distance, reprojected by the camera's motion, and started there
+     only when one field evaluation at the midpoint of the segment from the beam's
+     tile start proved the segment empty (a ball test, its evaluation counted as a
+     march step). On the RTX 2060's floor tier at 1920x1080 with reconstruction
+     on, primary's `gpu.march.steps` rose with seeding on: 476,615 to 514,550 on
+     the still leg and 607,186 to 652,765 on the panning leg (Vulkan; Direct3D 12
+     within three steps), surface steps flat.
+   - Outcomes on the still leg: 78,080 pixels sought a seed; 15,251 had no
+     candidate, 32,080 failed the ball test and 30,749 started at their candidate.
+     The panning leg: 97,024, 26,324, 35,214 and 35,486. Each accepted seed saved
+     0.81 steps on the still leg and 0.71 on the panning leg against the one
+     evaluation every tested seed costs, so even a gate that tested only the
+     seeds it would accept loses.
+   - A gate that tests the ball only when the segment exceeds β times the
+     march's own first step at the tile start (an evaluation the march makes
+     anyway) only approaches break-even: primary steps rise 1.23% and 1.42% at
+     β = 2, 0.22% and 0.05% at β = 4, and 0 and 2 steps at β = 8.
+   - Research note, open: a seed pays only if one accepted proof saves more than
+     one evaluation, which the midpoint ball cannot, since the beam already
+     starts primary near the surface and the march still converges from the
+     candidate. A proof that also covers the convergence after the candidate,
+     so an accepted seed lands within the acceptance band, is the formulation
+     worth studying before seeding returns.
 8. **P15-8, the floor tier's defaults.** The lead's call from the counted rows.
+   `quality.puck` carries the rows today: `temporal` is off at `low` and on at
+   `medium` and `high`, and `dynamicResolution` is off at all three, so the
+   counted comparison below decides whether any of them changes.
    - Delivers: the counters workload recorded with each lever off and on at the
      floor tier, in the configurations the first open decision below lists, and `quality.puck`'s `low`, `medium` and `high`
-     rows for the three levers as the lead decides.
+     rows for the two levers as the lead decides.
    - Touches: `quality.puck`, `tests/Puck.Counters`, the ceilings file.
    - Done when: the chosen defaults' ceilings are recorded and `puck counters
      --check` passes on the RTX 2060.
@@ -4895,10 +6346,9 @@ counted rows recorded in the same change.
 - **The floor tier's defaults (P15-8).** Gather, at 1920x1080 on the RTX 2060's
   floor tier, each pass's dispatches, binds, barriers, march steps, texels
   written, bytes uploaded and device-local bytes for: reconstruction off at
-  half scale (today's shape after P15-4); reconstruction on at half scale;
+  half scale (a reduced view with reconstruction off); reconstruction on at half scale;
   reconstruction on at the quarter tier, which the upscaler may make acceptable
-  where the spatial path is not; each with seeding off and on, over the still
-  and panning legs. The memory to expect at that extent: the history color and
+  where the spatial path is not; each over the still and panning legs. The memory to expect at that extent: the history color and
   the history surface at eight bytes a pixel each, in two frame slots, about
   66 MB a view, and the output at the output extent, about 33 MB, against the
   render-extent color's 18.7 MB at half scale.
@@ -4912,7 +6362,8 @@ counted-cost ceilings over `puck counters`' pinned workload at the floor tier
 and the RTX 2060's 1920x1080 hold every reconstruction pass, re-recorded only
 in the change that explains the move and never from wall-clock or GPU timing.
 The recorded Steam Deck run, with dynamic resolution on and render scale
-responding to its signal, is [deferred to the end](#deferred-to-the-end).
+responding to its signal, keeps P15 open beside P15-8 and is listed under
+[deferred to the end](#deferred-to-the-end).
 Whether that run holds a frame-time target is not checked while wall-clock and
 GPU timing are deferred.
 
@@ -4922,6 +6373,40 @@ so one could be added later as another mode of `resolve`.
 
 **Depends on:** P4's motion and jitter contract, P11 for per-instance history,
 and P14.
+
+#### Research input: per-tile interval pruning
+
+A CPU study measured how much of a render program interval analysis could stop
+evaluating per screen tile, beyond what the per-tile instance mask already
+removes. It enclosed each primitive over a ball of the tile's view cone in
+centered Lipschitz form, mapped the ball through every transform and fold,
+decided a hard min or max when the intervals separated (a smooth one only when
+they separated by more than its radius), and dropped the dead instructions. On
+the counters camera at 1440x810 with 16-pixel tiles, one tape per tile removed
+5.9% of the instructions the mask leaves in the counters world, 9.5% in the
+parity world's vocabulary station, 84.1% in nexus and 83.0% in the courtyard.
+Per march sample, shape evaluations fell against today's mask plus sphere and
+rigid-leaf skips by 2.3%, 9.1%, 71.4% and 84.7%, and by 10.1%, 46.2%, 83.6% and
+91.1% with a tape per depth slab. Every pruned tape returned the full walk's
+value at all 1.79 million march samples, at tile sizes 8, 16 and 32. The gain is
+large for dense programs, negligible for small ones, and larger per slab.
+
+The figures count shape evaluations and dispatched instructions on the CPU, not
+GPU time, and do not price building, uploading or indexing a tape per tile. The
+study ran static placements only, with no active bodies or adjacency bands, and
+records its figures for 16-pixel tiles. An op with no interval model stays live,
+and a wallpaper fold was transcribed approximately. The figures were printed by
+an explicit experiment and survive only in a commit message; the study's code is
+not part of the engine.
+
+A production version builds on Puck.Maths' certified interval rules
+(`FixedInterval` and the SDF interval rules over it), never on a second,
+float-based evaluator. P14-14's tape pass uses the existing GPU evaluator with
+an outward error margin in each finite host certificate; unsupported models
+stay live. Its consumer uses a tape only inside the balls whose proof built
+it, and preserves the full walk's distance bit for bit. The study's soundness law failed once its outward
+rounding was removed: a tape pruned by an uncertified bound can silently change
+what is drawn.
 
 ### P16 — Display output
 
@@ -4936,7 +6421,9 @@ and P14.
   device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
   steady upload reuses its texture's image view and allocates nothing, and
   replaces the view only when a new extent, format or level count rebuilds the
-  texture (`DirectXSurfaceUploadLawTests`).
+  texture. A rebuild creates the replacement before it retires the current
+  texture, which is released once the queue's fence passes the work submitted
+  before the swap (`DirectXSurfaceUploadLawTests`).
 - HDR swapchain selection. `DisplayOutput`, a `GpuPixelFormat` and a
   `DisplayColorSpace` (`Srgb`, `Hdr10`, `ScRgb`), is the one description of
   what a swapchain presents, `DisplayOutput.TrySelect` the one choice, and
@@ -4984,14 +6471,44 @@ setting, named once, requests HDR10 or scRGB, which the selection above takes
 when the display reports it. The HUD and overlays show at the paper-white
 level through the encode's `DisplayOutput.WhiteScale`, and one HDR source,
 desktop capture on an HDR display, converts through P12. SDR stays the default
-and the fallback. Everything but the HDR source landed with P14-10; the HDR
-desktop capture remains.
+and the fallback. Everything but the HDR source landed with P14-10, and the HDR
+source has landed too:
+
+- A desktop capture selects its format and encoding at open: the output
+  driving its monitor reports HDR10 (`IDXGIOutput6::GetDesc1`) or not, and
+  `Win32GraphicsCaptureFeed.CaptureOutputOf` turns that into the frames'
+  `DisplayOutput`, B8G8R8A8 sRGB for an SDR display and half-float scRGB for an
+  HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
+  capture is unchanged: its frames, its Direct3D 12 GPU route and its
+  `source-rgba` copy are what they were.
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display at a bounded cadence, off the render thread, including when no
+  frames arrive. The feed holds one DXGI factory and the output it found, re-reading
+  that output's description while the factory is current; a stale factory, which
+  is how DXGI reports a display change, is replaced and the output found again.
+  An HDR toggle, a move to a display that differs in it, or failed discovery ends
+  the feed when a check detects the change; the consumer reopens it with fresh
+  metadata. Unknown display discovery refuses an open instead of guessing SDR.
+- An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
+  downscaled in linear light, and converts on its CPU tier, never the GPU
+  route, whose shared targets are B8G8R8A8. The binder names the encoding
+  `ImageColorEncoding.Of` gives its color space, so the one-pass graph runs
+  `source-transfer`, which writes working values relative to the host's paper
+  white: a sample of N cd/m² shows at N cd/m² on an HDR output, nothing above
+  SDR white is clipped before the display encode, and nothing is encoded twice.
+  The room glow averages the same frames in linear light.
+- The laws are `ImageSourceWorkingSpaceLawTests` (HDR10 and scRGB samples at 80,
+  203, 1000 and 10,000 cd/m², at two paper whites, through the display
+  encode's own decode, with clipped, linear, doubly encoded and fixed-white red
+  legs, and an SDR capture bit for bit), `Win32GraphicsCaptureOutputTests` (the
+  capture's format and color space) and
+  `RenderGraphRuntimeLawTests.ASourcesConversionReadsTheHostsPaperWhiteFromItsPassBlock`;
+  the `source-conversion` canary converts a half-float scRGB region at two
+  paper whites on both backends.
 Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
 Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
-the parity contract. The HDR-display checks, the swapchain reporting an HDR
-color space, a test ramp exceeding SDR white, an HDR desktop capture displayed
-without clipping and the HUD at paper white, are
+the parity contract. The HDR-display checks keep P16 open; their list is under
 [deferred to the end](#deferred-to-the-end).
 
 **Depends on:** P11, and P14's float working targets.
@@ -5002,16 +6519,16 @@ without clipping and the HUD at paper white, are
 `SdfBrickPoolLayout` holding at most 8 bricks of 128 cubed samples) for settled
 carves; the CPU baker, its key, its cache, the `BAKE` chunk of
 [compiled worlds](runtime-and-delivery.md#compiled-worlds), and background baking
-on the CPU thread pool, described under the implementation status; and no path that
-draws a bake.
+on the CPU thread pool, and the mesh pass that draws a bake and its impostor,
+described under the implementation status.
 
 **Owns:** the baker, the texture pipeline, the content-addressed bake cache,
 its chunk in compiled worlds, and background baking on the CPU thread pool.
 
 **Delivers:** one baker that turns an SDF prototype into presentation assets:
 
-- A mesh with UVs, extracted with surface nets or dual contouring, whichever
-  measures better on silhouette error and cost.
+- A mesh with UVs, extracted with manifold dual contouring, which beat surface nets on
+  silhouette error and cost and beat one vertex per cell on topology.
 - Baked textures for albedo, normals, ambient occlusion, and material identity.
 - Impostors for distant content.
 
@@ -5021,8 +6538,8 @@ whether it is sRGB or linear. The Steam Deck supports all three formats. One
 pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
 GPU's images and the presented surfaces, with no conversion between them.
 
-Each bake is keyed by the prototype's content hash, the baker version, and the
-quality tier, and one cache is filled in two ways. A build ships each bake once
+Each bake is keyed by the prototype's content hash, the bake derivation's code
+fingerprint, and the quality tier, and one cache is filled in two ways. A build ships each bake once
 in a bake pack, and a compiled world's chunk names the keys it needs from it, so
 a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
 that has not been compiled, the CPU baker runs in the background on the thread
@@ -5036,77 +6553,179 @@ The parity world ships its bakes, so captures never depend on a local bake.
 Which representation a placement uses follows P6's rule that representations
 are chosen by measured cost.
 
+**Qualification state.** The existing CPU and device sampling evidence remains
+applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
+two visits to the handover band, settled draw-count observations, and a paused
+authoritative-hash comparison around `world.bakes`. Those World observations
+still require both backends. The creation-bake product pin is checked after the
+final bake derivation fingerprint is current; a successful shader build alone
+does not establish that product.
+
+**Manifold extraction.** The extractor places one vertex per surface patch of a
+cell, not one per cell: a cell's patches are the connected pieces of the
+marching-cubes surface inside it, found from the eight corner signs alone, so a
+cell two sheets cross holds a vertex for each. An ambiguous face, whose diagonal
+corners agree, is cut to separate its inside corners, a rule that reads nothing
+but the face's four signs, so the two cells sharing a face agree and the mesh has
+no crack. Over the 93 prototypes baked at the standard tier from the counters,
+parity, nexus, standard and courtyard worlds, counting edges shared by more than
+two quads by vertex index:
+
+| Extractor | Prototypes with such edges | Such edges | Vertices | Mesh evaluations | Whole-bake evaluations | Worst error | Mean error |
+|---|---|---|---|---|---|---|---|
+| One vertex per cell | 8 | 106 | 52,649 | 2,100,421 | 21,591,844 | 0.600 cells | 0.229 cells |
+| One vertex per patch | 0 | 0 | 52,787 | 2,101,141 | 21,596,216 | 0.600 cells | 0.229 cells |
+
+A prototype's error is the baker's own measure (`SdfBaker.MeasureError`), the
+largest field magnitude at a vertex, an edge midpoint or a triangle centroid, in
+lattice cells; the table gives the worst prototype, the courtyard tree under
+both, and the mean over prototypes. Patches cost 138 more vertices (0.26%) and
+0.02% more evaluations over whole bakes, and the triangles are the same 105,004.
+Eighty-five meshes are byte-identical under the two extractors, including each of the parity
+world's five, so no parity reference moves; the eight that differ are the eight
+prototypes the old extractor pinched (the kart ramp 33 such edges, the bank wall
+30, the granary store 18 and anchor 17, the wren 4, the spider 2, the courtyard
+floor and grass 1 each), and their error moves by at most 0.01 cells. A plate
+tilted off the lattice axes meshes as a closed two-manifold at every thickness
+from 0.4 to 3 cells, where one vertex per cell leaves 36 to 84 shared edges from
+0.85 to 1.1 cells (84 at one cell) and none at 0.4, 0.7, 1.2 or 1.3 to 3. Counting
+edges by vertex position instead reports 19 prototypes before and 14 after,
+because 11 prototypes carry no shared edge by index: each holds 1 to 8 positions
+where two distinct vertices coincide (the hex tiles, the arena pools, the groove
+seam, the jump wall, the isle shard, the dragonfly and the courtyard tree), which
+the census does not explain and no indexed consumer reads as topology. Whether any
+consumer needs those vertices apart stays open. The numbers come from a CPU
+census whose code is not kept; the laws in `SdfBakerLawTests` hold the plate and
+the closed meshes.
+
+**Impostors for distant content** are octahedral and view-dependent, and a
+placement hands over to them by its size on screen:
+
+- *Atlas.* The impostor is a grid of orthographic views of the bake's bounding
+  sphere, along the directions an octahedral map decodes with +Y its pole, each
+  view one tile of five textures: albedo with coverage (BC7, sRGB), normal (BC5),
+  depth across the sphere (BC4), material identity (R8, never blended) and
+  emission (BC6H), mipped per tile. They pack
+  into impostor atlases beside the mesh atlases, never in one with them, since
+  their tiles and chains differ.
+- *Sampling.* A card, a quad on the plane touching the sphere's near side, covers
+  the sphere's silhouette. Its pixels find the surface by marching the camera's ray
+  through the three views nearest the direction toward the camera, against each
+  view's depth, and take the weighted mean of the hits a majority of the views
+  agree on; a pixel the views do not cover is discarded. The surface is shaded from
+  the same three views, and the card writes the surface's depth, not its own.
+- *Switch.* The impostor's view edge, in texels, is the switch, in render pixels of
+  the sphere's projected diameter: below it one impostor texel covers at most one
+  pixel, so the impostor shows all the view could. It is 16 at the standard tier.
+  A placement drawn as its impostor hands back to its mesh once its diameter passes
+  the switch by a quarter, so a camera hovering at the switch does not alternate.
+- *Handover.* The field is kept camera-hidden whatever the representation, as for
+  the mesh, and keeps shadowing and occluding. A bake that is not ready draws the
+  field, and when it is ready the placement's two draws replace the field's; a
+  view then records one of them. The choice is made per view on the CPU from that
+  view's camera, so two views at two distances choose apart, and the shaders hold
+  no copy of it.
+- *Limits.* The nearest-texel depth bends a silhouette by at most a texel; the
+  oracle laws state the bound. A card reads a texel's material from the view
+  holding the most weight at the hit, unfiltered, so a boundary between two
+  materials is as sharp as a view texel. Coverage and material have one rule from
+  one provenance: a pixel is a card's only if some view's nearest depth texel at the
+  hit's level is covered, and its material is the highest-weighted such view's, so a
+  filtered alpha a neighbouring texel lifted never names an uncovered view's material.
+- *History.* The temporal resolve (P15-5) keeps a pixel's color history only where
+  the history surface names the same visibility identity (the kind and the draw
+  ordinal) at about the same ray distance. A placement's mesh and card are two draws
+  with two ordinals, so a switch between them is an identity change like any other
+  and restarts the pixel's history; no separate reset or reprojection is owed, and
+  `SdfVisibilityLawTests` hold the switch to that rule.
+
 **Check:** baking one prototype twice produces the same key and, on one
 device, the same bytes; editing one prototype rebakes only that prototype; a
 compiled world with a filled cache bakes nothing on load, counted; a missing
 bake renders through SDF and then switches; baked silhouettes stay under a
-stated error against the SDF; state hashes are equal with bakes on and off.
+stated error against the SDF; a baked plate about one cell thick meshes as a
+closed two-manifold; state hashes are equal with bakes on and off; a
+view records a placement's impostor and not its mesh once the placement is under
+the switch, hands back with hysteresis, and counts the draws it records; the
+impostor's views reproduce the field's sphere and box within a stated share of
+the bounding radius; the parity world's captures project every baked placement
+above the switch, so no parity reference depends on an impostor.
 
 **Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
 packaging, and compiled worlds in the runtime and delivery programme.
 
+#### Research input: manifold meshes and octree sign resolution
+
+A CPU study of the baker counted two things against the mesher that placed one
+vertex per cell. At the standard tier, 19 of the 93 prototypes baked from the
+counters, parity, nexus, standard and courtyard worlds carry edges shared by more
+than two triangles by vertex position (a nexus kart ramp 33, a kart bank wall 30,
+a granary anchor 27, each hex tile 8, the courtyard floor 1), while every mesh is
+closed; the manifold extraction above separates the causes. A plate one cell thick
+meshed with 84 such edges. An octree sign resolution saved 20.9% of sign
+evaluations but 0.5% of a whole bake's evaluations. The octree count covers one
+tier and matches vertices by position to 1e-5. The figures survive only in the
+study's commit messages.
+
 ### P18 — Sky and atmosphere
 
-**Starts from:** the sky as the code holds it: its lanes, its passes, its
-clocks and its duplicates.
+**Starts from:** the sky as the code holds it through P18-9.
 
-- **One packed table.** `SdfEnvironment` (`src/Puck.SignedDistance`) packs the
-  lights, the curvature gains, the sky, the softboxes and the studio horizon
-  into 53 hand-numbered `float4` rows, 848 of the pass block's 1,120 bytes.
-  `SdfFrameBlock.BakeEnvironment` writes those rows into every pass block, so
-  all ten `sdf.world` passes (sky, mask, beam, cull-args, mesh, primary,
-  surface, ambient, shadow, views) carry them, though only sky, shadow and
-  views read them. `frame/sdf-lights.hlsli` decodes the sky's rows through 22
-  hand-written accessors, and `SdfEnvironment.BlendOf` classifies every lane's
-  cycle blend (lerp, arc or hold) by row and lane number.
-- **Sky evaluated twice.** `shade/sdf-sky.hlsli` holds the stars, a private 2D
-  lattice noise, the clouds, the gradient and the composite in one file. The
-  `sky` pre-pass (`passes/sdf-sky.comp.hlsl`) evaluates `skyColor` for every
-  pixel, and the views stage (`sdfLightStage`) evaluates it again for every
-  pixel of a live tile, hits included, before it knows whether the pixel hit.
-  A hit then calls `skyGradient` once for fog and once for the silhouette edge.
-- **Re-marched for sky-only changes.** The cadence (`SdfWorldTables.Cadence.cs`)
-  hashes the twinkle tick and the pass block, cloud offsets included, so a
-  drifting cloud or a twinkling star re-renders every pass of the view. A
-  bounded volume forces a render every frame (`ForcesRender`), because volumes
-  animate on the presentation time (`sceneTime`, `frame.Time`), which is not the
-  tick and is not replayed.
-- **Four gradients over elevation:** the sky's stops; the pinned two-stop
-  gradient written as HLSL literals behind `SkyEnabled`, a branch kept so an
-  unauthored world stays bit-identical; the studio reflection horizon (rows 51
-  and 52); and the hemisphere ambient light.
-- **Five spellings of the sun:** `SdfEnvironment.DefaultSunDirection`, the HLSL
-  `SdfSunDirection`, `worldSunDirection` (whichever light shadows),
-  `SunDiscLightIndex` (the light the disc is drawn about) and the unused
-  `KeyLightDirection`. The disc is always white; the clouds are lit by the
-  shadow light, which need not be the light the disc marks. One light may
-  shadow: the visibility record's K row holds one key visibility, and the
-  shadow stage marches one direction.
-- **Two cloud systems.** The sky's cloud layer and the bounded `SdfVolume`
-  `Cloud` kind use different noise (`sdfLatticeNoise` in the sky file,
-  `sdfLatticeNoise3` in `field/sdf-noise.hlsli`) on different clocks.
-- **Two cycle resolvers.** `render.cycle` keys lighting and sky over a state
-  row. Its key-to-key carry is implemented twice, in
-  `WorldRenderCycleTrack.Rebuild` and `WorldDefinitionValidator`'s
-  `ValidateRenderCycleResolution`.
-- **Clock defects.** The sky clock is `(uint)m_simulation.ElapsedTicks`, which
-  wraps after 2^32 engine ticks (about 23.7 hours at 50,400 a second) and is
-  not the state mirror's presented tick that every other presentation value
-  reads. Cloud drift, shear and spin are `elapsed × rate`, so a cycle that moves
-  a rate jumps the clouds across the sky. A routed scene takes the host's sky
-  clock (`WorldRoutedScene`), not its destination's.
-- **Dead and unreachable code.** `SdfFrame.SunScale` and `AmbientScale` are
-  never set outside a law; `KeyLightDirection` has no reader; the gradient's
-  `stops <= 1` branch is unreachable, because the validator requires two
-  stops; `materialPalette`, a debug-view helper, lives in the sky file.
-- **Little coverage.** Only `moth-courtyard.puck` and `tools/hgb-mirror.puck`
-  author `render.sky` (gradient, fog and sun disc), and only the courtyard a
-  cycle. No world, canary or parity station draws stars, clouds, twinkle or a
-  cycle blend. The parity world renders the pinned sky.
+- **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
+  pack the lights, sky block and open layer table into three
+  World-group regions. Their HLSL structures are generated from the C#
+  records. Active shadow handoff controls occupy a fourth region. The
+  generated pass block holds the light count, `shadowSlots` int4, configured stable
+  count, active fade count, curvature shading and P18-13's amortization switch
+  and two rejection masks; the sky and light records are read only by the
+  kernels that use them.
+- **The sky once, where it is seen.** `sky/sdf-sky.hlsli` holds the stars,
+  the clouds and the gradient, grouped into the runs they compose in, over the
+  periodic noise of `field/sdf-noise.hlsli`. Views shades hits only, into a lit
+  image with its coverage; the `sky` pass evaluates the field runs on the
+  render grid only where coverage is below one, and the `composite` pass puts
+  the lit image over the runs and integrates the bounded media. The atmosphere's
+  fog and haze in-scatter the lighting-visible sky, which the composite reads from the residency's
+  environment map rather than evaluating it at each fogged pixel.
+- **A sky-only change re-runs sky and composite.** The cadence
+  (`SdfWorldTables.Cadence.cs`) hashes the tables and the pass block, the light
+  and sky regions and the volume table among them, with their presented-tick
+  bakes: the twinkle phase, the cloud offsets, a medium's advection and pulse.
+  Pass-group signatures leave camera traversal, hit shading and converged
+  history standing on a drifting cloud, twinkle or moving medium. Only a
+  declared screen slab, an in-progress carve bake or a frame with the cadence
+  gate off forces a render regardless of the signature (`ForcesRender`).
+- **One sky for lighting and background.** The default sky's two-stop gradient
+  supplies the background, SH ambient and map reflections. Authored visibility
+  separates camera and lighting layers; panels add sharp reflection highlights.
+- **Three spellings of the sun:** `SdfLights.DefaultSunDirection`, which is also
+  the clouds' light when shadow slot 0 is empty; the HLSL `SdfSunDirection`, the
+  fallback of `worldSunDirection` when slot 0 is empty; and `worldSunDirection`
+  itself, slot 0's light direction. The sun disc is drawn about the light
+  its disc layer names (`SdfSkyDisc.Light`), which need not be slot 0's light, while the
+  clouds are lit by slot 0. The host allocator selects up to four named lights,
+  each with its own shadow march and 8-bit visibility in the K row, and active
+  handoffs add at most F incoming marches.
+- **Two cloud systems.** The sky's cloud layer (`sdfPeriodicNoise2` in
+  `sky/kinds/clouds.hlsli`) and the bounded `SdfVolume` `Cloud` kind
+  (`sdfPeriodicNoise3`, used in `shade/shade-volumes.hlsli`) shade their density
+  separately, over one engine-tick clock family.
+- **Coverage.** The parity world's sky station, the `sky-layers`, `sky-cycle`,
+  `sky-clock` and `sky-coverage` canaries and the four counted sky workloads
+  (`tests/Puck.Counters/sky-*.world.json`) author and draw the current layers,
+  the clocks and a keyed blend. `moth-courtyard.puck`, `avatars/moth.puck` and
+  `tools/hgb-mirror.puck` (under `src/Puck.World/Assets/worlds/`) author
+  `render.sky` among the shipped worlds, and only the courtyard keys it.
 
-The portal session and window sky, which draws a destination under its own sky
-at its presentation's quality with a residency per endpoint and per-view
-quality levers, is S27's. This package builds on it and does not re-plan it.
+A portal session or window already draws its destination under the
+destination's own sky and sky clock. Routed seats and fully disclosed windows
+onto a live local endpoint share its residency (`WorldRoutedScene`); ordinary
+session screens and windows that cannot join that endpoint render separate
+disclosed session residencies (`WorldScreenBinder.TryResolveView`). Each view
+carries its own quality (`SdfViewSnapshot.Quality`); sessions and routed windows
+use `WorldSessionSceneEmitter.ReducedQuality`. Quality levers a portal window
+sets on its own view are open work. This package builds on that and does not
+re-plan it.
 
 **Owns:** the sky, the atmosphere and the lighting derived from them; the
 celestial bodies and the lights they cast, with any number of shadowed lights;
@@ -5155,72 +6774,109 @@ The sky's work moves out of the view's hit shading. With every step landed an
 upload → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
 ```
 
-`views` shades hits only, into a `lit` image whose color is premultiplied by
-the pixel's coverage and whose alpha is that coverage (one for a solid hit, the
-silhouette weight on an edge, zero on a miss). Coverage and P15's reactivity are
-two channels: reactivity is a one-channel image of its own, which only
-`resolve` reads and consumes, while coverage stays in `lit`'s alpha and is
-reprojected and filtered with the color through `resolve`. `sky` evaluates the
-sky's field layers only where coverage is below one. `composite` writes the
-instance's output: the sky's layers in their authored order, the lit image over
-them by its coverage, then the atmosphere along each pixel's ray distance and
-the bounded media.
-
-Once P15-4 lands, the order is:
+A view that renders below its output extent or reconstructs over time runs
+`resolve` between `views` and `sky`:
 
 ```text
 … → shadow → views → resolve → sky → composite
 ```
 
-`resolve`, in its spatial mode (reconstruction off) and its temporal mode alike,
-writes the resolved surface at the output extent, from the change that lands
-its first reader: `lit` with its coverage, and
-the ray distance of the nearest render-extent sample it read. `sky` and
-`composite` then run at the output extent and read only that surface, never the
-render-extent record. Before P15-4 they run at the render extent and read the
-visibility record's ray distance and `lit` directly. Once per change of a
-lighting-visible sky value, a shared `sky.environment` instance per world
-renders the environment map and its ambient coefficients, which every view of
-that world reads.
+`views` shades hits only, into a `lit` image whose color is premultiplied by
+the pixel's coverage and by the fog's transmittance over the hit's ray
+distance, and whose alpha is that coverage (one for a solid hit, the silhouette
+weight on an edge, zero on a miss). Coverage and P15's reactivity are two
+channels: reactivity is a one-channel image of its own, written by `views` in a
+temporal view and read and consumed by `resolve`, while coverage stays in
+`lit`'s alpha and is reconstructed with the color through `resolve`. `sky`
+evaluates the sky's field runs on the render grid, only where the lit coverage
+at a pixel or one of its eight neighbours is below one. `composite` writes the
+instance's output at the output extent from the lit image, the surface
+transport and the runs: the sky's layers in their authored order, the lit image
+over them by its coverage, the fog's in-scatter along each pixel's ray, and the
+bounded media, which only `composite` integrates. In a native view `composite`
+reads `views`' lit image and visibility records; in a reduced or temporal view
+it reads the lit image and the surface transport `resolve` writes at the output
+extent, a filtered word for each pixel (P15's resolve decision states it), never
+a nearest, unfiltered depth. Once per change of a lighting-visible sky value, the
+residency's upload renders the environment map and its ambient coefficients (its
+`environment` pass), one pair every view of that residency reads.
 
-**Authoring, before and after.** Today a day-night courtyard is spelled in
-lanes a key must address by slot and index:
+**Authoring.** The `timeline` section, a section keyed on a clock (`clock:` and
+`keys [ … ]`, each key's partial record written as its kind under the name of the
+layer it addresses), the `gradient`, `sunDisc`, `stars` and `clouds`
+layers, `render.atmosphere` (P18-10), and the `min`, `h`, `deg` and `hz` units
+are shipped, and the courtyard keys its sky and its fog on a state clock:
 
 ```puck
+timeline {
+  clocks [
+    {
+      name: "skyMode",
+      state: skyMode
+    }
+  ]
+}
+
 render {
-  lighting {
-    lights [
-      directional(direction: [0.51, 0.79, 0.33], color: "#FFF1D6", weight: 0.85, shadows: true)
-      hemisphere(color: "#B7C8DA", base: 0.25, gradient: 0.25)
-    ]
-  }
   sky {
     layers [
-      gradient(stops: skyStops)
-      fog(density: 0.004)
-      sunDisc(light: 0, radius: 0.018, intensity: 1.5)
+      gradient(name: "air", stops: skyStops)
+      sunDisc(name: "sun", light: 0, radius: 0.018, intensity: 1.5)
+    ]
+    clock: skyMode
+    keys [
+      {
+        at: 0
+        layers {
+          air: gradient(stops: nightStops)
+          sun: sunDisc(intensity: 0)
+        }
+      }
+      {
+        at: 0.5
+        layers {
+          air: gradient(stops: skyStops)
+          sun: sunDisc(intensity: 1.5)
+        }
+      }
     ]
   }
-  cycle {
-    state: skyMode
-    keys [
-      { at: 0,   sky { layers [ gradient(stops: nightStops) fog(density: 0) sunDisc(intensity: 0) ] } }
-      { at: 0.5, sky { layers [ gradient(stops: skyStops) fog(density: 0.004) sunDisc(intensity: 1.5) ] } }
-    ]
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0 }, { at: 0.5, value: 0.004 }]
+      }
+    }
   }
 }
 ```
 
-The same model spells three very different skies. **An Earth day and night**,
-which a shipped `skies.puck` module also offers as a template
+The same clock and key vocabulary spells three very different skies once the
+steps below land their `bodies` and further layer kinds. The
+spellings of those three are targets. **An Earth day and night**, which a
+`skies.puck` module (P18-8) would also offer as a template
 (`skies.earth(latitude: 40deg, day: day)`):
 
 ```puck
 timeline {
   // A day that lasts twenty real minutes and reads as twenty-four hours.
-  clock day { periodSeconds: 20min, spanSeconds: 24h, startSeconds: 7h }
+  clocks [
+    {
+      name: "day",
+      periodSeconds: 20min,
+      spanSeconds: 24h,
+      startSeconds: 7h
+    }
+  ]
 }
 render {
+  lighting {
+    lights [
+      directional(name: "sunLight", weight: 3, shadow: always)
+      directional(name: "moonLight", weight: 0.06, shadow: auto)
+    ]
+  }
   sky {
     bodies [
       {
@@ -5229,7 +6885,7 @@ render {
         shape: disc(size: 0.53deg)
         color: "#FFF1D6"
         intensity: 40
-        light { intensity: 3, shadows: always }        // the penumbra follows the disc's size
+        light: "sunLight"                              // binds a named directional light
       }
       {
         name: "moon"
@@ -5238,19 +6894,20 @@ render {
         litBy ["sun"]
         color: "#DDE4F0"
         intensity: 0.8
-        light { intensity: 0.06 }
+        light: "moonLight"
       }
     ]
     layers [
-      gradient(name: "air")
+      gradient(name: "air", stops: noonStops)
       stars(name: "stars", density: 48, brightness: 1.2, twinkle { share: 0.3, depth: 0.5, rate: 1hz })
       clouds(name: "cumulus", coverage: 0.35, scale: 2, drift: [0.02, 0.005], tier: medium)
     ]
-    keys(clock: day) [
-      { at: 0h,      layers { air { stops: nightStops }, stars { opacity: 1 } } }
-      { at: 5.5h, layers { air { stops: dawnStops },  stars { opacity: 0 } } }
-      { at: 12h,     layers { air { stops: noonStops } } }
-      { at: 19h,     layers { air { stops: duskStops },  stars { opacity: 0.4 } } }
+    clock: day
+    keys [
+      { at: 0h, layers { air: gradient(stops: nightStops), stars: stars(opacity: 1) } }
+      { at: 5.5h, layers { air: gradient(stops: dawnStops), stars: stars(opacity: 0) } }
+      { at: 12h, layers { air: gradient(stops: noonStops) } }
+      { at: 19h, layers { air: gradient(stops: duskStops), stars: stars(opacity: 0.4) } }
     ]
   }
   atmosphere {
@@ -5264,16 +6921,24 @@ render {
 
 ```puck
 timeline {
-  clock ember { periodSeconds: 9min }
-  clock pale  { periodSeconds: 14min, startSeconds: 5min }
+  clocks [
+    { name: "ember", periodSeconds: 9min }
+    { name: "pale", periodSeconds: 14min, startSeconds: 5min }
+  ]
 }
 render {
+  lighting {
+    lights [
+      directional(name: "emberLight", weight: 2.2, shadow: always)
+      directional(name: "paleLight", weight: 1.4, shadow: auto)
+    ]
+  }
   sky {
     bodies [
       { name: "ember", motion: orbit(clock: ember, rise: 80deg, tilt: 20deg), shape: disc(size: 1.4deg),
-        color: "#FF8A3D", intensity: 30, light { intensity: 2.2, shadows: always } }
+        color: "#FF8A3D", intensity: 30, light: "emberLight" }
       { name: "pale", motion: orbit(clock: pale, rise: 110deg, tilt: 35deg), shape: disc(size: 0.4deg),
-        color: "#CFE3FF", intensity: 60, light { intensity: 1.4, shadows: auto } }
+        color: "#CFE3FF", intensity: 60, light: "paleLight" }
     ]
     layers [
       gradient(name: "dust", stops [ { elevation: -90deg, color: "#5A3A22" } { elevation: 0deg, color: "#E8B37A" } { elevation: 90deg, color: "#9C6B4E" } ])
@@ -5289,22 +6954,32 @@ ringed giant that is a far SDF prototype, and a hole in the zenith onto another
 world:
 
 ```puck
-timeline { clock pulse { periodSeconds: 6s } }
+timeline {
+  clocks [ { name: "pulse", periodSeconds: 6s } ]
+}
 render {
+  lighting {
+    lights [directional(name: "starLight", weight: 1.8, shadow: always)]
+  }
   sky {
     frame { up: [0.2, 0.95, 0.1] }
     bodies [
       { name: "star", direction { azimuth: 200deg, elevation: 35deg }, shape: disc(size: 2deg),
-        color: "#B9A8FF", intensity: 20, light { intensity: 1.8, shadows: always } }
+        color: "#B9A8FF", intensity: 20, light: "starLight" }
       { name: "giant", direction { azimuth: 40deg, elevation: 25deg }, shape: far(prototype: "gasGiant", size: 18deg),
         rings { inner: 1.4, outer: 2.3, tilt: 12deg, color: "#E8D2A8", opacity: 0.7 }, litBy ["star"] }
     ]
     layers [
       pattern(name: "void", checker { cells: 24 }, colors ["#101018", "#1A1030"])
-      aurora(name: "curtains", color: "#3DFFB0", intensity: keys(clock: pulse) [ { at: 0s, value: 1 } { at: 3s, value: 3 } ],
+      aurora(name: "curtains", color: "#3DFFB0", intensity: 1,
         mask { elevation [10deg, 60deg] })
       view(name: "elsewhere", world: "rulepush", anchor: "lobby", mask { cone { toward: [0, 1, 0], radius: 20deg } },
         scale: 0.5, refresh: 2)
+    ]
+    clock: pulse
+    keys [
+      { at: 0s, layers { curtains: aurora(intensity: 1) } }
+      { at: 3s, layers { curtains: aurora(intensity: 3) } }
     ]
   }
 }
@@ -5312,60 +6987,94 @@ render {
 
 Every value above can be changed while the World runs, by `world.row.set`,
 by a `.puck` save with `world.watch` on, or by the editor's inspector (see the
-last build step), and lands on the next frame. The spellings above are the
-target; each step settles its own vocabulary rows in
-`src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
+last build step), and lands on the next frame. The `atmosphere` spelling is
+shipped; the `bodies`, `frame` and further layer spellings are targets; each step settles its own vocabulary
+rows in `src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
 
 **Decisions.**
 
 - **No privileged sun.** Bodies are a list of any length up to a capacity, and
-  nothing in the pipeline assumes one key light. A body casts light only
-  through its `light`, a directional whose direction is the body's, whose
-  colour defaults to the body's colour, and whose penumbra defaults to the
+  nothing in the target pipeline assumes one key light. A body casts light only
+  through its `light` binding to a named directional whose direction is the
+  body's, whose colour defaults to the body's colour, and whose penumbra defaults to the
   body's angular radius. The disc is tinted by that colour. A body with no light
-  is scenery. A world with no light-casting body has no directional light; its
-  surfaces are lit by the sky's ambient and any point lights. The fallback sun
+  is scenery. Directionals remain independently authored lights; a body only
+  binds one. A world with no directional lights has surfaces lit by the sky's
+  ambient and any point lights. The fallback sun
   (`DefaultSunDirection`, `SdfSunDirection`, the pinned directional) is
   deleted. Every kernel read of "the sun" (the clouds' lighting, the unbound
   screen glass's tint, `sdfMaterialShade`'s light direction) walks the lights
   through `sdfLightResponse` instead, or reads the sky's ambient.
-- **Many shadowed lights, shadowed by slot.** Every light-casting body has
-  `shadows: always`, `auto` (the default) or `never`. At each delivered engine
+- **Many shadowed lights, shadowed by slot.** A directional light has
+  `shadow: always`, `auto` or `never` (the default); `always` and `auto`
+  require a unique `name`. The allocator's identity is that name, never the
+  list index or a body's name. A future body binds a light and becomes a
+  candidate through that light. At each delivered engine
   tick (the mirror's integer tick, never a frame and never the presented
-  fraction) the host fills up to K shadow slots: `always` bodies first, in list
-  order, then `auto` bodies by their luminance resolved at that tick, with ties
-  broken by list order.
+  fraction) the host fills up to K shadow slots: `always` lights first, then
+  `auto` lights by their luminance resolved from tick-state colour and weight.
+  At equal priority (the same mode and, for auto, luminance), a current slot
+  holder precedes a non-holder. List order breaks ties among non-holders and
+  on a fresh selection. A pure reorder keeps the holder; selected names retain
+  their existing slots when ranking or authored order changes.
   The rest light unshadowed, scaled by ambient occlusion as an unshadowed
   directional is today. K comes from the tier: `low` 0 (today's floor already
-  turns shadows off), `medium` 1, `high` 2, and the lever allows up to 4. The
-  validator refuses more `always` bodies than 4. The shadow stage loops over the
-  slots, one gather and one march per slot, so its march steps scale with K and
-  are counted per slot. The visibility record's K row packs four 8-bit
-  visibilities into its one word, so the record keeps sixteen words.
+  turns shadows off), `medium` 1, `high` 2, with a maximum of 4. These current
+  preset rows are retained by P18-14's counted component comparison; that
+  comparison does not claim an entire preset frame's ceiling. The boot row
+  defaults to K = 1, F = 0,
+  zero fade ticks and instant overflow, with the named pinned sun as an
+  `always` candidate when lights are unauthored. Applying a preset changes its
+  four shadow-policy fields together. The host computes and reports the full
+  selection in `SdfLights.ShadowSlots`. The shadow stage performs one gather
+  and one march per occupied stable slot and active incoming slot, counted
+  per slot. Four 8-bit stable visibilities pack into the K row's one word,
+  within the twenty-four-word record, including the indirect receiver certificate.
 - **A shadow slot changes hands by a crossfade on the tick.** A crossing is
   detected at a tick boundary: the slot assignment computed at a delivered tick
   differs from the one at the tick before it, both from tick-state luminance.
-  The body losing a slot keeps it while the body gaining it marches in a fade
-  slot, and the two visibilities blend by the fade weight
-  `(presented tick − crossing tick) / fade ticks`, clamped to one. The weight is
+  The light losing a slot keeps it while the light gaining it occupies a fade
+  slot. Progress is `(presented tick − crossing tick) / fade ticks`, clamped
+  to [0, 1]. Each light keeps its own radiance and shadow visibility: the
+  outgoing light's occlusion deficit (`1 − visibility`) scales by
+  `1 − progress`, and the incoming light's deficit scales by `progress`.
+  Neither radiance nor the two visibilities are blended together. Progress is
   a function of the presented tick alone, never of frames rendered, so the N
   frames a `converge` capture composes at one frozen tick carry identical
   weights, and a replay that delivers the same ticks detects the same crossings
-  at the same ticks. A discontinuity in delivered ticks (a seek, a clock
-  scrubbed by a lever, a reload) completes every fade at once. The fade length
-  is a tier value in engine ticks, which a tier may set to `instant`. An
-  `always` body still pins its slot and never fades out. The reason is that an
+  at the same ticks. A seek, reload, structural revision, backward delivery or
+  policy change installs without fades. Selected names keep the slots they
+  held; new names fill freed slots in rank order. The fade length
+  is the tier's `shadowFadeTicks` value in engine ticks; zero means instant. An
+  `always` light still pins its slot while selected. The reason is that an
   artist sees a pop as a bug in their sky, and a fade slot's march is a small,
   counted price.
-- **Fades are bounded.** At most F fades run at once, a tier value: `low` has
-  K = 0 and F = 0, `medium` K = 1 and F = 1, `high` K = 2 and F = 1, and the
-  lever allows K up to 4 and F up to 2. A crossing detected while F fades run
-  waits in a queue, and starts when a fade ends if the assignment it would make
-  still differs from the current one; a tier may instead resolve an overflowing
-  crossing instantly (`fadeOverflow: queue | instant`, `queue` by default). The
-  shadow stage therefore marches at most K + F slots on any frame, and the
-  ceilings file records K + F per tier: 0 at `low`, 2 at `medium`, 3 at
-  `high`.
+- **Fades are bounded.** `shadowLights` gives K, up to 4, and
+  `shadowFadeSlots` gives F, up to 2. With `shadowOverflow: queue`, a crossing
+  waits while its slot has a handoff (`SlotInHandoff`), its desired identity
+  participates in another handoff (`IdentityInUse`), or all fade entries are
+  busy (`FadeCapacity`). The allocator recomputes current targets only at
+  delivered tick boundaries and starts a still-needed crossing at the first
+  delivered tick when its blocker clears. Matching targets queued at the
+  previous delivery take free fade capacity before fresh crossings, oldest
+  first, with slot index breaking equal-age ties. With `shadowOverflow: instant`,
+  overlap or exhausted capacity releases all old participants and installs
+  the desired owner atomically in the same tick. F = 0 or zero fade duration
+  also makes a crossing instant. No presented frame of an instant crossing
+  holds both owners or neither. A seek, reload,
+  structural revision, backward delivery or policy change installs without
+  fading and keeps surviving selected names in their held slots. CPU handoffs
+  use fixed current and prior records, each
+  32 bytes per fade slot, with integer crossing ticks and durations. Reading
+  computes progress from the presented tick without advancing the allocator
+  or allocating. `MarchSlots` is the stable count plus the active handoff
+  count, at most K + F. The shadow-stage loop counts every active march and applies the per-light
+  deficits above. Shipped tiers use F = 0, zero `shadowFadeTicks` and
+  `shadowOverflow: instant`; P18-14 chooses the final rows from counted work.
+  Loading checks every reachable policy, including `auto`, and refuses K > 0
+  with F = 0 and positive fade ticks, positive F with zero fade ticks, and a
+  queue policy that cannot progress. K = F = 0, fade ticks 0 and instant is
+  valid.
 - **An open, ordered layer stack.** Layers composite in the order they are
   authored, each by its blend mode (`over`, `add`, `multiply`, `screen`), and a
   kind may appear more than once. Kinds are an extensible set: a kind is a
@@ -5421,30 +7130,30 @@ target; each step settles its own vocabulary rows in
   the environment map in the pixel's direction. The silhouette edge blends
   toward the full sky colour at the pixel, because `composite` has it, rather
   than the gradient alone.
-- **Environment lighting samples the same sky.** `sky.environment` renders the
-  lighting-visible layers, bodies excluded, into a 64 by 64 octahedral map and
-  reduces it to nine second-order spherical-harmonic coefficients per colour
-  channel, once per change of a lighting-visible value (a value of a layer the
-  environment map draws). A change whose irradiance differs from the rendered
+- **Environment lighting samples the same sky.** The residency's `environment`
+  pass renders the lighting-visible layers, bodies excluded, into a 64 by 64
+  octahedral map and reduces it to nine second-order spherical-harmonic
+  coefficients per colour channel, once per change of a lighting-visible value
+  (a value of a layer the environment map draws). A change whose irradiance differs from the rendered
   coefficients by less than one 8-bit display code in every direction counts as
   no change, so a slow day cycle re-lights in display-code steps rather than on
   every tick; the skipped re-renders are counted. Ambient is the
   harmonic irradiance at the normal, scaled by `environment.ambient`. A
   reflection samples the map and adds the `panel` layers analytically along the
-  reflected direction, widened by roughness as `worldStudioReflection` does
-  today, so a studio keeps its sharp softboxes. A light-casting body keeps its
+  reflected direction, widened by roughness, so a studio keeps sharp highlights. A light-casting body keeps its
   specular in the light's lobe and is left out of the reflection lookup, so it
   is counted once. The hemisphere light kind, the horizon rows and the
   softboxes section are deleted: a studio look is a dark sky with
   lighting-only `panel` and `gradient` layers.
 - **The air composites after the surface.** Fog, height fog, haze, the medium
   and the bounded media run in `composite`, reading each pixel's ray distance
-  from the record (after P15-4, from the resolved surface). An atmosphere edit
+  from the record in a native view and from the surface transport `resolve`
+  writes in a reduced or temporal one. An atmosphere edit
   or a moving volume re-runs `composite` alone. Bounded media and the sky's
   cloud layer stay two kinds of thing, a position function in a box and a
   direction function at infinity, but share the one noise module
-  (`field/sdf-noise.hlsli`, where the 2D lattice noise and the fractal sum move),
-  the density shaping (coverage and softness), the clock and the lighting by
+  (`field/sdf-noise.hlsli`, which holds the periodic 2D and 3D noise and where
+  the sky's fractal sum moves), the density shaping (coverage and softness), the clock and the lighting by
   bodies.
 - **A pass stands when everything it reads stands.** The one view signature
   splits into a signature per pass group. The march group (mask, beam,
@@ -5463,8 +7172,8 @@ target; each step settles its own vocabulary rows in
     a body's disc, the atmosphere, the media). It runs `sky` and `composite`;
     nothing is marched, shaded or reconstructed.
   - **Lighting-visible**: a value the environment map draws, or a light's
-    colour or intensity. It runs `sky.environment` (unless the display-code
-    rule above counts it unchanged), `views`, `resolve` when reconstruction is
+    colour or intensity. It runs the residency's `environment` pass (unless the
+    display-code rule above counts it unchanged), `views`, `resolve` when reconstruction is
     on, `sky` and `composite`. The march group and `shadow` stand. With
     reconstruction on, `resolve` blends the re-shaded image into history
     through its rectification without new jitter samples; the identity and
@@ -5526,7 +7235,11 @@ target; each step settles its own vocabulary rows in
   drawn by `WorldSessionSceneEmitter` over its endpoint's mirror, the dressing
   a `session$<screen>` view and a `WorldRoutedScene` already share, from a
   fixed anchor in it, turned with the viewer's camera and never translated,
-  through S27's per-endpoint residency. It is dressed at reduced cost: its own render
+  using the endpoint-sharing path for eligible views (`WorldRoutedScene`) or a
+  separate disclosed session residency otherwise. The existing binder shares
+  only routed seats and fully disclosed window projections onto a live local
+  endpoint; the infinity view's routing remains part of this step.
+  It is dressed at reduced cost: its own render
   scale (`scale`), a refresh divisor (`refresh`), shadows and ambient occlusion
   off unless its levers turn them on, and a far distance of its own. It renders
   only while some view's previous frame showed it on an uncovered pixel, and
@@ -5565,21 +7278,22 @@ target; each step settles its own vocabulary rows in
   are composited after `resolve`, so jitter never touches a star, a drifting
   cloud never ghosts, and a visual-only change neither resets nor dirties any
   history: a converged view keeps standing while its sky moves, because only
-  `sky` and `composite` run. Bounded media move out of the views stage with
-  this, so P15's reactivity image covers screens and animated emission only.
+  `sky` and `composite` run. Bounded media are the composite's, so P15's
+  reactivity image covers screens and animated emission only.
 
 **Build sequence.** Each step lands alone, in order, with its counted rows and
 its re-recorded parity stations or canaries in the same change. Every step adds
 the read-back of what it decides (`world.lighting` for the sky, air and lights;
 `world.timeline` for clocks and keys) and folds its cost into `world.budget`.
 
-1. **P18-1, a baseline to measure against.** Today's sky, held still before
-   anything moves.
+1. **P18-1, a baseline to measure against.** The sky before anything moves,
+   held still.
    - Landed: four sky parity captures, the discriminating `sky-layers` and
      `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
      workloads. Both backends pass with debug layers and agree on the counted
      baseline. The still workload can skip a node entirely; an absent sample
-     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
+     is not a measured zero. Each workload's ceilings are recorded on the RTX 2060
+     at the floor tier, beside it as `sky-<workload>.ceilings.json`.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
@@ -5590,16 +7304,17 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
-     `tests/Puck.World.Canaries`, `src/Puck.Cli/Canary/CanaryCeilings.cs`.
+     `tests/Puck.World.Canaries`, `CanaryCeilings.json`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
-     tier, and show today's costs: every pass re-rendering on a drift frame.
+     tier, and show the costs before the cadence changes: every pass re-rendering on a
+     drift frame.
    - Counted-cost gate: nothing moves; this step records the rows every later
      step's win is read against.
 2. **P18-2, one clock family on the tick.** Landed.
    - Delivers: the `timeline` section with tick and state-row clocks, its
-     validator and its schema (optional, as every section is, so no shipped
-     world carries it until one names a clock); the presented tick
+     validator and its schema (optional, as every section is, so a world carries it
+     only when it names a clock); the presented tick
      (`PresentedTick`, an unsigned 64-bit whole tick and a fraction) as
      `SdfFrame.Clock`, taken from the state mirror the frame's bound state
      presents at (`WorldStateMirror.Presented`), so the pass block and the
@@ -5609,8 +7324,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      noise and the sky's cloud noise on a lattice wrapped to
      `SdfVolume.NoisePeriodCells`, so an offset reduced by that period joins
      without a seam; routed and session scenes on their own endpoint's clock;
-     the refusal of a `render.cycle` key that moves a cloud rate, since a state
-     row can jump between two ticks; `min` and `h` in the `.puck` units; and
+     the refusal of a cloud rate keyed on a state clock or bound to a state row,
+     since a state row can jump between two ticks; `min` and `h` in the `.puck` units; and
      `world.timeline`, which echoes each clock's source, period and phase.
    - Deletes: `SdfFrame.SampleIndex` and its `(uint)` cast, the `sampleIndex`
      and `sceneTime` pass values, `SdfFrameBlock`'s `elapsed × rate`
@@ -5623,18 +7338,49 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      the tick crosses 2^32 (red legs: a 32-bit clock differs);
      `SdfSkyClockLawTests` hold the twinkle phase, the cloud offsets across 2^32
      and a medium's motion to the tick (red leg: no star, no phase);
-     `WorldTimelineLawTests` hold every clock refusal and the cycle-rate
-     refusal with a control; `WorldRoutedPresentationLawTests` hold a routed
+     `WorldTimelineLawTests` hold every clock refusal and the keyed-rate
+     refusals with a control; `WorldRoutedPresentationLawTests` hold a routed
      and a session scene to their endpoint's presented tick, never the host's;
      the `sky-clock` canary holds the view one second apart equal and three
      tenths apart different on both backends (red leg: a pulse at 1.25 Hz);
      parity holds every station unchanged.
    - Counted-cost gate: a still view with a visible volume renders when the
      presented tick moves its motion, never on a frame whose tick has not moved;
-     the pass block keeps its 1,120 bytes, and the written pass-block bytes per
-     pass fall from 1,048 to 1,024 (`world-counters`).
+     P18-4 holds the current pass-block size and table bindings.
 3. **P18-3, keys on clocks, for every presentation value.**
-   - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
+   - Landed: the keys substrate. Every colour, scalar, angle, direction and
+     vector a document binds may be keyed on a `timeline` clock
+     (`{ clock, keys [ { at, value, ease } ] }`, a block in `.puck` whose clock
+     is a declared name written bare, with `at` a time that takes `s`, `min`
+     and `h`); the light and sky fields became
+     `BindableScalar`, `BindableAngle`, `BindableDirection`,
+     `BindableVector2` (cloud drift and shear) and `BindableVector3` (point and
+     occluder positions). `render.lighting` and `render.sky` key whole through
+     `clock` and `keys`, each key's partial record written as its kind under
+     the name it addresses (`layers { haze: fog(density: 0) }`), the kind
+     checked against the named layer's, so the record stays typed;
+     `WorldRenderKeys.Expand` turns a section key into the value keys of the
+     fields it states, one key track per field. `WorldKeyResolver` in
+     `Puck.World.Schema` is the one resolver; the validator calls it with no
+     source, and the state mirror, which registers each state clock's row,
+     with its own. Cloud rates and the twinkle's rate integrate in closed form
+     on the host, so the environment rows carry offsets and a phase. The
+     environment and the theme re-resolve only when a clock a key reads or a
+     slot they bind moves; `world.timeline` echoes the mirror's keyed
+     resolutions. The courtyard, the parity world, the sky-cycle canary and
+     the counted sky-cycle workload key on a `skyMode` state clock. The
+     panel layers replace the softboxes in P18-9; their colour, intensity and blur
+     use the same key resolver, and a
+     clock keyed on another clock is not built. Values that must hold an order
+     (a gradient's stop elevations, an ink band's ends) are judged over every
+     phase of their one clock: the union of their key times partitions it,
+     every ease moves a value monotonically between two key times, and a pair
+     is refused (`JudgeAscending`) where its values may meet between keys as
+     well as at them; an ordered value binds no state row. A presentation-tier
+     projection carries the timeline's tick clocks, which a recipient
+     evaluates at the tick it presents, and each state clock a value keys on as
+     an anchored clock (below).
+   - Delivers: the keyed form of every bindable value (`{ clock, keys [ … ] }`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
      refusal of keys on structure, the one pure resolver in
@@ -5657,35 +7403,93 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
-   - Remote presentation decision: use the existing tier-governed
-     `WorldProjectionDocument`, with no side metadata or held-value history.
-     Tick-only clock closures evaluate locally. For a disclosed state clock,
-     send an anchor whenever the client's prediction at an authoritative tick
-     differs from the authority's phase. The anchor carries its tick, phase
-     and the current rate for a proven affine span, or rate zero otherwise.
-     Rate changes, quantized advances, staircases, nonlinear rows and seeks
-     all follow this one rule. Other resolved presentation values travel as
-     per-recipient deltas only when changed. Every used dependency must pass
-     the existing disclosure boundary; a hidden source refuses before any
-     derived value is emitted. A late view seeds invalid fields from the
-     load-validated authored initial value (or clamps a closed range), so
-     early and late views may hold different values while invalid.
-   - Projection proof is a separate unimplemented slice after the keys
-     substrate. Authority and recipient must call the same prediction function
-     from a shared package, bit-exact on the u64 phase. A mixed affine,
-     staircase, quantized, nonlinear and seek trace must match the host phase
-     at every tick and produce zero spurious anchors. A steady state sends
-     nothing; a late join hydrates the exact current phase; a hidden
-     dependency sends no derived value. Count the last anchor per recipient
-     per clock as a memory row, and release it when that recipient leaves or
-     loses disclosure. Before merge, count bytes per recipient per second for
-     a steady sky, a busy sky and a nonlinear clock that re-anchors every
-     tick, plus full late-join hydration. Each law needs an actual red leg.
+   - Landed: remote presentation. A presentation-tier recipient is fed by its
+     own `WorldProjectionFeed` through the tier-governed
+     `WorldProjectionDocument`, with no side metadata or held-value history;
+     every projection and delta travels as compact canonical JSON
+     (`WorldProjection.SerializeCompact`), as does a replica's definition
+     (`WorldDefinitionSerialization.SerializeCompact`), and the canonical
+     indented forms stay for what hashes, stores or displays a document. Delivering prototypes by
+     content reference is an [open item](open-items.md#cross-plan-maintenance).
+     Tick-only clock closures evaluate locally. A disclosed state clock
+     crosses as an anchored clock (`WorldClock.Anchor`, refused in an authored
+     document) carrying a `WorldClockAnchor`: its engine tick, its phase as a
+     `u64` share of a turn (a Fixed row's fractional bits, exactly), and the
+     phase one authoritative tick adds over a span `WorldClockAnchors.Read`
+     proves affine (a Fixed slot whose one trait is an advance summing whole
+     raw units every tick, which the next tick confirms), or rate zero
+     otherwise. Authority and recipient call the one prediction in
+     `Puck.World.Schema` (`WorldClockAnchor.Predict`, exact on the `u64` phase
+     at every authoritative tick), and `WorldClockAnchorLedger` sends an anchor
+     exactly when the recipient's prediction at an authoritative tick misses
+     the authority's phase: rate changes, quantized advances, staircases,
+     eased rows and seeks all follow that one rule, checked at every
+     authoritative tick, sampled or not. Other resolved values travel as
+     per-recipient deltas of the projection members that changed
+     (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
+     side), and only when one changed; a delta of values alone reaches the
+     recipient as a state delivery. An observed cell carries its stored
+     value with the value-over-time trait that governs it and the clock it
+     reads, so the recipient advances, turns and eases it itself, and the
+     per-tick step sends anchors alone. A change to
+     observed row order or cell layout installs the definition so bindings
+     resolve their row ordinals again. A session's state mirror uses a delta's
+     stamped clock independently of the sampled body snapshots. Every state clock a value keys on must
+     pass the disclosure boundary for its row's slot, and every bindable bound
+     to a state cell for that cell (every cell of its row for a per-body
+     read), or the composition refuses by name before any derived value is
+     emitted; a row a presented bindable binds crosses as an observation of
+     the cells the recipient may read, policy or not, so a bound value is
+     never presented at its fallback. An observed row carries its envelope,
+     and a `.$target` read answers an eased cell's stored target. Only a
+     disclosure refusal (`WorldDisclosureException`) detaches a federation
+     stream by name; any other composition failure is a fault. A late view hydrates the
+     exact current phase; a clock whose row holds no number seeds a late view
+     from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
+     clamped into the row's closed envelope, while an early view keeps its
+     last anchor, so the two may differ while the clock reads none. Anchors
+     coalesce: the ledger keeps only the last one sent, so a recipient presents
+     the latest authoritative tick it was told about and never seeks backward
+     through anchors it was not sent. Presentation interpolates only forward
+     from the anchor it holds; a frame before the anchor's tick presents the
+     anchor's phase, `WorldClockAnchor.Predict` refuses an earlier tick by
+     name, and an authority restored before a sent anchor re-anchors. The last
+     anchor per recipient per clock is a counted row (`world.projection`
+     anchor rows retained and released), released when the recipient leaves
+     or loses disclosure, when a projection stops carrying the clock, or when
+     its stream detaches, without waiting for the socket to drain.
+     `ProjectionAnchorLawTests` hold a mixed affine,
+     quantized, staircase, eased and seek trace to the host phase at every
+     tick with no spurious anchor, a steady sky to zero bytes, a late join to
+     the exact phase, a hidden clock to a refusal, the anchor rows to their
+     release, an eased binding to the authority's presented value and its
+     target, advancing and cycling observations to the authority's values
+     with no composition or byte sent, a composition that does not flatten
+     to a fault rather than a disclosure detach, a coalesced anchor to
+     forward-only presentation, and the
+     courtyard's and the parity world's skies to the
+     authority's for a presentation-tier recipient; the federation wire
+     carries a delta as its own `ProjectionDelta` frame.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.
 4. **P18-4, the sky block, the lights table and generated decoders.** The
    environment leaves the pass blocks, and nothing it draws changes.
+   - Landed: the lights table (`SdfLight` records),
+     the sky block (`SdfSkyBlock`) and the open layer table (`SdfSkyLayer`) are World-group regions whose HLSL structs
+     `puck shaders generate` writes from the C# types; `SdfLights` and `SdfSky`
+     hold the authored values and pack the records with their host bakes (the
+     disc's direction and exponent, the light the clouds are lit by). The pass
+     block keeps the light count, shadow slot table and counts, and curvature
+     shading, which the surface pass reads, and is 512 bytes with S60b's slot
+     fields. The lights table is
+     referenced by shadow and views; sky, composite and views read the block and
+     layers, resolve reads fog, and views reads the shared coefficients. A star or cloud seed is exact now: the old
+     float rows rounded a seed past 2^24. The resolve pass declares the same
+     World group, since it binds the residency's one World set. Parity holds
+     every station under its contract on both backends; on Direct3D 12 two
+     pixels (one each at the converge and vocabulary stations) move by one code,
+     and Vulkan's captures are unchanged.
    - Delivers: the lights as a typed table (a World-group region of generated
      structs), the sky as a typed block (frame, layers, bodies, phases, the
      environment coefficients), both written as regions that owe only changed
@@ -5707,54 +7511,144 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      byte; `puck shaders generate --check` passes.
    - Counted-cost gate: the win is block size and binding, not upload bytes.
      Every region already writes only the words that changed, so the new
-     tables upload what changed, as the rest do. The generated pass block
-     shrinks from 1,120 bytes to about 272, so the constant data the host writes
-     into the ten pass blocks of a view each frame falls from 11,200 bytes to
-     about 2,720, and each dispatch binds a block a quarter of the size. The sky
-     group is bound by 3 of the 10 passes (`views`, `sky`, `composite`) and the
-     lights table by 2 (`shadow`, `views`). A law holds the block size and each
-     pass's bound groups to the generated interface.
-5. **P18-5, the sky once, and a composite last.**
+     tables upload what changed, as the rest do. The generated world pass block
+     is 512 bytes with S60b's slot fields, instead of embedding the environment
+     in the former 1,296-byte block. Sky and resolve use their own interfaces.
+     The light table is read by `shadow` and `views`; the sky block and layers
+     serve `sky`, `composite` and `views`, with fog density also read by resolve. A law holds the block size
+     and each kernel's table bindings to the generated interface.
+5. **P18-5, the sky once, and a composite last.** Landed.
+   - Landed: views shades hits only into the lit image (`SdfWorldPackage.Parts.Lit`,
+     premultiplied by coverage and by each hit's fog transmittance, coverage in
+     alpha, a miss uncovered); `sky`
+     (`passes/sdf-sky-runs.comp.hlsl`) writes the gradient's offset and the
+     cloud run's scale and offset as half-float images on the render grid where a
+     pixel or a neighbour of views' color is not wholly covered, and marks the
+     texels it evaluated; `composite` (`passes/sdf-composite.comp.hlsl`) adds the
+     fog's in-scatter of the gradient by the surface transport's weight, composes
+     the runs beneath the lit image by its coverage (filtered from the evaluated
+     texels, the disc and stars evaluated at the pixel), and integrates the
+     bounded media over the surface share to its transport's distance and over
+     the sky share to the far distance. Both read the sky interface
+     (`SdfWorldInterfaces.SkyParameters`) and record through `SdfSkyRecorder`. A
+     native view reads views' lit image and visibility records, current only
+     inside the dispatch box; a reduced or temporal view's resolve writes the lit
+     image and each pixel's surface transport at the output extent, its history
+     holding coverage and transport with color and never the sky.
+     The surface transport is two numbers a render sample, computed from the
+     sample's own ray distance and premultiplied by its coverage: the fog's
+     in-scatter weight, coverage times one minus transmittance, and coverage
+     over distance. The resolve reads each transport tap beside its color tap
+     over one footprint (`reconstruction.hlsli`'s footprint and combine), and
+     accumulates it with the Gaussian and history weights color has, so a
+     pixel's fog is its samples' coverage-weighted fog exactly. Media clip at
+     the harmonic mean of the samples' distances, exact for a footprint of one
+     surface; a medium lying between two surfaces of one footprint is the one
+     case not reproduced sample by sample. A pixel the resolve copies whole
+     from one render sample, as every pixel of a temporal epoch's first frame at
+     native scale is, carries the sample's ray distance itself in its transport
+     word, and the composite derives its transport at the one `precise` site a
+     native pixel reaches, so that frame equals the spatial frame to the bit.
+     The CPU reference is `SdfSurfaceTransport` (`SdfSurfaceTransportLawTests`). The default look
+     is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
+     reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
+     kernel-counted kind beside the march steps and texels written; the field
+     runs' texels are the `sky` pass's plain row, and each evaluated layer has
+     its detail row through P18-7's counter foundation. A pixel covered with all its neighbours reads
+     zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
+     Composite counts each in-place field fallback; its fog evaluates no sky
+     (`SdfSkySamplingLawTests`).
+   - Landed, the shared environment (extended by P18-8 and P18-9): the
+     residency's upload renders a 64 × 64 octahedral map and reduces its
+     lighting-visible stack to nine second-order SH coefficients. Every view
+     reads the same map for fog and reflection and the same coefficients for
+     ambient. Bodies remain outside it. Queue barriers order the views' reads
+     before its next writes. P18-9 owns the two map planes, the display-code
+     refresh rule, consumer gains and candidate-projection counters; see
+     [the environment map](../rendering/sdf/handbook/frame-rendering.md#the-environment-map)
+     for the current payload and counted work. Device laws, canary evidence,
+     parity and ceilings are renewed under P18-9 for its changed lighting.
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and
      offset images; `composite` walking the runs in the authored order (today's
      gradient, stars, disc and clouds are already three runs: a field run, a
      point run and a field run), then the lit image by its coverage, the fog
-     and the bounded media, reading the record's ray distance at the render
-     extent before P15-4 and the resolved surface after it; the default look in
-     data.
+     and the bounded media, reading the record's ray distance in a native view
+     and the resolve's surface transport in a reduced or temporal one; the
+     default look in data.
    - Deletes: the sky pre-pass (`sdf-sky.comp.hlsl`), `skyColor` and both
      `skyGradient` calls in `sdfLightStage`, the media in the sky pre-pass and
      the views stage, and the `SkyEnabled` branch with its pinned HLSL
      gradient; the parity world, the sky station and every canary that pins a
      sky pixel are re-recorded in this change, each move explained.
-   - Touches: `SdfWorldPackage.Fragment`, `passes/`, `shade/sdf-light-stage.hlsli`,
+   - Touches: `SdfWorldPackage.Fragment`, `passes/`, `passes/sdf-light-stage.hlsli`,
      `shade/sdf-sky.hlsli`, `SdfWorldPassRecorder`, `WorldRenderDefaults`,
      `tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
    - Done when: `SdfPassPlanLawTests` plans `sky` and `composite` after `views`;
-     a device law counts zero sky evaluations for a pixel that hits and one for
-     a pixel that misses (red leg: a hit pixel evaluated fails);
+     a device law counts zero field evaluations in the sky pass for a pixel
+     covered with all its neighbours and one for a pixel that misses;
+     a shader law requires the composite's fog and fallback evaluations to count;
+     `SdfSurfaceTransportLawTests` hold a quarter-covered pixel of a two-sample
+     row upscaled to four to its covered share's fog and a medium behind its
+     edge to its sky share, on the CPU reference within 1e-5 a channel (red leg:
+     the distance of the one sample under the pixel's center fails both);
      `SkyRunCompositionLawTests` hold the run composition to one ordered
      evaluation of the whole stack, on a CPU reference within a stated float
      tolerance, for stars beneath clouds and for a mixed stack (`over`, `add`,
      `multiply` and `screen` field layers interleaved with point layers) (red
      leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
-     pixel; parity holds on both backends after its explained re-record.
-   - Counted-cost gate: `gpu.sky.evaluations` falls from (1 + L) × P to about
-     (1 − h) × P per view (see the expected wins), and every hit reads zero;
-     each field run's texels written are a row of their own under `sky`.
+     pixel; parity holds on both backends after its explained re-record. For
+     the environment: `SdfSkyEnvironmentLawTests` hold the texels' solid angles
+     to 4π within 1e-6, a constant sky's coefficients to its colour times
+     √(4π) within 1e-6 and every other under 2e-3 of its colour, the default
+     look's linear gradient to its analytic first two coefficients within 1e-3,
+     a lookup of the default look to the gradient within half a display code in
+     every direction, two lookups a hair either side of a seam of the octahedral
+     fold to within 1e-3 of each other (a texel step, 0.045, with taps clamped
+     to the edge), a refresh two uploads after another to never overwriting the
+     earlier refresh's unread counts, and fog toward a disc fifty times the sky to the gradient
+     within the same bound; `SdfWorldTablesWorkLawTests` hold a still sky to
+     one render, only a gradient move to another, an unfogged sky to none until
+     its fog reads the map, and an installed reload to one more, with the
+     refresh's exact counts; `SdfSkySamplingLawTests` hold the composite's fog
+     to the map with no evaluator and the map's kernel to one counted gradient
+     evaluation a texel and no body; `SdfSkyEnvironmentDeviceLawTests` hold
+     both backends' map within a half-float step of the reference, their
+     coefficients within 1e-4 of the reference's projection of it, their
+     counts, and the same bytes on a second run; the `sky-environment` canary
+     holds fog before a bright disc to the gradient's grey, the composite's
+     `gradient` row to no sky evaluation and a still sky's environment pass to
+     skipped.
+   - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
+     evaluations per view, the dilated edge and composite fallbacks at output
+     resolution, the composite's point layers (its `disc` and `stars` rows, one
+     each a sky pixel where the layer is on), and 4,096 in the residency's
+     `environment` pass on the upload that renders the map and none on any
+     other; the composite's fog counts none, so its `gradient` row counts only
+     fallbacks. Each pass reports its own row. The
+     surface transport adds no storage: its word replaces the surface distance's,
+     and the history surface keeps three words by holding the distance and the
+     gathered weight as half floats. An edge pixel whose media reach past its
+     surface integrates them once more, counted in the composite's march steps.
 6. **P18-6, a cadence per pass.**
-   - Landed foundation: the graph can retain private intermediate resources
-     and leave a pass standing while its signature, extent, inputs and outputs
+   - The graph retains private intermediate resources
+     and leaves a pass standing while its signature, extent, inputs and outputs
      remain valid. Standing has its own counted state and no pass work. The
      existing resource tracker preserves the last actual access and restores
      its state when a frame fails before successful submission. Installed cadence
-     metadata is counted in the graph's CPU memory rows. The SDF change
-     classes, sky/composite scheduling and temporal-history integration below
-     remain to be connected and verified.
-   - Delivers: the pass-group signatures, retained fragment resources, the
+     metadata is counted in the graph's CPU memory rows. SDF passes declare
+     geometry, shadow, lighting and visual signatures over their packed inputs.
+     Fragment scratch retains its last queued write across flight slots;
+     disjoint visibility writers preserve predecessor fields and replace their
+     own query tallies. Skipped optional passes forward content identities.
+     Visual changes leave converged lit history and its ring standing, while
+     changed surface inputs restart temporal settling. The residency's `environment` pass
+     refreshes at P18-9's irradiance threshold; its submitted revision joins the lighting
+     signature. Gains and lighting-visible panels join that signature directly; analytic
+     reflections read panels even below the map's threshold.
+   - Delivers: pass-group signatures, retained fragment resources, the
      planner's barriers for a standing pass, the rule that a pass stands only
      when its group signature and its inputs do, and the four change classes
      (visual-only, lighting-visible, shadow direction, geometry or camera),
@@ -5762,64 +7656,255 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Touches: `SdfWorldTables.Cadence.cs`, `SdfWorldPasses`,
      `SdfWorldPassRecorder`, `IRenderGraphPackageRecorder`,
      `src/Puck.Shaders/Pipeline` (retained resources), `RenderGraphRuntime`.
-   - Done when: a law over the fake device drives one change of each class
+   - Checks: `SdfWorldPassesLawTests` drives one change of each class
      over a still camera and holds each frame to exactly its class's
-     dispatches, with the barriers the plan states: a cloud drift, a twinkle, a
-     fog edit and a moving volume to `sky` and `composite`; a keyed light
-     colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
-     on a lighting-visible layer to those and `sky.environment`); an orbiting
+     dispatches, including the retained last-access barriers: a cloud drift, a twinkle, a
+     camera-only gradient edit and a moving volume to `sky` and `composite`; a fog density
+     edit, which each hit's transmittance in the lit image carries, to `views`,
+     `resolve`, `sky` and `composite`; a keyed light
+     colour to `views`, `resolve` when present, `sky` and `composite` (including
+     P18-9's keyed colour on a lighting-visible layer that crosses the irradiance
+     threshold to those and the `environment` pass); an orbiting
      shadowed body to those and `shadow` (red leg:
      a lighting-visible change that skips `views` fails, and a camera move
      runs every pass); `RenderGraphRuntimeLawTests` hold a standing pass's
-     retained output to its last write; a `sky-cadence` canary reads zero march
-     steps on the sky leg's drift frames.
+     retained output to its last write across flight slots. Additional laws hold
+     temporal visual changes, the off-switch, floor-tier dispatches, replaceable
+     query tallies and the value/section-key class read-back.
+     `sky-cadence` declares zero march work on drift frames, with cadence off
+     as its discriminating leg. Its Vulkan and Direct3D 12 runs hold, as do
+     `temporal-standing`'s standing and resumed-work observations. Parity and
+     per-class floor-device counter re-records remain open.
    - Counted-cost gate, per class, against the baseline P18-1 records: a
-     meshless view at the floor tier runs 7 SDF compute dispatches today (`sky`,
-     `mask`, `beam`, `cull-args`, `primary`, `surface`, `views`; `ambient` and
-     `shadow` skip at `low`, and the mesh pass is a draw that a meshless frame
-     skips), and 9 plus the mesh draw at `high`. A visual-only frame runs 2
+     meshless view at the floor tier runs 9 SDF compute dispatches (`mask`,
+     `beam`, `cull-args`, `primary`, `surface`, `views`, `resolve` at the floor
+     tier's reduced scale, `sky`, `composite`; `ambient` and `shadow` skip at
+     `low`, and the mesh pass is a draw that a meshless frame skips), and adds
+     `ambient`, `shadow` and the mesh draw at `high`. A visual-only frame runs 2
      (`sky`, `composite`). A lighting-visible frame runs 3 (`views`, `sky`,
-     `composite`), plus `sky.environment`'s two (the map and its reduction)
-     when it re-renders and `resolve` when reconstruction is on. A
+     `composite`), plus the residency's `environment` pass's two (the map and
+     its reduction) when it re-renders and `resolve` when reconstruction is on. A
      shadow-direction frame adds `shadow` at a tier that shadows. Each class
      records required zeros for the march group, and the visual-only and
      lighting-visible classes for `shadow`.
 7. **P18-7, celestial bodies and many shadowed lights.**
-   - Delivers: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
-     motions (direction, orbit, keys, a state row), light binding,
-     illumination by other bodies, the shadow slots and their tier policy,
-     four packed visibilities in the K row, the shadow stage's loop over
-     slots, the crossfade when a slot changes hands (crossings detected at tick
-     boundaries, weights from the presented tick, at most F fades with the
-     queue or instant overflow, a tier's fade length in ticks, `instant` among
-     them), and `world.lighting`'s slot report (which body holds which slot at
-     this tick, why, and any fade or queued crossing).
-   - Deletes: `WorldRenderSkyLayer.SunDisc`, directional lights authored apart
-     from a body, `worldSunDirection`, `worldSunColor`,
-     `worldShadowPenumbraSlope`, `SdfSunDirection`, `DefaultSunDirection`, the
-     pinned directional and the `ShadowLightIndex` and `SunDiscLightIndex`
-     lanes.
+   - Delivers: S60 supplies `WorldShadowMode` (`shadow: always | auto | never`), named
+     light identities, `WorldShadowAllocator`'s deterministic selection and
+     stable slots, and `WorldQualityPreset`'s `shadowLights`,
+     `shadowFadeSlots`, `shadowFadeTicks` and `shadowOverflow` rows. The same
+     fields seed the boot settings, whose default is K = 1, F = 0, zero fade
+     ticks and instant overflow. With unauthored lights, the named pinned sun
+     is an `always` candidate in slot 0. The low/medium/high rows in
+     `quality.puck` remain K = 0/1/2. A preset applies its four shadow fields
+     as one settings change, never through an invalid intermediate policy.
+     `world.lighting` reports each slot's
+     light and reason (`always`, or `auto` with its rank), active handoffs and
+     queued crossings with their capacity, identity or slot reason. The CPU
+     computes the full K selection and up to F active handoffs; S60b carries
+     that selection unchanged through `SdfLights.ShadowSlots` into the GPU.
+     The frame block carries `shadowSlots`, `shadowSlotCount` and
+     `shadowFadeCount`; the sun disc's implicit binding follows slot 0.
+     Light-table reordering preserves named identities. `always` precedes `auto`; auto ranks by
+     tick-state luminance. At equal priority, current holders beat non-holders,
+     with authored order deciding among non-holders and on a fresh selection.
+     A boot `DeliverDefinition` carries its new definition and revision with
+     the delivery, so reorder detection runs before the install decision.
+     Entries follow names alone: a removed name and a new name at its former
+     table index cross through the normal policy. The retired boolean `shadows`
+     field and
+     one-shadow-light authoring refusal are gone.
+   - CPU fade storage: fixed current and prior handoff records, each 32 bytes
+     per fade slot for F <= 2 (at most 128 bytes of record payload). A record
+     holds outgoing and incoming indices and the stable slot as three
+     32-bit integers, 32-bit state flags, a 64-bit crossing tick and a 64-bit
+     duration. The indices address the interval's bounded CPU table of names;
+     they are never identity or GPU table indices. That table has room for the
+     eight current candidates and up to four held names plus two incoming
+     names that have left the candidates. Its storage is separate from the
+     32-byte handoff payload. Readouts map names to the current light table,
+     using index -1 for a departed name, never inheriting a replacement name's
+     reused index. No unbounded history is retained. Each active readout identifies its
+     outgoing light index, incoming light index, stable slot and progress.
+     Progress is derived only from the presented tick, so reading never
+     advances a handoff and steady reads allocate nothing. At most two active
+     fades require tick subtraction, division and clamping, plus bounded
+     copies across K + F entries. `MarchSlots` is
+     the stable count plus active handoff count, bounded by K + F. Queue
+     targets are recomputed only on tick deliveries. A seek, reload, structural
+     revision, backward delivery or policy change installs with no fades.
+     Names still selected keep their prior held slots; new names take freed
+     slots in rank order. A forward delivered gap alone preserves continuity:
+     a semantic seek must supply an install or revision signal. Session
+     snapshots with neither signal cannot distinguish a seek from a gap.
+   - Overflow policy: `queue` waits for an active handoff in the target slot
+     (`SlotInHandoff`), a desired identity participating in another slot's
+     handoff (`IdentityInUse`), or occupied fade capacity (`FadeCapacity`).
+     The allocator reconsiders only current desired targets at delivered
+     boundaries and starts a still-needed crossing at the first delivered
+     tick its blocker clears. A crossing already queued at the previous
+     delivery, matching both slot and incoming name, gets free fade capacity
+     before a fresh crossing. Older waiting crossings go first; equal ages use
+     slot index. A target that is no longer desired loses its place. This
+     includes an outgoing identity waiting until its existing handoff releases
+     it. `instant` resolves overlapping
+     and capacity-blocked crossings atomically, releasing all old participants
+     before publishing the desired owner. F = 0 or zero duration also chooses
+     instant behavior.
+   - Fade meaning: each light retains its radiance. The shade scales the
+     outgoing light's own occlusion deficit by `1 − progress` and the
+     incoming light's own deficit by `progress`; it never takes a weighted
+     sum of the two visibilities. The CPU publishes these controls and S60b
+     applies them to each light's own visibility in `shade/sdf-light.hlsli`.
+     A directional outside every stable and active incoming slot is unshadowed,
+     scaled by ambient occlusion.
+   - GPU storage: incoming fade visibility uses an R8 texture at
+     F = 1 (1 byte per pixel), an R8G8 texture at F = 2 (2 bytes per pixel),
+     and no texture, bytes or read binding at F = 0. Its memory is counted in
+     `GpuWorkReport` as transient-aliased storage, provisioned by the policy
+     before a handoff and never allocated mid-handoff. Each active handoff's
+     16-byte `SdfShadowHandoff` control record uploads through the counted
+     region path: outgoing light index, incoming light index and stable slot
+     as three 32-bit integers, then the float weight. Its HLSL structure is
+     generated from the C# record. The shadow stage loops over K stable slots
+     and the active incoming slots, with one gather and one march per slot.
+     Stable visibility occupies four 8-bit lanes in the existing K word;
+     neither the record size nor the allocator's decisions change.
+   - GPU pipelines: the boot policy and every authored quality row declare
+     the reachable fade capacities. Each nonzero capacity adds four pipelines:
+     shadow and the full, core and folds shading variants. Worlds whose rows
+     use F = 0 create none of these. A definition edit, a session shadow-policy
+     lever or following another world requests a newly reachable capacity
+     through the background pipeline cache. Readiness holds the previous frame
+     until that policy's shadow and shading pipelines are usable, before the
+     new F replans the graph and its incoming visibility image. Handoffs create
+     no pipelines. Requested variants remain leased for the residency's lifetime.
+   - Remaining: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
+     motions (direction, orbit, keys, a state row), binding to a named light,
+     and illumination by other bodies. Candidates remain light-keyed: a body
+     becomes a candidate through the light it binds. Body appearance and
+     illumination remain separate from the delivered GPU shadow-slot path.
+   - Deletes in the remaining body step: `WorldRenderSkyLayer.SunDisc`,
+     `worldSunDirection`, `SdfSunDirection`, `DefaultSunDirection`, the pinned
+     directional and the disc layer's `SdfSkyDisc.Light` lane. Per-light penumbra
+     remains a property of each shadow-casting directional.
    - Touches: the sky records, `frame/sdf-visibility.hlsli` and
      `SdfWorldPackage` (the K row), `surface/sdf-shadow.hlsli`,
      `surface/sdf-shadow-gather.hlsli`, `shade/sdf-light.hlsli`, the sky's
      point-kind modules, `quality.puck`, `WorldSessionLevers`.
    - Done when: `ShadowSlotLawTests` hold the slot order (red leg: an `auto`
-     body brighter than an `always` one does not take its slot); a crossing of
-     two `auto` bodies to a fade whose weights are a function of the presented
+     light brighter than an `always` one does not take its slot), name identity
+     through a reorder, holder-first ties, surviving slots across resets,
+     ordinary crossings on table-index reuse, instant atomic handoffs, and zero
+     allocations on steady reads. Document-load laws refuse invalid policy
+     combinations, unnamed candidates and the retired boolean field by name.
+     CPU fade laws take a crossing of two `auto` lights to a fade whose
+     weights are a function of the presented
      tick alone, identical on a replay and across the N frames of a `converge`
      capture at one frozen tick (red leg: weights advanced per rendered frame
      differ between two frame rates); a second crossing during a fade at F = 1
-     to the queue, and to an instant swap under `fadeOverflow: instant`; a
-     seek to complete every fade; a device law
-     packs and unpacks four visibilities exactly to 8 bits; a `sky-bodies`
-     canary's binary suns cast two shadows at `high` and one at `medium`,
-     each disc tinted by its light, and a moon lit by two suns shows two lit
-     limbs.
-   - Counted-cost gate: `shadow`'s march steps per slot, at most K + F slots
-     marched on any frame (0 at `low`, 2 at `medium`, 3 at `high`), fade slots'
-     steps only while a fade runs, and required zeros past K + F; at `low`
-     every shadow row is zero, as today.
-8. **P18-8, the open layer stack.**
+     to the queue, and to an instant swap under `shadowOverflow: instant`; a
+     waiting outgoing identity to its crossing at the first delivered tick
+     its handoff releases it; older queued crossings before fresh crossings;
+     a seek to install the current selection without fades while preserving
+     surviving slots. Boot laws exercise definition installation with the real
+     revision flow and the default pinned sun. Preset laws observe one shadow
+     settings change without an invalid intermediate. GPU integration has a
+     CPU packing law and a device law that pack and unpack four visibilities
+     exactly to 8 bits, layout laws for the control upload, and laws for
+     slot-table readers, absent F = 0 storage and per-slot counting. The
+     `shadow-slots` canary observes two marched slots at `high` and one at
+     `medium` over two suns and distinct-shadow geometry. Two disjoint floor
+     regions compare against a shadows-off reference: both suns cast at high,
+     and only the east sun casts at medium. Its discriminating leg selects
+     medium for the first sample, so the high slot 1 and west-sun shadow
+     predicates turn red. The remaining `sky-bodies` canary adds each disc
+     tinted by its light and a moon lit by two suns showing two lit limbs.
+   - Counted-cost gate: the `shadow` pass exposes six slot columns through
+     the existing kernel-counter kind dimension,
+     `gpu.shadow.slot0.steps` through `gpu.shadow.slot5.steps`. Their sum
+     partitions that pass's shadow march steps. At most K + F slots march
+     on any frame, with fade slots' steps only while a fade runs, and required
+     zeros past K + F. The incoming texture's
+     bytes and the 16-byte active controls are counted as specified above;
+     F = 0 has zero incoming-visibility bytes, control uploads and image read
+     bindings. At the current `low`
+     preset every shadow row is zero. Final tier counts remain P18-14's call.
+     The counter ledger also publishes `GpuWorkDetail` rows within a pass:
+     the sky and composite name their layers (`gradient`, `disc`, `stars`,
+     `clouds`), and each detailed pass has a `plain` row for work outside its
+     named details. These rows sum to every pass total. The shadow pass names
+     no detail rows; its slots are the six kinds above. Submission snapshots
+     retain their own labels across frame boundaries; identities and frame-slot
+     buffer capacity grow until the graph is replaced. The ceilings key each
+     count by node, pass, detail and kind, and apply the same device rules and
+     required zeros to detail rows as to pass totals.
+8. **P18-8, the open layer stack.** Implemented, including live panorama
+   publications; the remaining counted qualification is named below.
+   - Landed: the layer record (`SdfSkyLayer`, 192 bytes: kind, blend, detail
+     row, visibility, opacity, mask, mask softness, clock phase, mask band, a
+     unit-quaternion transform and a 128-byte kind payload), a World-group table
+     of `SdfSky.MaxLayers` (eight) records, `sdfSkyLayers`, in the region the
+     stops table held; the sky block (`SdfSkyBlock`, 64 bytes with P18-9's gains) carries the fog,
+     the layer count, the sky's tier, the sky frame's axes and the run structure.
+     A kind is an `ISdfSkyKind` parameter record and one module under
+     `Sdf/sky/kinds/` (`gradient`, `stars`, `clouds`, `aurora`, `noise`,
+     `pattern`, `panorama`, and `disc`, the sun disc's, whose `texture` shape draws
+     a screen's image across the disc), declared once in `SdfSkyKindsHlsl.Kinds`,
+     which `puck shaders generate` writes into `isa/sdf-sky-kinds.hlsli`
+     (constants, each record's struct and its payload decoder) and
+     `sky/sdf-sky-kind-table.hlsli` (the module includes and the evaluation
+     switch); the instruction set's fingerprint covers both, and the module tree
+     gains its `sky` layer. The stack composites in its authored order, a kind as
+     often as authored: the sky pass writes the lowest field run's offset and at
+     most two upper field runs as six half floats each across `skyUpper0` to
+     `skyUpper2` (one image more than the scale and offset pair it replaces), and
+     the composite applies them in order between the point layers it evaluates;
+     the validator refuses a stack whose camera layers cut into a third upper run,
+     and `SdfSky.Pack` writes no entry for it. A panorama and a textured disc
+     sample a declared screen's image through the screens the sky recorder binds
+     beside the views pass, under the lease that pass holds. The sky frame
+     (`render.sky.frame.up`) turns every layer but a disc; each layer's mask
+     (`band` or `cone`, `feather`), `transform` (`turn`, `tilt`) and `clock`
+     (whose phase moves an aurora, a noise field and a pattern) are its own. The
+     environment map draws the layers the lighting sees, but a disc, and
+     re-renders when they, the frame, the tier or an acquired panorama's
+     completed publication changes. The CPU `SdfSkyEnvironment` reference covers
+     procedural kinds and explicitly refuses image-backed panoramas. The
+     environment producer binds the actual acquired images and carries their
+     publication and taint into the finite lighting solve. Each kind takes its reduced form below
+     `high`: clouds one thickness tap and three octaves at `low`, shaded flat, and
+     three octaves at `medium`; stars no twinkle at `low`; an aurora and a noise
+     field fewer octaves. `world.sky-quality low|medium|high` (a session lever),
+     `render.skyQuality` (boot, folded by `world.save`) and the presets' `sky` row
+     in `quality.puck` set the tier; a layer above it writes no entry. The fractal
+     sum lives in `field/sdf-noise.hlsli` (`sdfPeriodicFbm2`, `sdfPeriodicFbm3`),
+     and the star and cloud constants are kind parameters. `skies.puck` holds the
+     `clearDay`, `starryNight`, `polarNight` and `overcast` templates. Detail rows
+     are `SdfSkyDetails`, one set a composition: `run0` to `run2`, `atmosphere`,
+     `indirect` and `indirect-near`, then a row per layer label (its name, or its
+     kind's, `#2` and on for repeats). Identities grow for the composition's
+     lifetime; retired labels keep their zero rows, and completed buffer slots
+     grow beyond the initial 32 rows when needed. The fixed composite order and
+     the one-per-kind rule are gone; fog is the air and appears at most once.
+   - Laws: `SkyLayerTableLawTests` (every kind's packed record through its
+     generated decoder; red: a decoder whose two members trade offsets),
+     `SkyKindTableLawTests` (a fixture kind inserts only its own lines; no pass
+     names a kind), `SkyRunCompositionLawTests` (every kind's class, repeated
+     kinds, a disc between two cloud layers, the run cap),
+     `WorldRenderLightingSkyLawTests` (the stack's resolution, the tier, and the
+     field-run, mask, clock, panorama and fog refusals), the domain rows of the new
+     bindable fields, and `SdfWorkDetailLawTests` and `SdfSkySamplingLawTests`
+     over the counted sites.
+   - Evidence and remaining work: the sky device laws, `sky-layers` and the
+     retained parity stations hold. Both backends distinguish a live panorama's
+     refreshed pixels and environment from its earlier publication. The owned
+     read-epoch image copy also has device red and restored evidence; holding a
+     lease alone does not freeze a live producer's pixels. The new counted rows
+     and their default decision remain open, including the floor-device run.
+     These pixel laws do not supply the driver's register counts needed to
+     choose a light kernel variant.
+     `view` and `far` layer routing belongs to P18-11; separate celestial body
+     authoring remains P18-7 work. P18-9 supplies the panel kind.
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
      `gradient`, `stars`, `clouds`, `aurora`, `noise`, `pattern` and
@@ -5827,7 +7912,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      body's disc), the sky frame, each kind's reduced forms, the
      `world.sky-quality` lever, and the `skies.puck` presets.
    - Deletes: the fixed composite order, the one-per-kind rule and the old
-     layer arms, the sky file's 2D lattice noise and fractal sum (moved into
+     layer arms, the sky file's fractal sum (moved into
      `field/sdf-noise.hlsli`, which the media read too), and the pinned cloud
      and star constants that are now kind parameters.
    - Touches: the sky records and vocabulary, `Sdf/sky/`, `SdfIsaHlsl` or its
@@ -5844,17 +7929,53 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      zero for an absent or zero-opacity layer, a zero for a layer below its
      tier, and clouds at `low` at a quarter or less of their `high` hashes per
      covered pixel.
-9. **P18-9, lighting derived from the sky.**
-   - Delivers: `sky.environment` (the environment map and its coefficients,
-     re-rendered only on a lighting-visible change larger than one display
-     code, with the skipped re-renders counted), ambient from the
+     The current sky and composite passes expose `gradient`, `disc`, `stars`
+     and `clouds` detail rows. `gpu.sky.evaluations` counts each layer evaluation,
+     including the gradient a field fallback and the environment map's texels evaluate; the composite's fog reads the map and evaluates none.
+     `gpu.sky.hashes` counts each star hash and each noise lattice corner hash;
+     `gpu.sky.texture-loads` counts the field-run loads, including an invalid
+     base tap. These two kinds are per-backend-deterministic, with required
+     zeros judged on every device. Skipped or standing passes retain detail
+     identities and publish no counts, so recording gives their rows zero
+     ceilings. Reports, comparisons and generated schemas carry detail labels;
+     an absent measured detail or a detail without a ceiling fails the gate.
+9. **P18-9, lighting derived from the sky.** Implemented with device-law and
+   canary evidence on Vulkan and Direct3D 12; parity and floor-device ceilings
+   remain open.
+   - The shared environment supplies cosine-convolved second-order SH ambient
+     through the existing AO and map reflections with analytic panel layers.
+     Both environment gains default to one; zero skips the corresponding
+     shading work, and zero gains plus zero fog skip projection and rendering.
+     The map has a full plane for SH/fog and a panel-free plane beneath analytic
+     reflections, with one layer evaluation per texel shared by both planes.
+   - The CPU candidate projector evaluates the lighting-capable kinds from the
+     packed stack. A quadratic extremum over the sphere compares irradiance
+     against the last rendered sky; only a maximum RGB difference of at least
+     1/255 refreshes the device map and coefficients. Skipped changes accumulate.
+     A constant sky has exactly zero higher bands through analytic integration
+     of its constant component; the two-colour law permits 0.001 irradiance error.
+   - `gpu.environment.projections`, `gpu.environment.projection-texels` and
+     `gpu.environment.skipped` expose candidate work, including skipped device
+     refreshes. Views count one harmonic evaluation, four reflection map loads
+     and each analytic panel evaluation when their gains enable them.
+   - The Vulkan and Direct3D 12 sky device laws and `ambient-from-sky`,
+     `sky-layers`, `sky-cycle` and `sky-environment` canaries hold, including
+     their opposite observations and discriminating legs. The lit parity
+     stations and recording the moved sky and surface-work ceilings on the
+     floor device remain open.
+     The environment payload is 65,680 bytes; a refresh writes 8,201 texels.
+     CPU evidence and withheld-fix arguments belong in the hand-back report.
+   - Delivers: the display-code rule on the `environment` pass P18-5 lands (the
+     map and its coefficients re-rendered only on a lighting-visible change
+     of at least one display code, with the skipped re-renders counted, where
+     P18-5 re-renders on any change of the map's layers), ambient from the
      coefficients, reflection from the map plus analytic `panel` layers,
      `render.environment`'s `ambient` and `reflection` gains, and the moth
      studio and mirror worlds' softboxes rewritten as `panel` layers.
    - Deletes: the hemisphere light kind (`WorldRenderLight.Hemisphere`,
      `SDF_LIGHT_HEMISPHERE`, its defaults), the horizon rows, the softboxes
      section and `worldStudioReflection`'s separate horizon.
-   - Touches: `src/Puck.Shaders/Graph` (the package), `shade/sdf-lighting.hlsli`,
+   - Touches: `SdfWorldTables.SkyEnvironment.cs`, `shade/sdf-lighting.hlsli`,
      `shade/sdf-light.hlsli`, `WorldRenderDefaults`, the shipped worlds,
      `tests/Puck.Parity`.
    - Done when: a law holds the coefficients of a constant sky to its
@@ -5866,24 +7987,88 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      camera-only change re-renders the map); `ambient-from-sky` holds a
      surface's ambient changing with a keyed sky colour; parity re-recorded,
      explained.
-   - Counted-cost gate: `sky.environment`'s 4,096 texel evaluations and one
-     reduction dispatch per sky change, zero on a still sky.
-10. **P18-10, the atmosphere.**
-    - Delivers: `render.atmosphere` with fog, height fog, haze that scatters
-      toward light-casting bodies, a medium (water, with its own extinction and
-      colour below a surface), and the bounded media authored under it by
-      creations, lit by bodies.
-    - Deletes: `WorldRenderSkyLayer.Fog` and the fog density lane.
-    - Touches: the records, `composite`, `shade/shade-volumes.hlsli`,
-      `CreationStampEmitter`'s volume emission, `tests/Puck.Parity`.
-    - Done when: a law holds height fog's integral along a ray to its closed
-      form (red leg: a ray parallel to the base); an `atmosphere` canary holds
-      haze brighter toward a low sun than away from it; parity re-recorded,
-      explained.
-    - Counted-cost gate: atmosphere evaluations counted under `composite`, zero
-      on a covered pixel with no atmosphere authored.
-11. **P18-11, infinity views: other worlds and far geometry.** After S27 and
-    S28.
+   - Counted-cost gate: the `environment` pass samples 4,096 map directions
+     and runs one reduction per sky change crossing a display code, with no
+     work on a still sky. Actual per-layer work follows each layer's visible
+     domain and count sites; a refresh writes the fixed 8,201 map and coefficient
+     texels. The device fixtures hold the Stars domain to 1,984 evaluations and
+     the Noise plus constant-backdrop stack to 8,192, rather than assigning one
+     universal evaluation count to every layer.
+10. **P18-10, the atmosphere.** Implemented with device-law and canary evidence
+    on both backends; parity and floor-device ceilings remain open.
+    - Landed: `render.atmosphere` (`WorldRenderAtmosphere`) with a `fog`
+      (`density`, `color`, and a `height { base, falloff }` profile, the height
+      fog), a `haze` (`amount` over the far distance, `anisotropy`, `height`)
+      that in-scatters the sky and every directional light, which is what a
+      light-casting body binds, by a Henyey-Greenstein phase, and a `medium`
+      (`surface`, `extinction`, `color`), water below a level surface. An absent
+      section is the default look's fog (`SdfAtmosphere.Default`); an authored
+      one is exactly the kinds it states, each off at zero, and the kinds are
+      structure, so each value keys on its own clock. The resolve writes them
+      into the sky block's atmosphere lanes (`SdfSky.PackAtmosphere`, which
+      bakes the haze's extinction from the far distance and the first four lit
+      directionals as the air lights), so the kernels branch on no light kind.
+      `shade/sdf-atmosphere.hlsli` evaluates each kind's optical depth in closed
+      form (`SdfAir` is the CPU reference): a height profile's integral, with
+      its series for a ray parallel to the base, and the medium's surface
+      crossed in order, air then water or the reverse, the transmittance the
+      exact product of the segments'. Views carries each hit through the
+      transmittance, and the surface transport carries the fog's, the haze's
+      and the medium's in-scatter weights apart, two words a pixel, so the
+      resolve reconstructs each with the color's weights and the composite
+      applies each kind's colour at the pixel's direction; the history surface
+      holds four words. The sky share passes through the haze and the medium
+      to the far distance; the fog ends at the sky. The bounded media a
+      creation authors take a `scatter`, the share of each sample's extinction
+      that scatters the air lights toward the eye. `world.lighting` echoes the
+      atmosphere and `world.budget` its kinds. The courtyard, the moth studio,
+      the mirror tool, the parity world, the counted sky workloads and the sky
+      canaries moved their fog from the sky into the atmosphere.
+    - Deletes: `WorldRenderSkyLayer.Fog`, the sky block's fog density lane and
+      the fog's density as a sky section key.
+    - Done when: `SdfAtmosphereLawTests` hold height fog's integral along a ray
+      to its closed form within a relative 1e-4 of a quadrature (red leg: a ray
+      parallel to the base without its series reads NaN), the medium crossed in
+      order (red leg: the water's in-scatter not seen through the air before
+      it), the haze's amount over the far distance and its glow toward a low
+      sun (red leg: an isotropic phase), an atmosphere of no kind doing nothing
+      (red leg: an absent fog read as the default density), and the kernel's
+      constants and series held to the reference's (red leg: the kernel's series
+      dropped); `SdfSurfaceTransportLawTests` hold each kind's in-scatter to
+      the weighted in-scatter of any footprint's samples and a sample's
+      composite to its kinds' colours (red leg: the kinds carried as one
+      weight); `SdfWorldTablesWorkLawTests` hold the environment map owed only
+      while a fog in-scatters the sky or a haze reads it (red leg: a haze that
+      renders no map); the validator refuses a negative fog density, a haze
+      taking all the light, a falloff under its floor and a medium colour
+      outside its grammar, each with a control; `VolumeLawTests` carry a
+      volume's scatter and refuse one outside the unit range. The `atmosphere`
+      canary holds haze brighter toward a low sun than away from it and its
+      evaluations counted, and none with the haze off.
+    - Counted-cost gate: each kind the composite evaluates at a pixel counts one
+      `gpu.sky.evaluations` in its `atmosphere` detail row, none with an
+      atmosphere authoring no kind; `SdfCompositeAtmosphereDeviceLawTests` hold
+      a wholly covered 16x8 image to 0, 128 and 384 with no kind, the fog, and
+      the fog, the haze and the medium. A bounded medium's scatter adds no
+      sample; its samples stay the composite's march steps.
+    - The device law and the `atmosphere`, `sky-*`, `world-counters` and
+      `kernel-counters` canaries hold on Vulkan and Direct3D 12. Parity and the
+      sky workloads' composite ceilings on the RTX 2060, which count the
+      atmosphere row, remain open. A bounded medium's scatter casts no shadow of its own and
+      the air's lights are not shadowed by geometry. The haze reads the
+      directional lights as P18-7's bodies will bind them; P18-9's lighting from
+      the sky changes none of it.
+11. **P18-11, infinity views: other worlds and far geometry.** The sharing
+    prerequisites are available: routed seats and eligible windows share an
+    endpoint residency, and camera views render from the world's own residency.
+    Other session screens retain separate residencies. The `view` and `far`
+    layer records, validation, fitting, planning and scene construction are
+    connected to the binder's existing observation and image-routing path.
+    Per-view fits use the final dressed extent and quality, and completed sky
+    counts feed demand. Live-edit cap refusal and the shared budget inventory
+    are implemented as part two. This uses the existing layer and prototype
+    vocabulary; P18-7's separate celestial bodies are not part of that binder
+    slice. The remaining image/admission qualification is distinguished below.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
@@ -5902,12 +8087,58 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       tainted view is withheld as a screen's is; a far planet's instance
       renders only its angular rect; a world authoring one infinity view past
       the cap is refused by name, and one at the cap boots.
+      Normal World captures fill external sources before recording. The windowed
+      observation compares that fill with the live source and an independent
+      nonexternal control; the neutral never-filling source law owns defensive
+      withholding.
+    - Landed beneath the vocabulary: the neutral record the kinds and shapes
+      lower to (`InfinityViewSpec`), the frame an instance renders for a viewer
+      (`InfinityViewFit`: the anchor, the viewer's turn, the cone's bounding
+      rectangle as an off-axis frustum, the extent at the dressed scale), the demand
+      (`InfinityViewDemand`, published as `WorldViewDemand.Sky` and `SkySeen`, which
+      the graph host turns into a footprint), the plan (`WorldInfinityViewPlan`:
+      nesting to the graph's depth with the fallback beyond it, a cap of
+      `MaxViews` instances), the instance names (`WorldViewNames.Sky`,
+      `NestedSky`), the scene (`WorldInfinityViewScene`, and far geometry as a
+      `WorldSessionSceneEmitter` holding only named prototypes), each with CPU laws.
+      Landed on P18-8's record: the `view` layer kind (`SdfSkyView`, one GPU kind for
+      both document arms, with `sky/kinds/view.hlsli` and its `Kinds` entry), which
+      samples the instance image at the tangent the pixel's direction has on the
+      viewer's basis inside the rectangle the fit chose (`InfinityViewSampling`, the
+      CPU reference, held by `InfinityViewSamplingLawTests`), counts a shown texel
+      in its layer's detail row whether it reads the image or draws its fallback
+      colour, and is camera-only; the `view` and `far` document arms of
+      `render.sky.layers` (`WorldRenderSkyLayer.View`, `Far`, written
+      `view(name:, destination:, …)` and `far(name:, prototypes:, …)`) with their
+      validator refusals by name (an unnamed, unaimed or unbounded view, a band mask,
+      a cone of a quarter turn or more, lighting visibility, a duplicate name, a
+      prototype the world lacks) and the cap of `SdfSky.MaxInfinityViews` views
+      a world, refused at validation; their resolution to the GPU kind
+      (`WorldEnvironmentResolve`) and to the `InfinityViewSpec`s the host renders
+      (`WorldInfinityViewSpecs`, which carries a layer's sky-frame cone into the
+      viewer's frame); and the console echo.
+      The binder owns these scenes, publishes fits per consumer, assigns image
+      slots by layer identity and feeds completed shown-texel counts back into
+      demand. The fitted table has eight 80-byte records, forty `float4` rows,
+      with paired image bindings. A `far` image carries premultiplied geometry
+      coverage; filtering and composition apply that coverage once. The live
+      plan and its cap are reported through `world.budget`.
+      A `far` layer selects existing placements of its named SDF prototypes;
+      their authored geometry and the layer's cone supply a bounded distant
+      shape. A `view` layer supplies a bounded view from a fixed source anchor.
+      These capabilities do not add the separate celestial body collection
+      specified by P18-7. That vocabulary remains open outside part two.
+      Part two still needs the `sky-portal` image/discriminator, actual at-cap
+      and over-cap admission, windowed live-source-to-capture-fill observations
+      and counted ceilings.
+      The `panel` kind belongs to P18-9.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the
       cap in `world.budget`.
 12. **P18-12, the artist's surface in the running World.**
-    - Delivers: the sky, air and timeline in the editor's inspector
+    - Implemented for the open sky stack and the separate atmosphere:
+      the sky, atmosphere and timeline in the editor's inspector
       ([E5](editor.md#e5--the-inspector), through its one formatter); clock
       levers `world.timeline hold|run|at|rate <clock>` (presentation-only, never
       saved, like `pipeline.time`); layer solo and mute and a per-pixel sky-cost
@@ -5919,126 +8150,250 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)).
     - Touches: `WorldLightingCommandModule`, `WorldRenderLeverCommandModule`,
       `WorldSessionLevers`, `DebugViewModes`, the editor's formatter.
-    - Done when: `WorldTimelineLeverLawTests` hold a scrubbed clock's
-      presentation to the tick it names and the simulation untouched (red leg:
-      a held clock that advances the state row); the inspector's sky text
-      equals `world.lighting`'s echo.
-    - Counted-cost gate: a held clock renders nothing new after one frame.
-13. **P18-13, temporal amortization of secondary shadows.** After P15-5.
+    - `WorldSkyAudition` filters authored rows before emission, keeping named
+      and repeated kinds distinct. Solo removes the fallback gradient, while
+      the separate atmosphere stays authored. `WorldClockReads` follows both
+      keyed values and per-layer clock phases through held and scrubbed previews.
+      `WorldLightingText` owns the console and inspector's common sky and
+      atmosphere text; atmosphere-only edits invalidate its cached readout.
+    - The sky-cost view records evaluations, hashes and texture loads at the
+      existing evaluation sites. Its base image carries field costs in RGB
+      while the upper-run images keep their packed summaries; the composite
+      filters the field costs and adds point and atmosphere work. Completed
+      work is counted once, where executed, through `world.cost sky`.
+    - CPU withheld-fix evidence covers held and scrubbed clocks, rate changes,
+      keyed-rate integration, invalid-command refusal and per-layer held-clock
+      phases. It also covers named and repeated row audition, muted automatic
+      discs, the separate atmosphere during audition, atmosphere-only inspector
+      invalidation, completed sky cost rows and reload/source-write behavior.
+      Accepted earlier red evidence remains applicable to unchanged behavior.
+    - On Vulkan and Direct3D 12, the held-clock GPU law holds submissions at
+      the first frame, the cost law sees the muted gradient's evaluation
+      disappear, and the edit law observes reload changing the held image and
+      saving the current source. The sky evaluation law and editor/sky canaries
+      also hold. These checks do not establish scrub/run/rate image equivalence
+      or named and repeated layer audition images; those image probes remain
+      open, as do parity and counted ceiling recordings from completed work.
+13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
+    image qualification holds on both backends. The receiver-only shader
+    mutation, counted-quarter comparison and floor-device ceilings remain open.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
       reprojects the rest from a history of the K row. A receiver's identity
       and depth, P15's test, are necessary but not enough, because a shadow
       also moves with its light and its occluders. A history sample is
       therefore rejected, and its pixel marched, when any of these holds:
-      - **Ownership:** the slot's body at the history's tick is not its body
-        now. The history stores each slot's owner, and a slot reassigned or
-        fading marches all its pixels until its history is rebuilt.
+      - **Ownership:** the slot's light name at the history's tick is not its
+        light name now. The history stores each slot's owner, and a slot
+        reassigned or fading marches all its pixels until its history is rebuilt.
       - **Light motion:** the slot's light direction has turned since the
-        history's tick by more than a stated fraction of its penumbra angle.
-      - **Occluder motion:** the group's gathered occluder set (the shadow
-        gather's per-group list) holds a dynamic-transform slot whose row
-        differs between P15-3's previous dynamic-transform table and the
-        current one, so a moving body re-marches every group whose shadow it
-        can touch.
+        history's tick by more than one quarter of its penumbra angle. Each
+        slot retains an anchor until a full rebuild; every accepted direction
+        stays within one eighth of the angle from that anchor, so any pair of
+        retained samples stays within one quarter. Penumbra edits also reject.
+      - **Occluder motion:** a dynamic-transform row differs between P15-3's
+        previous table and the current one, and either placement's bound
+        intersects the group's shadow cone. The check includes bodies whose
+        current grid cell has left the gather, so a departed body rejects the
+        shadow it left behind.
       - **Receiver:** P15's identity and depth test fails.
 
-      The first slot marches every pixel. `world.shadow-amortize` is a session
-      lever with a preset row.
+      The first slot marches every pixel. Incoming fade slots do too, and a
+      stable fading slot rejects history through its first nonfading rebuild.
+      `world.shadow-amortize` is a session lever with a preset row: off at low,
+      on at medium and high, effective only with temporal reconstruction.
+      The jitter sample index selects one of four parity classes of render
+      pixels. Rejection precedes this selection, so a changed owner reprojects
+      zero pixels, including pixels scheduled to march anyway.
+
+      The temporal fragment keeps a writer-ordered render-grid buffer of five
+      words per pixel: packed K, receiver identity, full ray distance, the
+      writer's sample index and rejection reactivity. Its bytes enter the
+      graph's memory accounting; native and spatial fragments have none.
+      The K field is reconstructed bilinearly at the preceding jittered grid's
+      fractional position, using the shared reconstruction footprint and its
+      edge clamp. Every tap with nonzero weight must pass the writer stamp,
+      receiver identity and five-percent depth checks; one invalid tap rejects
+      the whole reconstruction and marches the pixel. This prevents repeated
+      nearest-pixel copies from drifting across a still receiver as jitter
+      changes. Inside the grid, constant and affine visibility fields survive
+      the reconstruction apart from the stored eight-bit quantization.
+      Skipped shadow writers cannot reuse another camera's history: a sample
+      stamp validates the pixel against the preceding render. Each view keeps
+      four owner names and penumbra anchors, committed only when its shadow
+      writer submits. The gather checks all three dynamic rows by their bits
+      and tests both current and previous bounds, including a suppressed or
+      departed occluder. Eligible secondary groups scan instance metadata
+      cooperatively before walking current cells; only moved dynamic bounds
+      reach cone tests, and the scan performs no field evaluations. This adds
+      linear metadata work per group and eligible slot. Flat and camera-mask fallbacks conservatively test
+      the whole dynamic table, as do unmasked world segments. First and incoming slots
+      skip these motion checks. Temporal secondary shadows check ownership,
+      light and occluder motion even when K reuse is off. Rejected shadows raise
+      the existing color-history reactivity so reconstruction cannot keep an old
+      shadow behind freshly marched K. With the lever off, every pixel marches,
+      the four K-history words are neither read nor written, and amortization
+      decision pixels are zero. Only the current reactivity word is written and
+      read by views; a still frame writes zero reactivity, allowing color history
+      to converge. Receiver validation remains the color resolve's when K is not
+      reused. Low has no shadow history allocation or work.
     - Touches: `surface/sdf-shadow.hlsli`, `surface/sdf-shadow-gather.hlsli`
-      (the moved-occluder test), `SdfWorldPackage.Fragment` (the K history and
-      its owners), `frame/sdf-reprojection.hlsli`, `quality.puck`.
-    - Done when: a `temporal-shadows` canary's converged binary-star scene is
-      within a stated tolerance of the unamortized one; a body moving through a
-      still receiver's shadow, a light turning on its orbit, and a slot changing
-      hands each show no trail past the frame the rule rejects them on (red leg:
-      with only the receiver test, the moving occluder's old shadow lingers);
-      a law counts each rejection reason.
+      (the moved-occluder test), `SdfWorldPackage.TemporalFragment` (the K
+      history), `SdfShadowHistory` (its owners), `frame/sdf-reprojection.hlsli`,
+      `quality.puck`.
+    - Checks: a `temporal-shadows` canary's converged binary-star scene is
+      within two mean eight-bit codes of the unamortized one over its receiver
+      strip; a body moving through a still receiver's shadow, a light turning
+      on its orbit, and a slot changing
+      hands each show no trail past the frame the rule rejects them on. Its
+      unamortized reference uses the world presentation view in a second boot:
+      seat views share the amortization lever, and camera-view producers disable
+      shadows. The manifest's pixel discriminator delays transitions past the
+      subject captures. Eight off-camera pillars exercise the live frame grid;
+      departure and return captures preserve the arrival, light and owner legs.
+      The occluder's state-backed slides move it without replacing the program
+      or reseeding previous poses. A CPU fixture law applies those same state-cell
+      commands, holds the program identity and revision, and checks the departed
+      body's actual packed cell is outside the receiver query while its previous
+      bound intersects the cone. Withholding
+      the independent motion scan is the departure-specific shader red leg.
+      A separate shader mutation keeps only receiver rejection;
+      its GPU red leg must show the moving occluder's old shadow lingering.
+      laws hold the four rejection reasons, counted pixel and per-slot march
+      detail rows, name identity through a reorder, slow light drift, handoffs,
+      successful-submission metadata, the off-switch and the render-grid
+      allocation. On Vulkan and Direct3D 12, the still, occluder, light, owner,
+      departure and return images stay within the original two-code mean bound;
+      the opposite observations and authored discriminator hold. The separate
+      receiver-only shader mutation has discriminating red and restored image
+      evidence on Vulkan. Counted-cost qualification remains owed.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
       of the unamortized row plus its rejections, counted by reason and
       re-recorded lower; zero reprojected pixels on a frame where a slot
       changes hands.
+      `gpu.shadow.pixels` partitions secondary lit pixels into `interleaved`,
+      `ownership`, `light-motion`, `occluder-motion`, `receiver` and
+      `reprojected` detail rows. Each row carries its march steps and slot-step
+      columns too; their sums and the plain remainder reconcile to the pass.
+      Temporal shadows with more than one stable slot count five stored words
+      per active pixel with amortization on, or one current reactivity word with
+      it off. Off-switch fresh marches remain in the plain shadow row. There is
+      no new dispatch.
+    - The temporal rejection, history ownership, allocation, preset and
+      decision-row CPU laws have withheld-fix evidence. The per-invocation
+      `ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence` law
+      also has withheld-fix evidence against the subgroup reduction. The
+      `shadow-slots` canary on Vulkan and DirectX establishes nonzero counts for
+      both high-quality slots and the single medium-quality slot, zero counts
+      in unused slots, and the corresponding shadow regions; its opposite
+      observations and discriminating legs hold. This evidence qualifies the
+      per-slot counter correction. The temporal canary separately qualifies
+      moving-shadow images; counted-cost savings and floor-device ceiling
+      recordings remain owed.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
+    - Source state: `skyFieldScale` selects the full or half sky field grid
+      independently of the view's render scale, through authored defaults,
+      presets and the live lever. The collector and paired sky/shadow matrix
+      are implemented. On the RTX 4070, the thirty-six paired sky and shadow
+      observations are recorded and hold their ceilings. The chosen presets
+      retain field scale 1 at every tier, K = 0, 1 and 2, amortization off at
+      `low` and on at `medium` and `high`, zero fade slots and ticks, and instant
+      overflow. The matrix fixes the floor view scale and uses the High shadow
+      marcher for its binary-light component controls; these are not ceilings
+      for whole shipped presets. The selected Full images and parity remain
+      qualification work, and RTX 2060 hardware qualification remains separate.
     - Delivers: the sky leg recorded at each tier and field scale in the
-      configurations the first open decision lists, and `quality.puck`'s
-      `sky`, `shadowLights`, `shadowAmortize` and shadow-fade rows as the lead
+      declared matrix configurations, and `quality.puck`'s
+      `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
+      `shadowFadeTicks` and `shadowOverflow` rows as the lead
       decides beside P15-8.
     - Done when: the chosen defaults' ceilings are recorded and
       `puck counters --check` passes on the RTX 2060.
 
-**Expected counted wins.** Estimates derived from the code, to be replaced by
-the rows P18-1 records. P is a view's render pixels (518,400 for a 1920 by 1080
-view at the floor tier's half scale), h the fraction of them that hit, and L the
-fraction in live tiles, at least h.
+**Expected counted wins.** Estimates derived from the code, read against the
+rows P18-1 records in `tests/Puck.Counters/sky-still.ceilings.json`,
+`sky-drift.ceilings.json`, `sky-twinkle.ceilings.json` and
+`sky-cycle.ceilings.json`, beside the floor workload's
+`counters.ceilings.json`. P is a view's render pixels (1,166,400 for a 1920 by
+1080 view at the floor tier's half scale, which renders 1440 by 810), h the
+fraction of them that hit, and L the fraction in live tiles, at least h.
 
-- **Sky evaluations.** Today (1 + L) × P per frame: every pixel in the pre-pass
-  and every live-tile pixel again in `views`, hits included. After P18-5, about
-  (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
-  about 210,000, a fall of 77%. A hit reads zero sky evaluations instead of one
-  full sky and up to two gradients. A view that hits nothing is unchanged at P.
-- **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
-  atmosphere edit, a moving volume). Today every pass the view runs: 7 SDF
-  compute dispatches for a meshless view at the floor tier, 9 and the mesh draw
-  at `high`, with the whole march. After P18-6, 2 dispatches and zero march
-  steps.
-- **Lighting-visible frames** (a keyed light or lighting-visible colour). Today
-  the same 7 or 9 dispatches and the march. After P18-6, 3 (`views`, `sky`,
-  `composite`), plus `sky.environment`'s 2 when a change crosses a display code
+- **Sky evaluations.** The sky pass evaluates about (1 − h) × P field runs plus
+  the dilated edge. Composite adds only its in-place fallbacks: its fog reads
+  the residency's environment map. A refresh samples 4,096 directions, with
+  each layer's work counted at its actual evaluation sites, shared by every
+  view (P18-5). Before it, the
+  composite paid one gradient evaluation per fogged output pixel, 110,135 a
+  frame on the 1920 by 1080 counters workload. Cost comparisons include both
+  passes; a view that hits nothing and needs no fallback evaluates P field runs.
+- **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour or a
+  moving volume) run 2 dispatches (`sky`, `composite`) and zero camera march
+  steps. Bounded media still count their own integration in `composite`.
+- **Lighting-visible frames** (a keyed light or lighting-visible colour). The
+  view runs 3 dispatches (`views`, `sky`,
+  `composite`), plus the `environment` pass's 2 when a change crosses a display code
   and `resolve` with reconstruction on, and zero march steps.
-- **Bounded media.** Today a single volume re-renders every view every frame.
-  After P18-2 and P18-6, `composite` alone, and only on frames whose presented
-  tick moves.
-- **Pass-block size and binding.** Today the pass block is 1,120 bytes, 848 of
-  them the environment, written into each of 10 blocks: 11,200 bytes of
-  constant data per view per frame, every dispatch binding the whole block.
-  After P18-4 the block is about 272 bytes (about 2,720 per view per frame), and
-  the sky group and lights table are bound only by the passes that read them.
-  This is not an upload win: every region already uploads only the words that
-  changed, and the new tables do the same.
-- **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
-  two fractal sums of four octaves, four lattice corners) and 32 per clear one.
-  At `low`, 24 per covered pixel, a fall of 81%.
-- **Unauthored layers.** Today, once any sky layer draws, the star field hashes
-  every upper-hemisphere pixel even at zero brightness, and the disc pays a
-  `pow` at zero intensity. After P18-8 an absent, zero-opacity or zero-brightness
-  layer counts zero.
-- **Shadows.** One slot costs what the one shadow light costs today, each more
-  slot about as much again; the floor tier stays at zero. With P18-13 each
-  secondary slot falls to about a quarter plus its rejections.
+- **Bounded media.** A moving volume changes the visual signature, so sky and
+  composite render on frames whose presented tick moves it. Its integration
+  stays outside the lit image and temporal history.
+- **Pass-block size and binding.** The generated pass layout includes the
+  light count, shadow slots and fade controls, curvature shading, P18-13's
+  amortization controls and the current indirect-lighting values. Its actual
+  bytes are accounted with the graph's resources. The lights and sky tables
+  are referenced only by the kernels that read them. Every
+  region uploads only the words that changed, so the tables carry no upload
+  cost beyond their changes.
+- **Clouds.** The cloud layer costs 128 hash evaluations per covered pixel (four
+  thickness taps, two fractal sums of four octaves, four lattice corners) and 32
+  per clear one. At `low`, 24 per covered pixel, a fall of 81%.
+- **Unauthored layers.** A star field with no brightness already costs nothing,
+  and the disc pays a `pow` whenever it names a light, at zero intensity too.
+  After P18-8 an absent, zero-opacity or zero-brightness layer counts zero.
+- **Shadows.** Each occupied stable slot has one gather and one march; adding
+  a slot adds roughly another slot's work. The six per-slot counter columns
+  expose that cost, while the current floor preset stays at zero. P18-13
+  reduces each secondary slot to about a quarter plus its rejections.
 - **Environment lighting.** 4,096 texel evaluations and one reduction per
   lighting-visible change larger than a display code, zero on a still sky or a
   visual-only change; one harmonic evaluation per lit pixel in place of the
   hemisphere term.
-- **Shadow fades.** At most F fade slots beside the K held ones, and fade slots
-  march only while a fade runs: at most 2 slots at `medium` and 3 at `high` on
-  any frame.
+- **Shadow fades.** CPU reads inspect at most F active handoffs, deriving one
+  progress value for each without allocating or advancing state. The
+  GPU loop adds a march only while a handoff runs, bounded by K + F, and
+  scales each light's own occlusion deficit. Its incoming texture uses 0, 1
+  or 2 bytes per pixel at F = 0, 1 or 2, with counted 16-byte controls for
+  active handoffs. This is transient-aliased storage allocated with the policy,
+  so starting a handoff allocates nothing. Every visibility write counts.
+  P18-14 chooses the tier values and their counted ceilings; floor-device
+  measurement re-records moved ceilings for the delivered loop and counters.
 - **Many views of one world.** Every camera view of a world reads that world's
   one environment map, so its sky lighting costs it nothing of its own.
 
 **Sequencing with other lanes.**
 
-- **P15.** P18-1 needs P15-1's counter buffer and ceilings file. P18-2 to P18-12
-  land before or after P15-2 to P15-7: before P15-4, `sky` and `composite` run at
-  the render extent after `views` and read the record; from P15-4 they follow
-  `resolve` at the output extent and read only the resolved surface, the depth
-  and coverage `resolve` writes in both modes once its first reader lands (the
-  P18 step that lands `composite` adds it to `resolve`), and the sky's field
-  extent follows the output extent scaled by the sky tier. P15's reactivity is
-  its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
-  which `resolve` carries through; P15's text states both. P15-5's convergence
+- **P15.** P18-1 needs P15-1's counter buffer and ceilings file. P15-1 to P15-7
+  have landed, so a reduced or temporal view runs `resolve` between `views` and
+  `sky`: `composite` runs at the output extent over the lit image and the
+  surface transport `resolve` writes in both modes, while the sky's field runs
+  stay on the render grid, reading views' color, which a sky tier scales. P15's
+  reactivity is its own image, which `resolve` consumes, and P18's coverage is
+  `lit`'s alpha, which `resolve` carries through; P15's text states both. P15-5's convergence
   rule and P18-6's cadence compose: a converging view renders every pass for
   one jitter period; a converged one runs only `sky` and `composite` on a
   visual-only change, and `views`, `resolve`, `sky` and `composite` on a
   lighting-visible one. P18-13 follows
   P15-5. P18-14 records beside P15-8, and the two decisions are best taken
   together.
-- **S27 and S28.** P18-11's `view` layer and body shape ride S27's
-  per-endpoint residency and per-view quality levers, and follow it. P18-11
-  also follows S28, which folds camera views into the host residency and so
-  attacks the aperture open item before infinity views add residencies. Every
-  other step is independent of both; P18-2 moves a routed scene onto its own
-  clock, which S27's sky fix reads.
+- **The per-endpoint residency and camera views.** P18-11 can use the shared
+  `WorldRoutedScene` residency for eligible views: routed seats and fully
+  disclosed windows onto a live local endpoint. Ordinary session screens and
+  other windows still have separate disclosed residencies. P18-11 must route
+  its own views under the same disclosure constraints and add their quality
+  levers. Camera views render from the world's own residency, so they add no
+  residency to the aperture. Every other step is independent of both;
+  P18-2 extends the clocks available to routed scenes, whose sky already uses
+  the destination's own presented clock.
 - **The editor.** P18-12 follows E5 for the panel, E10 for reload and compare,
   and E11 for saving, and adds only the sky's rows to each; it does not
   reimplement them.
@@ -6046,8 +8401,8 @@ fraction in live tiles, at least h.
   binding path, so a later styling package keys on the same clocks with no
   mechanism of its own.
 - **The aperture open item.** Each infinity view is a residency, so P18-11
-  reports its tables' bytes in `world.budget`, lands after S28, and carries a
-  per-world cap on infinity views (see the settled decisions below).
+  reports its tables' bytes in `world.budget` and carries a per-world cap on
+  infinity views (see the settled decisions below).
 
 **Settled by the lead.** Each of these is a decision, recorded with its reason.
 
@@ -6056,29 +8411,37 @@ fraction in live tiles, at least h.
   those sections owns them. The section is optional, as every top-level
   section is, so a world names clocks only when it keys something on one.
 - **A shadow slot changes hands by a counted crossfade**, as the decision
-  above states. Artists should not see a pop when two `auto` bodies cross.
+  above states. Artists should not see a pop when two `auto` lights cross.
   The extra slot's march during the fade is counted, a tier may choose
-  `instant`, and `always` still pins a slot.
+  zero fade ticks, and `always` still pins a selected slot. CPU handoffs use
+  fixed current and prior 32-byte records per fade slot; presented-tick reads
+  produce progress without advancing them. Each light's own occlusion deficit
+  scales out or in while its radiance stays unchanged. P18-7 specifies the
+  storage and counted GPU binding contract; the K + F GPU loop and shade
+  integration are implemented, while the separate celestial body authoring
+  remains open.
 - **Specular has one spelling.** A light-casting body's glint lives only in its
   light's lobe, and the reflection path leaves every light-casting body out, so
   no body's highlight is counted twice. Crescents and rings are therefore not
   reflected in their true shape; the analytic lobe is kept.
-- **Infinity views wait for the aperture work and are capped.** P18-11 follows
-  S28, which reduces the residencies the aperture holds. It also carries a
+- **Infinity views are capped.** Camera views render as views of the world's
+  own residency, which reduced the residencies the aperture holds before P18-11
+  adds any. P18-11 also carries a
   per-world cap on infinity views as a counted ceiling (`world.budget` reports
   the live count against it), and a world that exceeds the cap is refused by
   name at validation and at a live edit. The RTX 2060's host-visible heap is
   already near full, so the fix and the cap land together.
 
-**Open decision for the lead.**
+**Chosen sky defaults and floor-device qualification.**
 
-- **The floor tier's sky defaults (P18-14).** Gather, at 1920 by 1080 on the
-  RTX 2060's floor tier, each sky and shadow row for: the sky leg's drift,
-  twinkle and keyed frames at field scale 1 and 0.5; clouds at each reduced
-  form; shadow slots 0, 1 and 2 over the binary-star leg, each with P18-13's
-  amortization off and on where P15-5 has landed. Choose `low`, `medium` and
-  `high`'s `sky`, `shadowLights`, `shadowAmortize` and shadow-fade length. This
-  is decided beside P15-8, from the counted rows of both packages.
+- **The sky defaults (P18-14).** The RTX 4070 component matrix retains the
+  Full field at every tier and the existing shadow ladder. Half remains an
+  authored option; lower counts alone do not qualify its images. The
+  [sky-default matrix](../../tests/Puck.Counters/sky-defaults/README.md) owns
+  the observations and their limits. The same drift, twinkle, keyed, cloud
+  and binary-shadow inputs at 1920 by 1080 still require RTX 2060 device
+  records and passing checks. This floor qualification does not reopen a
+  measured default decision without contrary evidence.
 
 **Check:** every step's own check above, and together: an artist can author,
 key and live-edit a sky of any number of bodies and layers in any frame, from
@@ -6096,13 +8459,68 @@ wall-clock or GPU timing.
 **Depends on:** P14 for the pass package and its plan; P15-1 for the counted
 march steps, texels and ceilings; P11's graph instances and history for the
 shared environment instance and retained resources; P12's image sources for
-`panorama`; S27 and S28 for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
+`panorama`; the existing residency sharing for routed seats and eligible
+windows, and camera views of the world's own residency, for P18-11;
+P15-5 for P18-13; and E5, E9, E10 and E11 for
 P18-12.
+
+### P19 — Neighbour-content bounds for wallpaper folds
+
+**Problem.** A wallpaper fold reads only the sample's own cell's copy. A program
+folds only through a group whose fold is continuous (PMM, P4M, P3M1, P6M),
+because only a fold built from reflections never reads past the nearest copy;
+`SdfProgram` refuses the other thirteen groups by name. The symmetry LOD,
+which dropped the in-cell folds past a distance from the camera, is deleted for
+the same reason: past its switch every group became a translation lattice. A
+scratch port of the kernel fold, stepped a thousandth of a cell across walls at
+200,000 points, measured each group's worst stretch of a pair's distance:
+
+| Group | Fold | Worst stretch |
+|---|---|---|
+| PMM, P4M, P3M1, P6M | continuous | at most 1 |
+| P1, P2, PM, PG, CM, PMG, PGG, CMM, P4, P4G, P3, P31M, P6 | jumps | 2,000 to 17,000 |
+
+**Walls do not lift it.** Making a march stop at every cell wall it has not
+measured across is sound but costs at least one step a wall: about 1.2 steps a
+unit of ray over a unit lattice. The shipped ground (`standard.puck`'s
+`groundTexture`, a P4M lattice of unit tiles with no limit) would spend more
+than the primary march's 128 steps on any pixel past about 100 units, and a ray
+running beside a wall would creep a tolerance a step under a ball-gap fallback.
+
+**The bound.** Each fold bakes the bounding box of its content in the fold's
+local frame, widened over the group's in-cell images (P4G's offset mirror maps
+the cell center to a corner, so its content can sit there). At each sample the
+kernel publishes the distance to the nearest neighbouring cell's box as a ball
+bound, never a wall to cross; content that reaches a wall still needs a crossing
+or a refusal. The ground's tiles stand 0.05 from every wall, so it pays nothing,
+and the off-centre P2 lattice reads 1.0 from x = -1.75 to cell -1's copy at -3.
+
+- The boxes must be tight. A sphere about the ground's 0.45 x 0.25 x 0.45 tile
+  (the shape bound `TryGetLocalBound` gives) reaches 0.68 vertically, which
+  would add steps above the tiles and creep through the gaps between them at
+  the horizon. Math's certified interval rules (`FixedInterval`) may already
+  derive tight local boxes; check them before writing per-shape bound code.
+- A wallpaper instruction has only Data1.w free, so the box needs a side table.
+- The in-cell rotation seams (P4G's quadrant walls, P6's sectors) need the same
+  bound over the sectors' images.
+- The symmetry LOD returns on the bound: past its switch the translation lattice
+  is sound once the neighbour bound covers it, and the march crosses the switch
+  as it crosses a log-sphere shell.
+
+**Done when** each of the seventeen groups builds and holds the brute-force
+distance sweep of `SdfWallpaperFoldLawTests` with off-centre prototypes, the
+ground's counted march steps do not rise (`puck counters --check`), parity holds,
+and the symmetry LOD's switch is crossed under the device law.
+
+**Depends on:** the march's fold-wall crossing (`sdfMarchAdvance`) and, for
+tight boxes, Math's interval rules.
 
 ## Sequencing
 
 **Foundation.** P2, P3 and P5 are complete. P1a and P1b stay open beside the
-rest: neither blocks P4 or releasing the foundation. P4-0, P4-1a to P4-1c and
+rest, on the hardware checks listed under
+[deferred to the end](#deferred-to-the-end): neither blocks P4 or releasing the
+foundation. P4-0, P4-1a to P4-1c and
 P4-2a to P4-2e and step 10, the visibility record's names, have landed, and the
 mesh canaries hold every scene its check names, so P4 is complete; its measured
 cost is held with P14's counted-cost ceilings. P6 follows P4.
@@ -6110,9 +8528,9 @@ Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7 is complete: its memory profile, its residency selector and
-every step of P7b have landed, and the gate's Linux bytecode leg is
-[deferred to the end](#deferred-to-the-end). P8 is complete; its frame group
+**Contracts.** P7 is open on one check: its memory profile, its residency
+selector and every step of P7b have landed, and the gate's Linux bytecode leg is
+listed under [deferred to the end](#deferred-to-the-end). P8 is complete; its frame group
 became a descriptor set when step 15 put pipelines on groups, and its echo of
 the SDF engine's two interfaces landed with P14-5.
 P7 and P8 do not read simulation state, so they do not wait on the state
@@ -6120,17 +8538,17 @@ rebuild.
 
 **The frame graph and nesting.** P11 is complete: every view, pane, seat,
 camera and session is a graph instance the runtime schedules by demand, and a
-host drives one render root. P12 is complete: its source contract,
+host drives one render root. P12 is open on one check: its source contract,
 producers and conversion passes have landed, and so has every step of P12b,
 the capture gate over the graph, probe outputs and view exports as sources,
-consumer-chosen filtering and the check's list among them; its `view` and
-`session` arms went with
-P11b-13. P13b's live mappings
+consumer-chosen filtering and the check's list among them, and P12b-4's recorded
+camera run is listed under [deferred to the end](#deferred-to-the-end). P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing
 from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's
-shared GPU picking and both-backend hovered-pane outline captures. Only
-step 4's recorded Windows click and focus return remain owner-assisted.
+shared GPU picking and both-backend hovered-pane outline captures. Step 4's
+recorded Windows click and focus return is the one item that keeps P13 open; it
+is owner-recorded and listed under [deferred to the end](#deferred-to-the-end).
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the
@@ -6142,18 +8560,24 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
 bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
-and the final sweep (P14-13): every P14 step has landed, and its counted-cost
-ceilings land as P15-1. P15 and P16 both follow P14: P15 also needs P4, and
-P16's display output landed with P14-10's float working targets; only its HDR
-desktop capture and the HDR-display checks remain.
+and the final sweep (P14-13). Per-tile instruction pruning (P14-14) and
+winner-only gradients (P14-15) have landed, with per-pass shape and gradient
+counts and the dense counters workloads. The RTX 2060 measurements meet the
+pruning criterion, gradient device laws hold on both backends, and parity
+passes. The counted-cost framework is P15-1.
+P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
+with P14-10's float working targets and its HDR desktop capture after it; the
+HDR-display checks keep P16 open and are listed under
+[deferred to the end](#deferred-to-the-end).
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
-of its field, with its normals, texture coordinates and triangle materials,
-while its textures and impostor remain; choosing between a bake and the field
-follows P6.
+of its field, textured, and its impostor draws in the mesh's place once the
+placement is small on screen; choosing between a bake and the field follows P6.
 
-**Bound state.** P9 and P10 have landed. P9, which also fills the frame group
+**Bound state.** P9 has landed, and so have all nine steps of P10, which stays
+open on its floor-tier parity leg (listed under
+[deferred to the end](#deferred-to-the-end)). P9, which also fills the frame group
 P8 declares, is written against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
 the runtime and delivery programme owns. P10 binds the pass members of
@@ -6162,48 +8586,87 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so has every other P14 step, so the longest remaining chain is
-P15's, P15-1 to P15-8.
-P16's HDR desktop capture follows P14-10, and a
-bake's textures (P17) come before P6's choice between a bake and the field.
+landed, and P14's fifteen steps have landed with their pruning and gradient
+GPU acceptance conditions met. The remaining P15 step is P15-8 (P15-1 to
+P15-7 have landed or been decided). A bake's
+textures and impostor (P17) come before P6's choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
-P18-6) land before or after P15-2 to P15-7, and move behind `resolve` once P15-4
-has landed. Its views of other worlds (P18-11) follow S27 and S28, its shadow
+P18-6) run behind `resolve`; P18-2 to P18-6 are implemented, with P18-6's cadence
+canaries holding on both backends and its floor-device counters still open.
+Its views of other worlds (P18-11) can build on the shared
+residency for routed seats and eligible windows and on camera views of the
+world's own residency; other session screens still use separate residencies,
+and the binder routes infinity layers with per-view fits and quality levers. Its shadow
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
 
+**Global illumination.** P6-GI's first slice (G1), the CPU reference and the
+CPU model of the cache's transport whose laws settle its layout, has landed. The cache itself (G2) extends P18-4 and P18-5, which have landed; its light views (G3) and lighting (G4) follow it; its
+change classes (G5) follow P18-6 and take P18-7's shadow slots; its sky (G6)
+follows P18-9; its portals (G7) follow G4 and, for infinity views, P18-11; its
+explanation (G8) follows the editor's E2, E4, E5 and E6; its near field (G9)
+follows G4; and its tier defaults (G10) are decided beside P15-8 and P18-14.
+
 ## Deferred to the end
 
 Some checks need a particular machine, device or environment rather than a
-change to the code, so they run once, when the programme closes, instead of
-holding each package open. A package whose other checks pass lands with these
-listed here, and its own text points here rather than naming them as open
-blockers. Each is still required before the programme is done.
+change to the code, so they run once, when the programme closes. Deferring a
+check does not close its package: the package stays open, marked in
+[open items](open-items.md), until the check has run, and its text names the
+check here instead of repeating it. Each check below is required before the
+programme is done.
 
-- **Hardware: P1a's no-driver windowed boot.** A windowed boot on a machine with
-  no usable GPU driver exits 2 with the unsupported line, rerun since the
-  teardown fix.
-- **Hardware: P1b's reference-GPU qualification.** `puck qualify` over the
-  release profile on the RTX 4070 and the AMD devices, the Direct3D 12 cells
-  included.
-- **Hardware: P1b's driver-removal exercise.** A driver-initiated removal (a
-  timeout detection and recovery) recovers as an injected loss does.
-- **Environment: P7's shader-bytecode comparison.** CI's `shader-bytecode` job
-  passes, holding a Linux build's SPIR-V and DXIL byte for byte to the Windows
-  build of the same commit.
-- **Hardware: P12b-4's recorded camera run.** A real camera feeding a screen on
-  both backends, recorded.
-- **Hardware: P13b-4's recorded Windows editor click.** A click reaching a
-  captured editor window at the mapped point, and the chord returning input to
-  the game, recorded on real hardware.
-- **Hardware: P15's recorded Steam Deck run.** The world with temporal
-  upscaling and dynamic resolution on, render scale responding to its signal.
-- **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
-  reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
-  capture displays without clipping, and the HUD renders at paper white.
+- **Hardware: P1a's no-driver windowed boot.** Keeps P1a open. A windowed boot
+  on a machine with no usable GPU driver exits 2 with the unsupported line, run
+  against the render root's teardown as it stands.
+- **Hardware: P1b's reference-GPU qualification.** Keeps P1b open. `puck
+  qualify` over the release profile on the RTX 4070 and the AMD devices, the
+  Direct3D 12 cells included, whose published-package readings set the peak
+  device-local thresholds.
+- **Hardware: P1b's driver-removal exercise.** Keeps P1b open. A
+  driver-initiated removal (a timeout detection and recovery) recovers as an
+  injected loss does.
+- **Environment: P7's shader-bytecode comparison.** Keeps P7 open. CI's
+  `shader-bytecode` job passes, holding a Linux build's SPIR-V and DXIL byte for
+  byte to the Windows build of the same commit.
+- **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
+  run at `low` on floor hardware.
+- **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14
+  keep their RTX 2060 device checks open. First close the available RTX 4070
+  native laws, physical canaries, direct cap and live-source controls, parity
+  and indirect comparison; source preparation is not their verdict. Then use
+  the same candidate's successfully built private CLI and World artifact on
+  the RTX 2060, outside a remote session. Run the declared
+  [sky matrix](../../tests/Puck.Counters/sky-defaults/README.md) and
+  [indirect comparison](../../tests/Puck.Counters/indirect-comparison/README.md)
+  serially at their authored 1920 by 1080 output. Retain every backend's
+  transcript, script and completion identity, reject device recovery or an
+  unavailable required row, and record and check the saved paired reports
+  through the [counter guide](../../tests/Puck.Counters/README.md). Recording
+  preserves the other devices' records; never replace them with estimates.
+  Check actual active and retiring residency and graph bytes in `world.budget`,
+  the aperture's floor-device heap limits, the `split-seats` and `pipeline-fault`
+  controls, and the floor parity stations. The fixture READMEs own the
+  executable recipes. Only actual RTX 2060 qualification may remain after
+  the local software and RTX 4070 checks pass; this does not add P18-7 or
+  P18-11's separate body-authoring work to the part-two binder slice.
+- **Hardware: P12b-4's recorded camera run.** Keeps P12 open. A real camera
+  feeding a screen on both backends, recorded.
+- **Hardware: P13b-4's recorded Windows editor click.** Keeps P13 open, and is
+  its only remaining item. A click reaching a captured editor window at the
+  mapped point, and the chord returning input to the game, recorded on real
+  hardware by the owner.
+- **Hardware: P15's recorded Steam Deck run.** Keeps P15 open beside P15-8. The
+  world with temporal upscaling and dynamic resolution on, render scale
+  responding to its signal.
+- **Hardware: P16's HDR-display checks.** Keeps P16 open. On an HDR display the
+  swapchain reports an HDR color space, a test ramp exceeds SDR white, an HDR
+  desktop capture displays without clipping, toggling HDR during a desktop
+  capture ends and reopens the feed in the new encoding, on a still desktop as
+  well as a changing one, and the HUD renders at paper white.
 - **Review: cross-backend agreement.** A change's own GPU checks run on the
   backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
   those checks is judged in one final review pass.
@@ -6219,8 +8682,8 @@ judged by code, disassembly, and deterministic counts; wall-clock and GPU
 timing are deferred with no date. A GPU-backed check runs on real floor and
 ceiling hardware, not over a remote session, because a remote session does not
 report the adapter's memory properties. A check that needs a particular machine
-or environment is listed under [deferred to the end](#deferred-to-the-end)
-rather than holding its package open. A completed package updates its
+or environment is listed under [deferred to the end](#deferred-to-the-end) and
+keeps its package open until it has run. A completed package updates its
 owning guide, and the landing commit message carries the evidence: the
 candidate, commands, environment, expected results, and retained evidence.
 

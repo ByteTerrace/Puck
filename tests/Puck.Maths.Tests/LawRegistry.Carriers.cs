@@ -558,10 +558,26 @@ internal static partial class LawRegistry {
             id: "scalar.pow-exact-lattice"
         ),
         SweptCase(
+            claim: Subjects.FixedPowWholeCorrectlyRounded,
+            domain: ScalarTranscendental,
+            id: "scalar.pow-whole-correctly-rounded",
+            width: 1
+        ),
+        SweptCase(
             claim: Subjects.FixedPowWithinEnvelope,
             domain: ScalarTranscendental,
             id: "scalar.pow-envelope",
             width: 1
+        ),
+        SweptCase(
+            claim: Subjects.FixedSmoothstepCorrectlyRounded,
+            domain: ScalarSmoothstep,
+            id: "scalar.smoothstep-correctly-rounded",
+            width: 2
+        ),
+        ClaimCase(
+            claim: Subjects.FixedSmoothstepEdges,
+            id: "scalar.smoothstep-edges"
         ),
 
     ];

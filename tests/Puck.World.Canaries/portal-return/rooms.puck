@@ -1,0 +1,229 @@
+// The two rooms the portal-return canary joins by windows both ways, as modules each composition instantiates at its
+// own nesting depth.
+
+import "../../Puck.World.Verdicts/composition/plot.puck"
+
+module room(wall, there, nesting) {
+  use plot(centre: [0m, 0m, 0m], landingAt: [0, 0, 0], threshold: 3)
+
+  host {
+    authority: null
+    backend: auto
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: 144
+    journalDepth: 2000
+    listen: null
+    presentMode: Immediate
+    presentation: offscreen
+    surfaceFormat: r8g8b8a8
+    targetHertz: 0
+    width: 256
+  }
+
+  // A traveller from the other room arrives here, and the other room's window observes all of this one with its whole
+  // replica.
+  bodies {
+    capacity: 5
+    localSeats: 1
+    networkPlayers: 4
+    seatSpawns [
+      "arrival"
+    ]
+    sleepAfterSeconds: 0
+  }
+
+  admission [
+    {
+      algorithm: ""
+      disclosure: Replica
+      domain: "*"
+      grants [
+        {
+          budget: 8
+          capability: "Drive"
+          exclusive: true
+        }
+        {
+          budget: 64
+          capability: "Observe"
+          subject: "all"
+        }
+      ]
+      mode: "FederatedAuthority"
+      publicKey: ""
+      subject: null
+    }
+  ]
+
+  references [
+    {
+      document: there
+      name: there
+    }
+  ]
+
+  destinations [
+    {
+      durability: "persisted"
+      name: there
+      reference: there
+      scope: "global"
+    }
+  ]
+
+  views {
+    nestingDepth: nesting
+  }
+
+  // One derived face a room: its arch's glass.
+  placements {
+    policy {
+      authoringHeadroomPlacements: 0
+      authoringHeadroomScreens: 0
+      candidateCap: 1
+      candidateRadius: 1
+      derivedFaceScreens: 1
+      maxPlacementScale: 1
+      minPlacementScale: 1
+      previewDeadlineFrames: 1
+    }
+  }
+
+  prototypes {
+    prototype "arch" {
+      document {
+        behavior {
+          faces [
+            {
+              name: "glass"
+              shapeId: 0
+            }
+          ]
+        }
+        name: "arch"
+        palette [
+          {
+            color: "#303030"
+            roughness: 0.8
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "rim" {
+          material: 0
+          position [0, 0, 0]
+          scale [1.5, 1.5, 0.05]
+        }
+        shape Box "opening" {
+          blend: Subtraction
+          material: 0
+          position [0, 0, 0]
+          scale [1.45, 1.45, 0.3]
+        }
+      }
+    }
+    prototype "wall" {
+      document {
+        name: "wall"
+        palette [
+          {
+            color: wall
+            emissive: 0.5
+            roughness: 0.8
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "wall" {
+          material: 0
+          position [0, 0, 0]
+          scale [12, 8, 0.1]
+        }
+      }
+    }
+  }
+}
+
+module lobby(nesting) {
+  use room(wall: "#FF8000", there: "garden", nesting: nesting)
+
+  placements {
+    placement "arch" {
+      faceSources [
+        {
+          face: "glass"
+          portal {
+            arrival: "mapped"
+            counterpart: "arrival/glass"
+            destination: "garden"
+            travel: "body"
+          }
+          source {
+            $type: "session"
+            destination: "garden"
+            projection: window
+            resolution [192, 192]
+          }
+        }
+      ]
+      position [0, 1.5, -6]
+      prototype: "arch"
+      yawDegrees: 180
+    }
+    placement "wall" {
+      position [0, 1.5, 14]
+      prototype: "wall"
+    }
+    placement "far" {
+      position [0, 1.5, -20]
+      prototype: "wall"
+    }
+  }
+}
+
+module garden(nesting) {
+  use room(wall: "#2040FF", there: "lobby", nesting: nesting)
+
+  placements {
+    placement "arrival" {
+      faceSources [
+        {
+          face: "glass"
+          source {
+            $type: "none"
+          }
+        }
+      ]
+      position [0, 1.5, -6]
+      prototype: "arch"
+      yawDegrees: 180
+    }
+    placement "return" {
+      faceSources [
+        {
+          face: "glass"
+          portal {
+            arrival: "mapped"
+            counterpart: "arch/glass"
+            destination: "lobby"
+            travel: "body"
+          }
+          source {
+            $type: "session"
+            destination: "lobby"
+            fallback: "#FF00FF"
+            projection: window
+            resolution [192, 192]
+          }
+        }
+      ]
+      position [0, 1.5, 2]
+      prototype: "arch"
+      yawDegrees: 0
+    }
+    placement "wall" {
+      position [0, 1.5, 14]
+      prototype: "wall"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Testing;
 
@@ -544,6 +545,68 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.MoveCopySets(copySets: second.Region(index: 0)));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => owning.MoveCopySets(copySets: second.Region(index: 0)));
     }
+    /// <summary>A staged region writes no copy set when it is created: each slot's set is written the first time that
+    /// slot records a copy, inside the pass recording it, and not again while the region still holds it, so the writes
+    /// are counted with the upload's own work and a slot that never copies writes nothing.</summary>
+    [Fact]
+    public void AStagedRegionWritesEachSlotsCopySetAtItsFirstCopyAndNotAtCreation() {
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        Assert.Equal(expected: 0, actual: gpu.BufferDescriptorWrites);
+
+        _ = region.Write(bytes: [1, 2, 3, 4], offset: 8);
+        Copy(gpu: gpu, region: region, slot: 0);
+        Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+
+        _ = region.Write(bytes: [5, 6, 7, 8], offset: 12);
+        Copy(gpu: gpu, region: region, slot: 0);
+        Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+
+        _ = region.Write(bytes: [9, 10, 11, 12], offset: 16);
+        Copy(gpu: gpu, region: region, slot: 1);
+        Assert.Equal(expected: 4, actual: gpu.BufferDescriptorWrites);
+        Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+    }
+    /// <summary>A region under the ring or in-place policy writes no copy set at all, though it is handed the copy
+    /// pipeline: created, written, flushed and asked to record its copy on every slot, it writes no descriptor.</summary>
+    [InlineData(GpuResidencyPolicy.Ring)]
+    [InlineData(GpuResidencyPolicy.InPlace)]
+    [Theory]
+    public void ARingOrInPlaceRegionWritesNoCopySet(GpuResidencyPolicy policy) {
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        for (var slot = 0; (slot < 2); slot++) {
+            _ = region.Write(bytes: [((byte)(1 + slot)), 2, 3, 4], offset: (8 + (slot * 4)));
+            region.Flush(slot: slot);
+            Copy(gpu: gpu, region: region, slot: slot);
+        }
+
+        Assert.Equal(expected: 0, actual: gpu.BufferDescriptorWrites);
+    }
     /// <summary>Regions created on their shares of one reserved copy pool create no pool of their own, whatever number
     /// of regions the pool serves, and a region whose set another region wrote since (a replacement its owner abandoned)
     /// rewrites it before it records that slot's copy, so the copy lands in its own destination; a region writing its
@@ -575,8 +638,8 @@ public sealed class GpuResidencyLawTests {
 
         using var kept = Region(byteCount: 64, share: 0);
         using var beside = Region(byteCount: 32, share: 2);
+        using var abandoned = Region(byteCount: 128, share: 0);
 
-        Region(byteCount: 128, share: 0).Dispose();
         Assert.Equal(
             actual: gpu.PoolsCreated,
             expected: [GpuRegionCopyPool.SizesOf(regionCount: 3, slotCount: 2)]
@@ -586,14 +649,27 @@ public sealed class GpuResidencyLawTests {
             expected: GpuDescriptorPoolSizes.ForSets(sets: [.. Enumerable.Repeat(count: 6, element: GpuRegion.CopyBindings)])
         );
 
-        _ = kept.Write(bytes: [1, 2, 3, 4, 5, 6, 7, 8], offset: 12);
-        _ = beside.Write(bytes: [9, 10, 11, 12], offset: 4);
-
         for (var slot = 0; (slot < 2); slot++) {
+            // Establish both slots' writers, then let the replacement actually take this slot's set. Construction
+            // writes no set, and a staged destination owes nothing after its first copy unless it is changed or owed.
+            kept.OweAll(slot: slot);
             Copy(gpu: gpu, region: kept, slot: slot);
+            beside.OweAll(slot: slot);
             Copy(gpu: gpu, region: beside, slot: slot);
+            _ = abandoned.Write(bytes: [((byte)(21 + slot)), 22, 23, 24], offset: 12);
+            Copy(gpu: gpu, region: abandoned, slot: slot);
+            var abandonedContents = gpu.Memory(bufferHandle: abandoned.Buffer(slot: slot).BufferHandle).ToArray();
+
+            gpu.ResetTallies();
+            _ = kept.Write(bytes: [((byte)(1 + slot)), 2, 3, 4, 5, 6, 7, 8], offset: 12);
+            _ = beside.Write(bytes: [((byte)(9 + slot)), 10, 11, 12], offset: 4);
+            Copy(gpu: gpu, region: kept, slot: slot);
+            Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+            Copy(gpu: gpu, region: beside, slot: slot);
+            Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
             Assert.Equal(expected: kept.Contents.ToArray(), actual: gpu.Memory(bufferHandle: kept.Buffer(slot: slot).BufferHandle));
             Assert.Equal(expected: beside.Contents.ToArray(), actual: gpu.Memory(bufferHandle: beside.Buffer(slot: slot).BufferHandle));
+            Assert.Equal(expected: abandonedContents, actual: gpu.Memory(bufferHandle: abandoned.Buffer(slot: slot).BufferHandle));
         }
 
         // Each region's set of a slot is its own: the shares name distinct sets.
@@ -614,6 +690,72 @@ public sealed class GpuResidencyLawTests {
             recorder: gpu.Services.Recorder,
             slotCount: 3
         ));
+    }
+    /// <summary>A pool keeps no disposed region alive through a slot the replacement has not copied through yet, nor
+    /// through an old share a region moved away from. Releasing an old writer preserves a later writer of its sets.</summary>
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ACopyPoolLetsGoOfADisposedWriterEvenWhenAReplacementHasNotUsedEverySlot(bool moved) {
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var pool = new GpuRegionCopyPool(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            regions: [default, default],
+            slotCount: 2
+        );
+
+        GpuRegion Region(int share) => new(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            copySets: pool.Region(index: share),
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        WeakReference RetireWriter(out GpuRegion replacement) {
+            var region = Region(share: 0);
+
+            for (var slot = 0; (slot < 2); slot++) {
+                region.OweAll(slot: slot);
+                Copy(gpu: gpu, region: region, slot: slot);
+            }
+
+            // The replacement takes only slot 0; slot 1 still names the old writer. Disposal must leave slot 0's
+            // replacement writer intact, while dropping the old writer from slot 1 or from the share it moved off.
+            replacement = Region(share: 0);
+            Copy(gpu: gpu, region: replacement, slot: 0);
+            if (moved) {
+                region.MoveCopySets(copySets: pool.Region(index: 1));
+            }
+            var retired = new WeakReference(target: region);
+
+            region.Dispose();
+
+            return retired;
+        }
+
+        var retired = RetireWriter(replacement: out var next);
+        using var replacement = next;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(condition: retired.IsAlive);
+        gpu.ResetTallies();
+        _ = replacement.Write(bytes: [1, 2, 3, 4], offset: 0);
+        Copy(gpu: gpu, region: replacement, slot: 0);
+        Assert.Equal(expected: 0, actual: gpu.BufferDescriptorWrites);
+        Assert.Equal(expected: replacement.Contents.ToArray(), actual: gpu.Memory(bufferHandle: replacement.Buffer(slot: 0).BufferHandle));
+        GC.KeepAlive(obj: pool);
     }
     [Fact]
     public void AStagedCopyStatesItselfInTheStagingBufferAndOwesOnlyTheWordsThatDiffer() {

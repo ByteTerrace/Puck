@@ -42,24 +42,28 @@ process stdin drives verbs, stdout/stderr echo results, and the on-screen
 console is only a MIRROR of that pipe — nothing that draws (including a HUD
 `replace` panel taking over the whole overlay) can take the control plane
 away. Verify game behavior by RUNNING the game, never by a build gate
-(`CLAUDE.md` rule 3).
+(`AGENTS.md` rule 3).
 
 A world document is authored in `.puck` source, not hand-written JSON.
 `Puck.World.Transpiler` — the `puck.world.definition.v1` vocabulary, a peer of
 `Puck.GamingBricks.Transpiler`'s `puck.cartridge.v1`, both riding the
 schema-agnostic `Puck.Transpiler` core — lowers a parsed `.puck` document to
-the same JSON this file describes; JSON stays the wire form and the
-checked-in shape of every shipped world. `Puck.World`'s boot loader
+the same JSON this file describes. JSON stays the wire form; a world with a
+`.puck` source has no committed document beside it. The build emits its
+document into the output tree. `Puck.World`'s boot loader
 (`PuckWorldLoader.TryResolveWorld`) transparently compiles a `--world
 <x>.puck` path before composing and validating it exactly like a JSON boot.
 Every door that needs only a source's documents (the boot, the composer's
-basis and import reads, `world.reload`, `puck test`) compiles through
+basis and import reads, and `world.reload`) compiles through
 `WorldCompileCache`, which serves a held compile while every file fact it read
-(`CompileInputs`) still holds and persists per user, so an unchanged source is
-never compiled twice. A boot then takes its drawn definition from a compiled
+(`Puck.Assets.CompileInputs`) still holds and persists per user, so an unchanged source is
+never compiled twice. Document compiles omit test lowering; `puck test` asks for
+the distinct test-bearing cache entry. The same cache persists composed JSON,
+its original chain bytes and all input facts; a changed source, basis, import,
+catalog or compiler misses. A boot then takes its drawn definition from a compiled
 world (`CompiledWorld`, `<name>.puckb`: a `PWLD` chunk container whose header keys
 the engine build, catalog fingerprint, authored-definition hash and instance,
-holding `DEFN`, `ASST` and `BAKE`, the keys of the creation bakes it needs in
+holding `DEFN`, `ASST`, `CURV` (exact compiled splines), and `BAKE`, the keys of the creation bakes it needs in
 the build's one bake pack, `bakes.puckbake`) beside its document or
 in the per-user `compiled-worlds` cache (shared by every boot whatever its state
 root), re-derives only the chunks whose version, inputs or dependencies moved,
@@ -74,8 +78,8 @@ a second cache; the contract is in
 boot's work is counted by the `world.boot` work source (`WorldBootWork`,
 `world.boot.compiled-hits` and `world.boot.chunk-derivations` among its kinds);
 a law attributes its own ledger to read it. The flagship `puck.world.json` itself has no `.puck` source today
-— it remains hand-authored JSON, while the avatar/courtyard/tool worlds and
-both shipped CGB cartridges are DSL-authored (`git ls-files '*.puck'` is the
+— it remains hand-authored JSON, while the avatar/courtyard/tool/game worlds and
+the shipped CGB cartridges are DSL-authored (`git ls-files '*.puck'` is the
 current inventory; treat it, not this sentence, as the source of truth).
 Grammar, `let`/`template`/modules, units, and diagnostics belong to
 `puck-dsl`; this skill owns only the world vocabulary's own sugar and
@@ -100,14 +104,14 @@ member there rather than at a reader.
 | `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records (`WorldStateSection`/`WorldStateRow` extend the engine's section and row with the body lanes and the `gatesDrive`/`field` traits; `WorldFieldTopology` is the physical lattice case), `WorldDefinitionValidator`, `WorldDefinitionSerialization` (`WorldJsonContext` over the generated `WorldJsonSourceContext`, `WorldJsonVocabulary` adding the document's arms to the engine's polymorphic bases); authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`Grantee`/`PrincipalTokens`, admission entries; the actor `Principal` itself lives in `Puck.Commands`) |
 | `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, the state mirror every presentation read of state goes through (`WorldStateMirror`, over `WorldDocumentStateView`, the `IWorldStateView` of the delivered definition and the snapshot's field cells; the colors a program or decal bakes resolve through it as `WorldBakedColors`; a session mirror and an authority endpoint follow their own with `FollowState`; its slots are registered by the document's `WorldPresentationManifest` and each seat's `WorldPresentationManifest.SeatBindings`, and a consumer only looks one up with `SlotOf`, which registers and reads nothing), and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — `WorldAuthorityEndpoint`/`WorldSessionMirror`/`WorldStateMirror` are namespaced `Puck.World.Client` and the adjacency family `Puck.World.Server` |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
-| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `IWorldMachineHost` (the screen-machine seam — the concrete host lives in `Puck.World.Machines`), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
-| `src/Puck.World.Console` | The server-only console command modules | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldNetworkCommandModule`, `WorldReplayCommandModule` (the `replay.*` verb surface — the tape and its read-back stay in Server), `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
+| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `IWorldMachineHost` (the screen-machine seam — the concrete host lives in `Puck.World.Machines`), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldHistory` (in-session time travel over the tape's capture), `WorldOutputHub` |
+| `src/Puck.World.Console` | The server-only console command modules | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldNetworkCommandModule`, `WorldReplayCommandModule` (the `replay.*` verb surface — the tape and its read-back stay in Server), `WorldHistoryCommandModule` (`world.history` — the history stays in Server), `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
 | `src/Puck.World.Addons` | The addon guest host — scripting guests only, with no emulator surface at all | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal`, `AddonSimulationPump` |
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host | `WorldMachineHost` (the `IWorldMachineHost` implementation — boot, per-tick stepping, cable-linking, memory peek/poke, the two-phase prepare/commit/finish lifecycle, cartridge symbol resolution), `WorldMachineCatalog` (immutable host-selected engines and neutral `IMachineContentProvider` registrations, built by `WorldMachineCatalog.From` from the host's composed extensions and also supplied explicitly to admission). References no Gaming Brick core or forge project |
 | `src/Puck.World.Client` | The presentation-facing client seam | `PlayerRoster`/`WorldClient`/`SeatController`, the client's own `WorldStateMirror` (`WorldClient.StateMirror`, and `StateMirrorFor` the mirror of whichever authority a seat is routed to) and `WorldStateLease` (a body's or seat's acquired slots, released when it leaves), the camera-program translation (`WorldCameraRigCompiler`, over the document-blind IR in `Puck.SdfVm.Views`), `WorldFramePresenter` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/`: `SdfDocumentDecoder`, `SdfDocumentProgram`/`SdfDocumentOp`/`SdfDocumentException`, `SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldAffordances`, and `PlayerCommandNames`/`WorldWheelCommandNames` in `CommandVocabulary.cs`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
 | `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), the command modules that stayed here (`WorldCommandArguments`, the free-text-tail reconstruction shared with `Puck.World.Console`, lives in `Puck.World.Server` since both need it), and the shipped world/scenario documents under `Assets/` |
 
-`src/Puck.Physics` owns the generic kernels the server drives: `Navigation/` (the budgeted, checkpointed A* over surface, volume, and medium grids) and `Fields/` (`FieldLattice`, the reaction integrator behind a `state.lattices` row). Server keeps pair selection, authority, and body-state writes. The static solid field bakes a distance grid at `collision.gridCellSize` (0 = none; the shipped world authors 0.5) and answers the exact program inside a contact band derived from the kit colliders, so a query never marches from scratch; `world.collision.status` echoes the grid. `host.journalDepth` bounds the undo journal (0 = unbounded; entries past the horizon fold forward into the base; `world.status` echoes it). Transfer leases, escrow rows, and parked entries expire off one sorted `WorldDeadlineTable`, never a per-tick sweep of a whole collection.
+`src/Puck.Physics` owns the generic kernels the server drives: `Navigation/` (the budgeted, checkpointed A* over surface, volume, and medium grids) and `Fields/` (`FieldLattice`, the reaction integrator behind a `state.lattices` row). Server keeps pair selection, authority, and body-state writes. The static solid field bakes a distance grid at `collision.gridCellSize` (0 = none; the shipped world authors 0.5) and answers the exact program inside a contact band derived from the kit colliders, so a query never marches from scratch; `world.collision.status` echoes the grid. `host.journalDepth` bounds the undo journal (0 = unbounded; entries past the horizon fold forward into the base; `world.status` echoes it). Transfer leases, escrow rows, and parked entries expire off one sorted `WorldDeadlineTable`, never a per-tick sweep of a whole collection. Every crossing step a peer can see is written ahead to the authority's crossing log, and a restarted authority redoes the records its checkpoint does not reflect ([references/adjacency-and-federation.md](references/adjacency-and-federation.md#durable-crossings)).
 
 **The one world and its districts.** `puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias. The district primitives and the derived limits that shape a district are in [references/documents-composition.md](references/documents-composition.md#the-one-world-and-its-districts).
 
@@ -219,9 +223,15 @@ placement is a reading of the cells it was dealt from, and a responsive (`respon
 placement a reading of the cells its conditions read, so the view (and the wire
 projection, through the same `WorldStateDisclosure.Disclose`) re-deals or re-reads
 it from the reader's own rows. Every federation egress that knows its traveler
-composes for it; the seatless `Observe` lane composes for the public observer. The
-local HUD and view bindings stay unfiltered: they draw the one shared screen the author
-chose. Details and the laws: [references/console.md](references/console.md).
+composes for it; the seatless `Observe` lane composes for the public observer. A
+state clock a projected value keys on is a reading of its row's slot: it crosses as
+an anchor of its phase (`WorldClockAnchor`, re-sent by the recipient's
+`WorldProjectionFeed` only where the shared `Predict` misses), never as the row; a
+bindable bound to state is a reading of its cell; a recipient that may not read either
+refuses the composition by name. Laws:
+`ProjectionAnchorLawTests`. The local HUD and view bindings stay unfiltered: they draw
+the one shared screen the author chose. Details and the laws:
+[references/console.md](references/console.md).
 
 **Rule writes land on the arena; the document installs once per tick.** During
 `EvaluateWorldRules` every state effect writes the host's `StateArena`
@@ -313,6 +323,11 @@ model shape (`WorldModelShape.generated.cs`, the table `WorldCallArguments` and
 together; `puck schema --check` (run in-process by `LedgerDriftTests`) fails
 when any of them drifts, and none is ever hand-edited. Precise direction:
 [references/documents.md](references/documents.md).
+If a model rename leaves generated getters uncompilable, run the existing CLI's
+`schema --bootstrap`: it builds a schema-only CLI with private intermediates and
+an explicitly absent model table, then uses the same reflective generator.
+Rebuild normally afterwards and check with that build's CLI; never hand-edit the
+generated table to break the cycle. The CLI reference owns the flags and logs.
 
 **Mint names through `GeneratedName`.** A name the engine or compiler writes
 into a namespace an author also names — a row, a cell key, a rule, a group, a
@@ -386,8 +401,11 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `entry` member); a composition with neither is refused by name. `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
-  what `puck parity` boots; its pump steps no tick past an armed capture
-  until the capture is served or refused). Tick-scheduled `captures`, the `schedule`
+  what `puck parity` boots; its time is its tick count, one tick per rendered
+  frame however long a frame takes, holding a tick whose frame the render
+  graph has not rendered yet (`[offscreen] holding tick T …` on stderr), so a
+  wait of N ticks has N rendered frames behind it, and its pump steps no tick past an armed capture until the
+  capture is served or refused). Tick-scheduled `captures`, the `schedule`
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
@@ -412,7 +430,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `world.wait <ticks>` holds only its issuing session, clocked by completed
   host-work ticks; the console drains before every step, so the line after a
   wait releasing at R runs before tick R+1, and a piped script's lines up to
-  its first wait run before tick 1. End a script with `quit` to stop the run when the
+  its first wait run before tick 1. Offscreen every one of those ticks
+  composed its own frame; a windowed host may compose one frame for several
+  ticks it catches up, so a windowed script that reads rendered work waits on
+  `world.wait ready` or `world.wait captures`, never a tick count. End a script with `quit` to stop the run when the
   script ends (see [references/console.md](references/console.md)).
 - **Encoding, the two traps**: a pwsh spawned from Git Bash reads captured
   output under an OEM codepage and mangles the engine's em-dashes
@@ -454,11 +475,18 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - **A verification that cannot fail is a lie.** Pair every denial case with
   a control (actor holds the grant → succeeds), keep actor ≠ target (every
   seat is seeded wide, so self-targeting discriminates nothing), and prove
-  a new assertion once by breaking it. This repo's recorded dominant
-  failure mode is verification scripts that lie silently.
+  a new assertion once by breaking it. A law with a fix is proven by
+  `puck laws prove <law> --fix <commit>` (or `--file-list` for an
+  uncommitted fix), which withholds the fix in a worktree of its own and
+  requires the law to fail there and pass with it; never hand-revert files
+  in a shared tree. This repo's recorded dominant failure mode is
+  verification scripts that lie silently.
 - `replay.verify` MATCH proves the explicitly hashed authoritative state-system
   trajectory, not the whole document, grant table, or HUD
-  ([references/replay.md](references/replay.md)).
+  ([references/replay.md](references/replay.md)). A recording tapes every row
+  of the process as one set, and a crossing is verified only when its
+  departure and arrival are both on tapes of that set; a crossing to a remote
+  or untaped authority is `NOT VERIFIED` and fails the verb.
 - Committed proofs: `puck canary` manifests under `tests/Puck.World.Canaries/`
   for every load-bearing seam, including `world.grant`-driven claims (a
   command claim's `stream` override lets an accepted outcome expect its
@@ -470,16 +498,17 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   proofs your change touches. The runner closes every leg's script with
   `wire.errors` and `quit`, so a leg lasts as long as its script; a manifest's
   `timeoutSeconds` is only the kill ceiling (each child World also gets
-  `--exit-after-seconds` at it as a backstop), `--jobs` runs legs
-  concurrently (a windowed, offscreen, or requirement-declaring leg runs
-  alone), and Ctrl+C or a leg that throws kills every child the run
+  `--exit-after-seconds` at it as a backstop), `--jobs` bounds the
+  World processes running at once and `--gpu-jobs` the legs on the GPU
+  (`CanaryCommand.CanaryLegSlots`; a manifest declaring `"exclusive": true`
+  runs each leg alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
   selection's World boots, spawns, builds and leg budget without running;
-  the automatic set and `--merge` are refused past their ceilings in
-  `src/Puck.Cli/Canary/CanaryCeilings.cs`, which a deliberate growth raises
-  in the same change. A GPU selection first warms the engine pipeline cache
+  the automatic set and `--merge` are refused past their ceilings recorded
+  in `CanaryCeilings.json`, which a deliberate growth records with
+  `puck canary-ceilings` in the same change. A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
-  (`CanaryCommand.Warm.cs`), so no leg builds the engine's pipelines cold. The
+  (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
@@ -520,10 +549,10 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | `SubmissionEnvelope`, the one queue, completions, echo routing, the intent buffer | [references/ordered-domain.md](references/ordered-domain.md) |
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
-| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
+| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, the handoff token's fences, durable crossing logs and their recovery, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `body.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines, a screen route's pointer `input` destination and its `Passthrough` refusal | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
-| The replay tape: version-1 format, capture scope, population hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
+| The replay tape: format, capture scope, destination arrivals and federated input, sets of tapes and crossing verdicts, population hash, verify semantics, receipts; the in-session history (`world.history`) that shares its capture | [references/replay.md](references/replay.md) |
 | Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots, `world.sdf.dump` | [references/console.md](references/console.md) |
 | Render validation, stamp capacity and the stamp pool, the `rigid`/`carry`/`tether` facets | [references/documents-render.md](references/documents-render.md) |

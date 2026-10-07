@@ -13,7 +13,7 @@ public enum SdfGalleryExhibit {
     CellJitterCreases,
     NotchHorizon,
     SmoothChain,
-    WallpaperP4G,
+    WallpaperP4M,
     CarveCeiling,
     LogSphereRunDoc,
     DriftMonolith,
@@ -114,9 +114,9 @@ public sealed class SdfGalleryScene {
             ]
         ),
         new ExhibitEntry(
-            Kind: SdfGalleryExhibit.WallpaperP4G,
-            Name: "wallpaper-p4g",
-            Title: "P4G glide mirrors",
+            Kind: SdfGalleryExhibit.WallpaperP4M,
+            Name: "wallpaper-p4m",
+            Title: "P4M mirrors",
             Target: new Vector3(
                 x: 0f,
                 y: -1.0f,
@@ -126,9 +126,9 @@ public sealed class SdfGalleryScene {
             Pitch: 0.9f,
             Distance: 7.0f,
             Plaque: [
-                "P4G folds an asymmetric motif through quarter-turn and glide-reflection classes while preserving a",
-                "one-cell translation period. The asymmetric tile makes the glide mirrors visible and keeps the",
-                "periodicity proof from passing through accidental motif symmetry.",
+                "P4M folds an asymmetric motif through the mirrors on every cell wall and cell diagonal. A program",
+                "folds only through a group whose fold is continuous, every wall a mirror, so the field never reads",
+                "past the nearest copy; the asymmetric tile, crossing the mirrors, shows each class and reads short.",
             ]
         ),
         new ExhibitEntry(
@@ -160,8 +160,8 @@ public sealed class SdfGalleryScene {
             Distance: 2.6f,
             Plaque: [
                 "An aggressive LogSphere (shellRatio ~2.8, twist) with the camera DOWN INSIDE the fold near a floor.",
-                "The folded field can overestimate distance near shell boundaries, so marchers step on the minimum of",
-                "the field value and the published boundary gap while terminating on the field value (sdfMapStepBound).",
+                "The folded field can overestimate distance past a shell boundary, so marchers cross each boundary just",
+                "past it (sdfMarchAdvance) and sample the next shell there, while terminating on the field value.",
                 "The world-droste-solidity stage protects this contract. The accepted residual is pixel-level containment-crease",
                 "speckle + MaxSteps filaments at extreme grazes. PAIR WITH world.debug-view overshoot AND world.debug-view termination",
                 "— a regression re-opens tile-size holes, which that solidity gate now catches.",

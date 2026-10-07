@@ -17,24 +17,36 @@ internal static class ParityCommand {
     private const string ContractPath = "tests/Puck.Parity/parity.contract.json";
     private const string ScratchPrefix = "puck-parity-";
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
-    private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    // The authored source of the parity world, and the name of the document the tree compile emits from it.
+    private const string ShippedWorldName = "parity.world.json";
+    private const string SourcePath = "tests/Puck.Parity/parity.puck";
     // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
     private const ulong WaitMarginTicks = 30;
+    // The ticks the leg turns temporal reconstruction on before the world's first converging station, so every view's
+    // temporal graph has installed before that station arms.
+    private const ulong ReconstructionLeadTicks = 60;
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
-    private static int Run(bool bakes) {
+    private static int Run(bool bakes, bool debugLayers) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
 
+        using var run = RunDirectory.Create(prefix: ScratchPrefix);
+
+        Console.WriteLine(value: $"parity: artifacts {run.Path}");
+
+        return run.Conclude(exitCode: Run(
+            bakes: bakes,
+            debugLayers: debugLayers,
+            repositoryRoot: repositoryRoot,
+            runDirectory: run.Path
+        ));
+    }
+    // One parity run inside its run directory, which the caller concludes with the exit code this returns.
+    private static int Run(bool bakes, bool debugLayers, string repositoryRoot, string runDirectory) {
         var suiteClock = Stopwatch.StartNew();
-
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
-
-        Console.WriteLine(value: $"parity: artifacts {runDirectory}");
 
         if (!WorldOffscreenLeg.TryResolveWorld(
             artifact: out var world,
@@ -65,22 +77,30 @@ internal static class ParityCommand {
             return CliExit.Refused;
         }
 
+        var validated = true;
+
         foreach (var backend in WorldOffscreenLeg.Backends) {
             var leg = RunBackend(
                 artifact: world.Path,
                 backend: backend,
                 bakes: bakes,
+                debugLayers: debugLayers,
                 shippedWorld: shippedWorld,
                 runDirectory: runDirectory,
-                suiteClock: suiteClock
+                suiteClock: suiteClock,
+                validation: out var validation
             );
 
+            if (validation is { } verdict) {
+                Console.WriteLine(value: ValidationLine(backend: backend, verdict: verdict));
+                validated &= verdict.Passed;
+            }
             if (leg != CliExit.Success) {
                 return leg;
             }
         }
 
-        return ParityCompareCommand.Run(
+        return Fold(compared: ParityCompareCommand.Run(
             contractPath: Path.Combine(
                 path1: repositoryRoot,
                 path2: ContractPath
@@ -97,33 +117,77 @@ internal static class ParityCommand {
                 path1: runDirectory,
                 path2: "captures-directx"
             )
-        );
+        ), validated: validated);
     }
 
-    // The tick the leg waits to, past the last tick the world's captures rows schedule, read from the document itself
-    // so a station added there is captured without a second statement of its schedule here. A world that cannot be
-    // read, or whose last tick leaves no room for the margin, is refused by name.
-    internal static bool TryReadWaitTick(string worldPath, out ulong waitTick, out string error) {
+    /// <summary>Returns the verdict line a leg booted under its backend's validation layer prints: the backend, then
+    /// <c>VALIDATION-OK</c> or <c>VALIDATION-FAIL</c>, then what the layer reported.</summary>
+    /// <param name="backend">The leg's backend.</param>
+    /// <param name="verdict">The leg's verdict (<see cref="DebugLayerOutput.Verdict"/>).</param>
+    /// <returns>The line.</returns>
+    internal static string ValidationLine(string backend, DebugLayerVerdict verdict) =>
+        $"parity: {backend} {(verdict.Passed ? "VALIDATION-OK" : "VALIDATION-FAIL")} {verdict.Detail}";
+    /// <summary>Folds the legs' validation verdicts into the comparison's exit code: a validation failure fails a
+    /// comparison that held every verdict, and leaves a failed or refused comparison as it was.</summary>
+    /// <param name="compared">The comparison's exit code.</param>
+    /// <param name="validated">Whether every leg booted under its validation layer reported nothing.</param>
+    /// <returns>The run's exit code.</returns>
+    internal static int Fold(int compared, bool validated) => (((compared == CliExit.Success) && !validated)
+        ? CliExit.Failed
+        : compared);
+    // The tick the leg waits to, past the last tick the world's captures rows schedule, and the tick it turns temporal
+    // reconstruction on at, ReconstructionLeadTicks before the first station that converges, or null for a world with
+    // none: both read from the document itself, so a station added there is captured without a second statement of its
+    // schedule here. Every station that does not converge must lie before the reconstruction tick, since parity's
+    // existing stations hold with reconstruction off. A world that cannot be read, whose last tick leaves no room for the
+    // margin, whose first converging station leaves no room for the lead, or that captures a station that does not
+    // converge once reconstruction is on, is refused by name.
+    internal static bool TryReadSchedule(string worldPath, out ulong waitTick, out ulong? reconstructionTick, out string error) {
         waitTick = 0UL;
+        reconstructionTick = null;
         error = string.Empty;
 
-        ulong lastTick;
+        IReadOnlyList<WorldCaptureRow> rows;
 
         try {
-            lastTick = (WorldDefinitionSerialization.Deserialize(
+            rows = (WorldDefinitionSerialization.Deserialize(
                 documentDirectory: Path.GetDirectoryName(path: worldPath),
                 utf8Json: File.ReadAllBytes(path: worldPath)
-            ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
+            ).Captures?.Rows ?? []);
         } catch (Exception exception) when ((exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or NotSupportedException)) {
             error = $"the parity world '{worldPath}' could not be read for its capture schedule: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
+        var lastTick = rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max();
+
         if (lastTick > (ulong.MaxValue - WaitMarginTicks)) {
             error = $"the parity world '{worldPath}' schedules a capture at tick {lastTick}, which leaves no room for the {WaitMarginTicks}-tick wait margin.";
 
             return false;
+        }
+
+        var converging = rows.Where(predicate: static row => (row.Converge > 0)).SelectMany(selector: static row => row.Ticks).ToArray();
+
+        if (converging.Length > 0) {
+            var first = converging.Min();
+
+            if (first <= ReconstructionLeadTicks) {
+                error = $"the parity world '{worldPath}' converges a station at tick {first}, which leaves no room for the {ReconstructionLeadTicks}-tick reconstruction lead.";
+
+                return false;
+            }
+
+            var on = (first - ReconstructionLeadTicks);
+
+            if (rows.FirstOrDefault(predicate: row => ((row.Converge == 0) && row.Ticks.Any(predicate: tick => (tick >= on)))) is { } late) {
+                error = $"the parity world '{worldPath}' captures station '{late.Station}' at or after tick {on}, when reconstruction is on, without converging; a station that does not converge holds with reconstruction off.";
+
+                return false;
+            }
+
+            reconstructionTick = on;
         }
 
         waitTick = checked((lastTick + WaitMarginTicks));
@@ -150,7 +214,7 @@ internal static class ParityCommand {
     private static bool ShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
         var tree = Path.Combine(
             path1: repositoryRoot,
-            path2: Path.GetDirectoryName(path: WorldPath)!
+            path2: Path.GetDirectoryName(path: SourcePath)!
         );
         var output = Path.Combine(
             path1: runDirectory,
@@ -161,7 +225,7 @@ internal static class ParityCommand {
         _ = Directory.CreateDirectory(path: output);
         world = Path.Combine(
             path1: output,
-            path2: Path.GetFileName(path: WorldPath)
+            path2: ShippedWorldName
         );
 
         foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
@@ -267,14 +331,17 @@ internal static class ParityCommand {
 
         return null;
     }
-    private static int RunBackend(string artifact, string backend, bool bakes, string shippedWorld, string runDirectory, Stopwatch suiteClock) {
+    private static int RunBackend(string artifact, string backend, bool bakes, bool debugLayers, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
+        validation = null;
+
         var captureDirectory = Path.Combine(
             path1: runDirectory,
             path2: $"captures-{backend}"
         );
 
-        if (!TryReadWaitTick(
+        if (!TryReadSchedule(
             error: out var scheduleError,
+            reconstructionTick: out var reconstructionTick,
             waitTick: out var waitTick,
             worldPath: shippedWorld
         )) {
@@ -285,7 +352,9 @@ internal static class ParityCommand {
 
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
         // only turns the bakes off when asked (a world carrying its bakes draws them), composes the world's companion SDF
-        // document and waits past the last tick its captures rows schedule.
+        // document, turns temporal reconstruction on at the reconstruction tick when the world converges a station, and
+        // waits past the last tick its captures rows schedule. A line after a wait releasing at tick R runs before tick
+        // R + 1, so the reconstruction tick is exact.
         // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
         var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
@@ -293,17 +362,16 @@ internal static class ParityCommand {
         ).Replace(
             newChar: '/',
             oldChar: '\\'
-        )}\"\nworld.wait {waitTick}\nworld.counters sdf.bakes\n";
+        )}\"\n{((reconstructionTick is { } on) ? $"world.wait {on}\nworld.temporal on\nworld.wait {(waitTick - on)}\n" : $"world.wait {waitTick}\n")}world.counters sdf.bakes\n";
         var leg = WorldOffscreenLeg.Run(
-            arguments: ["--capture-dir", captureDirectory],
+            arguments: ["--capture-dir", captureDirectory, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)],
             artifact: artifact,
             backend: backend,
             budget: SuiteBudget,
             // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as its
-            // wait releases. The net outlasts a slow machine's whole leg: an offscreen leg paces one produced
-            // frame per tick (about 45 s for the wait on an RTX 2060), and the host may hold its clock at a capture for
-            // at most WorldCaptureScheduler.BuildHoldBudgetSeconds while the engine's pipeline set builds on a cold
-            // driver cache plus WorldCaptureScheduler.HoldBudgetSeconds once it is ready.
+            // wait releases. This backstop bounds the whole leg independently of each capture's own readiness-based
+            // hold budgets. An offscreen leg paces one produced frame per tick and can hold that tick for a cold
+            // pipeline build or the captured source's finite solve.
             exitAfterSeconds: 300,
             process: out var process,
             runDirectory: runDirectory,
@@ -313,9 +381,31 @@ internal static class ParityCommand {
             world: shippedWorld
         );
 
+        return EvaluateBackend(
+            backend: backend,
+            bakes: bakes,
+            captureDirectory: captureDirectory,
+            debugLayers: debugLayers,
+            leg: leg,
+            process: process,
+            validation: out validation
+        );
+    }
+
+    // Judge stderr even when the process failed, before any refusal leaves the leg.
+    internal static int EvaluateBackend(string backend, bool bakes, string captureDirectory, bool debugLayers, int leg, CliProcessResult? process, out DebugLayerVerdict? validation) {
+        validation = DebugLayerOutput.Verdict(
+            backend: backend,
+            debugLayers: debugLayers,
+            stderr: (process?.OutputLines ?? [])
+                .Where(predicate: static line => (line.Stream == CliProcessOutputStream.Stderr))
+                .Select(selector: static line => line.Line)
+        );
+
         if (leg != CliExit.Success) {
             return leg;
         }
+
         if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
             Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");
 
@@ -340,7 +430,7 @@ internal static class ParityCommand {
         );
 
         command.Detail(detail: """
-            Boots tests/Puck.Parity/parity.world.json offscreen once per backend (vulkan, directx — no
+            Boots the world authored in tests/Puck.Parity/parity.puck offscreen once per backend (vulkan, directx — no
             window is shown), runs each leg until 30 ticks past the last tick its captures rows schedule,
             collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
             under tests/Puck.Parity/parity.contract.json.
@@ -361,18 +451,30 @@ internal static class ParityCommand {
             --bakes off every creation draws through its field, and `puck parity compare` of an on run
             against an off run holds each capture's stateHash, since bakes are presentation only.
 
+            With --debug-layers each leg boots its World under its backend's validation layer, as
+            `puck canary --debug-layers` does, and prints one validation verdict: VALIDATION-OK, or
+            VALIDATION-FAIL naming the first validation message, or the statement that the layer never
+            loaded. A leg's messages cannot be attributed to one capture, so a VALIDATION-FAIL fails the
+            run (exit 1) after every capture's verdicts are printed.
+
             Requires both a Vulkan and a Direct3D 12 device on this machine; no display is taken over.
 
-            Exit codes: 0 every capture held all three verdicts, 1 a verdict failed, 2 a leg/build
-            refusal or a malformed manifest or contract.
+            Exit codes: 0 every capture held every verdict, and under --debug-layers every leg's validation
+            verdict held, 1 a verdict failed, 2 a leg/build refusal or a malformed manifest or contract.
             """);
 
         var bakesOption = new Option<string>(name: "--bakes") { DefaultValueFactory = static _ => "on", Description = "Whether the parity world's static creations draw their bakes (on, the default) or their fields (off)." };
 
         bakesOption.AcceptOnlyFromAmong(values: ["on", "off"]);
+        var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot each backend's leg with --debug-layers, the validation layer of that backend, and fail the run when a leg's stderr has a validation message or says the layer never loaded." };
+
         command.Options.Add(item: bakesOption);
+        command.Options.Add(item: debugLayersOption);
         command.Subcommands.Add(item: ParityCompareCommand.Create());
-        command.SetAction(action: result => Run(bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal)));
+        command.SetAction(action: result => Run(
+            bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal),
+            debugLayers: result.GetValue(option: debugLayersOption)
+        ));
         return command;
     }
 }

@@ -27,9 +27,9 @@ public enum WorldBakeState : byte {
 /// and kept otherwise, so only a prototype whose content changed is baked again. A result is taken on the presenter's
 /// thread at the next frame, which starts the next key, so bakes become ready one by one. Nothing here reads or writes
 /// simulation state, and a prototype keeps drawing through its field until its bake is ready.
-/// <para>A presentation that draws bakes asks <see cref="TryGetMesh"/> for a ready prototype's baked mesh, decoded once
-/// per bake; the first time a bake is handed out it counts under <see cref="Drawn"/>, the counted switch from the field
-/// to the bake. <see cref="Revision"/> moves whenever a bake lands or the definition changes, so a presentation
+/// <para>A presentation that draws bakes asks <see cref="TryGetDraw"/> for a ready prototype's baked mesh and impostor,
+/// decoded once per bake; the first time a bake is handed out it counts under <see cref="Drawn"/>, the counted switch from
+/// the field to the bake. <see cref="Revision"/> moves whenever a bake lands or the definition changes, so a presentation
 /// rebuilds what it draws.</para>
 /// <para>The schedule counts its work under <see cref="SourceName"/>. Every kind is
 /// <see cref="WorkClass.Pacing"/>, because what the cache already holds decides it.</para>
@@ -48,12 +48,13 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private readonly HashSet<ContentPin> m_counted = [];
     private readonly HashSet<ContentPin> m_current = [];
     private readonly Dictionary<string, ContentPin> m_prototypes = new(comparer: StringComparer.Ordinal);
-    // Each held bake's mesh, decoded the first time it is asked for (null for a refusal or a bake without triangles), and
+    // Each held bake's draw, decoded the first time it is asked for (null for a refusal or a bake without triangles), and
     // the bakes handed out for drawing, each counted once.
-    private readonly Dictionary<ContentPin, SdfMesh?> m_meshes = [];
+    private readonly Dictionary<ContentPin, WorldBakedDraw?> m_meshes = [];
     private readonly HashSet<ContentPin> m_drawn = [];
 
     private long m_revision;
+    private volatile bool m_baking;
     // Published together at the end of a pump, so readiness never combines states from different definitions.
     private volatile Progress m_progress;
     private bool m_ships;
@@ -93,10 +94,13 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     public static WorkKind Baked { get; } = new(name: "sdf.bakes.baked", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the creations this device found have no bake.</summary>
     public static WorkKind Refused { get; } = new(name: "sdf.bakes.refused", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the held bakes that cannot be decoded, which their prototypes draw through the field
+    /// without.</summary>
+    public static WorkKind Undecodable { get; } = new(name: "sdf.bakes.undecodable", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the field evaluations this device's bakes made.</summary>
     public static WorkKind Evaluations { get; } = new(name: "sdf.bakes.evaluations", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the bakes a presentation switched to from their field: one per bake, the first
-    /// time <see cref="TryGetMesh"/> hands it out.</summary>
+    /// time <see cref="TryGetDraw"/> hands it out.</summary>
     public static WorkKind Drawn { get; } = new(name: "sdf.bakes.drawn", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the schedule's kinds, in the order a report lists them.</summary>
@@ -110,6 +114,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     public SdfBakeQuality Quality { get; }
     /// <summary>Gets whether any bake is queued or baking.</summary>
     public bool IsBusy => ((m_queue.Count > 0) || m_build.IsPending);
+    /// <summary>Gets whether a background bake is evaluating a field and its outcome has not been taken: false while a bake is
+    /// only queued, not yet scheduled onto the thread pool, or satisfied by the cache. Safe to read from any thread.</summary>
+    public bool IsBaking => m_baking;
     /// <summary>Gets whether the definition the schedule last pumped has every bake settled: baked, held or refused,
     /// none queued or baking. False before the first pump. Written at the end of each pump and safe to read from any
     /// thread.</summary>
@@ -166,7 +173,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
 
             m_queue.RemoveAt(index: 0);
             m_inFlight = batch;
-            m_build.Start(build: token => Resolve(batch: batch, store: store, token: token));
+            m_build.Start(build: token => Resolve(batch: batch, onBaking: () => m_baking = true, store: store, token: token));
         }
 
         m_progress = Progress.Reconciled | (m_ships ? Progress.Ships : Progress.None) | (IsBusy ? Progress.None : Progress.Settled);
@@ -187,13 +194,13 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             ? WorldBakeState.Refused
             : WorldBakeState.Ready);
     }
-    /// <summary>Returns a ready prototype's baked mesh, in the creation's engine frame like its inline mesh, decoded once
-    /// per bake and counted under <see cref="Drawn"/> the first time it is handed out.</summary>
+    /// <summary>Returns a ready prototype's baked mesh, in the creation's engine frame like its inline mesh, and its
+    /// impostor, decoded once per bake and counted under <see cref="Drawn"/> the first time it is handed out.</summary>
     /// <param name="prototypeId">The prototype row's id.</param>
-    /// <param name="mesh">The baked mesh, when the bake is ready and holds triangles.</param>
+    /// <param name="draw">The baked draw, when the bake is ready and holds triangles.</param>
     /// <returns><see langword="true"/> when the prototype draws its bake; otherwise it draws through its field.</returns>
-    public bool TryGetMesh(string prototypeId, [NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
-        mesh = null;
+    public bool TryGetDraw(string prototypeId, [NotNullWhen(returnValue: true)] out WorldBakedDraw? draw) {
+        draw = null;
 
         if (
             !m_prototypes.TryGetValue(key: prototypeId, value: out var key) ||
@@ -201,13 +208,11 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         ) {
             return false;
         }
-        if (!m_meshes.TryGetValue(key: key, value: out mesh)) {
-            mesh = ((CreationBakeCodec.TryDecode(bake: out var bake, content: outcome.Span, refusal: out _) && (bake.Mesh.Indices.Length > 0))
-                ? MeshOf(bake: bake)
-                : null);
-            m_meshes[key] = mesh;
+        if (!m_meshes.TryGetValue(key: key, value: out draw)) {
+            draw = DecodeDraw(key: key, outcome: outcome.Span);
+            m_meshes[key] = draw;
         }
-        if (mesh is null) {
+        if (draw is null) {
             return false;
         }
         if (m_drawn.Add(item: key)) {
@@ -228,16 +233,39 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
     public long Read(WorkKind kind) =>
         m_counts.Read(kind: kind);
-    /// <summary>Cancels the running bake without waiting for it, so a shutdown never waits out a bake. A bake that
-    /// finishes anyway only fills the store, which outlives the schedule.</summary>
+    /// <summary>Cancels the running bake and waits for it to stop. A bake stops at its next field evaluation, so a
+    /// shutdown never waits out a bake, and once this returns nothing the schedule started writes under the store's
+    /// directory, which its owner may then delete.</summary>
     public void Dispose() =>
-        m_build.Cancel();
+        m_build.CancelAndWait();
 
     private readonly record struct Outcome(ContentPin Key, bool Baked, bool Refusal, long Evaluations);
 
     // The drawable mesh of a bake: its positions, normals and texture coordinates, each triangle's palette entry, read
     // from the bake's material identity at the triangle's texture-coordinate centroid, which lies inside the triangle's
     // own tile, and its five surface textures.
+    // A held outcome's draw: null for a refusal or a bake without triangles. Bytes that are no canonical bake of this
+    // baker (a bake kept by another build under the same key) draw through the field, counted under Undecodable and named
+    // once on the error stream with the key and the reason, never silently and never by throwing on the frame thread.
+    private WorldBakedDraw? DecodeDraw(ContentPin key, ReadOnlySpan<byte> outcome) {
+        try {
+            return ((CreationBakeCodec.TryDecode(bake: out var bake, content: outcome, refusal: out _) && (bake.Mesh.Indices.Length > 0))
+                ? new WorldBakedDraw(Impostor: ImpostorOf(bake: bake), Mesh: MeshOf(bake: bake))
+                : null);
+        } catch (InvalidDataException exception) {
+            m_counts.Count(kind: Undecodable);
+            Console.Error.WriteLine(value: $"[sdf.bakes: the held bake {key.Hex} cannot be decoded ({exception.Message}), so its prototype draws through its field]");
+
+            return null;
+        }
+    }
+    private static SdfMeshImpostor? ImpostorOf(SdfBake bake) {
+        try {
+            return new SdfMeshImpostor(impostor: bake.Impostor);
+        } catch (ArgumentException) {
+            return null;
+        }
+    }
     private static SdfMesh MeshOf(SdfBake bake) {
         var baked = bake.Mesh;
         var positions = new System.Numerics.Vector3[baked.Vertices.Length];
@@ -280,7 +308,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             uvs: uvs
         );
     }
-    private static List<Outcome> Resolve(WorldBakeRequest[] batch, WorldBakeStore store, CancellationToken token) {
+    private static List<Outcome> Resolve(WorldBakeRequest[] batch, Action onBaking, WorldBakeStore store, CancellationToken token) {
         var outcomes = new List<Outcome>(capacity: batch.Length);
 
         foreach (var request in batch) {
@@ -295,7 +323,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
                 continue;
             }
 
-            var bytes = WorldBakeStore.Bake(request: request, work: out var work);
+            onBaking();
+
+            var bytes = WorldBakeStore.Bake(cancellationToken: token, request: request, work: out var work);
 
             _ = store.Keep(key: key, outcome: bytes);
             outcomes.Add(item: new Outcome(Baked: true, Evaluations: work.FieldEvaluations, Key: key, Refusal: (bytes[0] == 0)));
@@ -308,6 +338,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             return;
         }
 
+        m_baking = false;
         m_revision++;
 
         foreach (var outcome in (outcomes ?? [])) {
@@ -394,6 +425,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             Scheduled,
             Baked,
             Refused,
+            Undecodable,
             Evaluations,
             Drawn,
         ];

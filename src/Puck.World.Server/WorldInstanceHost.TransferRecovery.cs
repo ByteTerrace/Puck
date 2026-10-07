@@ -62,6 +62,53 @@ public sealed partial class WorldInstanceHost {
         };
         return true;
     }
+    // Recovery restores departure facts before the row resumes. A rollback saves the current owned identity, including
+    // writes made while the outcome was in doubt; the departing projection must never overwrite those newer values.
+    private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => {
+        if (!RestoreDetachedBody(commit: commit, member: member, source: source, transferId: transferId)) {
+            return false;
+        }
+        if (
+            (member.Profile is { } owned) &&
+            source.Server.Profiles.Owns(identity: owned) &&
+            !source.Server.Profiles.TrySave(
+                identity: owned,
+                reason: out var reason
+            ) &&
+            source.Server.Output.HasNarrationSink
+        ) {
+            source.Server.Output.Narrate(
+                channel: "world.identity",
+                text: $"[world.identity: world:{owned.Id} rolled back but its identity could not be saved — {reason}]"
+            );
+        }
+        return true;
+    });
+    private static bool RestoreDetachedBody(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.RestoreDetachedForTransfer(
+        detached: new WorldDetachedBody(
+            AdmissionGrants: member.AdmissionGrants,
+            BodyColor: member.BodyColor,
+            Designations: member.Designations,
+            DynamicState: member.DynamicState,
+            Mobility: member.Mobility,
+            Peer: member.Peer,
+            Position: member.Position,
+            Profile: member.Profile,
+            Slot: member.SourceSlot,
+            SourceGrants: member.SourceGrants,
+            Yaw: member.Yaw
+        ),
+        transferId: transferId,
+        // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
+        // departure turn is recovered from the retained commit, undoing only this attempted arrival.
+        travelTurn: (commit.HasMappedArrival
+            ? WorldFrameIsometry.AccumulateTurn(
+                travelTurn: commit.TravelTurn,
+                departureYaw: commit.YawRadians,
+                arrivalYaw: member.Yaw
+            )
+            : commit.TravelTurn)
+    );
     // Complete this preflight before installing any host schedule or table. A malformed later row must not leave
     // the valid prefix installed, erase an existing recovery, or call a peer with a changed commit payload.
     private List<InDoubtTransfer> PrepareInDoubtTransfers(WorldInstance row, IReadOnlyList<WorldInDoubtTransferCheckpoint> records) {
@@ -144,6 +191,24 @@ public sealed partial class WorldInstanceHost {
                 ) {
                     Refuse(reason: "member slots or mobility identities are invalid or duplicated");
                 }
+                // This handle is retained only for the source's own use: a rollback reseats it and a publication mirrors
+                // it. The commit still carries the projection; a seat of this authority's own rebinds to its restored
+                // catalog's identity, as it was before the restart. A checkpoint already includes its current facts;
+                // only RedoDeparture restores a logged projection newer than that checkpoint.
+                var owned = ((pending.CommitMembers[ordinal].Profile is { } projection)
+                    ? row.Server.HomeSeatIdentity(
+                        id: projection.Id,
+                        mobility: member.Mobility,
+                        slot: member.SourceSlot
+                    )
+                    : null);
+                var profile = (owned ?? ((pending.CommitMembers[ordinal].Profile is { } visitor)
+                    ? WorldIdentity.FromProjection(
+                        defaults: row.Server.Definition.PlayerDefaults,
+                        projection: in visitor
+                    )
+                    : null));
+
                 landed.Add(item: new(
                     AdmissionGrants: [.. member.AdmissionGrants],
                     BodyColor: member.BodyColor,
@@ -152,7 +217,7 @@ public sealed partial class WorldInstanceHost {
                     Mobility: member.Mobility,
                     Peer: member.Peer,
                     Position: member.Position,
-                    Profile: pending.CommitMembers[ordinal].Profile,
+                    Profile: profile,
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
                     SourcePrincipal: Principal.Console,

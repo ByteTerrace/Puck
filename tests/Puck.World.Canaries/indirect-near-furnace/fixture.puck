@@ -1,0 +1,42 @@
+schema: "puck.world.definition.v1"
+basis: "../indirect-near/scenes"
+documentId: "indirect-near-furnace"
+state {
+  world {
+    slot scene = 1
+  }
+}
+render {
+  indirect {
+    tier: high
+    bounces: 4
+    sources {
+      lights: 0
+      emission: 1
+      screens: 0
+      sky: 0
+      feedback: 1
+    }
+  }
+  lighting {
+    lights []
+  }
+}
+placements {
+  placement "furnace" {
+    prototype: "furnace"
+    position [4, 0.35, 0]
+  }
+}
+hud {
+  defaults {
+    enabled: true
+    cursor {
+      hoverRadius: 100
+      sizePx: 3
+      role: Accent
+      visible: null
+    }
+  }
+  panels []
+}

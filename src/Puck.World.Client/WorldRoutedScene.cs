@@ -11,8 +11,7 @@ namespace Puck.World.Client;
 /// The scene of one endpoint's world as this presentation renders it: the endpoint's own static scene, stamp pool and
 /// population, drawn from its delivered definition and state mirror by a <see cref="WorldSessionSceneEmitter"/> over
 /// <see cref="WorldAuthorityEndpoint.Mirror"/>, the same emitter a session screen draws a destination with, which lights it
-/// under the destination's own sky and lighting (its <c>render.cycle</c> or static lanes) on the destination's own sky
-/// clock. Every view of the world is a view of
+/// under the destination's own sky and lighting, its keys read on the destination's own clocks. Every view of the world is a view of
 /// the scene's one frame, so they share one program and one residency, each with its own camera and quality
 /// (<see cref="SdfViewSnapshot.Quality"/>):
 /// <list type="bullet">
@@ -20,10 +19,19 @@ namespace Puck.World.Client;
 /// <see cref="WorldFramePresenter"/> resolved for it this frame at the presentation's quality, latched afresh every frame
 /// (<see cref="AddView"/>);</item>
 /// <item>each window onto the world attached through <see cref="WorldFramePresenter.AttachWindow"/>, whose view its
-/// holder sets (<see cref="WorldRoutedWindow.View"/>), after the seats.</item>
+/// holder sets (<see cref="WorldRoutedWindow.View"/>), after the seats;</item>
+/// <item>each camera of the world a screen shows, which <see cref="Film"/> adds after the windows.</item>
 /// </list>
+/// The world's text screens draw through its own font catalog (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>).
 /// </summary>
-public sealed class WorldRoutedScene : ISdfFrameDresser {
+public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
+    /// <summary>Releases this scene's delivered-tick subscription.</summary>
+    public void Dispose() => m_emitter.Dispose();
+    /// <summary>Reads this authority's last presented shadow slots.</summary>
+    /// <param name="definition">The queried definition.</param>
+    /// <returns>The census, or null before a matching frame.</returns>
+    public string? DescribeShadowSlots(WorldDefinition definition) => m_emitter.DescribeShadowSlots(definition: definition);
+
     private readonly WorldSessionSceneEmitter m_emitter;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
@@ -32,6 +40,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     // last dressed frame rendered, kept for a frame with neither: a frame always carries a view.
     private readonly List<WorldRoutedWindow> m_latchedWindows = [];
     private readonly List<SdfViewSnapshot> m_dressedViews = [];
+    // The views the last dressed frame carries: the seats' and windows', then the cameras Film added.
+    private readonly List<SdfViewSnapshot> m_frameViews = [];
 
     private int m_latchedSeatCount;
 
@@ -41,7 +51,11 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// scene's frame takes; <see langword="null"/> before the first.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor) {
+    /// <param name="shadowSettings">The presentation's live slot policy.</param>
+    /// <param name="skyLayers">The presentation's session-only layer audition.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
@@ -50,10 +64,12 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
         m_hostFrame = hostFrame;
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
+            shadowSettings: shadowSettings,
             castsAvatarShadows: true,
+            domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
-        );
+        ) { SkyLayers = skyLayers };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
             emitters: [m_emitter]
@@ -68,6 +84,22 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>
     public int WindowCount => m_windows.Count;
+    /// <summary>Gets or sets what films the world's cameras into each dressed frame: handed the frame's views, the seats'
+    /// and windows' first, it adds a view of each camera of the world a screen shows, at an index the caller records.
+    /// <see langword="null"/>, the default, films none.</summary>
+    public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <summary>Gets or sets what fits the named sky layers to the final consuming views. The callback receives this
+    /// authority's resolved sky and the frame dimensions after seat, window and camera views have been dressed.</summary>
+    public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
+    /// <inheritdoc/>
+    /// <remarks>The world's own font atlas (<see cref="WorldSessionSceneEmitter.GlyphAtlas"/>).</remarks>
+    public SdfGlyphAtlas? GlyphAtlas => m_emitter.GlyphAtlas;
+    /// <inheritdoc/>
+    /// <remarks>The world's text screens' (<see cref="WorldSessionSceneEmitter.ScreenDecals"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_emitter.ScreenDecals;
+    /// <summary>Gets why the world's font catalog does not resolve, which leaves its text screens blank, or
+    /// <see langword="null"/> (<see cref="WorldSessionSceneEmitter.TextFault"/>).</summary>
+    public string? TextFault => m_emitter.TextFault;
 
     /// <summary>Clears the views the presenter latched, before it latches this frame's.</summary>
     public void BeginViews() => m_views.Clear();
@@ -112,32 +144,57 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 
             // The emitter's own view frames the world's default projection at a session screen's quality.
             foreach (var window in m_latchedWindows) {
-                m_dressedViews.Add(item: (window.View ?? frame.Views[0]));
+                m_dressedViews.Add(item: (window.View ?? ((window.FallbackResolution is { } resolve) ? resolve(frame.Views[0]) : frame.Views[0])));
             }
         } else if (m_dressedViews.Count == 0) {
             m_dressedViews.AddRange(collection: frame.Views);
         }
 
+        m_frameViews.Clear();
+        m_frameViews.AddRange(collection: m_dressedViews);
+        Film?.Invoke(obj: m_frameViews);
+        FitSkyViews?.Invoke(m_frameViews, frame.Sky, width, height);
+
         if (m_hostFrame() is not { } host) {
             return frame with {
-                Views = m_dressedViews,
+                Views = m_frameViews,
             };
         }
 
         return frame with {
             EnableCadenceGate = host.EnableCadenceGate,
             Time = host.Time,
-            Views = m_dressedViews,
+            Views = m_frameViews,
         };
     }
+    /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
+    /// it: the eye every window a screen of this world shows fits to, as the boot world's windows fit to its viewer.</summary>
+    /// <param name="camera">The camera, in the scene world's own coordinates, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the presenter latched a seat's view into the scene this frame.</returns>
+    public bool TrySeatCamera(out CameraSnapshot camera) {
+        if (m_views.Count != 0) {
+            camera = m_views[0].Camera;
+
+            return true;
+        }
+
+        camera = default;
+
+        return false;
+    }
+
+    /// <summary>Gets how many of the views the scene's last dressed frame carries are its seats', the views before its
+    /// windows.</summary>
+    public int SeatViewCount => m_latchedSeatCount;
+
     /// <summary>Finds the camera a view of the scene's last dressed frame rendered from, in the scene world's own
     /// coordinates: a seat's, or a window's (its <see cref="WorldRoutedWindow.View"/>, or the default projection).</summary>
     /// <param name="view">The view's index in the scene's frames (<see cref="WorldRoutedWindow.Index"/>).</param>
     /// <param name="camera">The camera, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the last dressed frame carries the view.</returns>
     public bool TryCamera(int view, out CameraSnapshot camera) {
-        if (((uint)view) < ((uint)m_dressedViews.Count)) {
-            camera = m_dressedViews[view].Camera;
+        if (((uint)view) < ((uint)m_frameViews.Count)) {
+            camera = m_frameViews[view].Camera;
 
             return true;
         }
@@ -227,6 +284,9 @@ public sealed class WorldRoutedWindow : IDisposable {
     /// quality. <see langword="null"/>, the default, renders the world's default projection at a session screen's
     /// reduced quality (<see cref="WorldSessionSceneEmitter.ReducedQuality"/>).</summary>
     public SdfViewSnapshot? View { get; set; }
+    /// <summary>Gets or sets how the window dresses the world's default projection it renders while <see cref="View"/> is
+    /// <see langword="null"/>, or <see langword="null"/> to render it as the emitter framed it.</summary>
+    public Func<SdfViewSnapshot, SdfViewSnapshot>? FallbackResolution { get; set; }
 
     /// <summary>Detaches the window from its scene; the scene's later windows move down at the next presenter latch.</summary>
     public void Dispose() {

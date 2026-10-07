@@ -138,8 +138,10 @@ public interface ISharedSlotRing {
     /// <param name="slot">When this returns <see langword="true"/>, the slot to sample.</param>
     /// <param name="fenceValue">When this returns <see langword="true"/>, the shared-fence value the slot's write
     /// signals, which the submission sampling it waits for; zero when the write completed before publication.</param>
+    /// <param name="version">When this returns true, the acquired slot's publication sequence. It belongs to the
+    /// same protected write as the fence value, even if another slot is published before this call returns.</param>
     /// <returns>Whether a slot has been published.</returns>
-    bool TryAcquireLatest(out int slot, out ulong fenceValue);
+    bool TryAcquireLatest(out int slot, out ulong fenceValue, out long version);
     /// <summary>Releases a slot acquired by <see cref="TryAcquireLatest"/> once the work sampling it has retired.</summary>
     /// <param name="slot">The acquired slot.</param>
     void Release(int slot);

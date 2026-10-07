@@ -1,8 +1,8 @@
+using Puck.Assets;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 using Puck.World.Transpiler.Vocabulary;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -13,8 +13,6 @@ namespace Puck.World.Transpiler.Lowering;
 /// <remarks>The description is a constructor argument rather than a static read so a law can hand one pass a
 /// description it invented and watch every reader of that pass follow it.</remarks>
 public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
-    /// <summary>The canonical schema URI for world definitions.</summary>
-    public const string Schema = "puck.world.definition.v1";
     /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
     public const string DocumentDirectoryAnnotation = "DocumentDirectory";
 
@@ -83,6 +81,19 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     );
     /// <inheritdoc />
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out System.Text.Json.Nodes.JsonNode? value) {
+        if (
+            (expression is ObjectExpressionNode keyed) &&
+            WorldDocumentEmitter.TryLowerKeyed(
+            fieldKey: fieldKey,
+            properties: keyed.Properties,
+            scope: scope,
+            value: out var keys
+        )
+        ) {
+            value = keys;
+
+            return true;
+        }
         if (expression is AssetExpressionNode asset) {
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
@@ -204,7 +215,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             return true;
         }
 
-        reason = $"Imported document '{name}' has neither a source at '{sourcePath}' nor a document at '{documentPath}'.";
+        reason = $"Imported document '{name}' has neither a source nor a document.";
 
         return false;
     }

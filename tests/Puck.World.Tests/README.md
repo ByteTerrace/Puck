@@ -4,6 +4,35 @@ These tests check the document, protocol, authoritative simulation, and the
 shipped games' state programs. Rendering and complete game interaction still
 need verification by running Puck.World.
 
+`ShadowSlotLawTests` exercises named light selection, holder-first ties followed
+by authored order, stable slots, atomic instant handoffs and discontinuity
+resets without a GPU. `ShadowFadeLawTests` covers bounded current and prior handoffs, progress
+derived only from the presented tick, and queue recomputation for busy slots,
+identities and fade capacity, including oldest-first service ahead of fresh
+crossings. Its outgoing-identity law holds a waiting
+crossing until the active handoff releases that identity, then starts it at
+the first delivered tick the blocker clears. These classes also cover instant
+atomic overlap, replay and frozen-tick agreement, and allocation-free steady reads.
+`ShadowGpuFrameLawTests` holds the full frame slot table and active GPU controls
+to those allocator outputs. Shader/device laws and the `shadow-slots` canary
+cover the GPU handoff separately; these World laws open no device.
+`ShadowFrameLawTests` exercises complete delivered samples, skipped render
+frames, state-only replacements, reordered light tables and the slot report.
+Boot delivery laws send the client's actual definition revision through an
+install and completed snapshot; default-policy coverage pins the sun in slot 0.
+`ShadowQualityLawTests` holds the shared preset source and the codec, live
+lever, save and boot path for its slot policy, including atomic preset changes.
+`SessionShadowDeliveryLawTests`
+checks that session observers see every complete delivery, field cells
+included, while keeping counted observer samples separate from frame samples.
+
+`GpuWorkDetailDeviceLawTests` runs the generated counting functions on Vulkan
+and Direct3D 12, crossing the low-word boundary in both a plain row and a named
+row. It submits two frames before waiting, grows the detail labels between
+them, and holds every detail sum to its pass total and each frame to its own
+labels. `SdfSkyEvaluationDeviceLawTests` binds the sky's named rows and checks
+that covered pixels evaluate no layer.
+
 `WorldCompilationAnalysisLawTests` checks that ticks retain installed cost and
 hazard analysis, while a rule-order edit replaces it even with the same state catalog.
 It also checks loader-to-server admission handoff, mismatched definition/catalog refusals, and
@@ -27,8 +56,35 @@ staged, chosen by handing the runtime the device's own memory profile with no
 host-visible device-local bytes, and holds a capture of each tick's image to the
 CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer
 on and fails on any `[d3d12-debug]` line, so the law runs alone in
-`DebugLayerCollection`. The device laws share `tests/Shared`'s
-`HeadlessVulkanDevice` and `DirectXTestDevices`. `SharedFenceLawTests` orders a
+`DebugLayerCollection`. `SurfaceEncoderUploadDeviceLawTests` hands
+`SurfaceEncoder.ReadSurface` CPU pixels in both float working formats on the
+same three devices, uploaded and drawn through the display encode in SDR, and
+holds each RGBA8 channel within one code of the value's own code, headroom
+saturating to 255; it shares that collection for the same debug-layer leg.
+The device laws share `tests/Shared`'s
+`HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
+hardware device carries `[Trait("Category", "Gpu")]`, which the build holds
+(GPU001), so `--filter-not-trait Category=Gpu` runs the rest of the suite beside a
+GPU leg. A Vulkan device law's
+instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
+`HeadlessVulkanDevice.Validation` says (on), unless the law passes
+`validation` itself; a host without the layer skips the law by name. An instance
+created under validation without a reporting messenger fails the law. The layer
+writes what it finds to the device's own writer, and disposing the device
+destroys it and its instance, then fails the law that owns it when the writer
+holds any `[vulkan-debug] validation` line, naming the first message's
+identifier. Creation failures check the same writer after teardown, so a validation
+message fails even when the device would otherwise be skipped. Snapshots share the
+callback writer's lock. `HeadlessVulkanDeviceValidationLawTests` reads the switch back from the
+device and holds the check: a deliberate violation fails the law that owns the
+device, and a device asked for no validation reports no layer.
+`HeadlessVulkanLifecycleLawTests` holds creation-failure cleanup, missing-messenger
+failures and synchronized snapshots over recording APIs without opening a device. The Direct3D 12
+debug layer stays off for `DirectXTestDevices.Hardware` and `Warp`: the layer
+is enabled for the whole process and removes every device the process already
+holds, and on some configurations it stops the next device from being created,
+so only a law that runs alone in `DebugLayerCollection` takes
+`DirectXTestDevices.Debug`. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through
@@ -49,11 +105,6 @@ installed host/device regions and CPU scratch/shadow payloads.
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.
 
-`SdfMarchSeedDeviceLawTests` runs the shared march-seed proposal and strict empty-ball
-proof on both hardware backends. Hand-derived intervals and the fixed field evaluator
-cover backoff, endpoint acceptance bands, tiny occluders, chamfer bounds, invalid values
-and adjacent-float equality. This proves the isolated helper; history sampling and
-renderer wiring remain separate work.
 
 ## Keep the feedback loop short
 
@@ -178,7 +229,7 @@ Changing a fixture must preserve the condition that can make its law fail.
 Measure execution separately from restore and build:
 
 ```powershell
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --logger trx
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --report-xunit-trx
 ```
 
 Review slow TRX cases before reducing workloads. Do not make the default run

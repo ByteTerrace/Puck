@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.System.Com;
@@ -9,11 +8,11 @@ namespace Puck.DirectX.Interop;
 /// A Direct3D 12 <see cref="IGpuImage"/>: a default-heap texture created by <see cref="DirectXTextures"/> with the
 /// resource flags, initial state and optimized clear value its declared usages need. <see cref="ImageHandle"/> is the raw
 /// resource (barriers, copies and readbacks name it); <see cref="ImageViewHandle"/> is a <see cref="DirectXImageView"/>
-/// token <see cref="DirectXGpuBindings"/> turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
+/// handle in <see cref="DirectXImageViews"/>, which <see cref="DirectXGpuBindings"/> turns into a UAV or SRV, and a framebuffer into a render-target or depth-stencil view.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuImage : IGpuImage {
-    private readonly GCHandle m_imageViewToken;
+    private readonly nint m_imageViewHandle;
     private readonly GpuDeviceMemoryWork? m_memory;
 
     private bool m_disposed;
@@ -65,7 +64,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             resource: m_resource,
             state: initialState
         );
-        m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
+        m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
             Format = dxgiFormat,
             ResourceHandle = m_resource,
         });
@@ -78,7 +77,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <inheritdoc/>
     public nint ImageHandle => m_resource;
     /// <inheritdoc/>
-    public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
+    public nint ImageViewHandle => m_imageViewHandle;
     /// <inheritdoc/>
     public GpuImageUsage Usage { get; }
     /// <inheritdoc/>
@@ -93,9 +92,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         m_disposed = true;
         DirectXResourceStates.Forget(resource: m_resource);
 
-        if (m_imageViewToken.IsAllocated) {
-            m_imageViewToken.Free();
-        }
+        DirectXImageViews.Release(handle: m_imageViewHandle);
 
         if (0 != m_resource) {
             DirectXDeviceMemory.CountReleased(

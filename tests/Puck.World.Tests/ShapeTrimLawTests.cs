@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: <see cref="ShapeTrimDocument"/> — a shape's second-material surface band against another,
-/// earlier-declared shape — is refused by name wherever its own field scope has nowhere to nest (a domain-folded
+/// earlier-declared shape — is refused by name outside the emitter's independent-shape recipe (a domain-folded
 /// shape, a grouped shape, a creation that already needs a scope of its own), where the reference names no earlier
 /// shape, and against a non-positive width or a negative/non-finite inset; otherwise it emits, on both paths, a
 /// scope of its own per trim: the host's own copy eroded by an isolated Dilate, then the reference's own copy —

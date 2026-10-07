@@ -1,37 +1,17 @@
 // Generic shading layers. Coordinates arrive in the winning instance frame.
 #ifndef SDF_SHADE_LAYERS_HLSLI
 #define SDF_SHADE_LAYERS_HLSLI
-float sdfWrapDiffuse(float ndotl, float wrap) {
-    return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
-}
-
-// A wide-stencil (SdfSoftenProbeEpsilon) tetrahedron field-gradient probe — the same 4-tap technique
-// calculateNormal uses, at a much larger epsilon, so fine surface detail (pores, panel seams, wear noise) is
-// per-part authored 'guide' ellipsoid normal without needing a guide shape.
-static const float SdfSoftenProbeEpsilon = 0.05;
-
-float3 sdfSoftenedNormal(float3 p, uint instanceMaskBase) {
-    const float2 k = float2(1.0, -1.0);
-    const float e = SdfSoftenProbeEpsilon;
-    float3 sum =
-        (k.xyy * mapDistanceMasked(p + (k.xyy * e), instanceMaskBase)) +
-        (k.yyx * mapDistanceMasked(p + (k.yyx * e), instanceMaskBase)) +
-        (k.yxy * mapDistanceMasked(p + (k.yxy * e), instanceMaskBase)) +
-        (k.xxx * mapDistanceMasked(p + (k.xxx * e), instanceMaskBase));
-
-    sdfWorkSteps += 4u;
-
-    return sdfSafeNormalize(sum);
-}
-
-// Blends `normal` toward the wide-stencil guide by `soften`, in place. soften <= 0 skips the extra 4-tap probe
-// entirely, matching applyWeathering's zero-ceiling skip.
-void applySoften(inout float3 normal, float3 p, uint instanceMaskBase, float soften) {
+// Blends `normal` toward the wide-stencil guide by `soften`, in place: the gradient the soften taps of sdfProbeField
+// measured (SdfSoftenProbeEpsilon, the same tetrahedron at a much larger epsilon, so fine surface detail such as pores,
+// panel seams and wear noise washes out of it, giving a per-part 'guide' normal without a guide shape). soften <= 0 skips
+// it, and the caller then asked for no soften taps, matching applyWeathering's zero-ceiling skip.
+void applySoften(inout float3 normal, float3 softenSum, float soften) {
     if (soften <= 0.0) {
         return;
     }
 
-    normal = normalize(lerp(normal, sdfSoftenedNormal(p, instanceMaskBase), saturate(soften)));
+    sdfWorkSteps += 4u;
+    normal = normalize(lerp(normal, sdfSafeNormalize(softenSum), saturate(soften)));
 }
 
 

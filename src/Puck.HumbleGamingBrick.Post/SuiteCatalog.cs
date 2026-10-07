@@ -369,6 +369,7 @@ internal static class SuiteCatalog {
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         )
+            .Order(comparer: StringComparer.Ordinal)
             .Prepend(element: suiteRoot);
 
         foreach (var directory in leafDirectories) {
@@ -379,12 +380,13 @@ internal static class SuiteCatalog {
                 searchPattern: "*.gb"
             )
                 .OrderByDescending(keySelector: static path => Path.GetFileNameWithoutExtension(path: path).Length)
+                .ThenBy(keySelector: static path => path, comparer: StringComparer.Ordinal)
                 .ToArray();
             var images = Directory.EnumerateFiles(
                 path: directory,
                 searchOption: SearchOption.TopDirectoryOnly,
                 searchPattern: "*.png"
-            ).ToArray();
+            ).Order(comparer: StringComparer.Ordinal).ToArray();
             var claimed = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
             foreach (var rom in roms) {

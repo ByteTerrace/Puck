@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Sources;
 
@@ -11,15 +13,37 @@ namespace Puck.World.Client;
 /// (<see cref="Root"/>). Each is a generated document name (<see cref="GeneratedName.Join"/>), and an authored camera
 /// name may not be in that form, so no minted view name can equal a camera's own registration. The parts are
 /// recoverable: a session view is <c>session$&lt;screen&gt;</c>, two
-/// parts; a seat view is <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
+/// parts, and a session seen through it adds the screen of the world it shows that it stands on
+/// (<see cref="Nested"/>, <c>session$&lt;screen&gt;$&lt;screen&gt;…</c>), one part a level; the sessions a world seats
+/// are presented in shows are <c>routed$&lt;digest&gt;$&lt;screen&gt;…</c> (<see cref="Routed"/>); a camera view of a
+/// world shown through a screen is that level's name, <c>camera</c> and the camera's
+/// (<see cref="NestedCamera"/>, <c>session$&lt;screen&gt;$camera$&lt;camera&gt;</c>); a seat view is
+/// <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
 /// name the view belongs to and the seat last because it is the qualifier that varies.</summary>
 public static class WorldViewNames {
+    /// <summary>Returns the single environment producer name belonging to a residency.</summary>
+    /// <param name="residency">The residency's complete name.</param>
+    /// <returns>The name with its environment part.</returns>
+    public static string Environment(string residency) => GeneratedName.Append(name: residency, part: "environment");
+    /// <summary>Returns the one depth-camera name belonging to a residency's indirect producer.</summary>
+    /// <param name="cache">The producer's complete generated name.</param>
+    /// <returns>The name with its final light-camera part.</returns>
+    public static string IndirectLight(string cache) => GeneratedName.Append(name: cache, part: "indirect-light");
+
     /// <summary>The first part of a session screen's view name.</summary>
     public const string SessionHead = "session";
     /// <summary>The part between a camera's name and the seat number in a seat-relative camera's view name.</summary>
     public const string SeatPart = "seat";
+    /// <summary>The part between a level's name and a camera's name in a camera view of a world shown through a
+    /// screen.</summary>
+    public const string CameraPart = "camera";
+    /// <summary>The first part of an infinity view's instance name, and the part between a level and the layer it shows.</summary>
+    public const string SkyPart = "sky";
     /// <summary>The first part of a source instance's name.</summary>
     public const string SourceHead = "source";
+    /// <summary>The first part of the name under which a world seats are presented in names the sessions its screens
+    /// show.</summary>
+    public const string RoutedHead = "routed";
 
     /// <summary>Returns the view name a session-sourced screen registers its view under.</summary>
     /// <param name="screen">The 0-based index of the screen the session feeds.</param>
@@ -28,6 +52,79 @@ public static class WorldViewNames {
         SessionHead,
         screen.ToString(provider: CultureInfo.InvariantCulture)
     );
+    /// <summary>Returns the instance name of an infinity view the viewer's own sky shows: <c>sky$&lt;layer&gt;</c>, the
+    /// layer's or body's name under <see cref="SkyPart"/>.</summary>
+    /// <param name="layer">The layer's or body's name, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>sky$&lt;layer&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="layer"/> is empty or carries the joiner.</exception>
+    public static string Sky(string layer) => GeneratedName.Join(
+        SkyPart,
+        layer
+    );
+    /// <summary>Returns the instance name of an infinity view the sky of a world another view renders shows: the view's
+    /// name, <see cref="SkyPart"/> and the layer, so every level of nesting names its views from the level above, and the
+    /// same layer seen at two depths is two views.</summary>
+    /// <param name="view">The name of the view whose world's sky shows the layer: a session's, a routed world's head or
+    /// another infinity view's.</param>
+    /// <param name="layer">The layer's or body's name, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>&lt;view&gt;$sky$&lt;layer&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="view"/> is empty, or <paramref name="layer"/> is empty or
+    /// carries the joiner.</exception>
+    public static string NestedSky(string view, string layer) => GeneratedName.Append(
+        name: GeneratedName.Append(
+            name: view,
+            part: SkyPart
+        ),
+        part: layer
+    );
+    /// <summary>Returns the view name of a session a screen shows inside the world another view renders: the view's name
+    /// joined with the screen's index, so every level of nesting names its views from the level above, and the same
+    /// screen seen at two depths is two views.</summary>
+    /// <param name="view">The name of the view whose world the screen stands in: a session's
+    /// (<see cref="Session"/>, or a nested one) or a routed world's head (<see cref="Routed"/>).</param>
+    /// <param name="screen">The 0-based index of the screen in that world.</param>
+    /// <returns><c>&lt;view&gt;$&lt;screen&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="view"/> is empty.</exception>
+    public static string Nested(string view, int screen) => GeneratedName.Append(
+        name: view,
+        part: screen.ToString(provider: CultureInfo.InvariantCulture)
+    );
+    /// <summary>Returns the view name of a camera of a world shown through a screen, or of a world a seat is presented
+    /// in: the name of the level that world is shown at, <see cref="CameraPart"/> and the camera's name, so each level
+    /// films its own world's cameras and the same camera seen at two levels is two views.</summary>
+    /// <param name="view">The level's name: a session view's (<see cref="Session"/>, or a nested one) or a routed
+    /// world's head (<see cref="Routed"/>).</param>
+    /// <param name="camera">The camera's name, free of <see cref="GeneratedName.Joiner"/>.</param>
+    /// <returns><c>&lt;view&gt;$camera$&lt;camera&gt;</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="view"/> is empty, or <paramref name="camera"/> is empty or
+    /// carries the joiner.</exception>
+    public static string NestedCamera(string view, string camera) => GeneratedName.Append(
+        name: GeneratedName.Append(
+            name: view,
+            part: CameraPart
+        ),
+        part: camera
+    );
+    /// <summary>Returns the head the sessions of a world seats are presented in are named under: the digest of the
+    /// identity of the authority the world runs on under <see cref="RoutedHead"/>, so a screen of that world shows
+    /// <c>routed$&lt;digest&gt;$&lt;screen&gt;</c> (<see cref="Nested"/>). An identity is any text, a remote one included,
+    /// so the name carries 16 hex characters of its SHA-256 rather than the identity itself, the same for one identity
+    /// on every run.</summary>
+    /// <param name="authority">The identity of the authority the world runs on.</param>
+    /// <returns><c>routed$&lt;digest&gt;</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="authority"/> is <see langword="null"/>.</exception>
+    public static string Routed(string authority) {
+        ArgumentNullException.ThrowIfNull(argument: authority);
+
+        return GeneratedName.Join(
+            RoutedHead,
+            Convert.ToHexStringLower(
+                inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: authority)),
+                length: 8,
+                offset: 0
+            )
+        );
+    }
     /// <summary>Returns the name of the source instance a producer, machine or probe source is read through, named by its
     /// content: its producer and the digest of its settings' canonical form (<see cref="ImageSourceSettings.Digest"/>).
     /// Every screen showing equal sources reads the one instance of that name, a screen added, removed or reordered
@@ -72,24 +169,28 @@ public static class WorldViewNames {
         );
     }
     /// <summary>Returns the 0-based view whose producer an instance name names (<see cref="World"/>'s inverse), or
-    /// <see langword="null"/> for any other name, the first view's producer included.</summary>
+    /// <see langword="null"/> for any other name, the first view's producer included. It allocates nothing, so a frame
+    /// may ask it of every instance it reads.</summary>
     /// <param name="instance">The instance name.</param>
     /// <returns>The 0-based view, at least 1, or <see langword="null"/>.</returns>
     public static int? ViewOf(string instance) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 
-        var prefix = (WorldViewGraphs.WorldInstance + GeneratedName.Joiner);
+        var head = WorldViewGraphs.WorldInstance.Length;
 
+        // World(view) writes the view without a sign or a leading zero, so only that spelling is its inverse.
         return ((
-            instance.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix) &&
+            (instance.Length > (head + 1)) &&
+            instance.StartsWith(comparisonType: StringComparison.Ordinal, value: WorldViewGraphs.WorldInstance) &&
+            (instance[head] == GeneratedName.Joiner) &&
+            (instance[(head + 1)] != '0') &&
             int.TryParse(
                 provider: CultureInfo.InvariantCulture,
                 result: out var view,
-                s: instance.AsSpan(start: prefix.Length),
+                s: instance.AsSpan(start: (head + 1)),
                 style: NumberStyles.None
             ) &&
-            (view >= 2) &&
-            string.Equals(a: World(view: view), b: instance, comparisonType: StringComparison.Ordinal)
+            (view >= 2)
         )
             ? (view - 1)
             : null);

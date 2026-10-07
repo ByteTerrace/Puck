@@ -1,22 +1,58 @@
 // The graphics presets every shipped world shares: `world.quality low|medium|high` applies one, each writing its
-// shadow tier, its ambient-occlusion switch and its render-scale tier into the live render levers. A world boots on
-// its own render levers and nothing here changes them until a tier is chosen. `low` is the floor tier a player, or a
-// Steam Deck, drops to; `high` is the fullest render. The standard world imports this table, so every world built on
-// it inherits the table, and a world with another basis imports it by name.
+// shadow tier and slot policy, its ambient-occlusion switch, its temporal-reconstruction switch, its dynamic-resolution switch (off
+// in every preset), its scalar render ceiling, its floor tier and its sky tier (`world.sky-quality`) into the live render
+// levers. The independently counted sky field stays Full at every tier; Half remains an authored option.
+// Indirect light is off at Low, Medium at Medium and High at High.
+// A world boots on its own render levers and nothing here changes them until a tier is chosen. `low` is the floor
+// tier a player, or a Steam Deck, drops to; `high` is the fullest render. The standard world imports this table, so
+// every world built on it inherits the table, and a world with another basis imports it by name.
 render {
   low {
+    indirect: Off
+    sky: low
+    skyFieldScale: 1
     shadows: Off
+    shadowLights: 0
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
     ambientOcclusion: false
-    renderScale: Half
+    temporal: false
+    shadowAmortize: false
+    dynamicResolution: false
+    renderScaleFloor: Quarter
+    renderScale: 0.70980394
   }
   medium {
+    indirect: Medium
+    sky: medium
+    skyFieldScale: 1
     shadows: Medium
+    shadowLights: 1
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
     ambientOcclusion: true
-    renderScale: ThreeQuarter
+    temporal: true
+    shadowAmortize: true
+    dynamicResolution: false
+    renderScaleFloor: Quarter
+    renderScale: 0.8666667
   }
   high {
+    indirect: High
+    sky: high
+    skyFieldScale: 1
     shadows: High
+    shadowLights: 2
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
     ambientOcclusion: true
-    renderScale: Native
+    temporal: true
+    shadowAmortize: true
+    dynamicResolution: false
+    renderScaleFloor: Quarter
+    renderScale: 1
   }
 }

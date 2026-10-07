@@ -82,7 +82,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 in createInfo,
                 0,
                 out imageHandle
-            ).ThrowIfFailed(operation: "vkCreateImage");
+            ).ThrowIfFailed(device: request.Device, operation: "vkCreateImage");
             request.Device.GetImageMemoryRequirements(
                 request.Device.Handle,
                 imageHandle,
@@ -109,7 +109,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 in allocateInfo,
                 0,
                 out memoryHandle
-            ).ThrowIfFailed(operation: "vkAllocateMemory");
+            ).ThrowIfFailed(device: request.Device, operation: "vkAllocateMemory");
             request.Device.CountAllocated(
                 allocationSize: allocateInfo.AllocationSize,
                 memoryHandle: memoryHandle,
@@ -120,7 +120,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 imageHandle,
                 memoryHandle,
                 0
-            ).ThrowIfFailed(operation: "vkBindImageMemory");
+            ).ThrowIfFailed(device: request.Device, operation: "vkBindImageMemory");
 
             return new VulkanOffscreenImageCreateResult(
                 ImageHandle: imageHandle,

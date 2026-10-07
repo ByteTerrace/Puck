@@ -1,0 +1,760 @@
+{
+  "id": "sky-portal",
+  "title": "A named destination keeps its anchor under viewer translation, follows viewer rotation, and Far coverage leaves the surrounding sky visible",
+  "binding": "The fixed camera observes an admitted lobby with a white emissive beacon over green sky. Moving only the consuming camera must preserve the destination image; turning it changes the rays. Removal and reopening exercise lifetime. A blue Far sphere outside the root march distance covers its angular cone while the destination remains visible around it. A nine-view live edit is refused without changing the installed image. The opposite leg deliberately translates the destination anchor with the consumer; only the translation agreement changes. These source-authored observations await the actual World run. The live budget must name two planned infinity scenes, the Far producer rendered at its quantized 30-by-30 extent, and unread after the consumer turns away. Unread is an actual scheduler status, not a fresh zero-work readback. All observations await the real World run; tainted capture withholding needs a windowed external-source leg.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "lobby.puck",
+    "README.md",
+    "at-cap.puck",
+    "at-cap.script.txt"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-portal/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 9,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "translation-keeps-the-destination-anchor",
+        "before": "lobby.png",
+        "after": "translated.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "turning-changes-the-destination-rays",
+        "before": "lobby.png",
+        "after": "turned.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "removal-removes-the-destination",
+        "before": "lobby.png",
+        "after": "removed.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "reopening-restores-the-destination",
+        "before": "lobby.png",
+        "after": "reopened.png",
+        "agree": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "far-geometry-covers-its-centre",
+        "capture": "far.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0.4,
+          1
+        ],
+        "maximum": [
+          0.2,
+          0.2,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "far-coverage-leaves-the-destination-around-it",
+        "capture": "far.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.05,
+          0.05,
+          0.1,
+          0.1
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.2,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "over-cap-refusal-retains-the-presented-stack",
+        "before": "far.png",
+        "after": "after-refusal.png",
+        "agree": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-admitted-lobby-beacon-is-visible",
+        "capture": "lobby.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-cap-refusal-names-the-ninth-view",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "infinity view 9",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-root-reports-two-planned-infinity-scenes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "world: infinity views: 2 of 8",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-far-scene-renders-its-quantized-angular-extent",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet rendered 30x30",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "turning-away-removes-the-far-render-demand",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet unread 30x30",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-portal/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.sky-quality",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 11,
+        "outcome": "refused"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.lighting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "translation-keeps-the-destination-anchor",
+        "before": "lobby.png",
+        "after": "translated.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "turning-changes-the-destination-rays",
+        "before": "lobby.png",
+        "after": "turned.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "removal-removes-the-destination",
+        "before": "lobby.png",
+        "after": "removed.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "reopening-restores-the-destination",
+        "before": "lobby.png",
+        "after": "reopened.png",
+        "agree": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "far-geometry-covers-its-centre",
+        "capture": "far.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0.4,
+          1
+        ],
+        "maximum": [
+          0.2,
+          0.2,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "far-coverage-leaves-the-destination-around-it",
+        "capture": "far.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.05,
+          0.05,
+          0.1,
+          0.1
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.2,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "over-cap-refusal-retains-the-presented-stack",
+        "before": "far.png",
+        "after": "after-refusal.png",
+        "agree": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-admitted-lobby-beacon-is-visible",
+        "capture": "lobby.png",
+        "extent": [
+          96,
+          96
+        ],
+        "region": [
+          0.48,
+          0.48,
+          0.52,
+          0.52
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-cap-refusal-names-the-ninth-view",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "infinity view 9",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-current-root-reports-two-planned-infinity-scenes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "world: infinity views: 2 of 8",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-far-scene-renders-its-quantized-angular-extent",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet rendered 30x30",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "turning-away-removes-the-far-render-demand",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "; sky$planet unread 30x30",
+        "present": true
+      }
+    ]
+  }
+}

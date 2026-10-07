@@ -14,11 +14,16 @@ using Puck.Cli.Canary;
 using Puck.Cli.CartridgeCost;
 using Puck.Cli.Counters;
 using Puck.Cli.Creation;
+using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
+using Puck.Cli.Formats;
+using Puck.Cli.Gate;
+using Puck.Cli.Host;
 using Puck.Cli.Landing;
+using Puck.Cli.Laws;
 using Puck.Cli.Mcp;
 using Puck.Cli.NuGet;
 using Puck.Cli.Official;
@@ -28,6 +33,7 @@ using Puck.Cli.PublishRelease;
 using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
 using Puck.Cli.Ratchets;
+using Puck.Cli.Refusals;
 using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
@@ -38,6 +44,7 @@ using Puck.Cli.Transpiler;
 using Puck.Cli.Vocabulary;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
+using Puck.Cli.WorktreeReport;
 
 namespace Puck.Cli;
 
@@ -107,8 +114,11 @@ internal static class PuckRootCommand {
     /// <param name="clock">The CLI host's clock; <see cref="TimeProvider.System"/> for a real invocation.</param>
     /// <returns>The root command: its verbs in ordinal name order, its help naming the tool <see cref="CliHelp.ToolName"/>,
     /// and every action guarded by <see cref="CliExit.Guard"/>.</returns>
-    public static RootCommand Create(TimeProvider clock) {
-        Command[] verbs = [
+    public static RootCommand Create(TimeProvider clock) => Create(clock: clock, schemaBootstrap: SchemaBootstrap.IsBootstrap);
+
+    // A bootstrap binary cannot start a consumer of the deliberately absent model table.
+    internal static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
+        Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
@@ -118,6 +128,7 @@ internal static class PuckRootCommand {
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),
+            CanaryCeilingsCommand.Create(),
             CartridgeCostCommand.Create(),
             RatchetCommand.CreateCommentSmells(),
             CompileCommand.Create(),
@@ -125,12 +136,18 @@ internal static class PuckRootCommand {
             CreationCommand.Create(),
             DecompileCommand.Create(),
             DeclarationsCommand.Create(),
+            DerivationsCommand.Create(),
+            DeterminismCommand.Create(),
             DocsCommand.Create(),
             EmbedCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
+            FormatsCommand.Create(),
+            GateCommand.Create(clock: clock),
+            HostCommand.Create(),
             LandingCommand.Create(),
+            LawsCommand.Create(),
             RatchetCommand.CreateLengths(),
             LintCommand.Create(),
             LspCommand.Create(),
@@ -144,9 +161,10 @@ internal static class PuckRootCommand {
             PullRequestCommand.Create(),
             QualifyCommand.Create(),
             ReferencesCommand.Create(),
+            RefusalsCommand.Create(),
             RegistryCommand.Create(),
             ScanCommand.Create(),
-            SchemaCommand.Create(),
+            SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
             ShadersCommand.Create(),
             TestCommand.Create(),
@@ -154,8 +172,9 @@ internal static class PuckRootCommand {
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
             WorktreeBaseCommand.Create(),
+            WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
-        ];
+        ]);
         var root = new RootCommand(description: "The Puck developer CLI: every repository operation is a verb here.");
 
         // The listing reads in name order however the list above is kept.
@@ -171,6 +190,7 @@ internal static class PuckRootCommand {
 
         return root;
     }
+
     public static int Invoke(string[] args) => Invoke(
         args: args,
         root: Create(clock: TimeProvider.System)

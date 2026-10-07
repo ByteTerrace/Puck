@@ -45,6 +45,7 @@ internal sealed class UploadModelGpu :
 
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
+    private readonly ConcurrentDictionary<nint, string> m_pipelineNames = new();
     // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
     // compute read of a staged destination before a copy writes it, and the buffers a transition from the compute stage
     // orders the same way in one command buffer; a copy recorded under neither is refused.
@@ -54,6 +55,9 @@ internal sealed class UploadModelGpu :
 
     private nint m_boundPipeline;
     private nint m_boundSet;
+
+    /// <summary>Gets the pipeline the most recent bind selected.</summary>
+    public string BoundPipelineName => m_pipelineNames[m_boundPipeline];
 
     private long m_nextHandle = 0x1000;
 
@@ -96,6 +100,8 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets the model's buffers, bindings, pipelines, shader modules and recorder, and the
     /// <see cref="FakeGpuDevice"/>'s other services.</summary>
     public GpuDeviceServices Services { get; }
+    /// <summary>Gets the buffer descriptors written into sets since the last <see cref="ResetTallies"/>.</summary>
+    public int BufferDescriptorWrites { get; private set; }
     /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
     public int UploadCopies { get; private set; }
     /// <summary>Gets the raw buffer-copy bytes recorded since the last tally reset.</summary>
@@ -146,6 +152,10 @@ internal sealed class UploadModelGpu :
     /// <see langword="null"/>, the default, to record none.</summary>
     public List<(uint Group, nint Set)>? SetBinds { get; set; }
 
+    /// <summary>Gets or sets how many fenced submissions pass before the next one throws before any command reaches the
+    /// queue, or -1, the default, for none.</summary>
+    public int FencedSubmissionsBeforeRefusal { get; set; } = -1;
+
     /// <summary>Returns the handle of the buffer a set's binding names.</summary>
     /// <param name="set">The set.</param>
     /// <param name="binding">The binding.</param>
@@ -175,6 +185,7 @@ internal sealed class UploadModelGpu :
 
         UploadCopies = 0;
         BufferCopyBytes = 0;
+        BufferDescriptorWrites = 0;
     }
     public void WaitIdle() { }
 
@@ -198,6 +209,8 @@ internal sealed class UploadModelGpu :
             _ = gate.Wait(timeout: TimeSpan.FromSeconds(value: 60));
         }
         var pipeline = PipelineOf(layout: description.Layout);
+
+        m_pipelineNames[pipeline.Handle] = description.Name;
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
             _ = m_uploadPipelines.TryAdd(
@@ -239,7 +252,10 @@ internal sealed class UploadModelGpu :
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Services.Bindings.CreateSampler(filter: filter);
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
-    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+        BufferDescriptorWrites++;
+    }
     void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
@@ -476,6 +492,13 @@ internal sealed class UploadModelGpu :
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);
     }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        if (FencedSubmissionsBeforeRefusal == 0) {
+            FencedSubmissionsBeforeRefusal = -1;
+            throw new InvalidOperationException(message: "Injected submission refusal.");
+        }
+        if (FencedSubmissionsBeforeRefusal > 0) {
+            FencedSubmissionsBeforeRefusal--;
+        }
         Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,

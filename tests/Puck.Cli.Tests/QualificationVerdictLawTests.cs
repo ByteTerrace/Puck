@@ -1,6 +1,7 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Qualification;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -69,6 +70,7 @@ public sealed class QualificationVerdictLawTests {
         MemoryProfile: "memory: unified.coherent=no device-local=8589934592",
         Releases: 1,
         SubmissionRefusals: [],
+        ValidationLive: true,
         ValidationMessages: [],
         Waits: [new QualificationWait(Outcome: "reached", Phase: "installed"), new QualificationWait(Outcome: "reached", Phase: "counted 4")],
         WorldReloads: 2
@@ -176,6 +178,13 @@ public sealed class QualificationVerdictLawTests {
         Assert.Equal(actual: Judge(debugLayers: false, readings: readings).Outcome, expected: QualificationOutcome.Pass);
     }
     [Fact]
+    public void ALayerThatNeverSaidItWasLiveFailsOnlyWithTheLayerOn() {
+        var readings = (Good() with { ValidationLive = false });
+
+        Fails(finding: "the vulkan validation layer never said it was live", readings: readings);
+        Assert.Equal(actual: Judge(debugLayers: false, readings: readings).Outcome, expected: QualificationOutcome.Pass);
+    }
+    [Fact]
     public void ALegThatCouldNotRunHereIsBlockedAndOneThatMisbehavedFails() {
         Assert.Equal(actual: Judge(leg: WorldOffscreenLegStatus.Unsupported, readings: Good()).Outcome, expected: QualificationOutcome.Blocked);
         Assert.Equal(actual: Judge(leg: WorldOffscreenLegStatus.NotRun, readings: null).Outcome, expected: QualificationOutcome.Blocked);
@@ -224,6 +233,7 @@ public sealed class QualificationVerdictLawTests {
                 Out(line: "[vulkan-debug] validation error: an object was not destroyed", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] general: loader notice", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[d3d12] debug layer live: the device reports through its info queue", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[vulkan] validation layer live: the instance reports through its debug messenger", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink unsupported: the dxc shader tool is absent", stream: CliProcessOutputStream.Stderr),
@@ -246,6 +256,7 @@ public sealed class QualificationVerdictLawTests {
         Assert.Equal(actual: readings.Waits, expected: [new QualificationWait(Outcome: "reached", Phase: "counted 4")]);
         Assert.Equal(actual: readings.Releases, expected: 1);
         Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed", "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"]);
+        Assert.True(condition: readings.ValidationLive);
         Assert.Single(collection: readings.CandidateRefusals);
         Assert.Equal(actual: readings.CompilerAbsent, expected: "[pipeline: ink unsupported: the dxc shader tool is absent");
         Assert.Equal(actual: readings.WorldReloads, expected: 1);
@@ -253,25 +264,21 @@ public sealed class QualificationVerdictLawTests {
     }
     [Fact]
     public void ThePackageCheckTellsReadyToRunFromIlOnly() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-qualify-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-qualify-law-");
         var publish = new ReleasePublish(Compiler: ReleaseCompilerDiscovery.None, EntryAssembly: "Puck.World.dll", Mode: ReleasePublishMode.ReadyToRun);
-        var entry = Path.Combine(path1: directory.FullName, path2: publish.EntryAssembly);
+        var entry = Path.Combine(path1: directory.RootPath, path2: publish.EntryAssembly);
 
-        try {
-            Assert.False(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out _, publish: publish, reason: out var missing));
-            Assert.Contains(actualString: missing, expectedSubstring: "no entry assembly");
+        Assert.False(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out _, publish: publish, reason: out var missing));
+        Assert.Contains(actualString: missing, expectedSubstring: "no entry assembly");
 
-            File.Copy(destFileName: entry, sourceFileName: typeof(QualificationVerdictLawTests).Assembly.Location);
-            Assert.False(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out _, publish: publish, reason: out var ilOnly));
-            Assert.Contains(actualString: ilOnly, expectedSubstring: "no ReadyToRun header");
+        File.Copy(destFileName: entry, sourceFileName: typeof(QualificationVerdictLawTests).Assembly.Location);
+        Assert.False(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out _, publish: publish, reason: out var ilOnly));
+        Assert.Contains(actualString: ilOnly, expectedSubstring: "no ReadyToRun header");
 
-            // The shared framework ships precompiled, so its core library carries a ReadyToRun header.
-            File.Copy(destFileName: entry, overwrite: true, sourceFileName: typeof(object).Assembly.Location);
-            Assert.True(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out var verified, publish: publish, reason: out var reason), userMessage: reason);
-            Assert.Equal(actual: verified, expected: Path.GetFullPath(path: entry));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        // The shared framework ships precompiled, so its core library carries a ReadyToRun header.
+        File.Copy(destFileName: entry, overwrite: true, sourceFileName: typeof(object).Assembly.Location);
+        Assert.True(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out var verified, publish: publish, reason: out var reason), userMessage: reason);
+        Assert.Equal(actual: verified, expected: Path.GetFullPath(path: entry));
     }
     [Fact]
     public void TheLegWithholdsTheCompilerAndFlagsOnlyTheListedLayers() {
@@ -279,11 +286,11 @@ public sealed class QualificationVerdictLawTests {
         var withheld = QualificationPackage.LegEnvironment(
             compiler: ReleaseCompilerDiscovery.None,
             holdsCompiler: static directory => directory.EndsWith(comparisonType: StringComparison.Ordinal, value: "dxc-bin"),
-            searchPath: $"C:/tools{separator}C:/dxc-bin{separator}C:/other"
+            searchPath: $"/tools{separator}/dxc-bin{separator}/other"
         );
 
-        Assert.Equal(actual: withheld["PATH"], expected: $"C:/tools{separator}C:/other");
-        Assert.Empty(collection: QualificationPackage.LegEnvironment(compiler: ReleaseCompilerDiscovery.Path, holdsCompiler: static _ => true, searchPath: "C:/dxc-bin"));
+        Assert.Equal(actual: withheld["PATH"], expected: $"/tools{separator}/other");
+        Assert.Empty(collection: QualificationPackage.LegEnvironment(compiler: ReleaseCompilerDiscovery.Path, holdsCompiler: static _ => true, searchPath: "/dxc-bin"));
 
         var profile = new ReleaseProfile(
             Backends: ["vulkan", "directx"],

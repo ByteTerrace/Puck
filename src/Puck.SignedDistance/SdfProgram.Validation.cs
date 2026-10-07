@@ -277,6 +277,7 @@ public sealed partial class SdfProgram {
     private static void RequirePackedMaterials(IReadOnlyList<SdfMaterial> materials, string paramName) {
         for (var index = 0; (index < materials.Count); index++) {
             var material = materials[index];
+            var bleed = (material.Bleed ?? Vector3.One);
 
             if (
                 !VectorFunctions.IsFinite(vector: material.Albedo) ||
@@ -305,17 +306,20 @@ public sealed partial class SdfProgram {
                 !float.IsFinite(f: material.Soften) ||
                 (material.Soften < 0f) ||
                 (material.Soften > 1f) ||
-                !VectorFunctions.IsFinite(vector: material.Bounce) ||
-                (material.Bounce.X < 0f) ||
-                (material.Bounce.Y < 0f) ||
-                (material.Bounce.Z < 0f) ||
+                !VectorFunctions.IsFinite(vector: material.Fill) ||
+                (material.Fill.X < 0f) ||
+                (material.Fill.Y < 0f) ||
+                (material.Fill.Z < 0f) ||
+                !VectorFunctions.IsFinite(vector: bleed) ||
+                (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
+                !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering
             )
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and bounce tint, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
                     paramName: paramName
                 );
             }
@@ -357,7 +361,7 @@ public sealed partial class SdfProgram {
         }
     }
     // A PushField/PopField pair saves one accumulator slot in every interpreter. A hand-assembled stream must obey
-    // the same one-deep, balanced, single-owner, shape-bearing discipline as the builder: crossing an instance
+    // the same bounded, balanced, single-owner, shape-bearing discipline as the builder: crossing an instance
     // boundary would let a masked segment observe a save or restore emitted by a different mask bit (or by the
     // unmasked world stream), and an empty pair composes the FarDistance sentinel the push seeded — under an
     // intersection-family compose that sentinel wins the max() and erases every candidate accumulated before it.
@@ -494,6 +498,54 @@ public sealed partial class SdfProgram {
             );
         }
     }
+    // A wallpaper fold reads only its own cell's copy, which is the nearest copy everywhere exactly when the fold is
+    // continuous: every cell wall and in-cell seam a mirror (SdfWallpaperFold.IsContinuous). A group whose fold jumps (a
+    // translation wall, a rotation seam) would let a march step through a neighbour's copy, so it is refused here, before
+    // packing, whatever its content. A continuous group stays continuous only through a limit its clamp can honour
+    // (SdfWallpaperFold.LimitRefusal) and reciprocals that are exactly 1 / cell (Data0.zw against InverseCell): the lattice
+    // round and the cell displacement must read one cell, or the fold jumps at a boundary.
+    private static void RequireContinuousWallpaper(int index, SdfInstruction instruction, string paramName) {
+        var group = ((SdfWallpaperGroup)instruction.Shape);
+
+        if (!Enum.IsDefined(value: group)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds through undeclared wallpaper group {instruction.Shape}.",
+                paramName: paramName
+            );
+        }
+
+        if (!SdfWallpaperFold.IsContinuous(group: group)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds through wallpaper group {group}, whose fold jumps at a translation wall or rotation seam: its field reads only the sample's own cell, so a march could step through a neighbouring copy. Fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).",
+                paramName: paramName
+            );
+        }
+
+        var cell = new Vector2(x: instruction.Data0.X, y: instruction.Data0.Y);
+
+        if (SdfWallpaperFold.CellRefusal(cell: cell, group: group) is { } cellRefusal) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} through a cell it cannot invert: {cellRefusal}.",
+                paramName: paramName
+            );
+        }
+
+        if (SdfWallpaperFold.LimitRefusal(group: group, limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y)) is { } limitRefusal) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} through a limit it cannot clamp continuously: {limitRefusal}.",
+                paramName: paramName
+            );
+        }
+
+        var inverseCell = SdfWallpaperFold.InverseCell(cell: cell, group: group);
+
+        if ((instruction.Data0.Z != inverseCell.X) || (instruction.Data0.W != inverseCell.Y)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} with reciprocal cell extents ({instruction.Data0.Z}, {instruction.Data0.W}) that are not 1 / its cell ({inverseCell.X}, {inverseCell.Y}): the lattice round and the cell displacement would read different cells.",
+                paramName: paramName
+            );
+        }
+    }
     // The packed format's OWN admission test, run before anything reads a lane. ValidateIsa covers the opcode; these
     // are the other lanes the packing writes straight into GPU words, where an out-of-domain value is not a fault but a
     // silently wrong program: an undeclared shape/blend id falls through the kernel's switch, a material id past the
@@ -533,6 +585,14 @@ public sealed partial class SdfProgram {
                 instruction: instruction,
                 paramName: instructionsParamName
             );
+
+            if (instruction.Op == SdfOp.WallpaperFold) {
+                RequireContinuousWallpaper(
+                    index: index,
+                    instruction: instruction,
+                    paramName: instructionsParamName
+                );
+            }
 
             if (instruction.Op == SdfOp.LaneErode) {
                 RequireLaneErodeLaneIndex(
@@ -726,6 +786,9 @@ public sealed partial class SdfProgram {
         }
 
         foreach (var instance in m_instances) {
+            if (!Enum.IsDefined(value: instance.Indirect)) {
+                throw new ArgumentOutOfRangeException(message: "An instance's indirect participation must be Default, Cast, Receive or Off.", paramName: instancesParamName);
+            }
             if (
                 (instance.First < 0) ||
                 (instance.End > m_instructions.Length) ||
@@ -738,12 +801,12 @@ public sealed partial class SdfProgram {
             }
             if (
                 !VectorFunctions.IsFinite(vector: instance.Center) ||
-                !float.IsFinite(f: instance.Radius) ||
+                (!float.IsFinite(f: instance.Radius) && !SdfBoundAlgebra.IsUnbounded(bound: instance.Radius)) ||
                 (instance.Radius < 0f)
             ) {
                 throw new ArgumentOutOfRangeException(
                     paramName: instancesParamName,
-                    message: $"An instance bound must carry a finite center and a finite, non-negative radius; got center {instance.Center} and radius {instance.Radius}."
+                    message: $"An instance bound must carry a finite center and a non-negative radius, finite or SdfBoundAlgebra.Unbounded; got center {instance.Center} and radius {instance.Radius}."
                 );
             }
         }
@@ -756,7 +819,10 @@ public sealed partial class SdfProgram {
             instructionOwners: instructionOwners,
             paramName: instructionsParamName
         );
-
+        RequireSegmentsStartAtTheWorldPoint(
+            instructionOwners: instructionOwners,
+            paramName: instructionsParamName
+        );
 
         return instructionOwners;
     }

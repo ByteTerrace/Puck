@@ -54,11 +54,13 @@ internal static partial class AzureCommand {
         ) {
             throw new InvalidDataException(message: "official package must contain the configured primary world and its complete composed inventory");
         }
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-world-release-prepare-");
-
-        try {
+        // The inventory silo holds a generated key, so it is deleted however the step ends.
+        using (var temporary = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-world-release-prepare-"
+        )) {
             var package = Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.Path,
                 path2: "package"
             );
 
@@ -72,7 +74,7 @@ internal static partial class AzureCommand {
                     ["type"] = "directory",
                     ["settings"] = new JsonObject {
                         ["path"] = Path.Combine(
-                    path1: temporary.FullName,
+                    path1: temporary.Path,
                     path2: "store"
                 ).Replace(
                     newChar: '/',
@@ -84,7 +86,7 @@ internal static partial class AzureCommand {
             );
 
             silo["stateDir"] = Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.Path,
                 path2: "state"
             ).Replace(
                 newChar: '/',
@@ -137,7 +139,7 @@ internal static partial class AzureCommand {
                 );
                 using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
                 var keyPath = Path.Combine(
-                    path1: temporary.FullName,
+                    path1: temporary.Path,
                     path2: (name + ".pk8")
                 ).Replace(
                     newChar: '/',
@@ -151,7 +153,7 @@ internal static partial class AzureCommand {
                 var row = prototype.DeepClone(); row["world"] = name; row["federation"]!["keyFile"] = keyPath; rows.Add(item: row);
             }
             var siloPath = Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.Path,
                 path2: "silo.json"
             );
 
@@ -192,6 +194,6 @@ internal static partial class AzureCommand {
                 ),
                 overwrite: true
             );
-        } finally { temporary.Delete(recursive: true); }
+        }
     }
 }

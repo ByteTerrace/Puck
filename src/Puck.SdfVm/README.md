@@ -5,7 +5,8 @@ walks a compiled signed-distance program on the GPU. `SdfWorldResidency` makes
 one frame source resident on the render graph's device and holds its
 `SdfWorldTables` (the program, transforms, screens, lights, volumes and mesh
 draws every view of it reads), and `SdfWorldPasses` records each view as an
-`sdf.world` instance of the render graph: beam cull, then the per-view render
+`sdf.world` instance of the render graph: instance and beam culling, certified
+tile pruning, then the per-view render
 into the instance's own output image. The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
 (Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
@@ -28,6 +29,12 @@ never a Vulkan or DirectX type by name.
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam
   ever cone-marches, so beam cost tracks instances near the tile's cone
   rather than the total instance count.
+- *Certified tile pruning:* the tape pass encloses masked candidates over
+  eight depth slabs per tile, retaining the instructions that may contribute
+  in each slab. The existing scalar, gradient and compiled-part walks read its
+  instruction masks; segment masks and summary words skip empty runs.
+  Missing certificates and samples outside the covered balls keep the full
+  walk; small masked programs bypass the slab evaluations.
 - *Live program growth:* construction options reserve program words and instances.
   `UploadProgram` grows those buffers once the device is idle, retaining
   images, pipelines, and baked data. Dynamic-transform slots remain reserved by
@@ -36,8 +43,12 @@ never a Vulkan or DirectX type by name.
   scene be assembled from independent emitters—fixed geometry, an authoring
   pool, a debug takeover—as one list instead of one hand-written
   `BuildProgram` method.
-- *Gradient propagation for normals:* one forward-mode walk (`mapGradCore`)
-  carries shape gradients through transforms and composition. Common primitives,
+- *Gradient propagation for normals:* `mapGradCore` selects the shapes with
+  nonzero blend weight at the hit, then evaluates their gradients through the
+  existing transform and composition rules. A hard blend, or a smooth blend
+  outside its radius, keeps the deciding side; a smooth band retains every
+  weighted shape. A contributor set that fills falls back to the full dual walk.
+  Common primitives,
   including superellipsoids, use analytical leaf normals; the remaining shapes
   use local finite differences. The full-field finite-difference option remains
   available for comparisons. Authored curvature shading uses four neighboring
@@ -45,7 +56,9 @@ never a Vulkan or DirectX type by name.
   shading-only details need a fifth sample because their shading field differs
   from the march field.
   Keep the four curvature samples in one loop: each spelled-out VM call
-  duplicates the whole inlined interpreter.
+  duplicates the whole inlined interpreter. The
+  [gradient reference](../../docs/rendering/sdf/reference/gradients-and-normals.md)
+  explains the selected derivative walk and its counted cost.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, primary, shadow, AO)
   and appears only in the hit-only re-evaluations at an already-found surface
@@ -67,31 +80,55 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
+The indirect residency also owns a depth-only orthographic light-camera fragment
+with retained maps, one region published per frame and no work for unchanged
+regions. Its visibility contract and geometry limits are described in
+[the light-view section](../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view).
+Its finite lighting pass pins the source tables and publishes whole submitted
+sweeps; [the solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+describes the two lighting generations and their actual source snapshots.
+
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
-[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
-fills every pixel of the view's output with the authored sky, before any tile is culled)
+[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
-(cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
-(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
+(cone march over the tile-masked field) → `sdf-tape.comp` (certified instruction and segment masks)
+→ `sdf-cull-args.comp` → the mesh pass
+(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws, and `sdf-mesh-impostor.frag` the baked impostors' cards a view records) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
-`sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel
-(materials, lighting and diagnostics). The ambient and shadow passes skip a
+`sdf-world-shadow.comp` (the selected slots' soft shadows) → the views kernel
+(materials, lighting and diagnostics, shading hits only into the lit image,
+premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
+coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
+order, the lit image over them by its coverage, the atmosphere's in-scatter and
+the bounded media, into the output). The ambient and shadow passes skip a
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
-instance's render grid. Native views use `SdfWorldPackage.NativeFragment` and
-write the output directly. Views whose render-scale ceiling is below native use
-`SdfWorldPackage.Fragment`: its final `sdf-resolve.comp` reconstructs full-output
-color from the render-grid color, which is one transient allocation. The graph
+instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose sky and composite read
+the lit image and the visibility records views left. Views whose render-scale
+ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
+reconstructs the lit image and each pixel's surface transport at the output extent
+from the render-grid color, which is one retained allocation, and the sky and
+composite follow it, so the sky is never resampled or kept in history. A view
+whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment`
+at any render scale: the views kernel also writes a reactivity buffer, and the
+resolve gathers the jittered samples of `SdfTemporalHistory` (an eight-sample
+Halton period) over the instance's history color and surface, which survive
+from frame to frame in the graph. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
-pixels and resampling them otherwise. The residency counts its upload as three
-passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
+pixels and resampling them otherwise. The residency counts its upload as four
+passes, `fillers`, `bricks`, `upload` and `environment`, the sky's environment
+map and its coefficients, rendered only when lighting-visible irradiance changes by at least one display code
+(`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
-counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
-kernels' march steps and texels written among them. The views
+counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
+kernels' march steps, shape evaluations, shape gradients, texels written and
+sky evaluations, hashes and texture loads among them. The sky, composite and views expose per-layer detail rows, and the
+shadow exposes its slot; the ledger reconciles these with the plain remainder
+into each pass's totals. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
@@ -99,28 +136,35 @@ variant that supports its operations, reducing shader size and register pressure
 
 The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
-`SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
+`SdfWorldPackage.VisibilityRecordByteLength`, 96 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
-data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
+data, dynamic frame/lanes, primary iteration/evaluation counts, and the
+indirect receiver's certified camera-ray approach in L.y. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
-shadow the key light's soft-shadow visibility, each adding its queries to the
-combined count. The planner's buffer barrier orders each producer's
-record writes before its consumer. Views binds the record read-only, and every hit pass binds the
-beam's tile planes read-only, so a buffer a pass only reads is never held in a
-read-write state. These four dispatches share indirect bounds and live view
+shadow four 8-bit stable visibilities in the one K word, each adding its queries
+to the combined count. Active handoffs add incoming marches, bounded by K + F,
+and write policy-sized retained visibility storage: R8 at F = 1, R8G8 at
+F = 2, absent at F = 0. Each light shades from its own visibility and each
+handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
+record writes before its consumer. Views reads those rows and, with indirect enabled,
+publishes a preserving version containing its eight-word receiver certificate.
+The certificate retains the launch, clearance, complete allocation identity,
+transport revision and resolved or unresolved outcome. Every hit pass binds the
+beam's tile planes read-only. These dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
+The buffer reserves `renderWidth × renderHeight × 96` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
-changes. It is transient: one allocation shared by every frame slot, whose
+changes. It is retained: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
-The render ceiling (`SdfViewSnapshot.RenderScale`) alone chooses the fragment and
-allocates scratch once; a smaller current grid (`ResolvedRenderScale`, such as a
-layout transition's dip) changes dispatches and the packed visibility stride
+The render ceiling (`SdfViewSnapshot.RenderScale`) and the temporal ask choose the
+fragment, and the ceiling allocates scratch once; a smaller current grid (`ResolvedRenderScale`, which dynamic
+resolution and a layout transition's dip set) changes dispatches and the packed visibility stride
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
-at its current grid. Views at a native ceiling retain their ten passes, allocate
-no resolve resources and ignore the current grid. The shared reconstruction module
+at its current grid. Views at a native ceiling that do not ask for temporal
+reconstruction retain their twelve passes, allocate no resolve resources and
+ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.
 The existing resample canary exercises the shared filter through `place`; the
@@ -140,7 +184,11 @@ The iteration count describes the selected march; the evaluation count sums
 queries across all primary marches and attribute resolution, saturating at
 8,388,607. The evaluation diagnostic adds the surface, AO and shading queries.
 Queries can evaluate different amounts of geometry, so this count alone does
-not measure field work.
+not measure field work. `gpu.shapes.evaluated` counts that work, including the
+tape pass, winner selection and primitive finite-difference taps;
+`gpu.shapes.gradients` counts primitive derivatives. The
+[dense counters workloads](../../tests/Puck.Counters/README.md) hold the Nexus
+and courtyard camera, extent and floor tier fixed for comparisons.
 
 The beam chooses its work from the program's traversal admission. Programs that
 trace compiled parts independently use at most eight conservative entry samples;
@@ -204,6 +252,9 @@ per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
 outcomes within the probe's ceilings cannot overrun the program allocation.
+An upload changing only existing material values keeps geometry passes and
+indirect transport. It advances lighting and the next immutable solve source;
+material IDs, palette size and field/layout changes still invalidate geometry.
 `SdfWorldResidency` builds its tables once its pipeline set is ready, captures
 its frame source's frame once a frame (`Prepare`), and owns device-loss
 recovery: `OnDeviceLost` releases its tables and forwards `NotifyDeviceLost` to
@@ -247,7 +298,11 @@ in the existing upload pass. A dynamic row contributes 48 bytes and a mesh matri
 frames contribute zero. Host-visible upload bytes remain unchanged.
 
 Each view instance retains the camera and sample grid of its last completed
-render. A cut, view change, or gap invalidates that correspondence.
+render. A cut, view change, or gap invalidates that correspondence, and so does
+a residency whose previous transform tables hold other poses than that render
+read. History commits only when a render completes: a render whose submission
+fails commits no sample, standing or poses, so its retry takes the same jitter
+sample and reprojects from the last render that was written.
 `frame/sdf-reprojection.hlsli` combines it with the visibility record's winning
 slot or mesh triangle to recover the previous pixel and ray distance.
 `world.debug-view motion` shows previous-minus-current motion: red and green
@@ -282,10 +337,27 @@ draining the console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
-its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
-10 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
-A residency is `IsReady` once its set is installed and its tables hold its
-first captured frame; the World is ready once the world's residency is and the
+its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
+11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
+A residency is `IsReady` once its tables are built from every pipeline but the
+views variants, hold its first captured frame, and the views kernel its program
+selects (or a fuller one) is built, so a program that selects the core or folds
+variant never waits for the full ISA's translation. A captured program whose
+views kernel is still building is not uploaded: the residency holds the frame it
+last packed, which keeps rendering, and is not ready, naming the kernel, until
+that kernel is built. The pending frame survives a film gate that captures
+nothing, and `WaitReadyAsync` waits for the hold to release. A newer capture
+replaces the pending frame. A views kernel whose creation fails, other than by a
+device loss, is refused rather than thrown: the residency holds its frame the
+same way, and `NotReadyReason` names the kernel and its failure. The error stream
+reports each slot's refusal once, naming the kernel, the failure, and its recovery.
+Every views slot is polled after the tables are built, including variants the
+program does not select, so a device loss in any of their builds reaches recovery.
+A program whose own variant was refused renders with a fuller variant that is
+built. No frame
+builds a refused kernel again; a kernel reload (`world.shaders.reload`) builds
+it again from the bytecode it was refused with, or from the tree's, and a device
+loss rebuilds every pipeline. The World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
 `world.wait ready` waits on. A host that produces frames on its own thread and
 has nothing to present until the builds finish blocks between frames on
@@ -297,8 +369,9 @@ instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or
 its last release. The pass-pipeline cache creates up to
 `GpuPassPipelineCache.BuildConcurrency` pipelines at once on the thread pool,
-however many entries are building, and each entry checks its cancel before it
-creates, never during a creation. Releasing a set cancels every build no other
+however many entries are building; an entry waiting for its turn, and a view's
+pass build waiting for its residency's tables, holds no thread. Each entry checks
+its cancel before it creates, never during a creation. Releasing a set cancels every build no other
 holder leases before it waits for any, then waits for only the pipelines
 already in the driver: nothing may be created on a device that is being torn
 down, and a shutdown never waits out a whole cold build. A set whose creations
@@ -327,12 +400,6 @@ so a lasting failure is attempted once per change and never on a clock.
 Meanwhile no pass of the residency's views installs. The residency keeps its
 lease through the refusal.
 
-The unified overlay (`Puck.Overlays`) refuses its own resources the same way:
-a creation that fails releases what was created, `ResourceRefusal` names it,
-and the overlay presents the inner frame unchanged, forwarding any capture to
-it, until a device loss or a change to the operator's GPU faults, each of which
-tries the creation once more.
-
 Each backend also keeps a persistent pipeline cache per device, so a warm start
 translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)
 and [Direct3D 12](../../docs/rendering/directx.md#pipeline-library). A pipeline
@@ -359,21 +426,21 @@ names its file and line. The issuing text session's later lines wait for the
 request to settle.
 
 `SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
-creates replacements for the kernels whose bytecode changed, using the existing
-binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
+creates replacements for the kernels whose bytecode changed, and for any refused
+views kernel, using the existing binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
 `SdfWorldPipelines.PrepareReload` reflects each changed kernel and holds it to
 its interface's layout (`SdfKernelSet.InterfaceMismatch`), whose pass block
-carries the instruction set's stamp (`SdfIsaHlsl.Stamp`): a kernel compiled
+carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`): a kernel compiled
 against another instruction set, or binding anything where the host does not
 place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
 the `dxc` on the path.
 Buffers, images, scene programs, animation, and baked bricks remain allocated; only
 the frame-reuse signature is reset, so the next frame renders. A binding or layout
 change still needs a rebuilt host. Unchanged bytecode creates no
-pipeline and causes no GPU drain. Device-loss recovery uses the last
+pipeline and causes no GPU drain, unless its kernel was refused. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
 reload replaces pipelines in place, so the residency first takes its set out of
 the cache's sharing; when another residency on the device leases the same set,
@@ -395,6 +462,12 @@ range and rebuilding only on a revision change. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.
+
+Its `sdf.transforms.*` counters total the rows packed, bytes compared and rows
+owed over produced frames. These are `pacing` counts: interpolation can produce
+several poses between simulation ticks, so a pinned tick does not pin the
+amount of presentation work. An unchanged zero-time frame skips packing while
+keeping any pending follower motion for the next advancing frame.
 
 `SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
 to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that
@@ -453,7 +526,7 @@ are ignored build outputs; never commit them. When a `.hlsl` source is
 deleted, `ValidateShaderBytecodeSources` removes the bytecode and sidecars the
 build wrote for it and prints one line per file. Bytecode without a same-stem
 source that the build did not write (no sidecar recording its bytes) fails the
-build and stays in place. `ValidateShaderBytecodeFresh` fails the build on
+build and stays in place. `CollectShaderBytecode` fails the build on
 bytecode stale against its source or its sidecar. The recipe is
 `build/Shaders.targets` (`Puck.Shaders`).
 
@@ -470,15 +543,33 @@ the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
 kernel behavior outside the parity stations is not verified by any machine
 check.
 The kernels read the instruction set from
-`Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
-`Puck.SignedDistance`: every opcode, shape,
+`Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` (in
+`Puck.SdfVm.Model`) generates from `Puck.SignedDistance`: every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
-constants. It is checked in and never edited by hand. After changing any of
-those C# members, run `puck shaders generate` and rebuild this project;
+constants. It is checked in and never edited by hand. This project references
+`Puck.Shaders.Generator` as a build-only reference, so building it writes every
+declaration the model has changed before its kernels compile
+([generated declarations](../../docs/reference/shaders.md#generated-declarations));
+`puck shaders generate` writes the same files by hand, and
 `puck shaders generate --check` exits 1 naming the file when it has drifted,
 and CI runs it. The [`rendering` skill](../../.claude/skills/rendering/SKILL.md)
 carries the C#↔HLSL sync-pair contracts that are still written on both sides
 and must change together.
+
+## Indirect controls
+
+Indirect frames carry immutable source gains and requested finite bounce depth,
+with receiver-only application controls. World authors bind these through
+`render.indirect.sources`, `bounces` and `apply`; the existing environment resolver
+and generated common block deliver them to both solve and view passes. The
+[finite-solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+owns their ranges, source accounting, tier limits and captured reference semantics.
+
+The existing brick region keeps stable pool records and a sorted directory of
+their slot indices. `SdfIndirectBrickTable` and the shader lookup share the exact
+level/Z/Y/X ordering; planning publishes one completed table without transient
+empty writes. [The lighting handbook](../../docs/rendering/sdf/handbook/lighting-and-shading.md)
+owns its lookup bounds and region byte accounting.
 
 ## Capture completion
 
@@ -489,6 +580,23 @@ only after the PNG writer returns, or with a failure if readback, writing,
 capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
+
+A capture freezes its dependency closure even when it requests no additional
+convergence samples. Each participating residency retains an exact complete,
+fenced, untainted finite answer or starts a fresh solve with reusable transport.
+The runtime waits for the required source's completed view fence before
+forwarding the capture or counting samples. An exact completed census proving
+that a view has no indirect readers removes its indirect demand and cache wait.
+Unknown demand and changed camera, geometry, extent, binding or mode invalidate
+that shortcut. A frozen indirect control refuses a required cold solve by name
+without thawing or changing its retained bank; an off tier needs no lighting fence.
+Retained source and temporal-history taint remain independent of newer clean
+graph inputs.
+
+Freezing or releasing a source may replace its transform collection with an
+identical copy. That replacement reseeds motion history, while geometry cadence
+changes only for different packed rows or an active row-count change. Snapshot
+ownership alone does not restart a completed screen-lighting closure.
 
 A readback `DeviceLostException` completes the request with that failure and
 is then rethrown so the host can rebuild the graphics device. Ordinary PNG or
@@ -523,10 +631,34 @@ names still reports an unavailable name.
 The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
 travels with the request. SDF identity names a program instance ordinal plus one,
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
-L.x, separate from its instance's conservative bound slot. The remaining L words
-are reserved, and anonymous lanes read the existing transform row. The record
-remains 64 bytes. Nothing in this picker enters simulation input or grants edit
+L.x, separate from its instance's conservative bound slot. L.y carries the certified
+indirect receiver approach, and anonymous lanes read the existing transform row. The record
+has a 64-byte surface prefix and a 32-byte retained indirect receiver certificate,
+for 96 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
 authority.
+
+With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
+a 288-byte GPU answer and the probe-state range for a census of the snapshot's
+allocated bricks. It uses the visibility submission's fence and retains its own
+cache epoch, completed lighting source, selected method and final receiver
+source-enable mask. That mask may differ from the held solve's recursive source
+mask while the replacement solve is incomplete. Source RGB values
+and corner weights are the actual shader results. An answered Near replacement
+also captures its sampled direction and exact predecessor. Its current immutable
+source is retained only when the fenced High cache method and publication
+identities agree, so the independent reference follows that exact first ray.
+Classifications come from the
+copied probe states. No CPU schedule count stands for a GPU classification.
+The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`
+accounts for the actual lazy readback rings until their recorder retires.
+
+`SdfWorldResidency.IsIndirectReady` describes the current desired shared cache.
+Transport and the finite lighting solve must be submitted, the pinned source
+must match the latest packed frame, and an existing view's deferred-word
+readback fence must complete that exact allocation, epoch, publication and
+source sequence. A stale completed sweep cannot release a wait after a light
+edit or reset. This shares the eight-byte receiver census readback. Per-view receiver certificates keep their separate topology scope;
+shared-cache readiness does not claim that every view has admitted every receiver.
 
 ## Documentation
 

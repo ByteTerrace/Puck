@@ -1,0 +1,7 @@
+world.wait ready 60
+world.sky-quality high
+world.wait 12
+world.lighting
+world.budget
+world.screenshot {run}/at-cap.png
+world.wait captures 30

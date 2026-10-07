@@ -466,7 +466,7 @@ of the well.
 [hiddenranks.puck](hiddenranks.puck) is a module fragment, not a bootable world: the
 board, the two armies and the rules, over a 10×10 `grid` topology
 (`hiddenRanksField`, cell ordinal = row × 10 + column counting from red's back
-rank). `minimal-hiddenranks-host.world.json` under
+rank). `minimal-hiddenranks-host.puck` under
 [`tests/Puck.World.Tests/Fixtures`](../../../../../tests/Puck.World.Tests/Fixtures)
 supplies the two local seats and the `attack` channel the module's rules read.
 
@@ -646,7 +646,7 @@ pins the export after a three-question game.
 
 [snake.puck](snake.puck) is a module, not a bootable document: it declares the
 state and rules and leaves the seat, the input channels and the population to a
-host. [minimal-snake-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json)
+host. [minimal-snake-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck)
 is the smallest host that completes it—one local seat on the shared `walk` kit,
 plus the `forward`/`strafe` bipolar channels the four turn presses arrive on.
 
@@ -702,7 +702,7 @@ second run, and dies again — ending before the second deadline passes, so
 [paddleball.puck](paddleball.puck) is a module, not a bootable document: it declares a court,
 three bodies that play on it, and the rules that judge them, and leaves the seat,
 the `attack` channel and the population to a host.
-[minimal-paddleball-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json)
+[minimal-paddleball-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck)
 is the smallest host that completes it—one local seat, the `walk` program, the
 three looks and a population of six.
 
@@ -759,7 +759,7 @@ conceding side serves, the points alternate and the recorded game ends 11-10 wit
 [wordspy.puck](wordspy.puck) is a module fragment, not a bootable world: a
 5x5 word grid, a key card the two spymasters alone may read, and the rules for
 touching cards.
-[minimal-wordspy-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.world.json)
+[minimal-wordspy-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.puck)
 is the smallest host that completes it—four local seats and nothing else, since
 this module reads no channel and owns no placement. The seats are the four
 roles: 1 red spymaster, 2 red guesser, 3 blue spymaster, 4 blue guesser.
@@ -853,7 +853,7 @@ three clues: the third was within 0.9 cosine of one already on file and
 [arena.puck](arena.puck) is a module, not a bootable document: two fighters,
 two health pickups and the rules that score them, left to a host for its seats,
 its `attack` channel and its population.
-[minimal-arena-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.world.json)
+[minimal-arena-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.puck)
 is the smallest one that completes it—two local seats on one floating kit, the
 `attack` channel the fighters shoot on, a four-body population (seats 0 and 1,
 the two items) and the `arenaItem` look the item placements wear.

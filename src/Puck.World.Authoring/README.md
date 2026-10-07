@@ -112,7 +112,8 @@ not a requirement to fill every slot.
 ## Canonical form and the creation pin
 
 `CreationCanonicalizer.Canonicalize` validates a creation, normalizes it, and
-serializes the result through `DocumentJsonOptions.Shared`. The pin it reports
+serializes the result through `CreationJsonContext.Document`, the generated
+metadata using `DocumentJsonOptions.Shared`'s spelling. The pin it reports
 is the `ContentPin` of exactly the bytes it returns, and a world's
 `prototypes[].hash`, when authored, must equal it. Canonical form is a fixed
 point: canonicalizing the canonical document, its bytes read back, or the
@@ -128,7 +129,7 @@ band is what makes the form a fixed point. `CreationCanonicalFormLawTests`
 holds every prototype a shipped world boots to both laws.
 
 The pin also keys a creation's bakes: `CreationBakeKey` pairs it with the
-baker's version and a quality tier, `CreationBaker` bakes the creation through
+bake code fingerprint and a quality tier, `CreationBaker` bakes the creation through
 the contact emission (`CreationStampEmitter.EmitFixed`), and `CreationBakeCodec`
 encodes the outcome, a bake or the creation's refusal
 ([prototype bakes](../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
@@ -354,9 +355,9 @@ draws. An op with no expansion is refused by name on a solid placement.
 | `$type` | Builder call | Contact |
 |---|---|---|
 | `symmetry` | `SymmetryPlane(normal, offset)` | 2 copies |
-| `repeat` | `RepeatLimited(spacing, limit)`, sandwiched between a translate to and from `origin` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses) |
+| `repeat` | `RepeatLimited(spacing, limit)`, sandwiched between a translate to and from `origin` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses, and has no render reach: it answers `SdfBoundAlgebra.Unbounded`, the state the instance packs as unmaskable) |
 | `polar` | `RepeatPolar(count, axis, mirror, materialStride)`, sandwiched between a translate to and from `origin` | `count` copies, doubled when `mirror` is set |
-| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride, lodDistance)` | none—refused on a solid placement |
+| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride)`, mirror groups only; `limit` a whole number of cells for a square group, unbounded (absent) for a hex group, which is bounded by intersecting it (a scoped placement's render bound composes through its blends, so the intersected creation is as bounded as its clipper) | none—refused on a solid placement |
 
 `repeat`/`polar` carry an optional `origin` (creation units; null = the creation
 root, unchanged behaviour)—the point their fold centres on instead of the
@@ -494,13 +495,16 @@ panel's compose bites only this shape, never a sibling occupying the same
 space—`CreationStampEmitter.EmitShapeChain` (static placements) and
 `Client.WorldStampPool.EmitShape` (the animated stamp pool)—and emit the copy
 from its own `ResetPoint` chain rather than after the plate's shape
-instruction, whose emission may leave a persistent `Scale` op behind. Because
-a field scope nests no deeper than 1, a panel is refused by name wherever that
-scope would already be spent: a `Plane` (no meaningful face), a domain-folded
+instruction, whose emission may leave a persistent `Scale` op behind. The
+creation emitter refuses panels outside that independent-shape recipe:
+a `Plane` (no meaningful face), a domain-folded
 shape, a grouped shape (the pool's own group scope), and a creation whose OTHER
 shapes force `CreationStampEmitter.RequiresScope` (a non-Union blend, an
 engraved text run, or a noise facet)—the static path then shares one scope
-across the whole creation, leaving a panel nowhere of its own to nest.
+across the whole creation without lowering per-shape panel copies. The VM's
+second scope level lets a text-bearing moving creation isolate its complete
+field while retaining existing independent group scopes; it does not add new
+panel or trim authoring combinations.
 
 Render-only, like `Domain`: `CreationStampEmitter.EmitFixed`/
 `VisitFixedPrimitiveCopies` never read it, so a panelled solid placement's
@@ -652,7 +656,7 @@ does not own a Schema type for (`render`, `rules`, `state`, `dynamics`,
 `cameras`, `views.layouts`, a look row) as raw JSON matching the document's
 own wire spelling, and its caller (the `creation.sculpt` console verb, or
 `puck creation sculpt`) is the one that serializes a `CreationDocument` row
-through `DocumentJsonOptions.Shared` and validates the patched WHOLE
+through `CreationJsonContext.Document` and validates the patched WHOLE
 document through `WorldDefinitionSerialization`/`WorldDefinitionValidator`.
 
 `ICreationSculpt` is one registered generator: `Sculpt(SculptContext)`
@@ -663,8 +667,8 @@ it to carry rig data forward by name; it never writes to it directly.
 composition root or a test through `CreationSculptRegistry.Register`. Apply
 a registered sculpt live through `creation.sculpt <name>`
 (`Puck.World.Console`), or offline against a file through
-`puck creation sculpt <name> --world <path>` (`Puck.Cli`)—see that
-project's README.
+`puck creation sculpt <name> --world <path>` (`Puck.Cli`)—see the
+[CLI reference](../../docs/reference/cli.md#puck-creationcode-authored-sculpts).
 
 `SculptPatch.TouchedRows` groups a patch's results by row for a caller that
 resubmits whole rows: a `RemoveMember` is a modification of the row it

@@ -31,6 +31,26 @@
 #define SDF_OP_LANE_ERODE        34u
 #define SDF_OP_CELL_DISPLACE     35u
 
+// Puck.SdfVm.SdfShadowDecision.
+#define SDF_SHADOW_DECISION_INTERLEAVED     0u
+#define SDF_SHADOW_DECISION_OWNERSHIP       1u
+#define SDF_SHADOW_DECISION_LIGHT_MOTION    2u
+#define SDF_SHADOW_DECISION_OCCLUDER_MOTION 3u
+#define SDF_SHADOW_DECISION_RECEIVER        4u
+#define SDF_SHADOW_DECISION_REPROJECTED     5u
+
+// Puck.SignedDistance.SdfIndirectParticipation.
+#define SDF_INDIRECT_PARTICIPATION_DEFAULT 0u
+#define SDF_INDIRECT_PARTICIPATION_CAST    1u
+#define SDF_INDIRECT_PARTICIPATION_RECEIVE 2u
+#define SDF_INDIRECT_PARTICIPATION_OFF     3u
+
+// Puck.SignedDistance.SdfIndirectTier.
+#define SDF_INDIRECT_TIER_OFF    0u
+#define SDF_INDIRECT_TIER_MEDIUM 1u
+#define SDF_INDIRECT_TIER_HIGH   2u
+#define SDF_SHADOW_HISTORY_WORDS 5u
+
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
 #define SDF_SHAPE_CAPSULE             1u
@@ -135,9 +155,22 @@
 #define SDF_SEGMENT_COUNT(v)             ((v).x)
 #define SDF_SEGMENT_STEP_SCALE(v)        ((v).y)
 #define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
+#define SDF_SEGMENT_TAPE_OFFSET(v)       ((v).w)
+#define SDF_TAPE_INSTRUCTION_THRESHOLD   30u
+#define SDF_TAPE_SLAB_COUNT              8u
+#define SDF_TAPE_HEADER_WORDS            33u
+#define SDF_TAPE_CERTIFIED               0x00000001u
+#define SDF_TAPE_OMISSIBLE               0x00000002u
+#define SDF_TAPE_DYNAMIC_FRAME           0x00000004u
+#define SDF_TAPE_CENTERED_NORM_ENVELOPE  0x00000008u
+#define SDF_TAPE_TOKEN_SHIFT             8u
+#define SDF_TAPE_COORDINATE_LIMIT        65536.0
+#define SDF_TAPE_INTERMEDIATE_LIMIT      1E+12
+#define SDF_TAPE_BLEND_ROUNDOFF_MARGIN   3.8146973E-06
 #define SDF_INSTANCE_COUNT(v)            ((v).x)
 #define SDF_INSTANCE_PART_PROGRAMS(v)    ((v).y)
 #define SDF_INSTANCE_FLAGS(v)            ((v).z)
+#define SDF_INSTANCE_TAPE_TOKENS(v)      ((v).w)
 #define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
 
 // Shape-lane flags and the type mask on a ShapeBlend instruction's header.
@@ -153,7 +186,9 @@
 #define SDF_SEGMENT_BOUND_MASK              0x000000FFu
 #define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
 #define SDF_INSTANCE_CAMERA_HIDDEN_BIT      0x40000000u
-#define SDF_INSTANCE_SEGMENT_END_MASK       0x3FFFFFFFu
+#define SDF_INSTANCE_SEGMENT_END_MASK       0x0FFFFFFFu
+#define SDF_INSTANCE_INDIRECT_SHIFT         28u
+#define SDF_INSTANCE_INDIRECT_MASK          0x30000000u
 #define SDF_NO_DETAIL_SHAPES_FLAG           0x00000001u
 
 // The rigid-leaf plan.
@@ -166,17 +201,28 @@
 #define SDF_SAMPLED_REGION_DIM_MASK 0x000003FFu
 
 // Program capacities, strides and floors.
-#define SDF_MAX_INSTANCES              65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 20u
-#define SDF_GRID_HEADER_WORDS          16u
-#define SDF_GRID_MAX_DIM               64u
-#define SDF_MAX_FIELD_SCOPE_DEPTH      1u
-#define SDF_FLARE_MIN_SCALE            0.05
-#define SDF_LANE_ERODE_RAGGED_AMOUNT   0.35
-#define SDF_SCREEN_MATERIAL            65535
-#define SDF_MAX_SCREEN_SURFACES        32u
-#define SDF_MINIMUM_NEAR               0.02
-#define SDF_NOISE_PERIOD_CELLS         4096u
+#define SDF_MAX_INSTANCES               65536u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY  20u
+#define SDF_GRID_HEADER_WORDS           16u
+#define SDF_GRID_MAX_DIM                64u
+#define SDF_MAX_FIELD_SCOPE_DEPTH       2u
+#define SDF_FLARE_MIN_SCALE             0.05
+#define SDF_LANE_ERODE_RAGGED_AMOUNT    0.35
+#define SDF_SCREEN_MATERIAL             65535
+#define SDF_MAX_SCREEN_SURFACES         32u
+#define SDF_MAX_LIGHTS                  8u
+#define SDF_MAX_SHADOW_SLOTS            4u
+#define SDF_MAX_DISPATCH_GROUPS         65535u
+#define SDF_MAX_NOISE_OCTAVES           8u
+#define SDF_MAX_SWEEP_STRANDS           4u
+#define SDF_MAX_CONVEX_VERTICES         8u
+#define SDF_MAX_PATH_EDGES              128u
+#define SDF_SCREEN_EMISSION_EDGE        4u
+#define SDF_SCREEN_EMISSION_MEAN        16u
+#define SDF_SCREEN_EMISSION_RECORDS     17u
+#define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5
+#define SDF_MINIMUM_NEAR                0.02
+#define SDF_NOISE_PERIOD_CELLS          4096u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u
@@ -188,32 +234,11 @@
 #define SDF_GRID_OBJECT  2u
 #define SDF_GRID_SURFACE 4u
 
-// The environment's rows in the pass block's environment array (SdfEnvironment) and its light kinds.
-#define SDF_ENV_ROW_COUNT           53u
-#define SDF_ENV_CONTROL_ROW         0u
-#define SDF_ENV_LIGHTS_ROW          1u
-#define SDF_ENV_ROWS_PER_LIGHT      3u
-#define SDF_ENV_MAX_LIGHTS          8u
-#define SDF_ENV_CURVATURE_ROW       25u
-#define SDF_ENV_SKY_CONTROL_ROW     27u
-#define SDF_ENV_SKY_STOPS_ROW       28u
-#define SDF_ENV_MAX_SKY_STOPS       4u
-#define SDF_ENV_STARS_ROW           32u
-#define SDF_ENV_TWINKLE_ROW         33u
-#define SDF_ENV_CLOUDS_ROW          34u
-#define SDF_ENV_SOFTBOX_CONTROL_ROW 38u
-#define SDF_ENV_SOFTBOXES_ROW       39u
-#define SDF_ENV_ROWS_PER_SOFTBOX    3u
-#define SDF_ENV_MAX_SOFTBOXES       4u
-#define SDF_ENV_HORIZON_LOW_ROW     51u
-#define SDF_ENV_HORIZON_HIGH_ROW    52u
-
 // Puck.SignedDistance.SdfLightKind.
 #define SDF_LIGHT_DIRECTIONAL 0u
-#define SDF_LIGHT_HEMISPHERE  1u
-#define SDF_LIGHT_RIM         2u
-#define SDF_LIGHT_POINT       3u
-#define SDF_LIGHT_OCCLUDER    4u
+#define SDF_LIGHT_RIM         1u
+#define SDF_LIGHT_POINT       2u
+#define SDF_LIGHT_OCCLUDER    3u
 
 // Puck.SdfVm.SdfVisibilityKind.
 #define SDF_VISIBILITY_KIND_BACKGROUND 0u
@@ -225,6 +250,16 @@
 #define SDF_VISIBILITY_SOURCE_MASK            0x3FFFFFFFu
 #define SDF_TRANSFORM_SLOT_NONE               -1
 #define SDF_VISIBILITY_BOX_EDGE               8u
+#define SDF_VISIBILITY_AMBIENT_QUERIES_WORD   9u
+#define SDF_VISIBILITY_SHADOW_QUERIES_WORD    10u
 #define SDF_VISIBILITY_CURRENT(pixel, bounds) (((pixel).x >= ((bounds)[0] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y >= ((bounds)[1] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).x < ((bounds)[2] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y < ((bounds)[3] * SDF_VISIBILITY_BOX_EDGE)))
+#define SDF_SHADOW_BITS                       8u
+#define SDF_SHADOW_MASK                       0x000000FFu
+#define SDF_SHADOW_SLOTS                      4u
+#define SDF_SHADOW_FADE_CAPACITY              2u
+
+// The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
+#define SDF_TRANSFORM_SLOT_STATIC_WORD  0u
+#define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)
 
 #endif // SDF_ISA_HLSLI

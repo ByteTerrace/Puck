@@ -1,0 +1,108 @@
+schema: "puck.world.definition.v1"
+basis: "../sky-still"
+documentId: "sky-defaults-comparison"
+
+// Existing dense sky geometry and camera remain shared across every observation.
+state {
+  world {
+    slot skyPhase = 0.0
+    slot skyRunning = 0
+    slot binaryPhase = 0.0
+    slot binaryRunning = 0
+  }
+}
+timeline {
+  clocks [
+    { name: "matrix-sky", state: skyPhase }
+    { name: "matrix-binary", state: binaryPhase }
+  ]
+}
+rule "advance-matrix-sky" {
+  when skyRunning == 1
+  mode: Level
+  skyPhase += 0.001
+}
+rule "advance-matrix-binary" {
+  when binaryRunning == 1
+  mode: Level
+  binaryPhase += 0.005
+}
+render {
+  low {
+    shadows: Off
+    shadowLights: 0
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
+    ambientOcclusion: false
+    temporal: false
+    dynamicResolution: false
+    renderScale: 0.70980394
+    sky: low
+  }
+  medium {
+    shadows: Off
+    shadowLights: 0
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
+    ambientOcclusion: false
+    temporal: false
+    dynamicResolution: false
+    renderScale: 0.70980394
+    sky: medium
+  }
+  high {
+    shadows: Off
+    shadowLights: 0
+    shadowFadeSlots: 0
+    shadowFadeTicks: 0
+    shadowOverflow: instant
+    ambientOcclusion: false
+    temporal: false
+    dynamicResolution: false
+    renderScale: 0.70980394
+    sky: high
+  }
+  lighting {
+    lights [
+      directional(name: "east-sun", direction: [0.6, 0.8, 0], color: "#FFE4BB", weight: 1, shadow: auto)
+      directional(name: "west-sun", direction: {
+        clock: `matrix-binary`
+        keys [{ at: 0, value [-0.6, 0.8, 0] }, { at: 0.5, value [-0.9, 0.43589, 0] }]
+      }, color: "#BBDDFF", weight: 0.7, shadow: auto
+      )
+    ]
+  }
+}
+// The same two-sun floor and pillars as the existing shadow-slots observation.
+prototypes {
+  prototype "shadow-court" {
+    document {
+      schema: "puck.creation.v1"
+      name: "shadow-court"
+      palette [{ color: "#CCCCCC", roughness: 1, specular: 0 }]
+      shape Box "floor" {
+        material: 0
+        position [0, -0.25, 0]
+        scale [5, 0.25, 5]
+      }
+      shape Box "tall-pillar" {
+        material: 0
+        position [-1.2, 1, 0]
+        scale [0.35, 1, 0.35]
+      }
+      shape Box "short-pillar" {
+        material: 0
+        position [1.2, 0.65, 0.8]
+        scale [0.35, 0.65, 0.35]
+      }
+    }
+  }
+}
+placements {
+  placement "court" {
+    prototype: "shadow-court"
+    position [0, 0, 0]
+  }
+}

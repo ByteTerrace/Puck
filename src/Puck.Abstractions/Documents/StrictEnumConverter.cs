@@ -15,9 +15,9 @@ namespace Puck.Abstractions.Documents;
 /// source-gen <c>[JsonSourceGenerationOptions(Converters = ...)]</c> array fails the build outright with SYSLIB1034,
 /// unconditionally (not merely an AOT-publish nag — it fires with native AOT/trimming off too), if the non-generic
 /// form (or a subclass of it) appears there, because it resolves its per-value behavior at runtime rather than at
-/// compile time for one closed type. Being generic and a concrete (non-factory) type, this converter needs no
+/// compile time for one closed type. The generic factory is bound to that enum type, so this converter needs no
 /// <see cref="Type.MakeGenericType(Type[])"/> reflection to reach the enum it converts, so it carries no AOT/trim
-/// analysis gap the way the factory it replaces did — no project need opt out of the repo-wide AOT/trim default to
+/// analysis gap the non-generic factory had — no project need opt out of the repo-wide AOT/trim default to
 /// use it.
 /// <para>
 /// Applied per enum at the declaration — <c>[JsonConverter(typeof(StrictEnumConverter&lt;ThatEnum&gt;))]</c> — so the

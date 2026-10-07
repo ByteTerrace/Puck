@@ -110,6 +110,6 @@ public sealed class VulkanLogicalDevice : IDisposable {
 
         var result = m_logicalDeviceApi.WaitIdle(device: Commands);
 
-        result.ThrowIfFailed(operation: "vkDeviceWaitIdle");
+        result.ThrowIfFailed(device: Commands, operation: "vkDeviceWaitIdle");
     }
 }

@@ -1,0 +1,171 @@
+schema: "puck.world.definition.v1"
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 256
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+views {
+  layout "interfaces" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 0.1
+        instance: "ink-simulation"
+        width: 1
+        x: 0
+        y: 0
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "ink-visualize"
+        width: 1
+        x: 0
+        y: 0.1
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "ink-finish"
+        width: 1
+        x: 0
+        y: 0.2
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "tint"
+        width: 1
+        x: 0
+        y: 0.3
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "sdf-film-grain"
+        width: 1
+        x: 0
+        y: 0.4
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "place"
+        width: 1
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "overlay"
+        width: 1
+        x: 0
+        y: 0.6
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "sdf-world"
+        width: 1
+        x: 0
+        y: 0.7
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "source"
+        width: 1
+        x: 0
+        y: 0.8
+      }
+      {
+        camera: null
+        height: 0.1
+        instance: "indirect"
+        width: 1
+        x: 0
+        y: 0.9
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0.25
+  }
+
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+
+  seatRig "pipeline" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 0.001)
+    ]
+  }
+
+  graph "ink-simulation" {
+    camera: null
+    source: "ink-simulation.graph.json"
+  }
+
+  graph "ink-visualize" {
+    camera: null
+    source: "ink-visualize.graph.json"
+  }
+
+  graph "ink-finish" {
+    camera: null
+    source: "ink-finish.graph.json"
+  }
+
+  graph "tint" {
+    camera: null
+    source: "tint.graph.json"
+  }
+
+  graph "sdf-film-grain" {
+    camera: null
+    source: "sdf-film-grain.graph.json"
+  }
+
+  graph "place" {
+    camera: null
+    source: "place.graph.json"
+  }
+
+  graph "overlay" {
+    camera: null
+    source: "overlay.graph.json"
+  }
+
+  graph "sdf-world" {
+    camera: null
+    source: "sdf-world.graph.json"
+  }
+
+  graph "source" {
+    camera: null
+    source: "source.graph.json"
+  }
+
+  graph "indirect" {
+    camera: null
+    source: "indirect.graph.json"
+  }
+}

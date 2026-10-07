@@ -20,6 +20,7 @@ It intentionally omits implementation chronology and review provenance.
 | Analytic forward-mode normals | Shipped default; four-tap comparison remains available | [Gradients and normals](gradients-and-normals.md) |
 | Normal-ladder AO | Shipped three-tap ambient-only path | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Cone AO and bent normals | Optional quality tier; open | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
+| World-space radiance cache traced through the field | The CPU reference, GPU directional cache, depth-only light views, finite lighting and Cache/Screen/Cone comparison paths are implemented. Physical qualification remains open, including G10's actual RTX 4070 measurements and default choice, and RTX 2060 qualification | [Finite lighting](../handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
 | Penumbra soft shadows | Shipped with a workgroup grid gather | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
@@ -31,6 +32,7 @@ It intentionally omits implementation chronology and review provenance.
 | Negative authored scale as a mirror | Not supported; refused at the creation document validator in favour of the symmetry domain op | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |
 | Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [Level of detail and bounds](lod-and-bounds.md) |
 | Coverage AA | Shipped footprint-aware path | [Antialiasing and filtering](antialiasing-and-filtering.md) |
+| Temporal reconstruction | Shipped as a per-view quality: a jittered sample a frame, resolved over the view's own history | [Temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction) |
 | Ray-differential CRT filtering | Open when minification is visible | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [Level of detail and bounds](lod-and-bounds.md) |
@@ -39,6 +41,5 @@ It intentionally omits implementation chronology and review provenance.
 | Glyph decals for dense reading text | Shipped material-level tier | [Text and glyphs](text-and-glyphs.md) |
 | Coverage rasterizers as SDF geometry | Not applicable; they produce coverage, not a marchable distance | [Text and glyphs](text-and-glyphs.md) |
 
-Open implementation work is tracked nowhere. The backlog that held it was
-removed and nothing replaced it, so an "Open" row above is the
-full record of that item: no owner, no sequencing, and no plan to start one.
+The detail links distinguish implemented behavior from remaining work. The
+P6-GI plan tracks the cache's physical qualification and counted default choice.

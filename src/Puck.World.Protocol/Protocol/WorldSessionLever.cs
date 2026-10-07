@@ -21,7 +21,7 @@ namespace Puck.World.Protocol;
 /// server checks it like a command (exactly as <c>ApplyCommand</c> checks <see cref="WorldCapability.Drive"/>) rather
 /// than applying it like a <see cref="WorldMutation"/>.</para>
 /// <para><b>Presentation state only — a hard constraint on what may become a lever.</b> The
-/// <see cref="A"/>/<see cref="B"/> lanes are IEEE doubles, so a knob the simulation reads would put a float inside the
+/// <see cref="A"/>/<see cref="B"/>/<see cref="C"/>/<see cref="D"/> lanes are IEEE doubles, so a knob the simulation reads would put a float inside the
 /// determinism boundary. Every knob carried here writes render, present-pacing, overlay, or audio-mix state that no
 /// server type reads: <c>WorldRenderSettings</c> has no consumer under <c>Server/</c>, and <c>PresentPacingControl</c>
 /// documents itself as presentation pacing only while the fixed step runs at its own constant rate. <b>A knob the
@@ -33,10 +33,13 @@ namespace Puck.World.Protocol;
 /// payload rather than something each call site must remember to pass.</param>
 /// <param name="Name">The registered knob token to write.</param>
 /// <param name="A">The primary value (a level, a tier ordinal, or 0/1 for a toggle).</param>
-/// <param name="B">The secondary value for the knobs that carry two (shadow crowd radius); otherwise zero.</param>
+/// <param name="B">The secondary value for a compound knob (shadow crowd radius or fade slots); otherwise zero.</param>
+/// <param name="C">The third value for a compound knob; otherwise zero.</param>
+/// <param name="D">The fourth value for a compound knob; otherwise zero.</param>
 /// <param name="Seat">The 0-based local seat a per-seat knob writes, or <c>-1</c> for a session-wide knob. A setter
 /// registered for a session-wide name ignores it.</param>
-public readonly record struct WorldSessionLever(WorldSection Section, string Name, double A, double B = 0.0, int Seat = -1) {
+/// <param name="View">The render view target, or null for every view.</param>
+public readonly record struct WorldSessionLever(WorldSection Section, string Name, double A, double B = 0.0, double C = 0.0, double D = 0.0, int Seat = -1, string? View = null) {
     /// <summary>The <see cref="Seat"/> value a session-wide lever carries.</summary>
     public const int NoSeat = -1;
 }

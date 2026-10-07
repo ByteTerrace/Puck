@@ -24,23 +24,25 @@ public sealed partial class ShaderPipelineCompiler {
     // A pass's references in recording order, each with whether it writes and whether a graphics stage reaches it: an
     // indirect dispatch's arguments (read in the indirect-argument state), then the inputs, then the outputs. A shader
     // pass reaches every reference in its own kind's stage; a package pass reaches each in the stage its port declares.
-    private static IEnumerable<(ResourceReference Reference, bool Write, bool Arguments, bool Graphics)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
+    private static IEnumerable<(ResourceReference Reference, bool Write, bool Mutate, bool Arguments, bool Graphics, bool Transfer)> ReferencesOf(ShaderPipelinePass pass, ShaderPipelinePackagePass? package) {
         if (pass.DispatchArguments is { } arguments) {
-            yield return (new ResourceReference(Name: arguments), false, true, false);
+            yield return (new ResourceReference(Name: arguments), false, false, true, false, false);
         }
 
         var inputs = pass.InputReferences;
         var outputs = pass.OutputReferences;
 
         for (var index = 0; (index < inputs.Count); index++) {
-            yield return (inputs[index], false, false, ((package is null)
+            yield return (inputs[index], false, (package?.InputAccess(index: index) == RenderGraphPortAccess.ComputeReadWrite), false, ((package is null)
                 ? pass.IsGraphics
-                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)));
+                : (package.InputAccess(index: index) == RenderGraphPortAccess.FragmentSampled)),
+                (package?.InputAccess(index: index) == RenderGraphPortAccess.TransferRead));
         }
         for (var index = 0; (index < outputs.Count); index++) {
-            yield return (outputs[index], true, false, ((package is null)
+            yield return (outputs[index], true, false, false, ((package is null)
                 ? pass.IsGraphics
-                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)));
+                : (package.OutputAccess(index: index) == RenderGraphPortAccess.ColorAttachmentWrite)),
+                (package?.OutputAccess(index: index) == RenderGraphPortAccess.TransferWrite));
         }
     }
     // The state a reference needs from the instance it reaches, which is also the state the reference leaves it in. A
@@ -169,6 +171,7 @@ public sealed partial class ShaderPipelineCompiler {
         // Per storage and role (0 current, 1 previous): the pass, the position in its access list, and the use.
         var roles = new List<(int Pass, int Slot, ShaderPipelineAccessState Use)>[roots.Length, 2];
         var accesses = new (int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)[passes.Count][];
+        var aliases = new Dictionary<(int Pass, int Slot), List<string>>();
 
         for (var storage = 0; (storage < roots.Length); storage++) {
             roles[storage, 0] = [];
@@ -177,8 +180,9 @@ public sealed partial class ShaderPipelineCompiler {
         for (var index = 0; (index < passes.Count); index++) {
             var declaration = passes[index];
             var list = new List<(int Storage, string Version, bool PreviousFrame, ShaderPipelineAccessState Use)>();
+            var combined = new Dictionary<(int Storage, bool PreviousFrame), int>();
 
-            foreach (var (reference, write, arguments, graphics) in ReferencesOf(
+            foreach (var (reference, write, mutate, arguments, graphics, transfer) in ReferencesOf(
                 package: packages[index],
                 pass: declaration
             )) {
@@ -187,15 +191,35 @@ public sealed partial class ShaderPipelineCompiler {
 
                 var use = (arguments
                     ? ArgumentsUse
-                    : UseOf(
+                    : (transfer ? new ShaderPipelineAccessState(Access: (write ? GpuAccess.TransferWrite : GpuAccess.TransferRead),
+                        Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer) : UseOf(
                         graphics: graphics,
-                        preserve: (resource.From is not null),
+                        preserve: (mutate || (resource.From is not null)),
                         resource: resource,
-                        write: write
-                    ));
+                        write: (write || mutate)
+                    )));
 
-                roles[storage, (reference.PreviousFrame ? 1 : 0)].Add(item: (index, list.Count, use));
-                list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));
+                // These shader accesses share one buffer state during the dispatch. Transfer and argument uses
+                // retain their distinct states, and current/previous roles reach different physical instances.
+                var compatible = ((resource.Kind == ShaderPipelineResourceKind.Buffer)
+                    && ((use.Access & ~(GpuAccess.ShaderRead | GpuAccess.ShaderWrite)) == 0));
+                var key = (storage, reference.PreviousFrame);
+
+                if (compatible && combined.TryGetValue(key: key, value: out var slot)) {
+                    var earlier = list[slot];
+
+                    if (!aliases.TryGetValue(key: (index, slot), value: out var versions)) {
+                        versions = [earlier.Version];
+                        aliases.Add(key: (index, slot), value: versions);
+                    }
+                    if (!versions.Contains(item: reference.Name)) { versions.Add(item: reference.Name); }
+                    list[slot] = (storage, (write ? reference.Name : earlier.Version), reference.PreviousFrame,
+                        new ShaderPipelineAccessState(Layout: use.Layout, Access: earlier.Use.Access | use.Access,
+                            Stage: earlier.Use.Stage | use.Stage));
+                } else {
+                    if (compatible) { combined.Add(key: key, value: list.Count); } else { combined.Remove(key: key); }
+                    list.Add(item: (storage, reference.Name, reference.PreviousFrame, use));
+                }
                 if (write) {
                     writers[reference.Name] = index;
                 } else {
@@ -208,6 +232,11 @@ public sealed partial class ShaderPipelineCompiler {
                 lastUse[reference.Name] = index;
             }
             accesses[index] = [.. list];
+            for (var slot = 0; (slot < list.Count); slot++) {
+                var entry = list[slot];
+
+                roles[entry.Storage, (entry.PreviousFrame ? 1 : 0)].Add(item: (index, slot, entry.Use));
+            }
         }
 
         // The steady state: each role's first use starts where the instance's previous role left it. Folding twice
@@ -275,7 +304,11 @@ public sealed partial class ShaderPipelineCompiler {
                         Storage: storage,
                         Use: use,
                         Version: entry.Version
-                    );
+                    ) {
+                        OtherVersions = (aliases.TryGetValue(key: (pass, slot), value: out var versions)
+                            ? versions.Where(predicate: version => !string.Equals(a: version, b: entry.Version, comparisonType: StringComparison.Ordinal)).ToArray()
+                            : []),
+                    };
                     state = state.Then(use: use);
                     priorKind = ShaderPipelinePriorKind.Pass;
                     priorPass = pass;

@@ -102,7 +102,7 @@ public sealed class MachineCartridgeLawTests {
             hash *= 1099511628211UL;
         }
     }
-    private static string ModulePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/modules/arcade.world.json");
+    private static string ModulePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/modules/arcade.puck");
     /// <summary>A cartridge the GAME ships, for the one law that boots a shipped module and must therefore stage
     /// what that module names.</summary>
     /// <param name="file">The cartridge file name.</param>
@@ -353,7 +353,7 @@ public sealed class MachineCartridgeLawTests {
             name: Path.Combine(
                 path1: "worlds",
                 path2: "modules",
-                path3: "arcade.world.json"
+                path3: "arcade.puck"
             ),
             text: File.ReadAllText(path: ModulePath())
         );
@@ -449,10 +449,10 @@ public sealed class MachineCartridgeLawTests {
             catalog: TestHookInstaller.CreateMachineCatalog(),
             documentPath: hostPath
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-world-tests-");
         var profiles = new WorldOwnedWorlds(
             template: definition,
-            directory: stateDirectory,
+            directory: stateDirectory.RootPath,
             machineId: Guid.NewGuid()
         );
         using var fixture = new WorldFixture(
@@ -464,8 +464,7 @@ public sealed class MachineCartridgeLawTests {
                 machines: machines,
                 narrationSink: new WorldConsoleNarrationSink()
             ),
-            machines: machines,
-            stateDirectory: stateDirectory
+            machines: machines
         );
 
         foreach (var (screen, engine, file) in ((ReadOnlySpan<(int, string, string)>)[(8, CgbEngine, "hgb-mirror.cgb.cartridge.json"), (9, AgbEngine, "pip.agb.cartridge.json"), (10, CgbEngine, "hgb-mirror.cgb.cartridge.json")])) {

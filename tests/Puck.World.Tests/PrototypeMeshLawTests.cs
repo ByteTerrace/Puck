@@ -17,6 +17,7 @@ namespace Puck.World.Tests;
 /// placement's scale, yaw and position, and a stamp (an animated or attached placement) draws it at its root this frame.
 /// <para>Each refusal is paired with a control that differs in one authored field.</para>
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class PrototypeMeshLawTests {
     private const string PlacementId = "slab-at-gate";
     private const string PrototypeId = "slab";
@@ -214,6 +215,8 @@ public sealed class PrototypeMeshLawTests {
 
         var rest = Assert.Single(collection: scene.Frame());
 
+        Assert.True(condition: rest.IsDynamic);
+
         // Author (0, 1, 0) is engine (0, 1, 0), scaled to (0, 2, 0), lifted by the offset to (0, 3, 0) and carried to
         // the body at (5, 0, 0).
         AssertNear(expected: new Vector3(x: 5f, y: 3f, z: 0f), actual: Vector3.Transform(position: rest.Mesh.Positions.Span[3], matrix: rest.ObjectToWorld));
@@ -240,6 +243,9 @@ public sealed class PrototypeMeshLawTests {
     public void AStaticPlacementDrawsThePrototypeMesh() {
         var draws = Draws(definition: With(mesh: Quad()));
         var draw = Assert.Single(collection: draws);
+
+        Assert.False(condition: draw.FieldBacked);
+        Assert.False(condition: draw.IsDynamic);
 
         Assert.Equal(expected: 2, actual: draw.Mesh.TriangleCount);
         Assert.Equal(expected: new Vector3(x: -1f, y: 0f, z: 0f), actual: draw.Mesh.Positions.Span[1]);

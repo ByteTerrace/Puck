@@ -59,7 +59,7 @@ public sealed unsafe class VulkanQueueSubmitter {
                 1,
                 in submitInfo,
                 fenceHandle
-            ).ThrowIfFailed(operation: "vkQueueSubmit");
+            ).ThrowIfFailed(device: device, operation: "vkQueueSubmit");
         }
     }
 
@@ -152,6 +152,6 @@ public sealed unsafe class VulkanQueueSubmitter {
             waitSemaphores: waitSemaphores,
             waitValues: waitValues
         );
-        device.QueueWaitIdle(graphicsQueue.Handle).ThrowIfFailed(operation: "vkQueueWaitIdle");
+        device.QueueWaitIdle(graphicsQueue.Handle).ThrowIfFailed(device: device, operation: "vkQueueWaitIdle");
     }
 }

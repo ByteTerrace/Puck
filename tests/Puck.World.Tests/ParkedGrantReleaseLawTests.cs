@@ -86,7 +86,8 @@ public sealed class ParkedGrantReleaseLawTests {
         IdentitySubject: "peer",
         AuthorityTransferred: false,
         PlacementId: null,
-        CatalogRig: 0
+        CatalogRig: 0,
+        TravelTurn: default
     );
     private static WorldDefinition WithGrace(float seconds, int rateHz = 240) {
         var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);
@@ -157,7 +158,7 @@ public sealed class ParkedGrantReleaseLawTests {
         }
 
         Assert.Equal(
-            actual: tape.Verify(name: name).DivergedAt,
+            actual: tape.Verify(name: name).Primary.DivergedAt,
             expected: -1
         );
     }
@@ -242,7 +243,12 @@ public sealed class ParkedGrantReleaseLawTests {
         Assert.NotNull(@object: checkpoint);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-parked-grant-tests-").FullName;
+        // The restored server composes a machine host whose background work may still hold a file as it is disposed, so
+        // the scratch delete is best-effort.
+        using var stateDirectory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-parked-grant-tests-"
+        );
 
         using var machines = new WorldMachineHost(
             engines: [],
@@ -254,56 +260,45 @@ public sealed class ParkedGrantReleaseLawTests {
             instanceIdentity: "boot",
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: stateDirectory,
+                directory: stateDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
         );
+        // The peer's authority is gone at restore itself — before any Step could run a sweep.
+        Assert.True(
+            condition: restored.Population.IsParked(index: PeerBodyIndex),
+            userMessage: "a restore parks every captured remote human"
+        );
+        Assert.Empty(collection: restored.Grants.Held(grantee: peer));
 
-        try {
-            // The peer's authority is gone at restore itself — before any Step could run a sweep.
-            Assert.True(
-                condition: restored.Population.IsParked(index: PeerBodyIndex),
-                userMessage: "a restore parks every captured remote human"
-            );
-            Assert.Empty(collection: restored.Grants.Held(grantee: peer));
+        // Its exclusive reservation is free: a rival's identical exclusive acquisition lands immediately.
+        var rival = Principal.Seat(slot: 2);
 
-            // Its exclusive reservation is free: a rival's identical exclusive acquisition lands immediately.
-            var rival = Principal.Seat(slot: 2);
+        restored.Grant(
+            actor: Principal.Console,
+            grant: new WorldGrant(
+                Grantee: rival,
+                Capability: WorldCapability.Control,
+                Subject: GrantSubject.Body(index: PeerBodyIndex),
+                Exclusive: true
+            )
+        );
 
-            restored.Grant(
-                actor: Principal.Console,
-                grant: new WorldGrant(
-                    Grantee: rival,
-                    Capability: WorldCapability.Control,
-                    Subject: GrantSubject.Body(index: PeerBodyIndex),
-                    Exclusive: true
-                )
-            );
+        Assert.True(
+            condition: restored.Grants.Held(grantee: rival).Contains(value: (WorldCapability.Control, GrantSubject.Body(index: PeerBodyIndex))),
+            userMessage: "a restored parked generation's exclusive reservation must not refuse a live acquirer"
+        );
 
-            Assert.True(
-                condition: restored.Grants.Held(grantee: rival).Contains(value: (WorldCapability.Control, GrantSubject.Body(index: PeerBodyIndex))),
-                userMessage: "a restored parked generation's exclusive reservation must not refuse a live acquirer"
-            );
-
-            // The control: the local seat's restore is unchanged — its acquisition and its seeded Drive row survive.
-            Assert.Contains(
-                expected: (WorldCapability.Control, seatAcquired),
-                collection: restored.Grants.Held(grantee: seat)
-            );
-            Assert.Contains(
-                expected: (WorldCapability.Drive, GrantSubject.Body(index: 1)),
-                collection: restored.Grants.Held(grantee: seat)
-            );
-        } finally {
-            try {
-                Directory.Delete(
-                    path: stateDirectory,
-                    recursive: true
-                );
-            } catch (IOException) {
-            }
-        }
+        // The control: the local seat's restore is unchanged — its acquisition and its seeded Drive row survive.
+        Assert.Contains(
+            expected: (WorldCapability.Control, seatAcquired),
+            collection: restored.Grants.Held(grantee: seat)
+        );
+        Assert.Contains(
+            expected: (WorldCapability.Drive, GrantSubject.Body(index: 1)),
+            collection: restored.Grants.Held(grantee: seat)
+        );
     }
     /// <summary>The reconnect half: the admission door's resume arm re-dispatches the same
     /// <see cref="WorldServerEvent.PeerAdmitted"/> shape a fresh admission rides, carrying the fresh connection's

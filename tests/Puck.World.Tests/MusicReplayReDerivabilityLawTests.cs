@@ -5,6 +5,7 @@ using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -181,36 +182,24 @@ public sealed class MusicReplayReDerivabilityLawTests {
     /// both trivially reading "none".</summary>
     [Fact]
     public void IdenticalScriptReDerivesTheIdenticalActiveLayerAndEmbellishmentStream() {
-        var directoryA = Directory.CreateTempSubdirectory(prefix: "puck-replay-law-layers-a-").FullName;
-        var directoryB = Directory.CreateTempSubdirectory(prefix: "puck-replay-law-layers-b-").FullName;
+        using var directoryA = new TemporaryDirectory(prefix: "puck-replay-law-layers-a-");
+        using var directoryB = new TemporaryDirectory(prefix: "puck-replay-law-layers-b-");
+        var streamA = RunLayeredScriptAndCollect(assetDirectory: directoryA.RootPath);
+        var streamB = RunLayeredScriptAndCollect(assetDirectory: directoryB.RootPath);
 
-        try {
-            var streamA = RunLayeredScriptAndCollect(assetDirectory: directoryA);
-            var streamB = RunLayeredScriptAndCollect(assetDirectory: directoryB);
-
-            Assert.Equal(
-                actual: streamB,
-                expected: streamA
-            );
-            Assert.Contains(
-                actualString: streamA[0],
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "layers=ambient-tune,arrival-tune"
-            );
-            Assert.Contains(
-                actualString: streamA[0],
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "lastEmbellishment=stinger"
-            );
-        } finally {
-            Directory.Delete(
-                path: directoryA,
-                recursive: true
-            );
-            Directory.Delete(
-                path: directoryB,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: streamB,
+            expected: streamA
+        );
+        Assert.Contains(
+            actualString: streamA[0],
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "layers=ambient-tune,arrival-tune"
+        );
+        Assert.Contains(
+            actualString: streamA[0],
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "lastEmbellishment=stinger"
+        );
     }
 }

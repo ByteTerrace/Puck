@@ -1,0 +1,99 @@
+{
+  "id": "temporal-disocclusion",
+  "title": "The pixels a moving slab reveals show the spatial path on the first frame they are seen",
+  "binding": "The positive leg boots a slab in front of a striped backdrop at native render scale with world.temporal on. A seat-granted edit submitted at tick 64 moves the slab four units aside on tick 65, and the world view is captured at tick 65, while the backdrop it revealed is new to the history. A camera view of the same eye and target renders the spatial path and is captured at tick 66. Over the revealed region the two differ by at most 4 codes, so revealed pixels take the current frame rather than stale history. The discriminating leg submits the edit one tick later, so the tick 65 capture still shows the slab and the claim fails.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-disocclusion/fixture.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-revealed-pixels-match-the-spatial-view",
+        "capture": "state/captures/revealed~65.png",
+        "reference": "state/captures/reference~66.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.465,
+          0.44,
+          0.535,
+          0.555
+        ],
+        "maximumMeanCodes": 4,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-disocclusion/discriminating.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-revealed-pixels-match-the-spatial-view",
+        "capture": "state/captures/revealed~65.png",
+        "reference": "state/captures/reference~66.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.465,
+          0.44,
+          0.535,
+          0.555
+        ],
+        "maximumMeanCodes": 4,
+        "holds": false
+      }
+    ]
+  }
+}

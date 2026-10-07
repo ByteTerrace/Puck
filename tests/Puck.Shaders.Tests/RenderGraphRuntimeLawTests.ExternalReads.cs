@@ -2,6 +2,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -108,6 +109,49 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     [Fact]
+    public void AThrowingExternalReaderLeavesNoLeaseOnAReleasedGraphImage() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders(Camera);
+        var world = new ReadingWorld();
+
+        recorders.Registry.RegisterProducer(factory: _ => world, package: World);
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: ReadSource),
+                new RenderGraphInstance(
+                    ExternalPackage: World,
+                    Name: "world",
+                    Passes: WorldPasses,
+                    Reads: [new RenderGraphRead(Producer: ReadSource)],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                )
+            ),
+            "world",
+            Graph(pipeline: CameraGraph()),
+            null!
+        );
+        var frame = 0L;
+
+        TestLiveness.Until(
+            reason: () => "The external reader never received a graph image.",
+            step: () => {
+                _ = ProduceReading(hertz: 60, index: frame++, runtime: runtime, tick: frame);
+
+                return ((world.Seen.Count == 1) && (world.Seen[0].ImageView != 0));
+            }
+        );
+        world.Throws = true;
+        Assert.Throws<InvalidOperationException>(testCode: () => ProduceReading(hertz: 60, index: frame++, runtime: runtime, tick: frame));
+        var read = Assert.Single(collection: world.Seen).ImageView;
+
+        Assert.NotEqual(actual: read, expected: 0);
+        runtime.OnDeviceLost();
+        Assert.True(condition: gpu.IsReleased(handle: read));
+        Assert.Empty(collection: gpu.UsesAfterRelease);
+    }
+    [Fact]
     public void ASourceProducerRendersAtItsDeclaredCadenceAndExtent() {
         var gpu = new FakePipelineGpu();
 
@@ -131,6 +175,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: (FakeSource.Width, FakeSource.Height), actual: source.Extent);
         }
     }
+    // While the display's rate is unknown a rate source's row is refused by name, yet the runtime still asks its producer
+    // to answer each frame without producing work; an offscreen capture fill can answer rendered that way.
     [Fact]
     public void ARateSourceIsRefusedByNameWhileTheDisplayRateIsUnknown() {
         var gpu = new FakePipelineGpu();
@@ -155,6 +201,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
+            Assert.Equal(expected: 4, actual: source.Answered);
             Assert.Equal(expected: 0, actual: source.Produced);
 
             // Once the display's rate is known, a 30 Hz source renders every second frame of a 60 Hz display.
@@ -293,13 +340,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             var self = reads![reads.IndexOf(producer: "mirror")];
 
             Seen.Add(item: ((int)self.Lease.ImageViewHandle));
             m_completed++;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -338,8 +385,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
         private IGpuImage? m_image;
 
         public int Acquired { get; private set; }
+        public int Answered { get; private set; }
 
-        public ImageSourceDescriptor? Descriptor { get; } = new(
+        public FrameRender Availability { get; set; } = FrameRender.Waiting(reason: "the fake camera has not produced");
+
+        public FrameRender Answer {
+            get {
+                Answered++;
+
+                return Availability;
+            }
+        }
+
+        public ImageSourceDescriptor? Descriptor { get; set; } = new(
             Cadence: cadence,
             Color: ImageColorEncoding.Srgb,
             Content: ImageContentClass.External,
@@ -367,7 +425,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() => m_image?.Dispose();
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_image ??= gpu.Create(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: height,
@@ -377,8 +435,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
+            Availability = FrameRender.Rendered;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -400,6 +459,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Layout: GpuImageLayout.ShaderReadOnly,
                 Lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
+                    Publication: new GpuImagePublication(Owner: this, Sequence: Produced),
                     Release: _ => Released++
                 ),
                 Tainted: false
@@ -419,8 +479,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public string? PendingCapturePath => null;
 
         public List<(string Producer, nint ImageView)> Seen { get; } = [];
+        public List<GpuImagePublication> Publications { get; } = [];
 
         public bool Takes { get; set; }
+        public bool Throws { get; set; }
 
         public IGpuWorkSource Work { get; } = new GpuWorkLedger(
             framesInFlight: 3,
@@ -429,18 +491,24 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             Seen.Clear();
+            Publications.Clear();
 
             for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
                 Seen.Add(item: (reads![index].Producer, reads[index].Image.ImageViewHandle));
+                Publications.Add(item: reads[index].Publication);
 
                 if (Takes) {
                     Held.Hold(lease: reads.Take(index: index));
                 }
             }
 
-            return true;
+            if (Throws) {
+                throw new InvalidOperationException(message: "Injected external reader failure.");
+            }
+
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

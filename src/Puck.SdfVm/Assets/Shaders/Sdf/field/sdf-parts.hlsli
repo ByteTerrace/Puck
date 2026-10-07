@@ -6,7 +6,7 @@
 bool sdfCanTracePartsIndependently() {
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
     uint table = sdfProgramLayout.partProgramOffset;
-    return table != 0u && (sdfWords[table].x & 0x80000000u) != 0u;
+    return table != 0u && (sdfProgramWord(table).x & 0x80000000u) != 0u;
 #else
     return false;
 #endif
@@ -14,7 +14,7 @@ bool sdfCanTracePartsIndependently() {
 
 // Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic flag, scope scale).
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
-// (pose slot + 1, material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the
+// (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
 void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
     float parentWeight = sdfMaterialBlendWeight;
@@ -31,33 +31,41 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     child.instanceIndex = -1;
     child.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
+    uint leafCount = part.z & 0x7FFFFFFFu;
+    if (!sdfProgramRange(part.x, leafCount, 1u) || !sdfProgramRange(part.y, leafCount, 1u)) {
+        parent = sdfIsaErrorHit();
+        return;
+    }
+
     [loop]
-    for (uint leaf = 0u; leaf < (part.z & 0x7FFFFFFFu); leaf++) {
-        uint4 code = sdfWords[part.x + leaf];
-        uint4 shape = sdfWords[SDF_PROGRAM_HEADER_VECTORS + code.x];
+    for (uint leaf = 0u; leaf < leafCount; leaf++) {
+        uint4 code = sdfProgramWord(part.x + leaf);
+        if (code.x >= sdfProgramLayout.instructionCount || code.y > sdfProgramLayout.instructionCount) { parent = sdfIsaErrorHit(); return; }
+        uint4 shape = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + code.x);
         if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) {
             continue;
         }
-        uint4 binding = sdfWords[part.y + leaf];
+        uint4 binding = sdfProgramWord(part.y + leaf);
+        if (!sdfTapeShapeLive(binding.z)) { sdfTapeSkippedShape(shape); continue; }
         float3 localPosition = worldPosition;
         float4 lanes = 0.0;
         int slot = SDF_TRANSFORM_SLOT_NONE;
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        if (binding.x != 0u) {
-            uint pose = binding.x - 1u;
+        if (binding.x != SDF_TRANSFORM_SLOT_STATIC_WORD) {
+            uint pose = (uint)SDF_TRANSFORM_SLOT_UNPACK(binding.x);
             slot = (int)pose;
-            float4 position = sdfDynamicTransforms[3u * pose];
-            float4 orientation = sdfDynamicTransforms[3u * pose + 1u];
+            float4 position = sdfDynamicTransformRow(3u * pose);
+            float4 orientation = sdfDynamicTransformRow(3u * pose + 1u);
             localPosition = rotatePointByInverseQuaternion(worldPosition - position.xyz, orientation);
-            if (trackMaterial) lanes = sdfDynamicTransforms[3u * pose + 2u];
+            if (trackMaterial) lanes = sdfDynamicTransformRow(3u * pose + 2u);
         }
 #endif
 
         float distanceScale = 1.0;
         if (code.y != 0u) {
             uint domainIndex = code.y - 1u;
-            uint4 domain = sdfWords[SDF_PROGRAM_HEADER_VECTORS + domainIndex];
-            float4 data0 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex]);
+            uint4 domain = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + domainIndex);
+            float4 data0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex));
             // These operations retain the generic scalar walk's arithmetic order. The compiler admits at most one
             // domain op after the pose and before the primitive; arbitrary chains stay in the reference VM.
             if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SCALE) {
@@ -66,8 +74,9 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
             }
 #ifndef SDF_STRIP_HEAVY
             else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) {
-                float4 data1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u]);
+                float4 data1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u));
                 uint axis = SDF_INSTRUCTION_SHAPE(domain);
+                if (axis >= 3u) { parent = sdfIsaErrorHit(); return; }
                 float rawT = (data0.z - localPosition[axis]) * data0.w;
                 float t = saturate(rawT);
                 float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
@@ -79,15 +88,17 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
                 distanceScale *= data1.x;
             } else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SHEAR) {
                 uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
+                if (target >= 3u || driver >= 3u) { parent = sdfIsaErrorHit(); return; }
                 float t = localPosition[driver];
                 localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
             }
 #endif
         }
 
-        float4 shapeData0 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x]);
-        float4 shapeData1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u]);
+        float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x));
+        float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u));
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
+        if (sdfTapeDecided(binding.z)) { child.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shape)); }
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
     }

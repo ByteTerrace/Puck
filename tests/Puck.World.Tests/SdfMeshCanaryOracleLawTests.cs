@@ -429,7 +429,7 @@ public sealed partial class SdfMeshCanaryOracleLawTests {
     }
     // A camera row as the World resolves it: its rig's eye, target and field of view at the extent its view renders at.
     private static CameraSnapshot Camera(WorldDefinition definition, string name, uint width, uint height) {
-        var (eye, target, fieldOfView) = WorldCameraRigCompiler.Compile(
+        var (eye, target, fieldOfView) = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: definition,
             mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
             program: definition.Cameras.Single(predicate: row => string.Equals(
@@ -456,7 +456,7 @@ public sealed partial class SdfMeshCanaryOracleLawTests {
             viewportWidth: width
         );
     }
-    // The normalized ray through a pixel's center, as march/sdf-cone.hlsli's cameraRayDirection casts it.
+    // The normalized ray through a pixel's center, as frame/sdf-viewport.hlsli's cameraRayDirection casts it.
     private static Vector3 Direction(CameraSnapshot camera, int width, int height, int x, int y) {
         var ndcX = ((((x + 0.5) / width) * 2.0) - 1.0);
         var ndcY = -((((y + 0.5) / height) * 2.0) - 1.0);

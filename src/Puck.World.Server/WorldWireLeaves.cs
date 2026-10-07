@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.Networking;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -12,14 +13,32 @@ namespace Puck.World.Server;
 /// (<see cref="WireReader.ReadRequiredString"/>) rather than accepting one and reading a mobility credential no live
 /// address can ever hold — deliberately stricter than the checkpoint codec's own leaf used to be, since a checkpoint
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
-/// discipline everywhere.</summary>
-internal static class WorldWireLeaves {
+/// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
+[FormatLeaf]
+public static class WorldWireLeaves {
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),
         Index: reader.ReadInt32(),
         Generation: reader.ReadInt32()
     );
+    /// <summary>Reads a traveler's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), refusing a
+    /// value outside the reduced interval <c>[-pi, pi)</c>, which no accumulation produces.</summary>
+    public static Puck.Maths.FixedQ4816 ReadTravelTurn(ref WireReader reader, string field) {
+        var turn = reader.ReadFixed();
+
+        if (
+            !reader.Failed &&
+            !WorldFrameIsometry.IsTurn(turn: turn)
+        ) {
+            reader.Fail(
+                detail: $"{field} {turn} is outside the reduced turn interval [-pi, pi)",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return turn;
+    }
     /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
     public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
         Incarnation: ReadEntityAddress(reader: ref reader),
@@ -39,6 +58,10 @@ internal static class WorldWireLeaves {
         var authorityTransferred = reader.ReadBoolean();
         var placementId = reader.ReadNullableString(field: "peer placement id");
         var catalogRig = reader.ReadByte();
+        var travelTurn = ReadTravelTurn(
+            field: "peer event entry travel turn",
+            reader: ref reader
+        );
 
         if (catalogRig >= WorldLookSource.Catalog.RigCount) {
             reader.Fail(
@@ -65,7 +88,8 @@ internal static class WorldWireLeaves {
             IdentityDomain: identityDomain,
             IdentitySubject: identitySubject,
             PlacementId: placementId,
-            Source: source
+            Source: source,
+            TravelTurn: travelTurn
         );
     }
     /// <summary>Writes a <see cref="WorldPeerEventEntry"/> in <see cref="ReadPeerEventEntry"/>'s order. The caller
@@ -93,6 +117,7 @@ internal static class WorldWireLeaves {
         writer.WriteBoolean(value: peer.AuthorityTransferred);
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);
+        writer.WriteFixed(value: peer.TravelTurn);
 
         return true;
     }
@@ -114,6 +139,166 @@ internal static class WorldWireLeaves {
         WriteEntityAddress(
             writer: writer,
             address: mobility.DepartedFrom
+        );
+    }
+    public static void WriteContinuum(WireWriter writer, WorldContinuumTrajectory continuum) {
+        writer.WriteFixedVector(value: continuum.PreviousPosition);
+        writer.WriteUInt64(value: continuum.SourceTick);
+        writer.WriteUInt64(value: continuum.ContinuumStartEngineTick);
+        writer.WriteUInt64(value: continuum.ContinuumEndEngineTick);
+        writer.WriteUInt64(value: continuum.ConsumedThroughEngineTick);
+        writer.WriteByte(value: continuum.BoundaryEvents);
+    }
+    /// <summary>Reads what <see cref="WriteContinuum"/> writes, refusing a segment that is not
+    /// <see cref="WorldContinuumTrajectory.IsWellFormed"/>.</summary>
+    public static WorldContinuumTrajectory ReadContinuum(ref WireReader reader) {
+        var continuum = new WorldContinuumTrajectory(
+            PreviousPosition: reader.ReadFixedVector(),
+            SourceTick: reader.ReadUInt64(),
+            ContinuumStartEngineTick: reader.ReadUInt64(),
+            ContinuumEndEngineTick: reader.ReadUInt64(),
+            ConsumedThroughEngineTick: reader.ReadUInt64(),
+            BoundaryEvents: reader.ReadByte()
+        );
+
+        if (
+            !reader.Failed &&
+            !continuum.IsWellFormed
+        ) {
+            reader.Fail(
+                detail: $"continuum trajectory has invalid interval [{continuum.ContinuumStartEngineTick},{continuum.ContinuumEndEngineTick}), consumed-through {continuum.ConsumedThroughEngineTick}, or boundary count {continuum.BoundaryEvents}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return continuum;
+    }
+
+    private static void WriteChannelEdge(WireWriter writer, WorldTransferChannelEdge edge) {
+        writer.WriteString(value: edge.Name);
+        writer.WriteBoolean(value: edge.PreviousBit);
+        writer.WriteFixed(value: edge.HeldValue);
+    }
+    private static WorldTransferChannelEdge ReadChannelEdge(ref WireReader reader) => new(
+        Name: reader.ReadString(
+            field: "channel edge name",
+            maxBytes: WireLimits.MaxStringBytes
+        ),
+        PreviousBit: reader.ReadBoolean(),
+        HeldValue: reader.ReadFixed()
+    );
+    private static void WriteActionRegister(WireWriter writer, WorldTransferActionRegister register) {
+        writer.WriteString(value: register.Name);
+        writer.WriteByte(value: ((byte)register.Kind));
+        writer.WriteFixed(value: register.Value);
+        writer.WriteUInt64(value: register.TimerTicks);
+    }
+    private static WorldTransferActionRegister ReadActionRegister(ref WireReader reader) {
+        var name = reader.ReadString(
+            field: "action register name",
+            maxBytes: WireLimits.MaxStringBytes
+        );
+        var kind = ((ActionStateKind)reader.ReadByte());
+
+        if (
+            !reader.Failed &&
+            !Enum.IsDefined(value: kind)
+        ) {
+            reader.Fail(
+                detail: $"{nameof(ActionStateKind)} wire value {((byte)kind)} is not declared",
+                refusal: WireRefusal.EnumValueUnknown
+            );
+        }
+
+        var value = reader.ReadFixed();
+        var timerTicks = reader.ReadUInt64();
+
+        return new WorldTransferActionRegister(
+            Kind: kind,
+            Name: name,
+            TimerTicks: timerTicks,
+            Value: value
+        );
+    }
+
+    public static void WriteActionContinuity(WireWriter writer, WorldTransferActionContinuity continuity) {
+        writer.WriteArray(
+            items: continuity.Channels,
+            writeItem: WriteChannelEdge
+        );
+        writer.WriteArray(
+            items: continuity.Registers,
+            writeItem: WriteActionRegister
+        );
+    }
+    public static WorldTransferActionContinuity ReadActionContinuity(ref WireReader reader) {
+        var channels = reader.ReadArray(
+            field: "action continuity channels",
+            readItem: static (ref WireReader r) => ReadChannelEdge(reader: ref r),
+            maximum: ChannelLimits.MaxChannels
+        );
+        var registers = reader.ReadArray(
+            field: "action continuity registers",
+            readItem: static (ref WireReader r) => ReadActionRegister(reader: ref r),
+            maximum: ChannelLimits.MaxChannels
+        );
+
+        return new WorldTransferActionContinuity(
+            Channels: channels,
+            Registers: registers
+        );
+    }
+    /// <summary>Writes a <see cref="WorldTransferCommitMember"/>'s arrival motion: everything but its profile, which
+    /// each carrier records in its own form (a checkpoint and a federation commit its identity projection, a tape its
+    /// pinned rates). It is the one encoding of a member's motion every carrier uses.</summary>
+    public static void WriteCommitMemberMotion(WireWriter writer, WorldTransferCommitMember member) {
+        writer.WriteBoolean(value: member.HasMappedArrival);
+        writer.WriteString(value: member.BodyMotionProgramName);
+        writer.WriteFixedVector(value: member.Position);
+        writer.WriteFixed(value: member.YawRadians);
+        writer.WriteFixedVector(value: member.PlanarVelocity);
+        writer.WriteFixed(value: member.VerticalVelocity);
+        writer.WriteFixed(value: member.TravelTurn);
+        WriteActionContinuity(
+            continuity: member.ActionContinuity,
+            writer: writer
+        );
+        writer.WriteOptional(
+            value: member.Continuum,
+            writeValue: WriteContinuum
+        );
+    }
+    /// <summary>Reads what <see cref="WriteCommitMemberMotion"/> writes, as a member with no profile.</summary>
+    public static WorldTransferCommitMember ReadCommitMemberMotion(ref WireReader reader) {
+        var hasMappedArrival = reader.ReadBoolean();
+        var bodyMotionProgramName = reader.ReadString(
+            field: "commit member body motion program",
+            maxBytes: WireLimits.MaxStringBytes
+        );
+        var position = reader.ReadFixedVector();
+        var yaw = reader.ReadFixed();
+        var planarVelocity = reader.ReadFixedVector();
+        var verticalVelocity = reader.ReadFixed();
+        var travelTurn = ReadTravelTurn(
+            field: "commit member travel turn",
+            reader: ref reader
+        );
+        var actionContinuity = ReadActionContinuity(reader: ref reader);
+        var continuum = reader.ReadOptional(
+            readValue: static (ref WireReader r) => ReadContinuum(reader: ref r)
+        );
+
+        return new WorldTransferCommitMember(
+            ActionContinuity: actionContinuity,
+            BodyMotionProgramName: bodyMotionProgramName,
+            Continuum: continuum,
+            HasMappedArrival: hasMappedArrival,
+            PlanarVelocity: planarVelocity,
+            Position: position,
+            Profile: null,
+            TravelTurn: travelTurn,
+            VerticalVelocity: verticalVelocity,
+            YawRadians: yaw
         );
     }
 }

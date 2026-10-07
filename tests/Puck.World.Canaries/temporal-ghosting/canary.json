@@ -1,0 +1,233 @@
+{
+  "id": "temporal-ghosting",
+  "title": "A slab stepping across tile boundaries leaves no ghost in the strip its last step vacated",
+  "binding": "The positive leg boots one block with world.temporal on at half render scale and a seat-granted schedule that submits a step of its placement right by half a unit on each of ticks 63 to 66, each applying on the next tick. The capture at tick 67, as the last step applies, is held over the strip the last step vacated to the still frame captured at tick 60, within 2 codes: history the block left behind is rejected there by identity and depth, so no trail remains. Afterwards a debug view and back resets the view's history, and the gpu counters read across 30 still ticks count exactly eight world submissions, one jitter period, before the view stands. The discriminating leg boots with temporal off and stops one step short, so the strip still holds the block and the still view renders once rather than eight times.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/fixture.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-vacated-strip-shows-the-still-background",
+        "capture": "state/captures/after~67.png",
+        "reference": "state/captures/before~60.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.497,
+          0.38,
+          0.52,
+          0.59
+        ],
+        "maximumMeanCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "response",
+        "name": "reset-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-reset",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-settled",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "a-reset-still-view-renders-one-period-then-stands",
+        "operator": "equal",
+        "left": {
+          "value": "world-settled",
+          "minus": "world-reset"
+        },
+        "right": {
+          "literal": 8
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/discriminating.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "the-vacated-strip-shows-the-still-background",
+        "capture": "state/captures/after~67.png",
+        "reference": "state/captures/before~60.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.497,
+          0.38,
+          0.52,
+          0.59
+        ],
+        "maximumMeanCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "response",
+        "name": "reset-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-reset",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-settled",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "a-reset-still-view-renders-one-period-then-stands",
+        "operator": "notEqual",
+        "left": {
+          "value": "world-settled",
+          "minus": "world-reset"
+        },
+        "right": {
+          "literal": 8
+        }
+      }
+    ]
+  }
+}

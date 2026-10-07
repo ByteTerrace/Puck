@@ -52,7 +52,7 @@ public sealed partial class WorldServer {
         if (ScreenOpTap is not null) {
             return new MachineOperationResult(
                 MachineOperationStatus.Refused,
-                reason: "machine operations cannot execute while recording; the current replay format does not capture provider operations"
+                reason: $"machine operations cannot execute while recording ({nameof(WorldMachineOperationRefusal.WhileRecording)}); the current replay format does not capture provider operations"
             );
         }
 
@@ -134,7 +134,7 @@ public sealed partial class WorldServer {
             // The host has crossed its runtime barrier. Candidate validation happened before commit, so this is only
             // a declaration adoption and delivery flag; no unrelated fallible install or second reconstruction runs.
             m_document.AdoptDefinition(definition: candidateDefinition);
-            m_document.PendingDefinitionDelivery = true;
+            m_document.MarkDefinitionDeliveryPending();
             return result;
         }
     }

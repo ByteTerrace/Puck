@@ -1,3 +1,6 @@
+using Puck.Hosting;
+using Puck.SignedDistance;
+
 namespace Puck.World;
 
 /// <summary>The soft-shadow candidate-mask policy. <see cref="Auto"/> keeps exact gathers for small sessions and uses
@@ -26,19 +29,29 @@ public enum AmbientOcclusionMode {
 /// console verbs in real time and read by <c>WorldFramePresenter</c> every captured frame. Session state, not
 /// identity: per-player preferences belong on the profile.
 /// </summary>
-public sealed class WorldRenderSettings {
+public sealed partial class WorldRenderSettings {
+    /// <summary>The sky layer audition, never folded into a saved definition.</summary>
+    public Client.WorldSkyAudition SkyLayers { get; } = new();
+
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;
     private bool m_cadenceGate;
+    private bool m_dynamicResolution;
     private bool m_farBound;
+    private SdfIndirectTier m_indirectTier;
+    private SdfIndirectMethod m_indirectMethod;
     private float m_renderScale;
     private int m_revision;
     private float m_shadowCrowdRadius;
     private ShadowMarchMode m_shadowMarch;
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
+    private Client.WorldShadowSettings m_shadowSlots;
+    private bool m_temporal;
+    private bool m_shadowAmortize;
     private float m_upscaleSharpness;
+    private WorldSkyTier m_skyQuality;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
     /// render-lever boot defaults (<see cref="WorldRenderDefaults"/>), copied into the live, mutable settings the
@@ -49,13 +62,20 @@ public sealed class WorldRenderSettings {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         ShadowReach = ShadowTiers.Scale(tier: defaults.Shadows);
+        ShadowSlots = Client.WorldShadowSettings.From(render: defaults);
         ShadowCrowdRadius = defaults.ShadowCrowdRadius;
         ShadowMask = ShadowMaskMode.Auto;
         ShadowMarch = ShadowMarchMode.Auto;
         AmbientOcclusionQuality = AmbientOcclusionMode.Auto;
         AmbientOcclusion = defaults.AmbientOcclusion;
-        RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
+        RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
+        Temporal = defaults.Temporal;
+        ShadowAmortize = defaults.ShadowAmortize;
+        SkyQuality = defaults.SkyQuality;
+        SkyFieldScale = defaults.SkyFieldScale;
+        IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
+        DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
         CadenceGate = true;
 
@@ -74,6 +94,27 @@ public sealed class WorldRenderSettings {
     /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
     /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
+    /// <summary>The residency's traced, partitioned indirect-light cache tier. It boots from <c>render.indirect.tier</c>,
+    /// Medium when absent, and follows the live session lever or quality preset thereafter.</summary>
+    public SdfIndirectTier IndirectTier {
+        get => m_indirectTier;
+        set {
+            if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
+            m_indirectTier = value;
+            m_revision++;
+        }
+    }
+    /// <summary>The live per-view indirect comparison method, defaulting to the residency cache. This presentation
+    /// override is read every frame and is never folded into a saved definition or authoritative session lever.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a declared indirect method.</exception>
+    public SdfIndirectMethod IndirectMethod {
+        get => m_indirectMethod;
+        set {
+            if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
+            m_indirectMethod = value;
+            m_revision++;
+        }
+    }
     /// <summary>Whether a prototype whose bake is ready draws its baked mesh, textured, in place of its field
     /// (<c>world.bakes on|off</c>), or <see langword="null"/>, the default, for the world's own answer: its bakes draw
     /// when the loaded world carries them (a released or compiled tree's <c>BAKE</c> chunk, whose pack holds every bake
@@ -99,6 +140,17 @@ public sealed class WorldRenderSettings {
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
     /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
     public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
+    /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
+    /// (<c>world.render-scale auto</c>; <see cref="Client.WorldDynamicResolution"/>), between
+    /// each view's quality floor and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a
+    /// frame never rebuilds; turning it on or off rebuilds a native view once, since it moves its ceiling.</summary>
+    public bool DynamicResolution { get => m_dynamicResolution; set { m_dynamicResolution = value; m_revision++; } }
+    /// <summary>Gets the render-scale ceiling each of the world's own views is allocated at: <see cref="RenderScale"/>,
+    /// except that a scale quantized to native is lowered to the three-quarter tier while
+    /// <see cref="DynamicResolution"/> is on, since a view at a native ceiling reconstructs nothing and has no grid to move.</summary>
+    public float RenderCeiling => ((m_dynamicResolution && (RenderGraphExtent.Quantize(fraction: m_renderScale) >= 1d))
+        ? WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.ThreeQuarter)
+        : m_renderScale);
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's
     /// <see cref="Puck.SdfVm.SdfViewSnapshot.RenderScale"/> each frame. Named tiers initialize it, while
     /// <c>world.render-scale</c> also accepts a live numeric fraction/percentage for performance sweeps. Native 1.0 is
@@ -107,7 +159,7 @@ public sealed class WorldRenderSettings {
     public float RenderScale { get => m_renderScale; set { m_renderScale = value; m_revision++; } }
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
-    public int Revision => m_revision;
+    public int Revision => unchecked((m_revision + SkyLayers.Revision));
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the
@@ -121,12 +173,27 @@ public sealed class WorldRenderSettings {
     /// <summary>The live shadow candidate-mask policy. Auto selects the camera-tile approximation at 16 or more
     /// simulated stand-ins; exact and camera-tile are explicit A/B overrides.</summary>
     public ShadowMaskMode ShadowMask { get => m_shadowMask; set { m_shadowMask = value; m_revision++; } }
+    /// <summary>The live shadow-slot policy, set by the world's quality row and persisted by save.</summary>
+    public Client.WorldShadowSettings ShadowSlots { get => m_shadowSlots; set { m_shadowSlots = value; m_revision++; } }
     /// <summary>The engine-wide soft-shadow reach fraction from 0 (off) through 1 (full reach). Named tiers are facades
     /// over this continuous value. The <c>world.shadows</c> verb moves it live through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> and <see cref="Puck.SdfVm.SdfViewQuality.ShadowDistanceScale"/>
     /// lanes, so no rebuild.</summary>
     public float ShadowReach { get => m_shadowReach; set { m_shadowReach = value; m_revision++; } }
-    /// <summary>The continuous reduced-resolution reconstruction blend: 0 is bilinear, 1 is clamped Catmull-Rom, and
-    /// intermediate values blend between them. Native render scale ignores it.</summary>
+    /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
+    /// and resolves them over its history into its output, at native or reduced render scale, through each view's
+    /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
+    /// one. Camera and session views never ask for it.</summary>
+    public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>Whether secondary stable shadow slots reuse valid history when reconstruction is on. The
+    /// <c>world.shadow-amortize</c> session lever changes it without rebuilding the graph.</summary>
+    public bool ShadowAmortize { get => m_shadowAmortize; set { m_shadowAmortize = value; m_revision++; } }
+    /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
+    /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
+    /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>
+    public WorldSkyTier SkyQuality { get => m_skyQuality; set { m_skyQuality = value; m_revision++; } }
+    /// <summary>The continuous reconstruction sharpness: the spatial resolve's blend from bilinear (0) to clamped
+    /// Catmull-Rom (1), and the strength of the contrast-adaptive sharpen <c>place</c> applies to a temporally resolved
+    /// view at its rect's own extent. A native view that does not reconstruct ignores it.</summary>
     public float UpscaleSharpness { get => m_upscaleSharpness; set { m_upscaleSharpness = value; m_revision++; } }
 }

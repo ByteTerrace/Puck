@@ -3,7 +3,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>Test furniture on the <see cref="IWorldPeerCall"/> seam (<see cref="WorldInstanceHost.SetPeerCallFault"/>):
-/// forwards every call straight through to a co-hosted destination's own server, except the FIRST
+/// forwards every call straight through to a co-hosted destination's own server, except, by default, the FIRST
 /// <see cref="Commit"/>, which the destination genuinely reserves against but this decorator reports
 /// <see cref="WorldTransferStep.Unreachable"/> for — a lease held, uncommitted, exactly what a lost commit
 /// acknowledgement over a real socket leaves behind. Every later <see cref="Commit"/> call for the SAME instance
@@ -21,8 +21,12 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
         m_destination = destination;
     }
 
-    /// <summary>Gets how many times <see cref="Commit"/> has been called — the first call always faults.</summary>
+    /// <summary>Gets how many times <see cref="Commit"/> has been called.</summary>
     public int CommitCalls => m_commitCalls;
+    /// <summary>Whether the first commit loses its answer.</summary>
+    public bool LoseFirstCommit { get; set; } = true;
+    /// <summary>Runs after the destination reserves and before the source sees its answer.</summary>
+    public Action? AfterReserve { get; set; }
 
     /// <inheritdoc/>
     public void Abort(string sourceAuthority, ulong transferId) => m_destination.AbortTransfer(
@@ -35,15 +39,15 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
         transferId: transferId
     );
     /// <inheritdoc/>
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
-        if (Interlocked.Increment(location: ref m_commitCalls) == 1) {
-            accepted = false;
+    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
+        if ((Interlocked.Increment(location: ref m_commitCalls) == 1) && LoseFirstCommit) {
+            status = WorldTransferStatus.Missing;
             reason = string.Empty;
 
             return WorldTransferStep.Unreachable;
         }
 
-        accepted = m_destination.CommitTransfer(
+        status = m_destination.CommitTransfer(
             members: members,
             reason: out reason,
             sourceAuthority: sourceAuthority,
@@ -53,7 +57,12 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
         return WorldTransferStep.Answered;
     }
     /// <inheritdoc/>
-    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) => m_destination.ReserveTransfer(request: request);
+    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
+        var reply = m_destination.ReserveTransfer(request: request);
+
+        AfterReserve?.Invoke();
+        return reply;
+    }
     /// <inheritdoc/>
     public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
         status = m_destination.TransferStatus(

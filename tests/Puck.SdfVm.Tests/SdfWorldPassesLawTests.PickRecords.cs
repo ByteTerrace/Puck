@@ -24,19 +24,19 @@ public sealed partial class SdfWorldPassesLawTests {
             new(Lanes: new Vector4(value: 4f), Orientation: Quaternion.Identity, Position: new Vector3(x: 1f, y: 2f, z: 3f)),
         ];
         var current = Frame() with { DynamicTransforms = rendered, Program = builder.Build() };
-        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
                 frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason), wait: view.Residency.WaitPipelineBuilds);
-        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * 64));
+        var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * 96));
         var box = gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // (0.25, 0.75) samples pixel (8, 24).
-        var record = ((((24 * ((int)Extent)) + 8)) * 64);
+        var record = ((((24 * ((int)Extent)) + 8)) * 96);
 
         BinaryPrimitives.WriteSingleLittleEndian(destination: records.AsSpan(start: record), value: 5f);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: records.AsSpan(start: (record + 4)), value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: 1));

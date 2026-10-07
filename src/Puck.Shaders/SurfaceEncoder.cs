@@ -5,9 +5,9 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 /// <summary>
-/// The display encode (<c>Assets/Runtime/display-encode.frag.hlsl</c>), the one shader that turns a working image into
+/// The display encode (<c>Assets/Shaders/Runtime/display-encode.frag.hlsl</c>), the one shader that turns a working image into
 /// the pixels a display or a capture holds: every swapchain compositor draws it into its back buffer in the output's
-/// color space, and a render node's preview draws it in SDR. An instance encodes a same-device image in SDR into an
+/// color space, and a render node's preview draws it in SDR. An instance encodes a working image in SDR into an
 /// RGBA8 image of its own and reads that back, which is how a capture of a float output, and a presenter's readback of
 /// one, becomes PNG pixels. Its pipeline is an entry of the device's <see cref="GpuPassPipelineCache"/>, leased when the
 /// instance is created and built on the thread pool; its target, framebuffer and readback are created at the first read
@@ -37,6 +37,7 @@ public sealed class SurfaceEncoder : IDisposable {
     private nint m_sampler;
     private nint m_set;
     private IGpuImage? m_target;
+    private IGpuSurfaceUpload? m_upload;
 
     /// <summary>Initializes a new instance of the <see cref="SurfaceEncoder"/> class, leasing its pipeline, which builds
     /// on the thread pool.</summary>
@@ -98,16 +99,17 @@ public sealed class SurfaceEncoder : IDisposable {
     /// <exception cref="IOException">The bytecode is missing or cannot be read.</exception>
     /// <exception cref="InvalidDataException">The file is not bytecode of the backend's format.</exception>
     public static byte[] Bytecode(bool directX, bool fragment) {
-        var path = Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Runtime",
-            path4: ((fragment
+        var path = Path.Combine(paths: [
+            AppContext.BaseDirectory,
+            "Assets",
+            "Shaders",
+            "Runtime",
+            ((fragment
                 ? FragmentStem
                 : VertexStem) + (directX
                 ? ".dxil"
-                : ".spv"))
-        );
+                : ".spv")),
+        ]);
         var bytecode = File.ReadAllBytes(path: path);
 
         ShaderBytecode.ValidateFormat(bytecode: bytecode);
@@ -136,7 +138,8 @@ public sealed class SurfaceEncoder : IDisposable {
     /// written them; the image's writes must complete in an earlier submission on the device's queue. An image in any
     /// layout but <see cref="GpuImageLayout.ShaderReadOnly"/> moves into it for the draw, which samples it there, and
     /// back into its own layout after, in the same submission.</summary>
-    /// <param name="image">The native handle of the image to encode.</param>
+    /// <param name="image">The native handle used for layout transitions; zero is sufficient for an uploaded image
+    /// already in <see cref="GpuImageLayout.ShaderReadOnly"/>.</param>
     /// <param name="imageView">The native handle of the view of the image to encode.</param>
     /// <param name="width">The image's width, in pixels.</param>
     /// <param name="height">The image's height, in pixels.</param>
@@ -259,19 +262,31 @@ public sealed class SurfaceEncoder : IDisposable {
             width: width
         );
     }
-    /// <summary>Encodes a presented same-device image surface in SDR into CPU pixels, as <see cref="ReadSdr"/> does. A
+    /// <summary>Encodes a presented same-device image or CPU-pixel surface in SDR, as <see cref="ReadSdr"/> does. A
     /// presented surface is in <see cref="GpuImageLayout.ShaderReadOnly"/>, the layout a compositor samples it
     /// in.</summary>
-    /// <param name="surface">The surface; a same-device image.</param>
+    /// <param name="surface">The surface; a same-device image or CPU pixels in working values.</param>
     /// <returns>A CPU-pixel surface of the same extent in <see cref="CaptureFormat"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="surface"/> is not a same-device image.</exception>
+    /// <exception cref="ArgumentException"><paramref name="surface"/> is neither a same-device image nor CPU pixels.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heaps cannot admit the encoder's pool.</exception>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
     public Surface ReadSurface(Surface surface) {
-        if (!surface.IsSameDeviceImage) {
+        if (!surface.IsSameDeviceImage && !surface.IsCpuPixels) {
             throw new ArgumentException(
-                message: "Only a same-device image surface is encoded.",
+                message: "Only a same-device image or CPU-pixel surface is encoded.",
                 paramName: nameof(surface)
+            );
+        }
+
+        var imageView = surface.ImageViewHandle;
+
+        if (surface.IsCpuPixels) {
+            m_upload ??= m_device.Services.SurfaceTransferFactory.CreateUpload();
+            imageView = m_upload.Upload(
+                format: surface.Format,
+                height: surface.Height,
+                pixels: surface.Pixels,
+                width: surface.Width
             );
         }
 
@@ -281,7 +296,7 @@ public sealed class SurfaceEncoder : IDisposable {
             pixels: ReadSdr(
                 height: surface.Height,
                 image: surface.ImageHandle,
-                imageView: surface.ImageViewHandle,
+                imageView: imageView,
                 layout: GpuImageLayout.ShaderReadOnly,
                 width: surface.Width
             ),
@@ -292,6 +307,8 @@ public sealed class SurfaceEncoder : IDisposable {
     /// recorded is in flight.</summary>
     public void Dispose() {
         ReleaseTarget();
+        m_upload?.Dispose();
+        m_upload = null;
         m_readback?.Dispose();
         m_readback = null;
         m_commands?.Dispose();

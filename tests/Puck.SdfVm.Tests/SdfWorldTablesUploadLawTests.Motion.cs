@@ -72,7 +72,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
         Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
-    // A slot that changed owner has no previous pose of its own: a program upload into the same tables seeds every
+    // A slot that changed owner has no previous pose of its own: changed program geometry in the same tables seeds every
     // previous row, a reseated slot seeds its own, and an ordinary move beside it keeps its motion. The pose revisions
     // move only on an upload that changes a pose.
     [Fact]
@@ -100,11 +100,18 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: Row(slot: 3, table: before), actual: Row(table: Previous(), slot: 3));
         Assert.NotEqual(expected: Row(slot: 3, table: before), actual: Row(table: Current(), slot: 3));
 
+        before = Current();
         rig.Move(slot: 1);
         rig.UploadProgram();
         rig.Render(time: 0f);
+        Assert.Equal(expected: before, actual: Previous());
+        Assert.NotEqual(expected: before, actual: Current());
+
+        rig.Move(slot: 1);
+        rig.UploadProgram(changedGeometry: true);
+        rig.Render(time: 0f);
         Assert.Equal(expected: Current(), actual: Previous());
-        Assert.Equal(expected: (still + 2), actual: rig.Engine.PoseRevision);
+        Assert.Equal(expected: (still + 3), actual: rig.Engine.PoseRevision);
         Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
     // A draw is continuous by identity, not by index: a list reordered at the same count, or a new draw at an index

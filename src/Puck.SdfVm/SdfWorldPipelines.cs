@@ -28,10 +28,11 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     private bool m_disposed;
     private SdfKernelSet m_kernels;
 
-    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots, SdfShadowFadeVariants shadowFadeVariants) {
         m_kernels = kernels;
         m_slots = slots;
         IncludesBrickPipelines = includesBrickPipelines;
+        m_shadowFadeVariants = shadowFadeVariants;
     }
 
     /// <summary>Gets whether the set was acquired for an engine with a brick pool. A kernel set with no brick kernels
@@ -42,17 +43,18 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
     public SdfKernelSet Kernels => m_kernels;
 
-    /// <summary>Takes a lease on every engine pipeline for a kernel set, each an entry of the pass-pipeline cache, joining
+    /// <summary>Takes a lease on the base and reachable fade pipelines, each an entry of the pass-pipeline cache, joining
     /// the entries other holders lease and starting the rest building on the thread pool. Safe on any thread.</summary>
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device the pipelines are created on.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
     /// <param name="includeBrickPipelines">Whether to lease the brick bake pipeline, for an engine with a brick
     /// pool.</param>
+    /// <param name="shadowFadeVariants">The additional fade capacities the source's policies can reach.</param>
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
     /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
-    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
+    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines, SdfShadowFadeVariants shadowFadeVariants = SdfShadowFadeVariants.None) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
@@ -61,8 +63,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         var slots = new Slot?[specs.Length];
 
         try {
-            // The views variants, the longest driver translations, start last, so the others install first.
-            foreach (var kernel in SdfWorldTables.PipelineLayouts.BuildOrder) {
+            foreach (var kernel in BuildOrder(kernels: kernels, shadowFadeVariants: shadowFadeVariants)) {
                 var spec = specs[((int)kernel)];
                 var bytecode = kernels[kernel];
 
@@ -90,15 +91,33 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         return new SdfWorldPipelines(
             includesBrickPipelines: includeBrickPipelines,
             kernels: kernels,
+            shadowFadeVariants: shadowFadeVariants,
             slots: slots
         );
     }
-    /// <summary>Describes how far the set's builds have come as a clause: <c>building (3 of 11 pipelines
-    /// created)</c>.</summary>
+    /// <summary>Orders a kernel set's up-front pipelines by when a set starts building them: longest bytecode first, ties
+    /// in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel, and a set is ready only once its
+    /// slowest pipeline is, so the longest starts while the device's threads are free rather than behind the rest.</summary>
+    /// <param name="kernels">The compiled kernel set for a device's backend.</param>
+    /// <param name="shadowFadeVariants">The additional fade capacities the source's policies can reach.</param>
+    /// <returns>Every base and requested fade kernel a set leases up front (resolve builds on demand), in build
+    /// order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<SdfKernel> BuildOrder(SdfKernelSet kernels, SdfShadowFadeVariants shadowFadeVariants = SdfShadowFadeVariants.None) {
+        ArgumentNullException.ThrowIfNull(argument: kernels);
+
+        return [.. SdfWorldTables.PipelineLayouts.Leased.Where(predicate: kernel => ((FadeVariantOf(kernel: kernel) & ~shadowFadeVariants) == 0))
+            .OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
+    }
+    /// <summary>Describes how far the set's builds have come as a clause: <c>building (9 of 11 pipelines
+    /// created; waiting on sdf-world-surface, sdf-world-views)</c>, naming the pipelines not yet built in
+    /// <see cref="SdfKernel"/> order, and then any refused (<see cref="IsBuilt"/>): <c>refused sdf-world-views</c>.</summary>
     /// <returns>The clause.</returns>
     public string Describe() {
         var built = 0;
         var total = 0;
+        var waiting = new List<string>();
+        var refused = new List<string>();
 
         foreach (var slot in m_slots) {
             if (slot is null) {
@@ -109,12 +128,16 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
             if (slot.Lease.Current is not null) {
                 built++;
+            } else if (slot.Refusal is not null) {
+                refused.Add(item: slot.Description.Name);
+            } else {
+                waiting.Add(item: slot.Description.Name);
             }
         }
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"building ({built} of {total} pipelines created)"
+            handler: $"building ({built} of {total} pipelines created{((waiting.Count == 0) ? string.Empty : $"; waiting on {string.Join(separator: ", ", values: waiting)}")}{((refused.Count == 0) ? string.Empty : $"; refused {string.Join(separator: ", ", values: refused)}")})"
         );
     }
     /// <inheritdoc/>
@@ -148,21 +171,56 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
-    /// <summary>Blocks until every pipeline of the set is ready, for a holder's own background build or a harness that
-    /// drives tables directly.</summary>
-    /// <param name="cancellationToken">The token that ends the wait; the entries keep building for their other
-    /// holders.</param>
+    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views variants, of which a
+    /// residency's views need only the one its program selects or a fuller one (<see cref="IsBuilt"/>), so a program that
+    /// selects a stripped variant never waits for the full ISA's translation. Polls every pipeline, the views variants
+    /// included; a views variant whose creation failed is refused (<see cref="IsBuilt"/>) rather than thrown, since the
+    /// tables are built without it.</summary>
+    /// <returns><see langword="true"/> once every pipeline but the views variants is ready.</returns>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="AggregateException">A pipeline's creation failed, named as <see cref="Poll"/> names it.</exception>
+    /// <exception cref="AggregateException">A pipeline's creation failed, other than a views variant's, named as
+    /// <see cref="Poll"/> names it.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
-    public void Wait(CancellationToken cancellationToken) {
+    public bool PollRequired() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        WaitAll(
+        return PollAll(
+            slots: m_slots,
+            viewsRequired: false
+        );
+    }
+    /// <summary>Returns whether one of the set's pipelines is built, taking a build that has just finished. A creation that
+    /// failed, other than by a device loss, is refused: it is kept (<see cref="RefusalOf"/>), never thrown, and the
+    /// pipeline is not polled again, so its build is not restarted, until a reload replaces it
+    /// (<see cref="PrepareReload"/>) or the set is disposed on a device loss. Allocates nothing.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns><see langword="true"/> when the set leases the kernel and its pipeline is built.</returns>
+    /// <exception cref="DeviceLostException">The device was lost during the creation.</exception>
+    public bool IsBuilt(SdfKernel kernel) => ((m_slots[((int)kernel)] is { } slot) && slot.PollRefusing());
+    /// <summary>Returns why one of the set's pipelines was refused (<see cref="IsBuilt"/>), or <see langword="null"/> when
+    /// it was not.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The creation's failure, or <see langword="null"/>.</returns>
+    public Exception? RefusalOf(SdfKernel kernel) => m_slots[((int)kernel)]?.Refusal;
+    /// <summary>Returns a task that completes once every pipeline of the set is ready, for a holder's own background
+    /// build, which awaits it holding no thread, or a harness that drives tables directly.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the entries keep building for their other
+    /// holders.</param>
+    /// <returns>The task, which faults as the exceptions below say.</returns>
+    /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="AggregateException">A pipeline's creation failed, named as <see cref="Poll"/> names it.</exception>
+    /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
+    public Task WaitAsync(CancellationToken cancellationToken) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        return WaitAllAsync(
             cancellationToken: cancellationToken,
             slots: m_slots
         );
@@ -191,12 +249,13 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         return waited;
     }
     /// <summary>Leases replacements for the pipelines whose bytecode differs between the installed kernels and
-    /// <paramref name="kernels"/>; unchanged bytecode leases nothing. Before it leases anything it reflects each changed
+    /// <paramref name="kernels"/>, and for each refused pipeline (<see cref="IsBuilt"/>), which the reload builds again;
+    /// unchanged bytecode leases nothing otherwise. Before it leases anything it reflects each changed
     /// kernel through <paramref name="reflector"/> and holds it to this host's interface
     /// (<see cref="SdfKernelSet.InterfaceMismatch"/>), so a kernel compiled against another instruction set, or binding
     /// anything the host does not place where the host places it, refuses the whole reload and the set keeps its kernels.
     /// The replacements build on the thread pool like any entry; the reload is ready once
-    /// <see cref="SdfWorldPipelineReload.Wait"/> returns, and <see cref="SdfWorldTables.InstallReload"/> puts it into
+    /// <see cref="SdfWorldPipelineReload.WaitAsync"/> completes, and <see cref="SdfWorldTables.InstallReload"/> puts it into
     /// service on the render thread. Safe on any thread while no other reload is being installed.</summary>
     /// <param name="cache">The composition's pass-pipeline cache the set was acquired from.</param>
     /// <param name="device">The device the set's pipelines were created on.</param>
@@ -229,12 +288,17 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel != SdfKernel.Resolve)) {
+                if ((slot is null) && (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth)) && (FadeVariantOf(kernel: kernel) == SdfShadowFadeVariants.None)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];
 
+                // A refused pipeline is built again from the bytecode it was refused with, which the set already reads.
                 if (bytecode.Span.SequenceEqual(other: baseline[kernel].Span)) {
+                    if (slot?.Refusal is not null) {
+                        changed.Add(item: (index, slot, bytecode));
+                    }
+
                     continue;
                 }
 
@@ -242,11 +306,14 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                     (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
                 }
 
-                changed.Add(item: (index, slot, bytecode));
+                // Inactive fade bytecode is validated for a later demand, but creates no pipeline during a reload.
+                if ((slot is not null) || (kernel is SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade)) {
+                    changed.Add(item: (index, slot, bytecode));
+                }
             }
 
             if (refusals is not null) {
-                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
+                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfWorldInterfaces.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
             }
 
             var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
@@ -271,6 +338,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 baseline: baseline,
                 kernels: kernels,
                 replacements: [.. replacements],
+                shadowFadeVariants: m_shadowFadeVariants,
                 target: this
             );
         }
@@ -307,14 +375,36 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         if (!ReferenceEquals(objA: reload.Baseline, objB: m_kernels)) {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
+        // A first demand may have acquired old bytecode after preparation. Refuse the stale reload before any swap;
+        // retrying prepares replacements for those newly active slots too, without ever leasing inactive variants.
+        var added = m_shadowFadeVariants & ~reload.ShadowFadeVariants;
+
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            if (((FadeVariantOf(kernel: kernel) & added) != 0) && !m_kernels[kernel].Span.SequenceEqual(other: reload.Kernels[kernel].Span)) {
+                throw new InvalidOperationException(message: "The reload was prepared before a changed shadow fade variant was requested; request the reload again.");
+            }
+        }
     }
-    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone.
-    internal static bool PollAll(IReadOnlyList<Slot?> slots) {
+    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipelineFor).
+    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds
+        or SdfKernel.ViewsFade1 or SdfKernel.ViewsCoreFade1 or SdfKernel.ViewsFoldsFade1
+        or SdfKernel.ViewsFade2 or SdfKernel.ViewsCoreFade2 or SdfKernel.ViewsFoldsFade2));
+    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
+    // slots are a set's, in kernel order. Without viewsRequired, a views variant still building or refused leaves the set
+    // ready.
+    internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
         var ready = true;
         List<(string Name, Exception Failure)>? failures = null;
 
         for (var index = 0; (index < slots.Count); index++) {
             if (slots[index] is not { } slot) {
+                continue;
+            }
+
+            // A views variant the tables do without is refused as IsBuilt refuses it, never thrown.
+            if (!viewsRequired && IsViews(kernel: ((SdfKernel)index))) {
+                _ = slot.PollRefusing();
+
                 continue;
             }
 
@@ -329,7 +419,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return ready;
     }
-    internal static void WaitAll(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
+    internal static async Task WaitAllAsync(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
         List<(string Name, Exception Failure)>? failures = null;
 
         for (var index = 0; (index < slots.Count); index++) {
@@ -338,7 +428,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             try {
-                _ = slot.Lease.Wait(cancellationToken: cancellationToken);
+                _ = await slot.Lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception failure) when ((failure is not OperationCanceledException)) {
                 (failures ??= []).Add(item: (slot.Description.Name, failure));
             }
@@ -371,24 +461,49 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> m_lease = lease;
 
+        // The lease's failed creation, which PollRefusing keeps instead of polling the lease again; a reload's exchange
+        // clears it with the lease it replaces.
+        private Exception? m_refusal;
+
         public nint DescriptorSetLayoutHandle => Native.DescriptorSetLayoutHandle;
         public IReadOnlyList<nint> GroupLayoutHandles => Native.GroupLayoutHandles;
         public nint Handle => Native.Handle;
         public nint LayoutHandle => Native.LayoutHandle;
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease => Volatile.Read(location: ref m_lease);
+        public Exception? Refusal => Volatile.Read(location: ref m_refusal);
 
         private IGpuComputePipeline Native => (Lease.Current?.Compute ?? throw new InvalidOperationException(message: $"The '{Description.Name}' pipeline is not built."));
 
         public void Dispose() =>
             Lease.Release();
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Exchange(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> replacement) {
-            return Interlocked.Exchange(location1: ref m_lease, value: replacement);
+            var replaced = Interlocked.Exchange(location1: ref m_lease, value: replacement);
+
+            Volatile.Write(location: ref m_refusal, value: null);
+
+            return replaced;
+        }
+        // Whether the lease is built. A creation that failed other than by a device loss is kept as the refusal, and the
+        // lease is not polled again, since a poll after a failure starts a fresh build.
+        public bool PollRefusing() {
+            if (Refusal is not null) {
+                return false;
+            }
+
+            try {
+                return (Lease.Poll() is not null);
+            } catch (Exception failure) when ((failure is not DeviceLostException)) {
+                Volatile.Write(location: ref m_refusal, value: failure);
+                Console.Error.WriteLine(value: $"[{Description.Name}] kernel build refused, retried on a kernel reload or a device loss: {failure.Message}");
+
+                return false;
+            }
         }
     }
 }
 /// <summary>
 /// Replacement pipelines for the kernels that changed, leased by <see cref="SdfWorldPipelines.PrepareReload"/> and put
-/// into service by <see cref="SdfWorldTables.InstallReload"/> once built (<see cref="Wait"/>). Disposing a reload that
+/// into service by <see cref="SdfWorldTables.InstallReload"/> once built (<see cref="WaitAsync"/>). Disposing a reload that
 /// was never installed releases its leases; a committed reload releases the leases it replaced.
 /// </summary>
 public sealed class SdfWorldPipelineReload : IDisposable {
@@ -397,10 +512,11 @@ public sealed class SdfWorldPipelineReload : IDisposable {
 
     private State m_state;
 
-    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfKernelSet baseline, SdfKernelSet kernels, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
+    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfKernelSet baseline, SdfKernelSet kernels, SdfShadowFadeVariants shadowFadeVariants, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
         Baseline = baseline;
         Kernels = kernels;
         Target = target;
+        ShadowFadeVariants = shadowFadeVariants;
         m_replacements = replacements;
         m_retired = new GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>?[replacements.Length];
     }
@@ -411,17 +527,20 @@ public sealed class SdfWorldPipelineReload : IDisposable {
     public SdfKernelSet Kernels { get; }
 
     internal SdfKernelSet Baseline { get; }
+    internal SdfShadowFadeVariants ShadowFadeVariants { get; }
     internal SdfWorldPipelines Target { get; }
 
-    /// <summary>Blocks until every replacement is built, for the holder's own background build.</summary>
+    /// <summary>Returns a task that completes once every replacement is built, for the holder's own background build,
+    /// which awaits it holding no thread.</summary>
     /// <param name="cancellationToken">The token that ends the wait.</param>
+    /// <returns>The task, which faults as the exceptions below say.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="AggregateException">A replacement's creation failed, for malformed or unsupported bytecode among
     /// other causes. The message names every pipeline whose creation failed, and the inner exceptions are those
     /// failures in the same order.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
-    public void Wait(CancellationToken cancellationToken) =>
-        SdfWorldPipelines.WaitAll(
+    public Task WaitAsync(CancellationToken cancellationToken) =>
+        SdfWorldPipelines.WaitAllAsync(
             cancellationToken: cancellationToken,
             slots: [.. m_replacements.Select(selector: replacement => new SdfWorldPipelines.Slot(
                 description: SdfWorldTables.PipelineLayouts.Specs[replacement.Index].Description,

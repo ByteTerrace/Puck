@@ -1,7 +1,7 @@
+using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -16,23 +16,58 @@ namespace Puck.World.Transpiler.Composition;
 /// emits another name, it is the name's carrier. Two files that carry one name, other than a source beside its own
 /// document, are refused by name (<see cref="TryCarriers"/> holds a whole directory to the same rule). Both the game boot path (<c>Puck.World.PuckWorldLoader</c>) and <c>puck compile --validate</c>
 /// (<see cref="Validation.WorldSemanticValidator"/>) compose through this one implementation, so a <c>.puck</c>
-/// source and the running game resolve a basis or import chain identically. Every source a name resolves to compiles
-/// through <see cref="WorldCompileCache.Shared"/>, so an unchanged source is compiled once however often a load reads
-/// or re-checks it. Resolved names use forward slashes on every platform.</summary>
+/// source and the running game resolve a basis or import chain identically. A supplied root compilation retains
+/// its input facts through composition; other sources compile through the selected <see cref="WorldCompileCache"/>,
+/// so checking provenance does not lower the same root again. Resolved names use forward slashes on every platform.</summary>
 public sealed class PuckDocumentComposer : IWorldDocumentSource {
-    private PuckDocumentComposer() { }
+    private readonly WorldCompileCache m_cache;
+    private readonly string? m_rootPath;
+    private readonly WorldCompiledSource? m_rootCompilation;
 
-    /// <summary>Gets the composer. It holds no state, so one instance serves every composition and is the one a
-    /// host installs as its local document source (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/>).</summary>
-    public static PuckDocumentComposer Instance { get; } = new();
+    /// <summary>Creates a document source backed by the selected compile and composition cache.</summary>
+    /// <param name="cache">The compile and composition cache.</param>
+    /// <param name="sourceCompilation">An already compiled root whose output may be supplied to composition.
+    /// Its first input identifies its source; carrier selection, bytes and current facts still govern reuse.</param>
+    public PuckDocumentComposer(WorldCompileCache cache, WorldCompiledSource? sourceCompilation = null) {
+        ArgumentNullException.ThrowIfNull(cache);
+        m_cache = cache;
+        m_rootPath = (((sourceCompilation is { Inputs.Count: > 0 }) && (sourceCompilation.Inputs[0].Kind == CompileInputKind.Content))
+            ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourceCompilation.Inputs[0].Path))
+            : null);
+        m_rootCompilation = sourceCompilation;
+    }
+
+    /// <summary>Gets the composer over <see cref="WorldCompileCache.Shared"/> that a host installs as its local
+    /// document source (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/>).</summary>
+    public static PuckDocumentComposer Instance { get; } = new(cache: WorldCompileCache.Shared);
     /// <inheritdoc />
     public bool ResolvesFiles => true;
+    /// <inheritdoc />
+    public IWorldCompositionStore Compositions => m_cache;
 
-    // Compiles a source through the compile cache for what it emits. A source that cannot be read reports nothing
+    /// <inheritdoc />
+    public bool RecordInputs(string resolvedName, byte[] content) => StillReads(content: content, resolvedName: resolvedName);
+
+    // Reuses the supplied root or compiles a source through the cache for what it emits. A source that cannot be read reports nothing
     // here: like a source that does not compile, it is left to the door that reads it to say why.
-    private static bool TryCompileSource(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure) {
+    private bool TryCompileSource(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure) {
         try {
-            return WorldCompileCache.Shared.TryCompile(
+            if ((m_rootCompilation is { } root) && Puck.Abstractions.PuckPaths.Comparer.Equals(
+                x: m_rootPath, y: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: path)))) {
+                // An already lowered root carries its own facts. A changed file or unsaved buffer cannot lend
+                // them to a held composition, and recompiling disk text would not prove that buffer's output.
+                failure = null;
+                compiled = null;
+                if ((root.Inputs.Count == 0) || (root.Inputs[0].Kind != CompileInputKind.Content) ||
+                    !Puck.Abstractions.PuckPaths.Comparer.Equals(x: m_rootPath, y: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: root.Inputs[0].Path))) ||
+                    root.Inputs.Any(predicate: static input => !input.StillHolds())) {
+                    return false;
+                }
+                CompileInputs.Restate(inputs: root.Inputs);
+                compiled = root;
+                return true;
+            }
+            return m_cache.TryCompile(
                 compiled: out compiled,
                 failure: out failure,
                 path: path
@@ -128,7 +163,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     // why a source whose stem spells the name carries no document of it, for a refusal to name. The index reads the
     // directory's listing and every source's bytes through CompileInputs, and the carrier compiles through the compile
     // cache, so a compile that resolves a name here rests on everything that decided it.
-    private static bool TrySelectCarrier(string directory, string leaf, out WorldDocumentCarrier? carrier, out WorldCompiledSource? compiled, out WorldCompilation? failure, out string? passed, out string reason) {
+    private bool TrySelectCarrier(string directory, string leaf, out WorldDocumentCarrier? carrier, out WorldCompiledSource? compiled, out WorldCompilation? failure, out string? passed, out string reason) {
         carrier = null;
         compiled = null;
         failure = null;
@@ -152,8 +187,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 y: leaf
             )) {
                 passed = ((file.Names.Count == 0)
-                    ? $"its source {file.Path} is a module library, which emits no document"
-                    : $"its source {file.Path} is a composition, which declares no world named '{leaf}'"
+                    ? $"its source {WorldDocumentLabel.Of(path: file.Path)} is a module library, which emits no document"
+                    : $"its source {WorldDocumentLabel.Of(path: file.Path)} is a composition, which declares no world named '{leaf}'"
                 );
             }
         }
@@ -163,6 +198,13 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             claims: claims,
             reason: out reason
         )) {
+            // The refusal names the colliding files, so it is worded over their names alone: the directory they are in is the host's.
+            _ = WorldDocumentName.TryCarriers(
+                carriers: out _,
+                claims: claims.Select(selector: static claim => (claim with { Path = WorldDocumentLabel.Of(path: claim.Path) })),
+                reason: out reason
+            );
+
             return false;
         }
 
@@ -199,7 +241,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// beside it, since the source now wins or the pair is refused, and a source read earlier no longer stands once it
     /// no longer emits the name. A source is resolved under each name it now emits, since a composition carries several
     /// and none need be its stem, and stands when one of them still selects it and compiles to
-    /// <paramref name="content"/>. A <c>.puck</c> source's document is read through the compile cache and compared, so
+    /// <paramref name="content"/>. A <c>.puck</c> source's supplied compilation or cached document is compared, so
     /// an edit to a module it imports is seen as surely as an edit to the source itself, and an unchanged source is not
     /// compiled again.</remarks>
     public bool StillReads(string resolvedName, byte[] content) {
@@ -271,6 +313,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider rewriting, or null for structural composition.</param>
+    /// <param name="sourceCompilation">The root's already completed compile, when available. Carrier identity,
+    /// output bytes and every input fact are still checked before composition can retain its provenance.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
     public static bool TryComposeWorldDocument(
         string rootResolvedPath,
@@ -280,7 +324,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         out string reason,
         string catalogFingerprint = "",
         IMachineValidationCatalog? catalog = null,
-        WorldDocumentOrigins? origins = null
+        WorldDocumentOrigins? origins = null,
+        WorldCompiledSource? sourceCompilation = null
     ) {
         return WorldDefinitionFileSource.TryComposeChainWithImports(
             origins: origins,
@@ -292,7 +337,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 newChar: '/',
                 oldChar: '\\'
             ),
-            source: Instance,
+            source: ((sourceCompilation is null) ? Instance : new PuckDocumentComposer(cache: WorldCompileCache.Shared, sourceCompilation: sourceCompilation)),
             catalogFingerprint: catalogFingerprint,
             catalog: catalog
         );
@@ -336,15 +381,15 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 passed: out var passed,
                 reason: out var collision
             )) {
-                reason = $"document '{name}' (named by {referrerName}) names more than one document: {collision}";
+                reason = $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) names more than one document: {collision}";
 
                 return false;
             }
 
             if (carrier is not { } found) {
                 reason = ((passed is null)
-                    ? $"document '{name}' (named by {referrerName}) has neither a source at {sourcePath} nor a document at {documentPath}."
-                    : $"document '{name}' (named by {referrerName}) has no document at {documentPath}, and {passed}."
+                    ? $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) has neither a source nor a document."
+                    : $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) has no document, and {passed}."
                 );
 
                 return false;
@@ -366,8 +411,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                     var error = compilation.Diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
                     reason = ((error is null)
-                        ? $"{resolvedName} does not compile."
-                        : $"{resolvedName}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}"
+                        ? $"{WorldDocumentLabel.Of(path: resolvedName)} does not compile."
+                        : $"{WorldDocumentLabel.Of(path: resolvedName)}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}"
                     );
 
                     return false;
@@ -382,7 +427,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
 
             return true;
         } catch (Exception ex) {
-            reason = $"cannot read document {resolvedName}: {ex.Message}";
+            reason = $"cannot read document '{name}': {WorldDocumentLabel.Failure(exception: ex)}";
 
             return false;
         }

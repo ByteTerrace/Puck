@@ -9,6 +9,7 @@ using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.Hosting;
 using Puck.Physics.Fields;
+using Puck.Testing;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -23,7 +24,7 @@ namespace Puck.World.Tests;
 /// document, a fresh in-process <see cref="WorldServer"/>) comes from, kept out of the law bodies themselves.
 /// The base document is COMPILER-MAINTAINED: <see cref="BuildDocument"/> constructs a minimal, valid
 /// <see cref="WorldDefinition"/> directly in code (never read from <c>src/Puck.World/Assets/worlds</c> — Puck.World,
-/// the composition root, is out of scope; see README.md, and CLAUDE.md's greenfield/scope rules). A change to
+/// the composition root, is out of scope; see README.md, and AGENTS.md's greenfield/scope rules). A change to
 /// <see cref="WorldDefinition"/>'s required member set breaks this file at COMPILE time rather than at a runtime
 /// parse of a JSON fixture nobody is watching — the whole point of the shape.
 /// </summary>
@@ -310,7 +311,7 @@ internal static class Fixtures {
             AudioRaw: null,
             CollisionRaw: collision,
             HostRaw: StandardHost,
-            // The engine ships no rig (Assets/worlds/standard.world.json authors the standard one), and a nonzero
+            // The engine ships no rig (Assets/worlds/standard.puck authors the standard one), and a nonzero
             // census must author a views section, so the fixture carries the standard chase framing itself.
             ViewsRaw: StandardViews,
             DynamicsRaw: StandardDynamics,
@@ -577,19 +578,11 @@ internal static class Fixtures {
         section: definition.StateRaw,
         time: ArenaTime.Origin
     );
-    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) {
-        var time = ArenaTime.At(
-            engineTick: 0UL,
-            tick: 0UL
-        );
-
-        return WorldStateDisclosure.Compose(
-            arena: Store(definition: definition),
-            definition: definition,
-            recipient: recipient,
-            time: in time
-        );
-    }
+    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) => WorldStateDisclosure.Compose(
+        arena: Store(definition: definition),
+        definition: definition,
+        recipient: recipient
+    );
     public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
         var time = ArenaTime.At(
             engineTick: 0UL,
@@ -778,7 +771,10 @@ internal static class Fixtures {
     /// <see langword="null"/> for none when no <paramref name="machineCatalog"/> is supplied.</param>
     /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
     /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null) {
+    /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
+    /// <param name="catalogNarration">The hub the fixture's owned-world catalog narrates through, or <see langword="null"/> for none.</param>
+    /// <param name="consoleNarration">Whether the server narrates to the console, or attaches no narration sink at all.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null, bool consoleNarration = true) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -796,18 +792,19 @@ internal static class Fixtures {
             catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestHookInstaller.CreateMachineCatalog())),
             documentPath: (documentPath ?? Path.Combine(AuthoredGameFixtures.Root, "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
         );
-        // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
-        // second round trip to disk for nothing. WorldFixture.Dispose deletes it; nesting it under one run-wide
-        // ScratchRoot is only the backstop for a fixture a law never got to dispose (a test that throws before its
-        // own using completes).
-        var stateDirectory = Path.Combine(
-            path1: ScratchRoot.Value,
-            path2: Guid.NewGuid().ToString(format: "N")
+        // The state directory is a PATH under the fixture's own scratch directory: WorldOwnedWorlds creates and
+        // enumerates it itself, and WorldFixture.Dispose resolves the scratch directory. A host that may still hold a
+        // file at disposal, or a slow disk, must never fail a law that already ran, so the delete is best-effort.
+        var scratch = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-world-tests-"
         );
+        var stateDirectory = scratch.PathOf(name: "state");
         var profiles = new WorldOwnedWorlds(
             template: definition,
             directory: stateDirectory,
-            machineId: Guid.NewGuid()
+            machineId: Guid.NewGuid(),
+            narrationHub: catalogNarration
         );
         var server = new WorldServer(
             definition: definition,
@@ -815,13 +812,14 @@ internal static class Fixtures {
             profiles: profiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
-            narrationSink: new WorldConsoleNarrationSink()
+            narrationSink: (consoleNarration ? new WorldConsoleNarrationSink() : null),
+            landingRefusal: landingRefusal
         );
 
         return new WorldFixture(
             machines: machines,
+            scratch: scratch,
             server: server,
-            stateDirectory: stateDirectory,
             stepTicks: StepTicksAt(rateHz: definition.SimulationRateHz)
         );
     }
@@ -986,7 +984,7 @@ internal static class Fixtures {
         },
         Channels: new Dictionary<string, string>()
     );
-    /// <summary>The standard host row (the values <c>standard.world.json</c> authors), for fixtures whose documents
+    /// <summary>The standard host row (the values <c>standard.puck</c> authors), for fixtures whose documents
     /// must carry an authored host (serialization round-trips, the host-member strict-parse laws) — the engine no
     /// longer carries one.</summary>
     public static WorldHostDefaults StandardHost { get; } = new(
@@ -1017,7 +1015,7 @@ internal static class Fixtures {
         PreviewDeadlineFrames: 12
     );
     /// <summary>The document's declared <c>dynamics</c> rows, mirroring what
-    /// <c>src/Puck.World/Assets/worlds/standard.world.json</c> authors — <c>chase</c> backs
+    /// <c>src/Puck.World/Assets/worlds/standard.puck</c> authors — <c>chase</c> backs
     /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
     /// own row.</summary>
     public static DynamicsRow[] StandardDynamics { get; } = [
@@ -1034,7 +1032,7 @@ internal static class Fixtures {
             Response: 0f
         ),
     ];
-    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
+    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.puck</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
     /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
     public static WorldCameraProgram StandardSeatRig { get; } = new(
@@ -1104,24 +1102,6 @@ internal static class Fixtures {
         };
 
     private static readonly Lazy<byte[]> DefaultBytes = new(valueFactory: static () => WorldDefinitionSerialization.Serialize(definition: BuildDocument()));
-    /// <summary>One scratch root for the whole run, removed when the process exits.</summary>
-    private static readonly Lazy<string> ScratchRoot = new(valueFactory: static () => {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
-
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => {
-            try {
-                Directory.Delete(
-                    path: root,
-                    recursive: true
-                );
-            } catch (IOException) {
-                // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the run.
-            } catch (UnauthorizedAccessException) {
-            }
-        };
-
-        return root;
-    });
 
     /// <summary>The engine-tick duration one simulation tick spans at the default <see cref="SimulationRateHz"/>,
     /// computed once and reused.</summary>
@@ -1172,15 +1152,16 @@ internal static class Fixtures {
 /// server without having to know what else a fresh boot required.</summary>
 internal sealed class WorldFixture : IDisposable {
     private readonly WorldMachineHost m_machines;
-    private readonly string m_stateDirectory;
+    private readonly TemporaryDirectory? m_scratch;
     private readonly ulong m_stepTicks;
 
     // stepTicks is the engine-tick width one Step advances by; null means one simulation tick at the default
-    // fixture rate.
-    internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory, ulong? stepTicks = null) {
+    // fixture rate. scratch is a directory the fixture owns and resolves at Dispose; null means the caller owns
+    // whatever directory the server was booted over.
+    internal WorldFixture(WorldServer server, WorldMachineHost machines, ulong? stepTicks = null, TemporaryDirectory? scratch = null) {
         Server = server;
         m_machines = machines;
-        m_stateDirectory = stateDirectory;
+        m_scratch = scratch;
         m_stepTicks = (stepTicks ?? Fixtures.StepTicks);
     }
 
@@ -1193,19 +1174,7 @@ internal sealed class WorldFixture : IDisposable {
     /// <inheritdoc/>
     public void Dispose() {
         m_machines.Dispose();
-
-        // Best-effort: a fixture built over FreshServer's own scratch path never materializes it on disk unless a
-        // law actually saved an identity, and a locked handle on a slow CI disk must never fail the law that already
-        // ran.
-        try {
-            Directory.Delete(
-                path: m_stateDirectory,
-                recursive: true
-            );
-        } catch (DirectoryNotFoundException) {
-        } catch (IOException) {
-        } catch (UnauthorizedAccessException) {
-        }
+        m_scratch?.Dispose();
     }
     /// <summary>Steps until the first search reports done or <paramref name="maxTicks"/> steps have run, whichever is
     /// first, and returns that search's last status.</summary>

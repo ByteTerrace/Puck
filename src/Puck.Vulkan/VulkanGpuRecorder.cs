@@ -123,7 +123,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         recordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
             device: Device
-        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        ).ThrowIfFailed(device: Device, operation: "vkBeginCommandBuffer");
     /// <inheritdoc/>
     public void BeginDebugGroup(nint commandBufferHandle, string label) =>
         recordingApi.BeginDebugLabel(
@@ -279,7 +279,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         recordingApi.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
             device: Device
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+        ).ThrowIfFailed(device: Device, operation: "vkEndCommandBuffer");
     /// <inheritdoc/>
     public void EndDebugGroup(nint commandBufferHandle) =>
         recordingApi.EndDebugLabel(

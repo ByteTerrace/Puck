@@ -1,0 +1,1071 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "indirect",
+  "resources": [
+    {
+      "name": "echo",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 98,
+        "height": 1
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "indirect",
+      "source": "indirect.echo.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [
+        {
+          "name": "echo"
+        }
+      ],
+      "config": {
+        "aspectRatio": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s aspectRatio sentinel."
+        },
+        "cameraTileShadowMask": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s cameraTileShadowMask sentinel."
+        },
+        "curvatureCavity": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s curvatureCavity sentinel."
+        },
+        "curvatureInk": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s curvatureInk sentinel."
+        },
+        "curvatureInkColor": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s curvatureInkColor sentinel."
+        },
+        "curvatureInkHigh": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s curvatureInkHigh sentinel."
+        },
+        "curvatureInkLow": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s curvatureInkLow sentinel."
+        },
+        "curvatureRim": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s curvatureRim sentinel."
+        },
+        "debugMode": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s debugMode sentinel."
+        },
+        "debugSliceAxis": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s debugSliceAxis sentinel."
+        },
+        "debugSliceOffset": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s debugSliceOffset sentinel."
+        },
+        "disableAmbientOcclusion": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s disableAmbientOcclusion sentinel."
+        },
+        "disableFarBound": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s disableFarBound sentinel."
+        },
+        "disableScreenLights": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s disableScreenLights sentinel."
+        },
+        "disableShadowCull": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s disableShadowCull sentinel."
+        },
+        "disableSoftShadows": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s disableSoftShadows sentinel."
+        },
+        "enableShadowProxy": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s enableShadowProxy sentinel."
+        },
+        "farDistance": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s farDistance sentinel."
+        },
+        "fastAmbientOcclusion": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s fastAmbientOcclusion sentinel."
+        },
+        "fastSoftShadowMarch": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s fastSoftShadowMarch sentinel."
+        },
+        "finiteDifferenceNormals": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s finiteDifferenceNormals sentinel."
+        },
+        "frustumOffset": {
+          "type": "float2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s frustumOffset sentinel."
+        },
+        "geometryOnly": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s geometryOnly sentinel."
+        },
+        "gridFlags": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s gridFlags sentinel."
+        },
+        "gridLineWidth": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s gridLineWidth sentinel."
+        },
+        "gridObjectFrame": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridObjectFrame sentinel."
+        },
+        "gridObjectOrigin": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridObjectOrigin sentinel."
+        },
+        "gridObjectPatchRadius": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s gridObjectPatchRadius sentinel."
+        },
+        "gridObjectPitch": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridObjectPitch sentinel."
+        },
+        "gridPlaneY": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s gridPlaneY sentinel."
+        },
+        "gridWorldFrame": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridWorldFrame sentinel."
+        },
+        "gridWorldOrigin": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridWorldOrigin sentinel."
+        },
+        "gridWorldPitch": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s gridWorldPitch sentinel."
+        },
+        "historyFrames": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s historyFrames sentinel."
+        },
+        "imageExtent": {
+          "type": "uint2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s imageExtent sentinel."
+        },
+        "indirectApply": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s indirectApply sentinel."
+        },
+        "indirectBodies": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectBodies sentinel."
+        },
+        "indirectClassifyCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectClassifyCount sentinel."
+        },
+        "indirectContact": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectContact sentinel."
+        },
+        "indirectEpoch": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectEpoch sentinel."
+        },
+        "indirectFeedback": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectFeedback sentinel."
+        },
+        "indirectFeedbackGain": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectFeedbackGain sentinel."
+        },
+        "indirectFrame": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectFrame sentinel."
+        },
+        "indirectMethod": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectMethod sentinel."
+        },
+        "indirectPhase": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectPhase sentinel."
+        },
+        "indirectPlaceCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectPlaceCount sentinel."
+        },
+        "indirectReadGeneration": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectReadGeneration sentinel."
+        },
+        "indirectReadPublication": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectReadPublication sentinel."
+        },
+        "indirectShadeCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectShadeCount sentinel."
+        },
+        "indirectSourceGains": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s indirectSourceGains sentinel."
+        },
+        "indirectSources": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectSources sentinel."
+        },
+        "indirectTier": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectTier sentinel."
+        },
+        "indirectTraceCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectTraceCount sentinel."
+        },
+        "indirectWriteGeneration": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectWriteGeneration sentinel."
+        },
+        "indirectWritePublication": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectWritePublication sentinel."
+        },
+        "instanceMaskWordCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s instanceMaskWordCount sentinel."
+        },
+        "jitter": {
+          "type": "float2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s jitter sentinel."
+        },
+        "lightCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s lightCount sentinel."
+        },
+        "lightMapCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s lightMapCount sentinel."
+        },
+        "lightMaps": {
+          "type": "float4",
+          "length": 84,
+          "default": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "description": "The indirect pass\u0027s lightMaps sentinel."
+        },
+        "lightSlice": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s lightSlice sentinel."
+        },
+        "lightSweepRadius": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s lightSweepRadius sentinel."
+        },
+        "meshDraws": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s meshDraws sentinel."
+        },
+        "nearDistance": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s nearDistance sentinel."
+        },
+        "previousView": {
+          "type": "float4",
+          "length": 6,
+          "default": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "description": "The indirect pass\u0027s previousView sentinel."
+        },
+        "screenCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s screenCount sentinel."
+        },
+        "shadowAmortize": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowAmortize sentinel."
+        },
+        "shadowDistanceScale": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowDistanceScale sentinel."
+        },
+        "shadowFadeCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowFadeCount sentinel."
+        },
+        "shadowLightReject": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowLightReject sentinel."
+        },
+        "shadowOwnershipReject": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowOwnershipReject sentinel."
+        },
+        "shadowSlotCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s shadowSlotCount sentinel."
+        },
+        "shadowSlots": {
+          "type": "int4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s shadowSlots sentinel."
+        },
+        "tanHalfFieldOfView": {
+          "type": "float",
+          "default": 0,
+          "description": "The indirect pass\u0027s tanHalfFieldOfView sentinel."
+        },
+        "temporal": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s temporal sentinel."
+        },
+        "tileGrid": {
+          "type": "uint2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s tileGrid sentinel."
+        },
+        "viewBase": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s viewBase sentinel."
+        },
+        "viewForward": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s viewForward sentinel."
+        },
+        "viewPosition": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s viewPosition sentinel."
+        },
+        "viewRight": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s viewRight sentinel."
+        },
+        "viewUp": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The indirect pass\u0027s viewUp sentinel."
+        },
+        "viewportCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s viewportCount sentinel."
+        },
+        "workCounterRow": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s workCounterRow sentinel."
+        },
+        "workCounterRowDetail": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s workCounterRowDetail sentinel."
+        }
+      }
+    }
+  ],
+  "outputs": [
+    "echo"
+  ]
+}

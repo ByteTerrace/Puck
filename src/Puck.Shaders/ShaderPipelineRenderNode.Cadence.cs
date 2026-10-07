@@ -1,11 +1,15 @@
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
+
 namespace Puck.Shaders;
 
 // Content identities are separate from barrier state. SkipAccesses remains the only standing-pass barrier path.
-// Retained intermediates share one queue-ordered allocation, so their identities describe the latest queued write,
+// Retained intermediates and package-borrowed buffers share one queue-ordered allocation, so their identities describe the latest queued write,
 // independently of the rotating submission slot. Every array below is allocated when the graph installs.
 public sealed partial class ShaderPipelineRenderNode {
     private long m_contentGeneration;
 
+    private readonly record struct ExternalBuffer(IGpuBuffer Buffer, GpuImagePublication Publication = default, long Generation = 0);
     private sealed class CadenceVersion(string name) {
         public readonly string Name = name;
 
@@ -31,12 +35,17 @@ public sealed partial class ShaderPipelineRenderNode {
             var canStand = ((pass.Package is not null) && (pass.Outputs.Length > 0));
 
             foreach (var access in pass.Accesses) {
-                if (!access.Use.Writes) {
-                    canStand &= AddCadenceInput(access.Version, access.PreviousFrame, inputs);
+                if (!access.Use.Writes || m_resources[access.Storage].Spec.IsExternal) {
+                    canStand &= (!access.Use.Writes && AddCadenceInput(access.Version, access.PreviousFrame, inputs));
+                }
+                foreach (var version in access.OtherVersions) {
+                    canStand &= AddCadenceInput(version, access.PreviousFrame, inputs);
                 }
             }
             foreach (var output in pass.Outputs) {
                 var resource = m_resourceLookup[output.Name];
+                // A new history instance contains no predecessor; every forwarding writer must execute.
+                canStand &= (!resource.History || (resource.Storage.Versions.Count == 1));
                 var version = Array.FindIndex(array: resource.Cadence, match: item => (item.Name == output.Name));
 
                 if (version < 0) { canStand = false; continue; }
@@ -51,12 +60,30 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private bool AddCadenceInput(string name, bool previous, List<CadenceVersion> inputs) {
         var resource = m_resourceLookup[name];
-        // A host/temporal/rotating input has no stable content identity in this retained-only path. Its reader executes.
-        if (previous || resource.History || resource.Spec.IsExternal || !resource.Spec.Retained) { return false; }
+        // Previous history feeds a requested write but creates no demand for another one. The package signature
+        // states whether a sample is owed. A current read follows the last successful write's content identity.
+        if (previous && resource.History) { return true; }
+        if (resource.Spec.IsExternal) {
+            if (resource.Spec.IsHostBuffer || (resource.Spec.Kind != ShaderPipelineResourceKind.Buffer)) { return false; }
+            // A mutable import's producer publication cannot describe writes made by this graph.
+            if (m_passes.Any(predicate: pass => pass.Accesses.Any(predicate: access =>
+                ((access.Storage == resource.Storage.Index) && access.Use.Writes)))) { return false; }
+        } else if (!resource.Spec.Retained && !resource.History && !resource.Borrowed) { return false; }
         var version = Array.Find(array: resource.Cadence, match: item => (item.Name == name))!;
 
         if (!inputs.Contains(item: version)) { inputs.Add(item: version); }
         return true;
+    }
+    private void UpdateExternalBufferCadence() {
+        foreach (var resource in m_resources) {
+            if (!resource.Spec.IsExternal) { continue; }
+            foreach (var version in resource.Cadence) {
+                var known = (m_externalBuffers.TryGetValue(key: version.Name, value: out var binding) && binding.Publication.IsKnown);
+
+                version.Valid = known;
+                version.Generation = (known ? binding.Generation : 0);
+            }
+        }
     }
     private static bool Stands(RuntimePass pass, ulong? signature) {
         if ((signature is null) || (pass.Cadence is not { CanStand: true } cadence) || (cadence.Signature != signature) ||
@@ -91,6 +118,23 @@ public sealed partial class ShaderPipelineRenderNode {
 
             written.Generation = ++m_contentGeneration;
             written.Valid = (output.Resource.Alias.Target is null);
+        }
+    }
+    private void SkippedCadence(RuntimePass pass) {
+        if (pass.Cadence is not { } cadence) { return; }
+        cadence.Signature = null;
+        foreach (var output in cadence.Writes) {
+            var version = output.Resource.Cadence[output.Version];
+
+            if (output.PreservesPredecessor && (output.Version > 0)) {
+                var predecessor = output.Resource.Cadence[(output.Version - 1)];
+
+                version.Generation = predecessor.Generation;
+                version.Valid = predecessor.Valid;
+            } else if (!version.Valid) {
+                version.Generation = ++m_contentGeneration;
+                version.Valid = true;
+            }
         }
     }
     private void InvalidateCadence() {

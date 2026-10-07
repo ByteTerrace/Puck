@@ -72,8 +72,16 @@ public sealed class WorldSiloLifecycleLawTests {
             if (!host.IsDraining) { host.Instances.StepInstances(masterDeltaTicks: Fixtures.StepTicks); host.NoteMasterStep(stepTicks: Fixtures.StepTicks); }
             await Task.Yield();
         }
-        await operation;
-        host.DrainActivationMailbox();
+        try {
+            await operation;
+        } finally {
+            await WorldSiloHost.PumpActivationMailboxesAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                hosts: [host],
+                operation: host.WaitForCheckpointUploadsAsync(ct: TestContext.Current.CancellationToken)
+            );
+            host.DrainActivationMailbox();
+        }
     }
 
     // Law: a row whose published listen endpoint another socket already holds fails its activation with the endpoint
@@ -535,8 +543,7 @@ public sealed class WorldSiloLifecycleLawTests {
 
         await PumpAsync(
             host: host,
-            operation: again,
-            step: true
+            operation: again
         );
         Assert.Equal(
             hash,
@@ -640,13 +647,15 @@ public sealed class WorldSiloLifecycleLawTests {
             host: host,
             identity: identity
         );
+        // The refusal needs no step, so it is pumped without one: a stepping pump steps until the task completes, and
+        // under load those steps cross the checkpoint cadence, whose legitimate capture would move the ordinal below.
         await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(
             host,
             host.ReloadAsync(
                 identity,
                 TestContext.Current.CancellationToken
             ),
-            step: true
+            step: false
         ));
         Assert.Equal(
             saved.Ordinal,
@@ -723,6 +732,8 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task ReplacementActivationUsesPublishedNetworkBindingAfterCheckpointRecovery(bool listen) {
+        if (listen) { PeerTestClient.SkipWithoutQuic(); }
+
         using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);

@@ -42,7 +42,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
             request: poolRequest
         );
 
-        createPoolResult.ThrowIfFailed(operation: "vkCreateCommandPool");
+        createPoolResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkCreateCommandPool");
 
         if (0 == commandPoolHandle) {
             throw new InvalidOperationException(message: "vkCreateCommandPool returned success without a valid command-pool handle.");
@@ -64,7 +64,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
                 request: allocateRequest
             );
 
-            allocateResult.ThrowIfFailed(operation: "vkAllocateCommandBuffers");
+            allocateResult.ThrowIfFailed(device: logicalDevice.Commands, operation: "vkAllocateCommandBuffers");
 
             var commandBufferHandles = new nint[commandBufferCount];
 

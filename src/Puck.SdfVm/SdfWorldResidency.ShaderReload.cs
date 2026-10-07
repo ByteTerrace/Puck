@@ -113,7 +113,7 @@ public sealed partial class SdfWorldResidency {
             device: m_deviceContext!,
             directory: request.Directory!,
             // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
-            extension: (m_kernels[SdfKernel.Beam].Span.StartsWith(value: "DXBC"u8)
+            extension: (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Beam].Span)
                 ? ".dxil"
                 : ".spv"
             ),
@@ -191,7 +191,7 @@ public sealed partial class SdfWorldResidency {
         var cache = m_pipelines.Catalog.Pipelines;
         var current = m_kernels;
 
-        m_reloadBuild.Start(build: token => {
+        m_reloadBuild.Start(build: async token => {
             SdfWorldPipelineReload reload;
 
             // A reload reflects the kernels it would install, so DXIL needs the compiler's reflection: the dxc on the
@@ -211,7 +211,7 @@ public sealed partial class SdfWorldResidency {
             }
 
             try {
-                reload.Wait(cancellationToken: token);
+                await reload.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
 
                 return reload;
             } catch {

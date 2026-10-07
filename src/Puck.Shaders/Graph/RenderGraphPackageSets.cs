@@ -113,15 +113,17 @@ public sealed class RenderGraphPackageSets {
     /// <param name="member">The member's name.</param>
     /// <returns>The binding, which is also its Direct3D 12 register number in space 3.</returns>
     /// <exception cref="ArgumentException">The pass group declares no resource of that name.</exception>
-    public uint BindingOf(string member) =>
-        (m_passGroup.Resources.FirstOrDefault(predicate: resource => string.Equals(
-            a: resource.Member.Name,
-            b: member,
-            comparisonType: StringComparison.Ordinal
-        )) ?? throw new ArgumentException(
+    public uint BindingOf(string member) {
+        for (var index = 0; (index < m_passGroup.Resources.Count); index++) {
+            var resource = m_passGroup.Resources[index];
+
+            if (string.Equals(a: resource.Member.Name, b: member, comparisonType: StringComparison.Ordinal)) { return resource.Binding; }
+        }
+        throw new ArgumentException(
             message: $"The pass group declares no resource '{member}'.",
             paramName: nameof(member)
-        )).Binding;
+        );
+    }
     /// <summary>Binds the slot's frame group set at group 0 and its pass group set at group 3.</summary>
     /// <param name="recorder">The recording's recorder.</param>
     /// <param name="commandBuffer">The recording's command buffer.</param>

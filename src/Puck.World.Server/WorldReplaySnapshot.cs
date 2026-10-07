@@ -1,7 +1,6 @@
 using Puck.Commands;
 using System.Text;
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.World.Protocol;
@@ -9,25 +8,12 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The profile a seat was seated on at record-start: its catalog name, plus the locomotion rates the recorded
-/// run actually integrated with. The rates are pinned because they are simulation input — <c>WorldBody.Advance</c> reads
-/// them off the seated handle every frame — and they are pinned as the simulation's own <see cref="FixedQ4816"/> values,
-/// so a re-drive consumes the recorded number rather than one re-derived from a float. Nothing about the profile that
-/// only presentation reads is here: not the color or portable seat-look preference, which the client applies before intent
-/// production, upstream of the link, so a recorded intent already carries it.</summary>
-/// <param name="Name">The profile the seat was seated on.</param>
-/// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded —
-/// <see langword="null"/> pins an identity that claimed no rate, so the re-drive falls back to the kit's rate the
-/// same way the live run did).</param>
-/// <param name="TurnSpeed">The pinned angular rate (<see cref="WorldIdentity.FixedTurnSpeed"/> as recorded).</param>
-public readonly record struct WorldReplayProfilePin(string Name, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
 /// <summary>One local seat active at record-start — the seat slice of the captured starting state, re-joined into the
 /// replay's fresh world so its body exists to receive the recorded intent stream.</summary>
 /// <param name="Slot">The 0-based seat slot.</param>
 /// <param name="Profile">The seat's pinned profile, or <see langword="null"/> for a profileless seat. One nullable
-/// carries both the name and the rates deliberately: they are present or absent together, so there is no shape where a
-/// seat has a name but no pinned rates for a reader to have to rule on.</param>
-public readonly record struct WorldReplaySeat(int Slot, WorldReplayProfilePin? Profile);
+/// carries the same identity projection the population checkpoint resumes, including its stable id and records.</param>
+public readonly record struct WorldReplaySeat(int Slot, WorldIdentityProjection? Profile);
 /// <summary>One captured authority input — the closed, discriminated set of synchronous writes that cross
 /// <see cref="IServerLink"/> inside a tick's command-apply window. One ordered stream rather than a list per kind,
 /// because the live order between a driving command and a grant change is stdin FIFO and position-within-tick is the
@@ -95,17 +81,17 @@ public abstract record WorldReplayEntry {
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// CAS-pinned: <see cref="ContentHash"/> is the canonical <c>sha256-64/{hex}</c> pin of the exact bytes the live
     /// session consumed (Load/Reload, off disk) or of the base's canonical bytes at the moment the rebuild applied
-    /// (Reset). Deliberately carries NO document: <see cref="WorldReplaySnapshot.Drive"/> re-reads
-    /// <see cref="PathHint"/> fresh for Load/Reload and re-reads its own live base for Reset, so a re-drive proves the
+    /// (Reset). Deliberately carries NO document: <see cref="WorldReplaySnapshot.Drive"/> re-reads a file
+    /// <see cref="Origin"/> fresh for Load/Reload and re-reads its own live base for Reset, so a re-drive proves the
     /// pinned content still matches rather than trusting a stored copy — the content-address proof the negative
     /// control (editing a byte of the file on disk) exercises.</summary>
     /// <param name="Kind">Which of the three document sources this rebuild came from.</param>
-    /// <param name="PathHint">The origin path for Load/Reload; <see langword="null"/> for Reset.</param>
+    /// <param name="Origin">Where a Load/Reload's document came from; <see langword="null"/> for Reset.</param>
     /// <param name="Force">Load's dirty-journal override, carried verbatim — the tape records what was submitted,
     /// never a normalization of it (the same convention <see cref="Revoke"/> follows for <c>Exclusive</c>).</param>
     /// <param name="ContentHash">The CAS pin a re-drive refuses by name against, on mismatch.</param>
     /// <param name="Actor">The principal that submitted the rebuild.</param>
-    internal sealed record Rebuild(WorldRebuildKind Kind, string? PathHint, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
+    internal sealed record Rebuild(WorldRebuildKind Kind, WorldRebuildOrigin? Origin, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join the ordered domain and the tape as their own
     /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
@@ -133,32 +119,70 @@ public abstract record WorldReplayEntry {
     /// <see cref="Puck.World.WorldReplayTape"/>'s class remarks).</summary>
     /// <param name="Paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
-    /// <summary>A same-process crossing's decided outcome — the local multi-authority tape contract — recorded by
-    /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> the moment <c>Puck.World.WorldInstanceHost.ApplyTransfer</c>
-    /// commits or aborts a transfer touching the boot instance. Acts on the departure half only, at re-drive:
-    /// <see cref="WorldReplaySnapshot.Drive"/> constructs one shadow <see cref="Server.WorldServer"/> for the boot
-    /// instance alone, so a member arriving from elsewhere is structurally unreachable (there is no source instance's
-    /// population to arrive from), but a member leaving boot's own population is a fact this shadow world can and
-    /// must reproduce — <see cref="DepartedBootSlots"/> is what makes that honest: without it, the live trace's pose
-    /// hash stops covering a departed body (an inactive index contributes nothing to
-    /// <see cref="WorldReplaySnapshot.HashState"/>) while the replay's shadow body would keep integrating right
-    /// through the crossing. <see cref="DestinationName"/>/<see cref="ScopeKey"/>/<see cref="GenerationId"/>/
-    /// <see cref="Outcome"/> remain narration only — proving the outcome reproducible by name, never re-deriving the
-    /// destination's own simulation. The entry's byte-level integrity (including <see cref="DepartedBootSlots"/>
-    /// itself) is enforced separately: this sits partly outside the population hash's own coverage (the destination/scope/
-    /// generation/outcome text is never simulation state), so <see cref="WorldReplaySnapshot.ReadTransferEntry"/>
-    /// recomputes a content signature from every decoded field and refuses by name
-    /// (<see cref="ReplayRefusal.TransferEventTampered"/>) on a disagreement, never a plausible-looking ordinary
-    /// trajectory mismatch.</summary>
-    /// <param name="TransferId">The transfer id minted for this crossing.</param>
-    /// <param name="DestinationName">The resolved destinations row name.</param>
-    /// <param name="ScopeKey">The resolved scope key.</param>
-    /// <param name="GenerationId">The resolver-issued generation id the cohort resolved against.</param>
-    /// <param name="Outcome">A short canonical outcome summary — narration only.</param>
-    /// <param name="DepartedBootSlots">The 0-based boot local-seat slots this crossing actually removed from boot's
-    /// own population (empty for a refused or aborted transfer, or one whose source is not boot) — replayed against
-    /// the shadow world's own population at re-drive, see this entry's own remarks.</param>
-    internal sealed record Transfer(ulong TransferId, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedBootSlots) : WorldReplayEntry;
+
+    /// <summary>A seat's switch from the identity the tape pinned to another, applied at the head of the tick it is recorded on.
+    /// A fork records one for each seat its drive rebound to the live owned identity, so the fork's tape holds the identity
+    /// the fork actually continues with and a re-drive switches at the same step the live fork did. The seat takes the
+    /// projection exactly, facts and records included, in a detached identity that saves nothing.</summary>
+    /// <param name="Slot">The local seat's body index.</param>
+    /// <param name="Profile">The projection the seat continues with.</param>
+    public sealed record SeatIdentity(int Slot, WorldIdentityProjection Profile) : WorldReplayEntry;
+
+    /// <summary>A crossing this authority decided as its source, recorded by
+    /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> when <c>Puck.World.WorldInstanceHost</c> settles the
+    /// transfer. It changes nothing on a re-drive: each body left, and any came back, at its own
+    /// <see cref="Departure"/> entry. The arrival is the destination's own fact and rides the destination's tape as an
+    /// <see cref="Arrival"/>; a set of tapes pairs the two by <see cref="Target"/> and <see cref="TransferId"/>.
+    /// <see cref="Outcome"/>, <see cref="DestinationName"/>, <see cref="ScopeKey"/> and <see cref="GenerationId"/> are
+    /// narration. The entry sits partly outside the hash's coverage, so
+    /// <see cref="WorldReplaySnapshot.ReadTransferEntry"/> recomputes a content signature over every decoded field and
+    /// refuses a disagreement by name (<see cref="ReplayRefusal.TransferEventTampered"/>).</summary>
+    /// <param name="TransferId">The transfer id this authority minted for the crossing.</param>
+    /// <param name="Target">The destination's authority identity, or empty when the transfer never resolved one.</param>
+    /// <param name="TargetRemote">Whether the destination is an authority reached over federation rather than a row
+    /// of this process.</param>
+    /// <param name="DestinationName">The resolved destinations row name, or empty for a console transfer.</param>
+    /// <param name="ScopeKey">The resolved scope key, or empty for a console transfer.</param>
+    /// <param name="GenerationId">The resolver-issued generation id, or 0 for a console transfer.</param>
+    /// <param name="Outcome">A short canonical outcome summary.</param>
+    /// <param name="DepartedSlots">The 0-based body indices whose departure the settlement made final; empty for a
+    /// refused or aborted transfer.</param>
+    internal sealed record Transfer(ulong TransferId, string Target, bool TargetRemote, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedSlots) : WorldReplayEntry;
+
+    /// <summary>An arrival a commit decided in this authority as a crossing's destination: the reservation, the
+    /// assigned body indices and the commit, encoded with the same leaf the authority's crossing log writes
+    /// (<see cref="Server.WorldAuthorityCheckpointCodec.EncodeCrossingArrival"/>), and its outcome
+    /// (<see cref="WorldServer.ArrivalTap"/>). A traveler's admission, a transferred peer's <c>PeerAdmitted</c>
+    /// included, is the landing's own consequence and is not taped beside it. A re-drive lands the arrival again
+    /// through the shadow's own escrow (<see cref="Server.WorldTransferEscrow.TryReland"/>) at the commit's position
+    /// among the tick's authority entries: each traveler at its recorded body index and generation, and a recorded
+    /// rollback at the same traveler, because a landing advances its index's generation, which outlives the rollback.
+    /// It refuses by name (<see cref="ReplayRefusal.ArrivalRefused"/>) when the shadow cannot. The identity it carries
+    /// hydrates against the recorded definition's player defaults, so it decodes at re-drive; read decodes it against
+    /// the engine defaults to refuse a malformed arrival at intake.</summary>
+    /// <param name="SourceAuthority">The source's authority identity — the half of the handoff token a set of tapes
+    /// pairs against the source's <see cref="Transfer"/>.</param>
+    /// <param name="TransferId">The source-scoped transfer id.</param>
+    /// <param name="Encoded">The encoded arrival.</param>
+    /// <param name="Outcome">What the commit decided: each landed traveler's generation, whether it rolled back, and the
+    /// projection each traveler coming home was bound to.</param>
+    public sealed record Arrival(string SourceAuthority, ulong TransferId, byte[] Encoded, WorldArrivalOutcome Outcome) : WorldReplayEntry;
+
+    /// <summary>One source body a crossing detached or restored (<see cref="WorldServer.DepartureTap"/>), at the
+    /// position among the tick's authority entries where the authority decided it, however long the crossing then
+    /// stayed in doubt. A re-drive detaches the body through the same detach the live crossing used, keeping what the
+    /// shadow captured, and a recorded rollback restores exactly that body; one it cannot reproduce refuses by name
+    /// (<see cref="ReplayRefusal.DepartureRefused"/>).</summary>
+    /// <param name="TransferId">The source-scoped transfer id.</param>
+    /// <param name="Slot">The source body index.</param>
+    /// <param name="Restored">Whether the body came back in a rollback rather than left.</param>
+    internal sealed record Departure(ulong TransferId, int Slot, bool Restored) : WorldReplayEntry;
+    /// <summary>The federated device images a recorded step held — the input forwarded and federated travelers drive
+    /// this authority's bodies with, which crosses no loopback. Taped at every step that holds any and once as the
+    /// set empties; a re-drive replaces the shadow's held images with exactly this set at the same position, and the
+    /// shadow's own step applies them where the live step did.</summary>
+    /// <param name="Held">Each held image with the body index it drives.</param>
+    internal sealed record FederatedIntents(IReadOnlyList<(int Index, IntentSubmission Submission)> Held) : WorldReplayEntry;
     /// <summary>One authored <c>adjacencies</c> row's delivered neighbour refresh, observed on this tick. The one
     /// piece of federation ingress the tape carries: whether a neighbour delivered is decided by the transport, not
     /// by the document or the population, so <c>Server.WorldEventFeed</c>'s link family and the
@@ -203,9 +227,10 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <summary>
 /// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
-/// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; the fresh
-/// world's starting body state is that definition's deterministic boot image (a fresh <see cref="WorldServer"/>
-/// reconstructs it exactly), not a per-body pose snapshot. The recording carries both the live session's per-tick
+/// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; a recording
+/// armed before the world's first step starts from that definition's deterministic boot image (a fresh
+/// <see cref="WorldServer"/> reconstructs it exactly), and one armed later, or a history branch saved as a tape, starts
+/// from an authority checkpoint of the live state (<see cref="StartCheckpoint"/>). The recording carries both the live session's per-tick
 /// pose trace (<see cref="RecordedHashes"/>) for inspection and the broader authoritative trace
 /// (<see cref="RecordedAuthoritativeHashes"/>) used for replay verdicts, sampled against the actual running session
 /// tick by tick rather than only at the tail.
@@ -213,9 +238,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <remarks>
 /// <para>The seat's profile rates are pinned, not re-resolved. A seated profile's MoveSpeed/TurnSpeed are read live off
 /// the handle by <c>WorldBody.Advance</c> every frame, which makes them simulation input — and they reach the catalog
-/// through <c>SetPlayerSection</c>, which never crosses the <see cref="WorldCommand"/>/grant/revoke union the tick
+/// through the identity verbs (<c>identity.motion</c>), which write the owned-world catalog in process and never cross the <see cref="WorldCommand"/>/grant/revoke union the tick
 /// stream records, so an edit to them is structurally invisible to that stream. Each <see cref="WorldReplaySeat"/>
-/// therefore carries the rates its profile actually ran at (<see cref="WorldReplayProfilePin"/>, in raw fixed-point),
+/// therefore carries the projection its profile actually ran with (<see cref="WorldIdentityProjection"/>, with raw fixed-point rates),
 /// and <see cref="Drive"/> seats its bodies on those rather than on whatever the live catalog now holds. That makes a
 /// re-drive hermetic with respect to the catalog: an <c>identity.motion</c> between record and verify no longer moves the
 /// replayed trajectory. When the live values have moved, <see cref="Drive"/> says so on stderr — naming the profile,
@@ -224,17 +249,13 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <para>Honest scope. The captured state is the authoritative server simulation only — the world definition, the active
 /// seats, and the per-tick stream of human/authority inputs (commands, grants, revokes) and intents. A mounted addon's
 /// driving is deliberately absent from that stream (it never crosses <see cref="IServerLink"/>) and is re-derived by
-/// re-running the document's own pinned guests during <see cref="Drive"/>. Grant changes made before record-start are
-/// likewise absent — they were never submitted during the capture — which is the same mid-session-capture boundary the
-/// boot-image start already has, and it reports honestly as a mismatch rather than as a false match. Screen machines
+/// re-running the document's own pinned guests during <see cref="Drive"/>. Screen machines
 /// and their pixels, camera rigs, overlays, and audio are
 /// presentation and are excluded: they are re-derived from the definition by the live client each frame and never feed
 /// back into simulation, so a replay reproduces the hashed authoritative server state but does not
-/// re-run the emulated cabinets or redraw the HUD. Because the fresh world starts from the definition boot image, a
-/// replayed tail matches the live tail precisely when the live session was still at that boot image at record-start (a
-/// boot-anchored capture); a mid-session capture — the session already moved from boot — faithfully re-drives its stream
-/// but from the boot image, so the verify honestly reports mismatch. Full per-body record-start rehydration (so a
-/// mid-session capture also matches) is the identified next lever.</para>
+/// re-run the emulated cabinets or redraw the HUD. A mid-session capture starts from the checkpoint it was armed on, so
+/// everything the session reached before the arm — poses, cells, grants, latches, the machine cores a checkpoint holds —
+/// is where the re-drive begins; a start the checkpoint does not reproduce reports MISMATCH at the first tick.</para>
 /// <para>Determinism. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
 /// pose. The recorded intent currency is likewise fixed-point: a
 /// <see cref="PlayerIntent"/> crosses as sixteen raw <see cref="FixedQ4816"/> lanes and an optional pointer ray of six more, so the replay currency is the
@@ -265,20 +286,44 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// compatibility reader.</para>
 /// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
-/// (and <see cref="WorldReplaySeat"/>/<see cref="WorldReplayProfilePin"/>/<see cref="WorldReplayTickInput"/>/the
+/// (and <see cref="WorldReplaySeat"/>/<see cref="WorldIdentityProjection"/>/<see cref="WorldReplayTickInput"/>/the
 /// <see cref="WorldReplayEntry"/> base it composes with) had not caught up. Widened so
 /// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 4 carries each recorded intent's optional pointer ray. Refuse earlier tapes at intake instead of reporting
-    // their old shape as a simulation divergence.
-    private const uint ShapeToken = 4u;
+    // A name, never a counter: this build writes and reads exactly one tape contract, and the tape's generated
+    // shape fingerprint (FormatShapes) is what refuses another layout at intake. The tape carries the recorded
+    // authority, its typed rebuild origins and its document paths, each starting seat's full identity projection, the
+    // companion tapes of a set, each departure and its rollback where the authority decided it, settlements by target
+    // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
+    // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
+    // or a saved history branch starts from.
+    private const uint ShapeToken = 1u;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
 
+    /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
+    /// tapes pairs one authority's departure with another's arrival.</summary>
+    public required string Authority { get; init; }
+    /// <summary>Gets the tapes of the other authorities this process recorded alongside this one, each a standalone
+    /// tape of one row. Verification re-drives every one and pairs each crossing's departure with its arrival; a
+    /// crossing whose other half is on no tape in the set is reported as not verified.</summary>
+    public IReadOnlyList<WorldReplaySnapshot> Companions { get; init; } = [];
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
+    /// <summary>Gets the directory the recorded world's document was read from
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a directory-less document. The
+    /// re-drive's definition resolves every relative path it authors — machine content, asset rows — where the live
+    /// one did.</summary>
+    public string? DocumentDirectory { get; init; }
+    /// <summary>Gets the recorded row's own document file, which the re-drive's cabinets read their content beside, or
+    /// <see langword="null"/> for the booted row, whose re-drive reads beside the booted document.</summary>
+    public string? DocumentPath { get; init; }
+    /// <summary>Gets the recorded row's instance identity — the instance rung of its draw seed ladder, which the
+    /// re-drive's shadow server is built under.</summary>
+    public required string Instance { get; init; }
     /// <summary>Gets the fork provenance — the parent tape and the count of leading tick groups copied from it —
     /// or <see langword="null"/> for a tape recorded from boot. Header narration only; <see cref="Drive"/> never
     /// reads it, because the copied prefix already sits in <see cref="Ticks"/> like any other recorded tick.</summary>
@@ -349,12 +394,14 @@ public sealed partial class WorldReplaySnapshot {
     /// pinned outcome, in entry order.</param>
     /// <param name="replayedMutationOutcomes">Receives each re-enqueued mutation's actual outcome once the next
     /// <see cref="WorldServer.Step"/> drains it, in the same order.</param>
-    /// <param name="rebuildContentPin">Resolves the CAS pin a recorded rebuild is enqueued under: the entry's own
-    /// hash for the offline drive (a disagreement then refuses by name from inside the step), or
-    /// <see langword="null"/> for the live drive, which must never let a refusal throw out of the running session's
-    /// step and narrates the disagreement itself instead.</param>
+    /// <param name="rebuildSource">Resolves how a recorded rebuild re-applies. <c>Verified</c> is the document a caller
+    /// already read and proved against the entry's recorded hash — a history re-simulation reads each file once,
+    /// before anything moves — or <see langword="null"/> to re-read the path inside the step. <c>Pin</c> is the CAS
+    /// pin the rebuild is enqueued under: the entry's own hash for the offline drive (a disagreement then refuses by
+    /// name from inside the step), or <see langword="null"/> for the live drive, which must never let a refusal throw
+    /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
-    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, string?> rebuildContentPin) {
+    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -399,20 +446,26 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.Rebuild rebuild:
-                    // Deliberately NO Definition: Load/Reload re-read rebuild.PathHint fresh inside
+                    // Without a verified document a Load/Reload re-reads a file rebuild.Origin fresh inside
                     // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
-                    // proof — a stored copy would let a moved file pass unnoticed. expectedContentHash is what
-                    // makes this a REPLAY drive rather than a live one: ApplyRebuild refuses BY NAME, before
-                    // installing anything, when the resolved candidate's hash disagrees with what was recorded.
+                    // proof — a stored copy would let a moved file pass unnoticed. A verified document is one the
+                    // caller read and proved against the recorded hash before the step, so it carries that hash and
+                    // the pin holds by construction. The pin is what makes this a REPLAY drive: ApplyRebuild refuses
+                    // by name, before installing anything, when the candidate's hash disagrees with the recording.
+                    var (verified, pin) = rebuildSource(rebuild);
+
                     server.EnqueueRebuild(
                         request: new WorldRebuildRequest(
+                            ContentHash: ((verified is null)
+                                ? null
+                                : rebuild.ContentHash),
+                            Definition: verified,
+                            Force: rebuild.Force,
                             Kind: rebuild.Kind,
-                            Definition: null,
-                            PathHint: rebuild.PathHint,
-                            Force: rebuild.Force
+                            Origin: rebuild.Origin
                         ),
                         principal: rebuild.Actor,
-                        expectedContentHash: rebuildContentPin(rebuild)
+                        expectedContentHash: pin
                     );
 
                     break;
@@ -476,16 +529,35 @@ public sealed partial class WorldReplaySnapshot {
                     // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
                     // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
                     break;
-                case WorldReplayEntry.Transfer transferEvent:
-                    // Acts on the departure half only: this shadow world is the boot instance alone, with no
-                    // destination instance to move a body into, so an arrival is structurally unreachable. A
-                    // departed body must stop contributing to HashState here exactly as it did live. A slot
-                    // already inactive is a no-op by TryDetachSeatForTransfer's own contract, never a throw.
-                    foreach (var departedSlot in transferEvent.DepartedBootSlots) {
-                        _ = population.TryDetachSeatForTransfer(
-                            profile: out _,
-                            slot: departedSlot
-                        );
+                case WorldReplayEntry.FederatedIntents federated:
+                    server.ReplaceFederatedIntents(held: federated.Held);
+
+                    break;
+                case WorldReplayEntry.SeatIdentity seatIdentity:
+                    ApplySeatIdentity(
+                        entry: seatIdentity,
+                        population: population,
+                        server: server
+                    );
+
+                    break;
+                case WorldReplayEntry.Arrival arrivalEvent:
+                    RelandArrival(
+                        arrival: arrivalEvent,
+                        server: server
+                    );
+
+                    break;
+                case WorldReplayEntry.Transfer:
+                    // Narration and pairing only: each body left at its own Departure entry.
+                    break;
+                case WorldReplayEntry.Departure departure:
+                    if (server.ExecuteAuthorityOperation(operation: () => server.RedriveDeparture(
+                        restored: departure.Restored,
+                        slot: departure.Slot,
+                        transferId: departure.TransferId
+                    )) is { } departureRefusal) {
+                        throw ReplayRefusal.DepartureRefused.Raise(message: departureRefusal);
                     }
 
                     break;
@@ -502,43 +574,34 @@ public sealed partial class WorldReplaySnapshot {
             server.EnqueueIntent(submission: in submission);
         }
     }
-    /// <summary>Re-joins this recording's seats into <paramref name="server"/> and re-seats each profiled one on a
-    /// detached handle carrying its pinned locomotion rates — the recorded values, never the live catalog's current
-    /// ones, which are only read for the drift report. Shared by the offline <see cref="Drive"/> and the live drive's
-    /// boot image.</summary>
-    /// <param name="server">A server at its boot image, with no seat joined yet.</param>
-    /// <param name="population">That server's population.</param>
-    /// <param name="definition">The embedded definition, for the pinned handle's player defaults.</param>
-    /// <param name="profiles">The live catalog the drift report reads.</param>
-    internal void SeatRecordedSeats(WorldServer server, WorldPopulation population, WorldDefinition definition, WorldOwnedWorlds profiles) {
-        foreach (var seat in Seats) {
-            // Seat(slot) directly: there is no PlayerRoster (and so no claim) behind this join to ask PrincipalOf of.
-            _ = server.ApplySession(request: new SessionRequest.Join(
-                Principal: Principal.Seat(slot: seat.Slot),
-                Slot: seat.Slot,
-                IdentityName: seat.Profile?.Name,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            ));
 
-            if (seat.Profile is not { } pin) {
-                continue;
-            }
-
-            ReportProfileDrift(
-                pin: pin,
-                profiles: profiles
-            );
-            population.SetSeatProfile(
-                slot: seat.Slot,
-                profile: WorldIdentity.Pinned(
-                    name: pin.Name,
-                    moveSpeed: pin.MoveSpeed,
-                    turnSpeed: pin.TurnSpeed,
-                    defaults: definition.PlayerDefaults
-                )
-            );
+    // Seats the one seat of a recorded switch at the population this tick holds, refusing by name a slot the re-drive has no
+    // active local seat at (an authored seat count that shrank, a seat that left, a peer slot): the tape names slots, and a slot
+    // the population does not hold would index past its entries.
+    // Seats a switch binds under one identity id share the escrow's one detached identity for that id, with every home
+    // adoption under it, as the live rebind gave them the catalog's one object: a write through either seat is read
+    // through the other.
+    private static void ApplySeatIdentity(WorldReplayEntry.SeatIdentity entry, WorldPopulation population, WorldServer server) {
+        if (
+            (((uint)entry.Slot) >= ((uint)population.LocalSeatCount)) ||
+            !population.IsActive(index: entry.Slot) ||
+            (population.EntryBody(index: entry.Slot) is null)
+        ) {
+            throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch names body:{entry.Slot}, which is not an active local seat in this re-drive (it holds {population.LocalSeatCount} local seat(s))");
         }
+
+        var profile = entry.Profile;
+
+        if (!server.TransferEscrow.TryBindDetached(detached: out var identity, reason: out var reason, taped: in profile)) {
+            throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch of body:{entry.Slot} to '{profile.Id}' could not bind its taped identity — {reason}");
+        }
+
+        population.SetSeatProfile(
+            profile: identity,
+            slot: entry.Slot
+        );
     }
+
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
     // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
     // simulation state (the order guests are pumped, disclosed, and fold their contributions), not a cosmetic
@@ -632,6 +695,13 @@ public sealed partial class WorldReplaySnapshot {
         hash.Add(value: transfer.TransferId);
         AddLengthPrefixedUtf8(
             hash: ref hash,
+            value: transfer.Target
+        );
+        hash.Add(value: (transfer.TargetRemote
+            ? 1U
+            : 0U));
+        AddLengthPrefixedUtf8(
+            hash: ref hash,
             value: transfer.DestinationName
         );
         AddLengthPrefixedUtf8(
@@ -643,9 +713,9 @@ public sealed partial class WorldReplaySnapshot {
             hash: ref hash,
             value: transfer.Outcome
         );
-        hash.Add(value: ((uint)transfer.DepartedBootSlots.Count));
+        hash.Add(value: ((uint)transfer.DepartedSlots.Count));
 
-        foreach (var slot in transfer.DepartedBootSlots) {
+        foreach (var slot in transfer.DepartedSlots) {
             hash.Add(value: ((uint)slot));
         }
 
@@ -814,6 +884,23 @@ public sealed partial class WorldReplaySnapshot {
                 }
             case 15:
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
+            case 19:
+                return ReadArrivalEntry(reader: ref reader);
+            case 21:
+                return ReadDepartureEntry(reader: ref reader);
+            case 22:
+                return ReadSeatIdentityEntry(reader: ref reader);
+            case 20:
+                return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
+                    field: "federated intents",
+                    maximum: WorldBodiesLimits.CapacityCeiling,
+                    readItem: static (ref WireReader r) => {
+                        var index = r.ReadInt32();
+                        var submission = WorldWireCodec.ReadIntentSubmission(reader: ref r);
+
+                        return (index, submission);
+                    }
+                ));
             case 16 or 17 or 18:
                 return ReadSessionEntry(
                     kind: kind,
@@ -883,17 +970,6 @@ public sealed partial class WorldReplaySnapshot {
 
         return (entries, grants);
     }
-    private static WorldReplayProfilePin? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(readValue: static (ref WireReader r) => {
-        var name = r.ReadString(field: "seat profile name");
-        var moveSpeed = r.ReadNullableFixed();
-        var turnSpeed = r.ReadNullableFixed();
-
-        return new WorldReplayProfilePin(
-            MoveSpeed: moveSpeed,
-            Name: name,
-            TurnSpeed: turnSpeed
-        );
-    });
     private static WorldQuery ReadQueryLeaf(ref WireReader reader) => ReadLeaf<WorldQuery>(
         reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeQuery,
@@ -902,16 +978,15 @@ public sealed partial class WorldReplaySnapshot {
     private static WorldReplayEntry ReadRebuildEntry(ref WireReader reader) {
         var kind = WorldWireCodec.ReadRebuildKind(reader: ref reader);
         var force = reader.ReadBoolean();
-        var pathHint = reader.ReadNullableString(field: "rebuild path hint");
+        var origin = WorldWireCodec.ReadRebuildOrigin(field: "rebuild origin", reader: ref reader);
         var contentHash = reader.ReadString(field: "rebuild content hash");
         var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
         if (
             !reader.Failed &&
-            (((kind == WorldRebuildKind.Reset) && (pathHint is not null)) ||
-            ((kind != WorldRebuildKind.Reset) && (pathHint is null)))
+            ((kind == WorldRebuildKind.Reset) != (origin is null))
         ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay rebuild entry: kind '{kind}' does not carry the path-hint shape its kind requires (none for Reset, one for Load/Reload).");
+            throw new InvalidDataException(message: $"Corrupt .puckreplay rebuild entry: kind '{kind}' does not carry the origin its kind requires (none for Reset, one for Load/Reload).");
         }
 
         return new WorldReplayEntry.Rebuild(
@@ -919,7 +994,7 @@ public sealed partial class WorldReplaySnapshot {
             ContentHash: contentHash,
             Force: force,
             Kind: kind,
-            PathHint: pathHint
+            Origin: origin
         );
     }
     private static WorldReplayEntry ReadScreenOpEntry(ref WireReader reader) {
@@ -957,21 +1032,153 @@ public sealed partial class WorldReplaySnapshot {
             readItem: readItem
         );
     }
+    // The arrival's carried identity hydrates against the recorded world's own player defaults, which only the
+    // re-drive holds; read validates the leaf against the engine defaults and keeps the bytes. An outcome must name a
+    // landing and a home binding for every traveler of a commit that stood, and at least one and at most every
+    // traveler of one that rolled back with no home binding, each at a generation an admission can mint.
+    private static WorldReplayEntry ReadArrivalEntry(ref WireReader reader) {
+        var encoded = reader.ReadBlock(
+            field: "arrival",
+            maxBytes: WireLimits.MaxDocumentBytes
+        );
+        var generations = reader.ReadArray(
+            field: "arrival generations",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+        var rolledBack = reader.ReadBoolean();
+        var adopted = reader.ReadArray(
+            field: "arrival home bindings",
+            readItem: static (ref WireReader r) => WorldIdentityProjectionWire.ReadOptional(reader: ref r),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+        var outcome = new WorldArrivalOutcome(
+            Adopted: adopted,
+            Generations: generations,
+            RolledBack: rolledBack
+        );
+        var refused = new WorldReplayEntry.Arrival(
+            Encoded: encoded,
+            Outcome: outcome,
+            SourceAuthority: string.Empty,
+            TransferId: 0
+        );
+
+        if (reader.Failed) {
+            return refused;
+        }
+        if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
+            arrival: out var arrival,
+            bytes: encoded,
+            reason: out var reason
+        )) {
+            reader.Fail(
+                detail: reason,
+                refusal: WireRefusal.PayloadMalformed
+            );
+            return refused;
+        }
+
+        var travelers = arrival!.Members.Count;
+
+        if (
+            (generations.Length == 0) ||
+            (generations.Length > travelers) ||
+            (!outcome.RolledBack && (generations.Length != travelers)) ||
+            (adopted.Length != (outcome.RolledBack ? 0 : generations.Length)) ||
+            generations.Any(predicate: static generation => (generation <= 0))
+        ) {
+            reader.Fail(
+                detail: $"arrival #{arrival.Request.TransferId} records {generations.Length} landing(s) and {adopted.Length} home binding(s) for {travelers} traveler(s){(outcome.RolledBack ? " before its rollback" : string.Empty)}, or a generation no admission mints",
+                refusal: WireRefusal.PayloadMalformed
+            );
+            return refused;
+        }
+
+        return new WorldReplayEntry.Arrival(
+            Encoded: encoded,
+            Outcome: outcome,
+            SourceAuthority: arrival.Request.SourceAuthority,
+            TransferId: arrival.Request.TransferId
+        );
+    }
+    private static WorldReplayEntry ReadSeatIdentityEntry(ref WireReader reader) {
+        var slot = reader.ReadInt32();
+        var profile = WorldIdentityProjectionWire.Read(reader: ref reader);
+
+        if (
+            !reader.Failed &&
+            (((uint)slot) >= WorldBodiesLimits.LocalSeatCount)
+        ) {
+            reader.Fail(
+                detail: $"seat identity names slot {slot}, outside 0..{(WorldBodiesLimits.LocalSeatCount - 1)}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldReplayEntry.SeatIdentity(
+            Profile: profile,
+            Slot: slot
+        );
+    }
+    private static WorldReplayEntry ReadDepartureEntry(ref WireReader reader) {
+        var transferId = reader.ReadUInt64();
+        var slot = reader.ReadInt32();
+        var restored = reader.ReadBoolean();
+
+        if (
+            !reader.Failed &&
+            (((uint)slot) >= WorldBodiesLimits.CapacityCeiling)
+        ) {
+            reader.Fail(
+                detail: $"departure of transfer {transferId} names body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldReplayEntry.Departure(
+            Restored: restored,
+            Slot: slot,
+            TransferId: transferId
+        );
+    }
+    private static void RelandArrival(WorldServer server, WorldReplayEntry.Arrival arrival) {
+        if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
+            arrival: out var decoded,
+            bytes: arrival.Encoded,
+            reason: out var decodeReason
+        )) {
+            throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' does not decode against the recorded world — {decodeReason}");
+        }
+
+        var reason = string.Empty;
+        var reproduced = server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.TryReland(
+            arrival: decoded!,
+            reason: out reason,
+            recorded: arrival.Outcome
+        ));
+
+        if (!reproduced) {
+            throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' {(arrival.Outcome.RolledBack ? "rolled back" : "landed")} live but the re-drive's own escrow did not reproduce it — {reason}");
+        }
+    }
     private static WorldReplayEntry ReadTransferEntry(ref WireReader reader) {
         var transferId = reader.ReadUInt64();
+        var target = reader.ReadString(field: "transfer target authority");
+        var targetRemote = reader.ReadBoolean();
         var destinationName = reader.ReadString(field: "transfer destination");
         var scopeKey = reader.ReadString(field: "transfer scope key");
         var generationId = reader.ReadUInt64();
         var outcome = reader.ReadString(field: "transfer outcome");
-        var departedBootSlots = reader.ReadArray(
+        var departedSlots = reader.ReadArray(
             field: "transfer departed-slot count",
-            maximum: WorldBodiesLimits.LocalSeatCount,
+            maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => {
                 var slot = r.ReadInt32();
 
-                if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
+                if (((uint)slot) >= WorldBodiesLimits.CapacityCeiling) {
                     r.Fail(
-                        detail: $"transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)})",
+                        detail: $"transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.CapacityCeiling - 1)})",
                         refusal: WireRefusal.PayloadMalformed
                     );
                 }
@@ -981,11 +1188,13 @@ public sealed partial class WorldReplaySnapshot {
         );
         var storedSignature = reader.ReadUInt64();
         var entry = new WorldReplayEntry.Transfer(
-            DepartedBootSlots: departedBootSlots,
+            DepartedSlots: departedSlots,
             DestinationName: destinationName,
             GenerationId: generationId,
             Outcome: outcome,
             ScopeKey: scopeKey,
+            Target: target,
+            TargetRemote: targetRemote,
             TransferId: transferId
         );
 
@@ -996,7 +1205,7 @@ public sealed partial class WorldReplaySnapshot {
         var recomputed = ComputeTransferSignature(transfer: entry);
 
         if (recomputed != storedSignature) {
-            throw ReplayRefusal.TransferEventTampered.Raise(message: $"transfer {transferId} -> '{destinationName}' (scope '{scopeKey}', generation {generationId}): stored content signature 0x{storedSignature:x16} disagrees with the recomputed 0x{recomputed:x16} — the tape's transfer event bytes were corrupted or edited after recording (this entry sits outside the population hash's own coverage, so nothing else on the tape would catch it)");
+            throw ReplayRefusal.TransferEventTampered.Raise(message: $"transfer {transferId} -> '{target}' '{destinationName}' (scope '{scopeKey}', generation {generationId}): stored content signature 0x{storedSignature:x16} disagrees with the recomputed 0x{recomputed:x16} — the tape's transfer event bytes were corrupted or edited after recording (this entry sits outside the population hash's own coverage, so nothing else on the tape would catch it)");
         }
 
         return entry;
@@ -1004,7 +1213,7 @@ public sealed partial class WorldReplaySnapshot {
     // Reports a live/pinned rate drift without refusing: a drifted profile is a perfectly replayable recording, so
     // nothing here throws. Without this, an operator who edited a profile between record and verify would see a
     // MATCH with no way to tell a profile edit from a genuine determinism regression.
-    private static void ReportProfileDrift(WorldOwnedWorlds profiles, WorldReplayProfilePin pin) {
+    private static void ReportProfileDrift(WorldOwnedWorlds profiles, WorldIdentityProjection pin) {
         if (profiles.Find(name: pin.Name) is not { } live) {
             // Drift all the way to absent. The re-drive is unaffected — the pinned handle needs no catalog entry — but
             // an operator reading a MATCH for a profile that no longer exists deserves to be told why it still ran.
@@ -1023,19 +1232,89 @@ public sealed partial class WorldReplaySnapshot {
             name: pin.Name,
             field: "move-speed",
             pinned: pin.MoveSpeed,
-            live: live.FixedMoveSpeed
+            live: live.FixedMoveSpeed,
+            used: PinnedUsed
         );
         ReportRateDrift(
             narrationHub: profiles.NarrationHub,
             name: pin.Name,
             field: "turn-speed",
             pinned: pin.TurnSpeed,
-            live: live.FixedTurnSpeed
+            live: live.FixedTurnSpeed,
+            used: PinnedUsed
         );
     }
+
+    /// <summary>Reports, as a pinned seat's drift is reported, where the owned identity as it stands now differs from the
+    /// projection a re-driven home arrival's tape records the seat bound to after its adoption, or a finished live
+    /// drive's detached seat carried: the name, either rate, and every fact whose presence or value differs, in ordinal
+    /// key order. The re-drive binds the taped projection, so an edit made to the owned identity after the recording
+    /// does not reach it; this names the edit rather than letting it pass unseen. It reads the owned identity and
+    /// refuses nothing.</summary>
+    /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
+    /// <param name="taped">The identity rebuilt from the taped projection.</param>
+    /// <param name="current">The owned identity as it stands now.</param>
+    /// <param name="used">What the report says the replay ran on, appended to every line.</param>
+    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity current, string used) {
+        if (narrationHub is not { HasNarrationSink: true }) {
+            return;
+        }
+        if (!string.Equals(
+            a: taped.Name,
+            b: current.Name,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{current.Name}'; {used}]"
+            );
+        }
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "move-speed",
+            pinned: taped.FixedMoveSpeed,
+            live: current.FixedMoveSpeed,
+            used: used
+        );
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "turn-speed",
+            pinned: taped.FixedTurnSpeed,
+            live: current.FixedTurnSpeed,
+            used: used
+        );
+
+        var carried = (taped.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+        var live = (current.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+
+        foreach (var key in carried.Keys.Concat(second: live.Keys).Distinct().OrderBy(keySelector: static key => key.Value, comparer: StringComparer.Ordinal)) {
+            var had = carried.TryGetValue(key: key, value: out var before);
+            var has = live.TryGetValue(key: key, value: out var after);
+
+            if ((had == has) && (before == after)) {
+                continue;
+            }
+            var tapedValue = (had ? before.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+            var boundValue = (has ? after.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {used}]"
+            );
+        }
+    }
+
+    // What the report says the replay ran on, so a verdict on a recording reads as the recording and not the edit.
+    internal const string HomeArrivalTapedUsed = "the home arrival used the TAPED projection, so this verdict reports the recording, not the edit";
+    internal const string DriveEndTapedUsed = "the drive ran on the TAPED projection and its writes were discarded, so the seat is back on the live identity";
+
+    private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
+
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still
     // a different trajectory, and a comparison that reads the display string would miss exactly those.
-    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
+    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live, string used) {
         if (pinned?.Value == live?.Value) {
             return;
         }
@@ -1043,7 +1322,7 @@ public sealed partial class WorldReplaySnapshot {
         if (narrationHub is { HasNarrationSink: true }) {
             narrationHub?.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
+                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; {used}]"
             );
         }
     }
@@ -1065,10 +1344,11 @@ public sealed partial class WorldReplaySnapshot {
         what: "designation",
         writer: writer
     );
+
     // The authority-INPUT tagged union: one discriminant byte, then the entry's own payload. Kept distinct from the
     // command tagged union — that one discriminates WorldCommand's sealed subtypes, this one discriminates what KIND
     // of authority write crossed the link at all.
-    private static void WriteEntry(WireWriter writer, WorldReplayEntry entry) {
+    internal static void WriteEntry(WireWriter writer, WorldReplayEntry entry) {
         switch (entry) {
             case WorldReplayEntry.Command command:
                 writer.WriteByte(value: 0);
@@ -1178,6 +1458,15 @@ public sealed partial class WorldReplaySnapshot {
                 writer.WriteBoolean(value: rateLever.Paused);
 
                 break;
+            case WorldReplayEntry.SeatIdentity seatIdentity:
+                writer.WriteByte(value: 22);
+                writer.WriteInt32(value: seatIdentity.Slot);
+                WorldIdentityProjectionWire.Write(
+                    projection: seatIdentity.Profile,
+                    writer: writer
+                );
+
+                break;
             case WorldReplayEntry.Transfer transfer:
                 writer.WriteByte(value: 10);
                 WriteTransferLeaf(
@@ -1242,6 +1531,45 @@ public sealed partial class WorldReplaySnapshot {
             case WorldReplayEntry.LinkDelivery linkDelivery:
                 writer.WriteByte(value: 15);
                 writer.WriteString(value: linkDelivery.Adjacency);
+                break;
+            case WorldReplayEntry.Arrival arrival:
+                writer.WriteByte(value: 19);
+                writer.WriteBlock(value: arrival.Encoded);
+                writer.WriteArray(
+                    items: arrival.Outcome.Generations,
+                    writeItem: static (w, generation) => w.WriteInt32(value: generation)
+                );
+                writer.WriteBoolean(value: arrival.Outcome.RolledBack);
+                writer.WriteArray(
+                    items: arrival.Outcome.Adopted,
+                    writeItem: static (w, adopted) => WorldIdentityProjectionWire.WriteOptional(
+                        projection: adopted,
+                        writer: w
+                    )
+                );
+
+                break;
+            case WorldReplayEntry.Departure departure:
+                writer.WriteByte(value: 21);
+                writer.WriteUInt64(value: departure.TransferId);
+                writer.WriteInt32(value: departure.Slot);
+                writer.WriteBoolean(value: departure.Restored);
+
+                break;
+            case WorldReplayEntry.FederatedIntents federated:
+                writer.WriteByte(value: 20);
+                writer.WriteArray(
+                    items: federated.Held,
+                    writeItem: static (w, held) => {
+                        w.WriteInt32(value: held.Index);
+                        if (!WorldWireCodec.TryWriteIntentSubmission(
+                            submission: in held.Submission,
+                            writer: w
+                        )) {
+                            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{held.Submission.Principal.Kind} — a federated image is driven by a peer principal.");
+                        }
+                    }
+                );
 
                 break;
             case WorldReplayEntry.SessionEvent session:
@@ -1255,6 +1583,7 @@ public sealed partial class WorldReplaySnapshot {
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
     }
+
     private static void WriteGrantLeaf(WireWriter writer, WorldGrant grant, bool revoke) => WriteLeaf(
         tryEncode: (revoke
         ? WorldSubmissionCodec.TryEncodeRevoke
@@ -1307,7 +1636,7 @@ public sealed partial class WorldReplaySnapshot {
     }
     // Deliberately its OWN small leaf, never WorldSubmissionCodec's TryEncodeRebuild/TryDecodeRebuild: that leaf's
     // shape REQUIRES an embedded document for Load/Reload (the ordinary submission needs it to cross the loopback),
-    // while the tape must NEVER carry one — Drive re-reads PathHint fresh, which is the content-address proof. The
+    // while the tape must NEVER carry one — Drive re-reads a file origin fresh, which is the content-address proof. The
     // kind byte is the one WorldWireTags table both leaves share.
     private static void WriteRebuildLeaf(WireWriter writer, WorldReplayEntry.Rebuild rebuild) {
         if (!WorldWireTags.TryToWire(
@@ -1319,11 +1648,14 @@ public sealed partial class WorldReplaySnapshot {
 
         writer.WriteByte(value: kind);
         writer.WriteBoolean(value: rebuild.Force);
-        writer.WriteNullableString(value: rebuild.PathHint);
+        WorldWireCodec.WriteRebuildOrigin(
+            origin: rebuild.Origin,
+            writer: writer
+        );
         writer.WriteString(value: rebuild.ContentHash);
     }
-    // The local-transfer leaf: five semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an
-    // FNV-1a content signature folded over those SAME five fields, length-prefixing every string so two distinct
+    // The transfer leaf: its semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an
+    // FNV-1a content signature folded over those SAME fields, length-prefixing every string so two distinct
     // field sequences can never fold to the same signature regardless of what any one field contains (the identical
     // netstring argument WorldSessionResolver.ScopedSegment already documents for the same reason). This entry sits
     // OUTSIDE the population hash's own coverage — a crossing's destination/scope/generation/outcome text is not
@@ -1331,12 +1663,14 @@ public sealed partial class WorldReplaySnapshot {
     // ReadTransferEntry recomputes it from the DECODED fields and refuses BY NAME on a disagreement.
     private static void WriteTransferLeaf(WireWriter writer, WorldReplayEntry.Transfer transfer) {
         writer.WriteUInt64(value: transfer.TransferId);
+        writer.WriteString(value: transfer.Target);
+        writer.WriteBoolean(value: transfer.TargetRemote);
         writer.WriteString(value: transfer.DestinationName);
         writer.WriteString(value: transfer.ScopeKey);
         writer.WriteUInt64(value: transfer.GenerationId);
         writer.WriteString(value: transfer.Outcome);
         writer.WriteArray(
-            items: transfer.DepartedBootSlots,
+            items: transfer.DepartedSlots,
             writeItem: static (w, slot) => w.WriteInt32(value: slot)
         );
         writer.WriteUInt64(value: ComputeTransferSignature(transfer: transfer));
@@ -1399,13 +1733,25 @@ public sealed partial class WorldReplaySnapshot {
         profiles: profiles
     ).Pose;
     /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
+    /// <param name="profiles">The live catalog the re-drive's detached copy and drift reports read.</param>
+    /// <param name="engines">The machine engines the shadow's machine host mounts.</param>
+    /// <param name="machineHostFactory">Builds the shadow's machine host.</param>
+    /// <param name="addonHostFactory">Builds the shadow's addon host.</param>
+    /// <param name="documents">The source a recorded <c>world.load</c>/<c>world.reload</c> re-reads its origin through;
+    /// <see langword="null"/> reads JSON files directly.</param>
+    /// <param name="observeTick">Called after each re-driven tick with its recorded tick index and the shadow server,
+    /// once both traces sampled it, for an inspection of the shadow's state that the traces only hash; it must not
+    /// change the shadow.</param>
+    /// <returns>Both traces, one entry per recorded tick.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
+    /// <paramref name="machineHostFactory"/>, or <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
 
-        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: PipelineSourceDirectory, utf8Json: DefinitionJson);
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: DocumentDirectory, utf8Json: DefinitionJson);
 
         // The header's SimulationRate must agree with the embedded definition's own SimulationRateHz — the same
         // internal-consistency family as the mount pin below. A disagreement re-driven anyway would produce a
@@ -1414,44 +1760,18 @@ public sealed partial class WorldReplaySnapshot {
             throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — re-driving at the wrong step size would produce a different trajectory that reports as an ordinary MISMATCH rather than naming the real cause. This tape is internally inconsistent; re-record it.");
         }
 
-        var population = new WorldPopulation(definition: definition);
         using var machines = machineHostFactory(
             definition.Screens,
             engines,
-            null,
+            DocumentPath,
             null
         );
-        // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
-        // authoritative simulation never consults GPU capacity, so no probe is needed offline.
-        var server = new WorldServer(
+
+        var (server, population) = CreateShadow(
             definition: definition,
-            population: population,
-            profiles: profiles,
-            envelope: new WorldRenderEnvelope(),
-            machines: machines
-        );
-
-        server.RebuildDocuments = documents;
-        server.PipelineSources = ((PipelineSourceDirectory is { } pipelineSources)
-            ? new WorldPipelineSources(documentDirectory: pipelineSources)
-            : null);
-        server.Extensions.EnterReplay();
-
-        // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
-        // other rule effect, but writing the world's own file is engine I/O. The tap narrates why no file write
-        // happened; the population hash this drive compares never depends on whether the write occurred. This
-        // shadow server binds no sink of its own — Server cannot construct a console-writing one — so the line
-        // reaches a caller only if it attaches one first.
-        server.SaveEffectTap = tick => server.Output.Narrate(
-            channel: "replay",
-            text: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
-        );
-
-        SeatRecordedSeats(
-            definition: definition,
-            population: population,
-            profiles: profiles,
-            server: server
+            documents: documents,
+            machines: machines,
+            profiles: profiles
         );
 
         // Mounted AFTER the seats re-join and after the server's constructor applied the embedded document's grants —
@@ -1499,7 +1819,7 @@ public sealed partial class WorldReplaySnapshot {
                 expectedMutationOutcomes: expectedMutationOutcomes,
                 input: Ticks[tick],
                 population: population,
-                rebuildContentPin: static rebuild => rebuild.ContentHash,
+                rebuildSource: static rebuild => (null, rebuild.ContentHash),
                 replayedMutationOutcomes: replayedMutationOutcomes,
                 server: server
             );
@@ -1514,6 +1834,10 @@ public sealed partial class WorldReplaySnapshot {
             authoritativeHashes[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: server,
                 tick: (server.NextInputTick - 1UL)
+            );
+            observeTick?.Invoke(
+                arg1: tick,
+                arg2: server
             );
         }
 
@@ -1597,398 +1921,4 @@ public sealed partial class WorldReplaySnapshot {
 
         return hash.Value;
     }
-    /// <summary>Reads a recording from a stream, consuming the stream to its end.</summary>
-    /// <param name="stream">The source stream.</param>
-    /// <returns>The deserialized recording.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The stream is not a <c>.puckreplay</c> tape, or is an older shape this
-    /// build does not read (refused outright — greenfield keeps no read-side tolerance for a foreign shape); is
-    /// truncated, corrupt, or carries bytes after the tape; carries a value no wire table names; pins one addon name
-    /// twice; or pins a seat slot out of range or twice.</exception>
-    public static WorldReplaySnapshot Read(Stream stream) {
-        ArgumentNullException.ThrowIfNull(argument: stream);
-
-        byte[] bytes;
-
-        using (var buffer = new MemoryStream()) {
-            stream.CopyTo(destination: buffer);
-            bytes = buffer.ToArray();
-        }
-
-        var reader = new WireReader(bytes: bytes);
-        var magic = reader.ReadUInt32();
-        var shapeToken = reader.ReadUInt32();
-
-        if (reader.Failed) {
-            throw Corrupt(failure: reader.Failure);
-        }
-
-        if (
-            (magic != Magic) ||
-            (shapeToken != ShapeToken)
-        ) {
-            throw ReplayRefusal.ShapeMismatch.Raise(message: $"Not a Puck replay tape, or an older shape this build does not read — re-record it. (found magic 0x{magic:x8}, shape token {shapeToken}; this build reads magic 0x{Magic:x8}, shape token {ShapeToken} only)");
-        }
-
-        var simulationRate = reader.ReadUInt32();
-        var forkedFrom = reader.ReadOptional(readValue: static (ref WireReader r) => {
-            var parentName = r.ReadString(field: "fork provenance parent");
-            var forkTick = r.ReadInt32();
-
-            return new WorldReplayForkProvenance(
-                ParentName: parentName,
-                Tick: forkTick
-            );
-        });
-        var pipelineSourceDirectory = reader.ReadNullableString(field: "pipeline source directory");
-
-        if (
-            !reader.Failed &&
-            (forkedFrom is { } fork)
-        ) {
-            if (string.IsNullOrWhiteSpace(value: fork.ParentName)) {
-                throw new InvalidDataException(message: "Corrupt .puckreplay recording: the fork provenance names an empty parent tape.");
-            }
-
-            if (fork.Tick < 0) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance tick {fork.Tick} is negative.");
-            }
-        }
-
-        var recordedHashes = ReadTapeArray(
-            minimumBytesEach: sizeof(ulong),
-            readItem: static (ref WireReader r) => r.ReadUInt64(),
-            reader: ref reader,
-            what: "hash"
-        );
-        var recordedAuthoritativeHashes = ReadTapeArray(
-            minimumBytesEach: sizeof(ulong),
-            readItem: static (ref WireReader r) => r.ReadUInt64(),
-            reader: ref reader,
-            what: "authoritative hash"
-        );
-        var definitionJson = reader.ReadBlock(
-            field: "definition",
-            maxBytes: WireLimits.MaxDocumentBytes
-        );
-        // 12 = the smallest possible receipt: two empty strings' 16-bit length prefixes and the u64 fuel.
-        var mountedAddons = ReadTapeArray(
-            minimumBytesEach: 12,
-            readItem: static (ref WireReader r) => {
-                var name = r.ReadString(field: "mounted addon name");
-                var hash = r.ReadString(field: "mounted addon hash");
-                var fuel = r.ReadUInt64();
-
-                return new WorldAddonReceipt(
-                    Fuel: fuel,
-                    Hash: hash,
-                    Name: name
-                );
-            },
-            reader: ref reader,
-            what: "mounted addon"
-        );
-        var seats = ReadTapeArray(
-            minimumBytesEach: 5,
-            readItem: static (ref WireReader r) => {
-                var slot = r.ReadInt32();
-                var profile = ReadProfilePin(reader: ref r);
-
-                return new WorldReplaySeat(
-                    Profile: profile,
-                    Slot: slot
-                );
-            },
-            reader: ref reader,
-            what: "seat"
-        );
-        var ticks = ReadTapeArray(
-            minimumBytesEach: 8,
-            readItem: static (ref WireReader r) => {
-                // 2 = the smallest possible entry: RateLever's discriminant byte plus its one bool. Every other kind
-                // (Command's minimal principal, a Grant/Revoke leaf, ...) is strictly larger.
-                var authority = ReadTapeArray(
-                    minimumBytesEach: 2,
-                    readItem: static (ref WireReader entry) => ReadEntry(reader: ref entry),
-                    reader: ref r,
-                    what: "authority entry"
-                );
-                var intents = ReadTapeArray(
-                    minimumBytesEach: 60,
-                    readItem: static (ref WireReader intent) => WorldWireCodec.ReadIntentSubmission(reader: ref intent),
-                    reader: ref r,
-                    what: "intent"
-                );
-
-                return new WorldReplayTickInput(
-                    Authority: authority,
-                    Intents: intents
-                );
-            },
-            reader: ref reader,
-            what: "tick"
-        );
-
-        if (!reader.TryFinish(failure: out var failure)) {
-            throw Corrupt(failure: failure);
-        }
-
-        // The set is compared BY NAME at re-drive, so two receipts under one name make the pin ambiguous: whichever the
-        // comparison happened to reach first would decide, and the other would be silently unenforced.
-        for (var index = 0; (index < mountedAddons.Length); index++) {
-            if (Find(
-                name: mountedAddons[index].Name,
-                receipts: new ArraySegment<WorldAddonReceipt>(
-                    array: mountedAddons,
-                    count: index,
-                    offset: 0
-                )
-            ) is not null) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: addon '{mountedAddons[index].Name}' is pinned twice in the mounted set — a name identifies exactly one mounted guest.");
-            }
-        }
-
-        for (var index = 0; (index < seats.Length); index++) {
-            var slot = seats[index].Slot;
-
-            // An out-of-range slot indexes straight into WorldPopulation's local-seat array during Drive (Join's own
-            // range check only refuses the session reply; SetSeatProfile does not check again), so it is refused
-            // here, before that reach, rather than crashing the host with an index exception.
-            if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)}).");
-            }
-
-            // The set is compared BY SLOT at re-drive (Drive re-joins each recorded slot once), so two seats pinning
-            // the same slot make the pin ambiguous — the same ambiguity the mounted-addon duplicate-name guard above
-            // refuses for names.
-            if (FindSeat(
-                seats: new ArraySegment<WorldReplaySeat>(
-                    array: seats,
-                    count: index,
-                    offset: 0
-                ),
-                slot: slot
-            ) is not null) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is pinned twice in the seat set — a slot identifies exactly one seat.");
-            }
-        }
-
-        // The two lengths are equal BY CONSTRUCTION on the record side (one hash sampled per tick appended), so a file
-        // where they disagree is doctored or truncated between the two sections. Reject it here rather than letting the
-        // shorter one silently bound the comparison — a trace cut short would otherwise read as "matched everywhere it
-        // was checked", which is exactly the shape of a verification that cannot fail.
-        if (recordedHashes.Length != ticks.Length) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedHashes.Length} recorded hashes for {ticks.Length} ticks.");
-        }
-        if (recordedAuthoritativeHashes.Length != ticks.Length) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedAuthoritativeHashes.Length} recorded authoritative hashes for {ticks.Length} ticks.");
-        }
-
-        // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
-        // tape holds is doctored or truncated after the header.
-        if (
-            (forkedFrom is { } provenance) &&
-            (provenance.Tick > ticks.Length)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance claims {provenance.Tick} tick(s) copied from '{provenance.ParentName}', but the tape carries only {ticks.Length}.");
-        }
-
-        return new WorldReplaySnapshot {
-            DefinitionJson = definitionJson,
-            ForkedFrom = forkedFrom,
-            MountedAddons = mountedAddons,
-            PipelineSourceDirectory = pipelineSourceDirectory,
-            RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
-            RecordedHashes = recordedHashes,
-            Seats = seats,
-            SimulationRate = simulationRate,
-            Ticks = ticks,
-        };
-    }
-    /// <summary>Derives the engine-tick step width <see cref="Drive"/> re-runs each recorded tick at — the one place
-    /// <see cref="SimulationRate"/>'s "0 means a static world that never steps" contract and
-    /// <c>Puck.Hosting.EngineTicks.PerRate</c>'s "0 has no representable step width" contract meet. Extracted as its
-    /// own testable primitive because exercising it through a real <see cref="Drive"/> call requires an embedded
-    /// <see cref="WorldDefinition"/> that itself authors <c>simulation.rateHz</c> 0 — not buildable end to end through
-    /// the ordinary document pipeline until a separate <c>WorldDefinitionValidator</c> change admits that
-    /// value as legitimate authored input — while this logic needs
-    /// nothing but the two raw numbers a hand-built tape can supply directly.</summary>
-    /// <param name="simulationRate">The tape's own <see cref="SimulationRate"/> header.</param>
-    /// <param name="recordedTickCount">The recording's own <see cref="Ticks"/>.Count.</param>
-    /// <returns>The step width in engine ticks — <c>0</c> for a legitimate rate-0/zero-tick tape, since a rate-0
-    /// recording's own invariant is that its step-loop never runs and the value is therefore never consumed.</returns>
-    /// <exception cref="InvalidDataException">Rate 0 with a nonzero recorded tick count — the one shape that is
-    /// genuinely inconsistent (see <see cref="ReplayRefusal.RateZeroCarriesTicks"/>): a rate-0 tape's own invariant is
-    /// zero recorded ticks, because <c>NoteTick</c> never fires while the boot world never steps.</exception>
-    public static ulong ResolveStepWidth(uint simulationRate, int recordedTickCount) {
-        // Rate 0 is legitimate tape metadata: a durable stop that never steps. NoteTick never fires while boot never
-        // steps, so a rate-0 recording carries zero ticks and the step-loop never runs — deriving a step width
-        // unconditionally would turn an honest rate-0 recording into an unnamed exception instead of the named
-        // refusal below for the one shape that actually is inconsistent.
-        if (
-            (simulationRate == 0U) &&
-            (recordedTickCount > 0)
-        ) {
-            throw ReplayRefusal.RateZeroCarriesTicks.Raise(message: $"This .puckreplay recording pins rateHz 0 (a static world with no step width) but carries {recordedTickCount} recorded tick(s) — a rate-0 tape's own invariant is zero recorded ticks; this tape is internally inconsistent, re-record it.");
-        }
-
-        return ((simulationRate == 0U)
-            ? 0UL
-            : EngineTicks.PerRate(ratePerSecond: simulationRate)
-        );
-    }
-    /// <summary>Encodes a recording in the <c>.puckreplay</c> binary form.</summary>
-    /// <param name="recording">The recording to encode.</param>
-    /// <returns>The complete tape.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="recording"/> is <see langword="null"/>.</exception>
-    /// <exception cref="WorldReplayCodecException">A host-side codec bug: the recording carries a value no wire table
-    /// or discriminated encoding covers, or pins one mounted-addon name twice.</exception>
-    public static byte[] Encode(WorldReplaySnapshot recording) {
-        ArgumentNullException.ThrowIfNull(argument: recording);
-
-        var writer = new WireWriter(capacity: (recording.DefinitionJson.Length + 4096));
-
-        writer.WriteUInt32(value: Magic);
-        writer.WriteUInt32(value: ShapeToken);
-        // Right after the shape header, before anything else: the rate is simulation INPUT the same way the
-        // definition and seats are, and Drive needs it before it can honestly derive a step size.
-        writer.WriteUInt32(value: recording.SimulationRate);
-
-        if (
-            (recording.ForkedFrom is { } forkedFrom) &&
-            (string.IsNullOrWhiteSpace(value: forkedFrom.ParentName) ||
-            (forkedFrom.Tick < 0) ||
-            (forkedFrom.Tick > recording.Ticks.Count))
-        ) {
-            throw new WorldReplayCodecException(message: $"a .puckreplay recording's fork provenance is inconsistent (parent '{forkedFrom.ParentName}', {forkedFrom.Tick} copied tick(s) of {recording.Ticks.Count}) — a host bug, not tape data.");
-        }
-
-        // (present, parent, int32 tick) — the fork provenance slot, right behind the rate it shares a header with;
-        // absent for a tape recorded from boot.
-        writer.WriteOptional(
-            value: recording.ForkedFrom,
-            writeValue: static (w, fork) => {
-                w.WriteString(value: fork.ParentName);
-                w.WriteInt32(value: fork.Tick);
-            }
-        );
-        writer.WriteNullableString(value: recording.PipelineSourceDirectory);
-        writer.WriteArray(
-            items: recording.RecordedHashes,
-            writeItem: static (w, hash) => w.WriteUInt64(value: hash)
-        );
-        writer.WriteArray(
-            items: recording.RecordedAuthoritativeHashes,
-            writeItem: static (w, hash) => w.WriteUInt64(value: hash)
-        );
-        writer.WriteBlock(value: recording.DefinitionJson);
-
-        // Read refuses a duplicate mounted-addon NAME (a name identifies exactly one mounted guest); the same
-        // ambiguity is reachable HERE too, straight from the live server's OWN receipts (WorldReplayTape.StopRecording
-        // never validated them). That is the host's own runtime having mounted two instances under one name — a host
-        // bug, not untrusted tape bytes — hence WorldReplayCodecException.
-        for (var index = 0; (index < recording.MountedAddons.Count); index++) {
-            for (var other = (index + 1); (other < recording.MountedAddons.Count); other++) {
-                if (string.Equals(
-                    a: recording.MountedAddons[index].Name,
-                    b: recording.MountedAddons[other].Name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    throw new WorldReplayCodecException(message: $"a .puckreplay recording's mounted-addon set pins '{recording.MountedAddons[index].Name}' twice — the live runtime mounted two instances under the same name, a host bug, not tape data.");
-                }
-            }
-        }
-
-        // Immediately after the definition and before the seats: the definition says which addons a world DECLARES, the
-        // receipt set says which ones actually mounted and from which bytes. The second is the one a re-drive is pinned
-        // against, and it reads next to the document it qualifies.
-        writer.WriteArray(
-            items: recording.MountedAddons,
-            writeItem: static (w, receipt) => {
-                w.WriteString(value: receipt.Name);
-                w.WriteString(value: receipt.Hash);
-                w.WriteUInt64(value: receipt.Fuel);
-            }
-        );
-        // The seat's profile pin rides a presence bit: a profileless seat writes the bit and nothing else, and its
-        // body falls back to the seat kit's own tuning on the re-drive exactly as it did live. The two rates cross as
-        // their RAW fixed-point lanes — the simulation's own currency, never a float — so a recorded rate re-enters
-        // WorldBody.Advance bit-identical.
-        writer.WriteArray(
-            items: recording.Seats,
-            writeItem: static (w, seat) => {
-                w.WriteInt32(value: seat.Slot);
-                w.WriteOptional(
-                    value: seat.Profile,
-                    writeValue: static (pinWriter, pin) => {
-                        pinWriter.WriteString(value: pin.Name);
-                        pinWriter.WriteNullableFixed(value: pin.MoveSpeed);
-                        pinWriter.WriteNullableFixed(value: pin.TurnSpeed);
-                    }
-                );
-            }
-        );
-        writer.WriteArray(
-            items: recording.Ticks,
-            writeItem: static (w, input) => {
-                w.WriteArray(
-                    items: input.Authority,
-                    writeItem: WriteEntry
-                );
-                w.WriteArray(
-                    items: input.Intents,
-                    writeItem: static (intentWriter, intent) => {
-                        if (!WorldWireCodec.TryWriteIntentSubmission(
-                            submission: in intent,
-                            writer: intentWriter
-                        )) {
-                            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{intent.Principal.Kind} — the world's own program never rides the tape as an actor.");
-                        }
-                    }
-                );
-            }
-        );
-
-        return writer.ToArray();
-    }
-    /// <summary>Serializes a recording to a stream in the <c>.puckreplay</c> binary form: the whole tape is encoded
-    /// first (<see cref="Encode"/>), then written in one call.</summary>
-    /// <param name="stream">The destination stream.</param>
-    /// <param name="recording">The recording to write.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    /// <exception cref="WorldReplayCodecException">A host-side codec bug (see <see cref="Encode"/>).</exception>
-    public static void Write(Stream stream, WorldReplaySnapshot recording) {
-        ArgumentNullException.ThrowIfNull(argument: stream);
-
-        stream.Write(buffer: Encode(recording: recording));
-    }
-    /// <summary>Serializes a recording to <paramref name="path"/> in one write: the whole tape is encoded to memory
-    /// first (<see cref="Encode"/>, where every write-side throw can still fire), and only a complete buffer ever
-    /// reaches the destination file, via one <see cref="File.WriteAllBytes(string, byte[])"/> call. A throw during
-    /// encoding therefore never truncates or creates a partial file on disk — the destination is untouched until the
-    /// whole tape is ready (a guard against a codec throw, not against the disk failing mid-write).</summary>
-    /// <param name="path">The destination file path.</param>
-    /// <param name="recording">The recording to write.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="recording"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    /// <exception cref="WorldReplayCodecException">A host-side codec bug (see <see cref="Encode"/>).</exception>
-    public static void WriteFile(string path, WorldReplaySnapshot recording) {
-        ArgumentException.ThrowIfNullOrEmpty(argument: path);
-
-        File.WriteAllBytes(
-            bytes: Encode(recording: recording),
-            path: path
-        );
-    }
-
-    private static InvalidDataException Corrupt(WireFailure failure) => new(message: $"Corrupt .puckreplay recording: {failure}.");
-
-    // The one shape every fixed leaf codec's TryDecodeX follows: a span of bytes decodes to a T or names a
-    // WorldCodecFailure. `value is null` is reachable only for the reference-typed leaves (WorldCommand,
-    // WorldComposition, WorldMutation, WorldQuery, SessionRequest, WorldScreenOp) — a defensive check against a codec
-    // that reports success with no value, always false for the struct-typed leaves (WorldDesignation, WorldGrant).
-    private delegate bool TryDecodeLeaf<T>(ReadOnlySpan<byte> bytes, out T? value, out WorldCodecFailure failure);
-    // The write-side twin of ReadLeaf: every fixed leaf codec's TryEncodeX turns a T into bytes or names a
-    // WorldCodecFailure.
-    private delegate bool TryEncodeLeaf<T>(T value, out byte[] bytes, out WorldCodecFailure failure);
 }

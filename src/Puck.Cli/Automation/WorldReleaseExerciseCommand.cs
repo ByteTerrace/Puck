@@ -57,7 +57,7 @@ internal static class WorldReleaseExerciseCommand {
                 path2: "qualification.fixture"
             ),
             128
-        )).Trim() != "puck.world.qualification.v1") {
+        )).Trim() != WorldReleaseQualificationRunner.MarkerFileContent) {
             throw new InvalidDataException(message: "release exercise requires a marked disposable qualification fixture");
         }
         var resultPath = Path.Combine(
@@ -255,6 +255,7 @@ internal static class WorldReleaseExerciseCommand {
             ImportedTicks: initialTicks,
             ReceiptSeedHash: receiptSeedHash,
             Schema: WorldReleaseExerciseResult.CurrentSchema,
+            Shape: WorldReleaseExerciseResult.CurrentShape,
             Steps: steps
         );
 
@@ -290,9 +291,12 @@ internal static class WorldReleaseExerciseCommand {
 /// (<paramref name="ReceiptSeedHash"/>), the exact original receipts found through the packaged lookup API after
 /// import (<paramref name="ImportedReceiptHash"/>), and the original receipts after continued gameplay with duplicate
 /// and conflicting retries checked (<paramref name="ContinuedReceiptHash"/>).</summary>
-public sealed record WorldReleaseExerciseResult(string Schema, string ImportedStateHash, string ContinuedStateHash,
+public sealed record WorldReleaseExerciseResult(string Schema, string Shape, string ImportedStateHash, string ContinuedStateHash,
     IReadOnlyDictionary<string, ulong> ImportedTicks, IReadOnlyDictionary<string, ulong> ContinuedTicks, int Steps,
     string ReceiptSeedHash, string ImportedReceiptHash, string ContinuedReceiptHash) {
     /// <summary>The schema every exercise report carries; the qualification runner refuses any other.</summary>
     public const string CurrentSchema = "puck.world.qualification-exercise.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for the report, which the exercise stamps and the
+    /// runner requires.</summary>
+    public const string CurrentShape = FormatShapes.WorldReleaseExerciseResultCurrentSchema;
 }

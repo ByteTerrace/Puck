@@ -6,6 +6,8 @@ using Puck.Assets.Documents;
 using Puck.Launcher.Release;
 using Puck.World;
 using Puck.World.Authoring;
+using Puck.World.Transpiler;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Official;
 
@@ -81,8 +83,9 @@ internal static class OfficialVerifyCommand {
     }
     // A document is named by its document name, and its source is a file that can author that name: its own
     // .world.json file, which it then is byte for byte, or a .puck source in the same directory — the one named after
-    // it, or a composition declaring it as a world.
-    private static void CheckAuthorship(OfficialDocumentEntry entry, string label, List<string> problems, IReadOnlyDictionary<string, OfficialSourceEntry> sourcesByName) {
+    // it, or a composition declaring it as a world: a source authors exactly the names its own text emits
+    // (WorldCompilation.EmittedNames).
+    private static void CheckAuthorship(OfficialDocumentEntry entry, string label, List<string> problems, string root, IReadOnlyDictionary<string, OfficialSourceEntry> sourcesByName) {
         if (!WorldDocumentName.TryValidate(
             name: entry.Name,
             reason: out var nameReason
@@ -125,7 +128,43 @@ internal static class OfficialVerifyCommand {
             comparisonType: StringComparison.Ordinal
         )) {
             problems.Add(item: $"{label}: source '{source.Name}' sits in another directory, and a source authors documents only beside itself.");
+        } else if (TryReadEmittedNames(
+            names: out var emitted,
+            root: root,
+            source: source
+        ) && !emitted.Contains(
+            comparer: StringComparer.Ordinal,
+            value: entry.Name[(entry.Name.LastIndexOf(value: '/') + 1)..]
+        )) {
+            problems.Add(item: $"{label}: source '{source.Name}' is another document's file.");
         }
+    }
+    // The names a published .puck source emits, from its own bytes as a compile reads them; a source whose object is
+    // missing or whose text does not parse says nothing here, since CheckObject names the missing object and the build
+    // refuses the source that does not compile.
+    private static bool TryReadEmittedNames(string root, OfficialSourceEntry source, out IReadOnlyList<string> names) {
+        var fullPath = Path.Combine(
+            path1: root,
+            path2: source.Path
+        );
+
+        names = [];
+
+        if (!File.Exists(path: fullPath)) {
+            return false;
+        }
+
+        if (WorldSourceIndex.Declaration(content: File.ReadAllBytes(path: fullPath)) is not { } declaration) {
+            return false;
+        }
+
+        names = WorldCompilation.EmittedNames(
+            declaredWorlds: declaration.Worlds,
+            emitsDocument: declaration.EmitsDocument,
+            sourcePath: source.Name
+        );
+
+        return true;
     }
     private static void CheckObject(string label, OfficialObjectRef objectRef, List<string> problems, string root) {
         var fullPath = Path.Combine(
@@ -278,6 +317,7 @@ internal static class OfficialVerifyCommand {
                 entry: entry,
                 label: label,
                 problems: problems,
+                root: root,
                 sourcesByName: sourcesByName
             );
             CheckObject(

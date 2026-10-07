@@ -187,9 +187,9 @@ public enum ShaderPipelinePriorKind : byte {
 }
 /// <summary>One access a pass makes to a storage instance, with the state it starts from and the barrier between
 /// them. A pass's accesses are listed in recording order: an indirect dispatch's arguments, then its inputs, then its
-/// outputs.</summary>
+/// outputs. Compatible buffer uses in the same frame role share one access.</summary>
 /// <param name="Storage">The index of the storage in <see cref="ShaderPipelinePlan.Storages"/>.</param>
-/// <param name="Version">The version the pass names.</param>
+/// <param name="Version">The representative version, preferring the pass's output when uses combine.</param>
 /// <param name="PreviousFrame">Whether the access reaches the instance the previous frame wrote.</param>
 /// <param name="PriorKind">Where <paramref name="Prior"/> comes from.</param>
 /// <param name="PriorPass">The pass index of the prior use within this frame, or -1 for a cross-frame or host prior.</param>
@@ -206,7 +206,21 @@ public sealed record ShaderPipelineAccess(
     ShaderPipelineAccessState Prior,
     ShaderPipelineAccessState Use,
     ShaderPipelineBarrier Barrier
-);
+) {
+    /// <summary>Gets the other versions this pass names through the same combined buffer access.</summary>
+    public IReadOnlyList<string> OtherVersions { get; init; } = [];
+
+    /// <summary>Returns whether this access includes the named version.</summary>
+    /// <param name="version">The input or output version.</param>
+    /// <returns>Whether the version participates in this access.</returns>
+    public bool ReferencesVersion(string version) {
+        if (string.Equals(a: Version, b: version, comparisonType: StringComparison.Ordinal)) { return true; }
+        for (var index = 0; (index < OtherVersions.Count); index++) {
+            if (string.Equals(a: OtherVersions[index], b: version, comparisonType: StringComparison.Ordinal)) { return true; }
+        }
+        return false;
+    }
+}
 /// <summary>Which instances of a storage the node clears when a graph installs or resets.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineClear>))]
 public enum ShaderPipelineClear : byte {

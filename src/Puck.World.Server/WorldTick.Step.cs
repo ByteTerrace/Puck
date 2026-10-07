@@ -200,10 +200,27 @@ public sealed partial class WorldTick {
 
         return applied;
     }
+    /// <summary>Delivers a timeline a history seek moved: the whole definition, then the completed tick's snapshot, so
+    /// a paused world shows the state it was moved to. The seek withholds every delivery of its span
+    /// (<see cref="WorldOutputHub.WithholdsTimeline"/>), so this is the one delivery a viewer observes per seek.</summary>
+    internal void PresentRestoredTimeline() {
+        lock (Host.AuthorityGate) {
+            Host.Document.MarkDefinitionDeliveryPending();
+            Host.Document.DeliverPending();
+            EmitSnapshot(
+                stepTicks: m_lastStepTicks,
+                tick: m_lastCompletedTick
+            );
+        }
+    }
 
-    // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached.
+    // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached, and
+    // while a history seek withholds its span.
     private void EmitSnapshot(ulong tick, ulong stepTicks) {
-        if (!Host.Output.HasTypedSubscribers) {
+        if (
+            !Host.Output.HasTypedSubscribers ||
+            Host.Output.WithholdsTimeline
+        ) {
             return;
         }
 
@@ -260,21 +277,23 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
         // this tick performs — an administrative mutation drained below, a rule's own writes, a response sweep —
         // rebase an Advance epoch, or reads one, against the SAME value. Reassigned identically at the step's own
         // end (m_lastCompletedEngineTicks = context.ElapsedTicks); setting it again there is a no-op.
         m_lastCompletedEngineTicks = context.ElapsedTicks;
+        m_deliveryTick = (context.Tick + 1UL);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
-        Host.EndFaultedSessions();
+        Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
-        Host.TransferForwarder?.ResolveContinuations(source: Host);
+        WorldAdjacencyOwnership.ResolveContinuations(server: Host);
         Host.InputHold.PrepareParticipants(population: Host.Population);
 
         m_tickWrittenCount = 0;
@@ -514,10 +533,10 @@ public sealed partial class WorldTick {
         Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
         Host.ReplaysInput = false;
 
-        // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
-        // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
+        // machines[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
+        // cell — see WorldServer.NamedMachineMemory.cs. Runs right before the machine steps so a Write binding's poke
         // reaches it before this tick's advance.
-        Host.SyncMachineMemory(tick: tick);
+        Host.SyncNamedMachineMemory(tick: tick);
 
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
         // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step
@@ -771,7 +790,10 @@ public sealed partial class WorldTick {
                 return;
         }
 
-        Host.ServerEventTap?.Invoke(obj: serverEvent);
+        // An arrival's own admissions are re-derived when its tape entry lands it again, so they are not taped twice.
+        if (!Host.LandingArrival) {
+            Host.ServerEventTap?.Invoke(obj: serverEvent);
+        }
     }
     /// <summary>The administrative drain — applies every buffered document-level operation (mutations, rebuilds,
     /// undo, addon lifecycle changes) without advancing simulation time: no addon tick, no intent drain, no body
@@ -797,8 +819,8 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
             Host.MutationBudget.BeginTick();
-            // A paused or stopped world still ends a session whose observer faulted.
-            Host.EndFaultedSessions();
+            // A paused or stopped world still ends a session whose observer faulted or detached itself.
+            Host.EndObserverEndedSessions();
             Host.Extensions.Drain();
             return DrainPendingOps(tick: m_lastCompletedTick);
         }

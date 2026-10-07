@@ -9,6 +9,7 @@ namespace Puck.Shaders.Tests;
 /// preserves predecessor identities; ordinary forwarding invalidates them. All barriers still come from the plan.</summary>
 public sealed partial class RenderGraphCadenceLawTests {
     private const string Writer = "test.retained-writer";
+    private const string MutableWriter = "test.mutable-writer";
     private const string Shade = "test.retained-shade";
     private const string Composite = "test.retained-composite";
 
@@ -16,10 +17,11 @@ public sealed partial class RenderGraphCadenceLawTests {
         ["gain"] = new(Default: JsonDocument.Parse("1").RootElement, Type: ShaderValueType.Float),
     };
 
-    private static RenderGraphPackageCatalog Catalog(bool input = false) => new(packages: [
+    private static RenderGraphPackageCatalog Catalog(bool input = false, bool shadeReads = false, bool compositeReadsPredecessor = false) => new(packages: [
+        new RenderGraphPackage(Id: MutableWriter, Inputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeReadWrite, strideBytes: null, count: null)], Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Updates an imported buffer."),
         new RenderGraphPackage(Id: Writer, Config: Config, Inputs: (input ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the first field."),
-        new RenderGraphPackage(Id: Shade, Inputs: [], Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the second field."),
-        new RenderGraphPackage(Id: Composite, Inputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)], Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], Members: [], Summary: "Reads both retained fields.")
+        new RenderGraphPackage(Id: Shade, Inputs: (shadeReads ? [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null)] : []), Outputs: [RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeWrite, strideBytes: null, count: null)], Members: [], Summary: "Writes the second field."),
+        new RenderGraphPackage(Id: Composite, Inputs: [.. Enumerable.Repeat(RenderGraphPackagePort.Buffer(RenderGraphPortAccess.ComputeRead, strideBytes: null, count: null), (compositeReadsPredecessor ? 2 : 1))], Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)], Members: [], Summary: "Reads both retained fields.")
     ]);
     private static RenderGraphDefinition Graph(bool preserve = true) => new(
         Schema: RenderGraphSchemas.Graph, Name: "retained", Outputs: ["out"],
@@ -33,10 +35,10 @@ public sealed partial class RenderGraphCadenceLawTests {
             new RenderGraphPackagePass(Name: "shade", Package: Shade, Outputs: ["b"]),
             new RenderGraphPackagePass(Name: "composite", Package: Composite, Inputs: ["b"], Outputs: ["out"])
         ]);
-    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, Model model, RenderGraphDefinition? graph = null, ShaderPipelineResource? input = null, bool previous = false) {
+    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, Model model, RenderGraphDefinition? graph = null, ShaderPipelineResource? input = null, bool previous = false, bool compositeReadsPredecessor = false) {
         var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
 
-        foreach (var id in new[] { Writer, Shade, Composite }) { packages.Register(factory: model, package: id); }
+        foreach (var id in new[] { Writer, MutableWriter, Shade, Composite }) { packages.Register(factory: model, package: id); }
         var node = new ShaderPipelineRenderNode(deviceContext: gpu, width: 32, height: 32, hostsOnDirectX: false,
             name: "retained", packages: packages, outputLayout: GpuImageLayout.ShaderReadOnly, pipelines: new GpuPassPipelineCache());
 
@@ -47,11 +49,80 @@ public sealed partial class RenderGraphCadenceLawTests {
                 Packages = graph.Packages!.Select(selector: pass => ((pass.Name == "write") ? pass with { Inputs = [new ResourceReference(input.Name, PreviousFrame: previous)] } : pass)).ToArray(),
             };
         }
-        node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog(input: (input is not null))).Compile(definition: graph).Pipeline,
+        node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog(input: (input is not null), compositeReadsPredecessor: compositeReadsPredecessor)).Compile(definition: graph).Pipeline,
             shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)));
         return node;
     }
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void APackageCanReadItsForwardedBufferOnlyWhilePreservingPredecessorFields(bool preserve) {
+        var graph = Graph(preserve: preserve);
+
+        graph = graph with {
+            Packages = graph.Packages!.Select(selector: static pass => ((pass.Name == "shade") ? pass with { Inputs = ["a"] } : pass)).ToArray(),
+        };
+        var compiler = new RenderGraphCompiler(Catalog(shadeReads: true));
+
+        if (!preserve) {
+            var failure = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => compiler.Compile(definition: graph));
+
+            Assert.Contains(collection: failure.Diagnostics, filter: static diagnostic => (diagnostic.Code == "SHADERPIPE_DISCARDED_READ"));
+            return;
+        }
+        var plan = compiler.Compile(definition: graph).Pipeline;
+        var before = plan.FindResource(name: "a")!;
+        var after = plan.FindResource(name: "b")!;
+        var shade = Assert.Single(collection: plan.Passes, predicate: static pass => (pass.Name == "shade"));
+        var write = Assert.Single(collection: shade.Accesses);
+
+        Assert.Equal(before.Storage, after.Storage);
+        Assert.Equal(before.Storage, write.Storage);
+        Assert.Equal("b", write.Version);
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Use.Access);
+        Assert.Equal(GpuStage.ComputeShader, write.Use.Stage);
+        Assert.Equal(GpuImageLayout.Undefined, write.Use.Layout);
+        Assert.True(condition: write.Barrier.SourceAccess.HasFlag(flag: GpuAccess.ShaderWrite));
+        Assert.Equal(GpuAccess.ShaderRead | GpuAccess.ShaderWrite, write.Barrier.DestinationAccess);
+    }
+    [Fact]
+    public void AReaderCanFollowThePreservingWriterWhoseNewFieldsItAlsoConsumes() {
+        var graph = Graph();
+
+        graph = graph with {
+            Packages = graph.Packages!.Select(selector: static pass => ((pass.Name == "composite") ? pass with { Inputs = ["a", "b"] } : pass)).ToArray(),
+        };
+        var plan = new RenderGraphCompiler(Catalog(compositeReadsPredecessor: true)).Compile(definition: graph).Pipeline;
+        var reader = Assert.Single(collection: plan.Passes, predicate: pass => (pass.Name == "composite"));
+        var writer = Assert.Single(collection: plan.Passes, predicate: pass => (pass.Name == "shade"));
+
+        Assert.Equal(["write", "shade", "composite"], plan.PassOrder);
+        Assert.Contains(writer.Index, reader.Dependencies);
+        Assert.DoesNotContain(reader.Index, writer.Dependencies);
+        Assert.Single(collection: reader.Accesses, predicate: access => (access.Storage == plan.FindResource(name: "a")!.Storage));
+        Assert.Equal(["a", "b"], reader.Inputs.Select(selector: static input => input.Name));
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ADestructiveSuccessorConsumesEveryPreservedAncestor(bool samePass) {
+        var graph = Graph();
+        var passes = graph.Packages!;
+
+        graph = graph with {
+            Resources = [.. graph.Resources, new ShaderPipelineResource(Name: "c", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16, From: "b")],
+            Packages = [passes[0], passes[1] with { Inputs = (samePass ? ["a"] : []) },
+                new RenderGraphPackagePass(Name: "destroy", Package: (samePass ? Composite : Shade),
+                    Inputs: (samePass ? ["a", "c"] : []), Outputs: [(samePass ? "out" : "c")]),
+                .. (samePass ? new[] { new RenderGraphPackagePass(Name: "overwrite", Package: Shade, Inputs: ["a"], Outputs: ["c"]) }
+                    : new[] { passes[2] with { Inputs = ["a", "c"] } })],
+        };
+        var failure = Assert.Throws<ShaderPipelineCompilationException>(testCode: () =>
+            new RenderGraphCompiler(Catalog(shadeReads: samePass, compositeReadsPredecessor: true)).Compile(definition: graph));
+
+        Assert.Contains(collection: failure.Diagnostics, filter: diagnostic => (diagnostic.Code == (samePass ? "SHADERPIPE_DISCARDED_READ" : "SHADERPIPE_CYCLE")));
+    }
     [Fact]
     public void AStandingIntermediateKeepsItsLastWriteBeyondEveryFlightSlot() {
         var gpu = new FakePipelineGpu();
@@ -140,21 +211,86 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
     }
     [InlineData("zero")]
-    [InlineData("history")]
     [InlineData("external")]
     [Theory]
     public void InputsWithoutARetainedContentVersionAlwaysExecute(string kind) {
         var gpu = new FakePipelineGpu();
         var model = new Model();
         var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
-            History: (kind == "history"), Initialization: ((kind == "external") ? ShaderPipelineInitialization.External : ShaderPipelineInitialization.Zero));
+            Initialization: ((kind == "external") ? ShaderPipelineInitialization.External : ShaderPipelineInitialization.Zero));
         using var external = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "external"));
-        using var node = Node(gpu, model, input: input, previous: (kind == "history"));
+        using var node = Node(gpu, model, input: input);
 
         if (kind == "external") { node.BindBuffer(buffer: external, name: "source"); }
         node.ProduceUntilInstalled();
         for (var frame = 0; (frame < 5); frame++) { node.ProduceFrame(context: default); }
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (6, 6));
+    }
+    [Fact]
+    public void KnownBufferImportsStandOnlyForTheSameOwnerPublicationAndAllocation() {
+        var gpu = new FakePipelineGpu();
+        var model = new Model();
+        var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
+            Initialization: ShaderPipelineInitialization.External);
+        using var first = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "first"));
+        using var replacement = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "replacement"));
+        using var node = Node(gpu, model, input: input);
+        var publication = new GpuImagePublication(Owner: first, Sequence: 1);
+
+        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.ProduceUntilInstalled();
+        for (var frame = 0; (frame < 4); frame++) {
+            node.BindBuffer(buffer: first, name: "source", publication: publication);
+            node.ProduceFrame(context: default);
+        }
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
+
+        publication = publication with { Sequence = 2 };
+        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
+        publication = publication with { Owner = replacement };
+        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (3, 3));
+        node.BindBuffer(buffer: replacement, name: "source", publication: publication);
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (4, 4));
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (4, 4));
+
+        node.BindBuffer(buffer: replacement, name: "source");
+        node.ProduceFrame(context: default);
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (6, 6));
+    }
+    [Fact]
+    public void AReadOnlyPassCannotStandOnAnImportAnotherPassMutates() {
+        var gpu = new FakePipelineGpu();
+        var model = new Model();
+        var graph = Graph() with {
+            Resources = [
+                new(Name: "a", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16, Retained: true),
+                new(Name: "b", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16, Retained: true),
+                new(Name: "out", Format: "R8G8B8A8Unorm", Dimensions: ShaderPipelineDimensions.Relative()),
+            ],
+            Packages = [
+                new(Name: "mutate", Package: MutableWriter, Inputs: ["source"], Outputs: ["a"]),
+                new(Name: "write", Package: Writer, Inputs: ["source"], Outputs: ["b"]),
+                new(Name: "composite", Package: Composite, Inputs: ["b", "a"], Outputs: ["out"]),
+            ],
+        };
+        var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
+            Initialization: ShaderPipelineInitialization.External);
+        using var buffer = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "mutable"));
+        using var node = Node(gpu, model, graph: graph, input: input, compositeReadsPredecessor: true);
+
+        node.BindBuffer(buffer: buffer, name: "source", publication: new GpuImagePublication(Owner: buffer, Sequence: 1));
+        node.ProduceUntilInstalled();
+        var records = model.Writes;
+
+        for (var frame = 0; (frame < 3); frame++) { node.ProduceFrame(context: default); }
+        Assert.Equal(actual: model.Writes, expected: (records + 6));
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -174,6 +310,18 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.True(condition: node.TryWriteParameter(field: "gain", passName: "write", value: 2));
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
+    }
+    [Fact]
+    public void APreviousReadOfUnwrittenHistoryDoesNotDemandARetainedWriter() {
+        var gpu = new FakePipelineGpu();
+        var model = new Model();
+        var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
+            History: true, Initialization: ShaderPipelineInitialization.Zero);
+        using var node = Node(gpu, model, input: input, previous: true);
+
+        node.ProduceUntilInstalled();
+        for (var frame = 0; (frame < 9); frame++) { node.ProduceFrame(context: default); }
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
     }
     [Fact]
     public void AFailedFrameCannotPublishAContentIdentityThatNeverSubmitted() {
@@ -307,13 +455,13 @@ public sealed partial class RenderGraphCadenceLawTests {
 
         public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) =>
             ((StageRegion && (context.Package == Writer)) ? [new RenderGraphPackageRegion(ByteCount: 16, Name: "source")] : []);
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this, package: context.Package);
 
         private sealed class Recorder(Model owner, string package) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public bool Skips(in FrameContext context) => ((package == Shade) && owner.InactiveShade);
-            public ulong? Signature(in FrameContext context) => ((package == Writer) ? owner.WriterSignature : owner.ShadeSignature);
+            public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((package == Writer) ? owner.WriterSignature : owner.ShadeSignature);
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 if (package == Composite) {
                     if (owner.RefuseComposite) { throw new InvalidOperationException(message: "Injected composite refusal."); }
@@ -321,7 +469,7 @@ public sealed partial class RenderGraphCadenceLawTests {
                 } else {
                     var handle = recording.Outputs[0].Buffer!.BufferHandle;
 
-                    if (package == Writer) { owner.Writes++; owner.Contents[handle] = (owner.WriterValue, 0); } else { owner.Shades++; owner.Contents[handle] = (owner.Contents[handle].First, owner.ShadeValue); }
+                    if (package is Writer or MutableWriter) { owner.Writes++; owner.Contents[handle] = (owner.WriterValue, 0); } else { owner.Shades++; owner.Contents[handle] = (owner.Contents[handle].First, owner.ShadeValue); }
                 }
                 return RenderGraphPackageOutcome.Drew;
             }

@@ -1,4 +1,5 @@
 using Puck.Abstractions;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -90,34 +91,30 @@ public sealed class DocumentPassPackageKernelLawTests {
 
         Assert.False(condition: ShaderWorkCounters.IsDeclaredBy(shaderInterface: shaderInterface));
 
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-document-kernel-");
+        using var cache = new TemporaryDirectory(prefix: "puck-document-kernel-");
 
-        try {
-            var shader = await new ShaderCompiler(cacheDirectory: cache.FullName).CompileAsync(
-                cancellationToken: TestContext.Current.CancellationToken,
-                descriptor: new ShaderCompilationRequest(
-                    generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) {
-                        [Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name))] = ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface),
-                    },
-                    name: Path.GetFileName(path: path),
-                    stages: [new ShaderStageSource(
-                        EntryPoint: entryPoint,
-                        Path: path,
-                        Source: await File.ReadAllTextAsync(cancellationToken: TestContext.Current.CancellationToken, path: path),
-                        Stage: stage
-                    )]
-                )
-            );
+        var shader = await new ShaderCompiler(cacheDirectory: cache.RootPath).CompileAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            descriptor: new ShaderCompilationRequest(
+                generatedIncludes: new Dictionary<string, string>(comparer: PuckPaths.Comparer) {
+                    [Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name))] = ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface),
+                },
+                name: Path.GetFileName(path: path),
+                stages: [new ShaderStageSource(
+                    EntryPoint: entryPoint,
+                    Path: path,
+                    Source: await File.ReadAllTextAsync(cancellationToken: TestContext.Current.CancellationToken, path: path),
+                    Stage: stage
+                )]
+            )
+        );
 
-            Assert.True(
-                condition: shader.IsSuccess,
-                userMessage: string.Join(
-                    separator: " | ",
-                    values: shader.Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Path}:{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}")
-                )
-            );
-        } finally {
-            cache.Delete(recursive: true);
-        }
+        Assert.True(
+            condition: shader.IsSuccess,
+            userMessage: string.Join(
+                separator: " | ",
+                values: shader.Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Path}:{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}")
+            )
+        );
     }
 }

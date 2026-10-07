@@ -39,6 +39,46 @@ public sealed class SdfTemporalHistoryLawTests {
         history.Prepare(epoch: epoch with { Cut = 2 }, camera: next, previousPoses: 3, currentPoses: 3);
         Assert.False(condition: history.HasPreviousView);
     }
+    // A temporal epoch's output stands once its history holds a period of samples and a period has rendered since its
+    // inputs last changed; a change restarts that count without resetting the history, and a spatial epoch keeps the
+    // jitter rule.
+    [Fact]
+    public void ATemporalEpochStandsOnlyAPeriodAfterItsLastChange() {
+        var epoch = (Epoch with { Temporal = true });
+        var history = new SdfTemporalHistory();
+
+        void RenderPeriod() {
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                Assert.False(condition: history.Stands(epoch: epoch, previousPoses: 0), userMessage: $"sample {sample}");
+                history.Prepare(camera: default, currentPoses: 0, epoch: epoch, previousPoses: 0);
+                history.Rendered();
+            }
+        }
+
+        RenderPeriod();
+        Assert.True(condition: history.Stands(epoch: epoch, previousPoses: 0));
+        history.Changed();
+        RenderPeriod();
+        Assert.Equal(expected: (2U * SdfTemporalHistory.Period), actual: history.Frames);
+        Assert.True(condition: history.Stands(epoch: epoch, previousPoses: 0));
+        Assert.False(condition: history.Stands(epoch: (epoch with { Temporal = false }), previousPoses: 0));
+        Assert.False(condition: history.Stands(epoch: (epoch with { Cut = 9 }), previousPoses: 0));
+    }
+    [Fact]
+    public void AChangedRecordedGridNeedsAPeriodEvenWhenTheRequestedScaleAlreadySettled() {
+        var epoch = (Epoch with { Temporal = true });
+        var history = new SdfTemporalHistory();
+
+        foreach (var width in new[] { 160u, 320u }) {
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                history.Prepare(camera: default, currentPoses: 0, epoch: epoch, previousPoses: 0,
+                    renderWidth: width, renderHeight: 180);
+                history.Rendered();
+                Assert.Equal(expected: (sample == (SdfTemporalHistory.Period - 1)),
+                    actual: history.Stands(epoch: epoch, previousPoses: 0));
+            }
+        }
+    }
     [Fact]
     public void EightSamplesBeginAtTheCenterAndRepeat() {
         Vector2[] expected = [
@@ -56,6 +96,9 @@ public sealed class SdfTemporalHistoryLawTests {
             Epoch with { Binding = 2 }, Epoch with { Cut = 2 }, Epoch with { Width = 800 },
             Epoch with { Height = 600 }, Epoch with { Ceiling = 1f }, Epoch with { Enabled = false },
             Epoch with { Debug = 1 },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 1, Epoch: 0, Publication: 0) },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 0, Epoch: 1, Publication: 0) },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 0, Epoch: 0, Publication: 1) },
         ];
 
         foreach (var next in changes) {
@@ -76,6 +119,21 @@ public sealed class SdfTemporalHistoryLawTests {
         gap.Rendered();
         gap.Prepare(camera: default, epoch: Epoch, previousPoses: 5, currentPoses: 5);
         Assert.Equal(expected: 0u, actual: gap.Frames);
+    }
+    [Fact]
+    public void ARenderWhoseSubmissionFailedLeavesHistoryOnThePosesTheLastCompletedRenderHeld() {
+        var history = new SdfTemporalHistory();
+
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 0, currentPoses: 1);
+        history.Rendered();
+        // The tables uploaded poses 2 for this render, but its submission failed: Rendered is never called.
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 1, currentPoses: 2);
+        Assert.True(condition: history.HasPreviousView);
+        // The retry's previous tables hold poses 2, which no completed render of this view held: its history image
+        // was rendered at poses 1, so reprojecting it through poses 2 would be wrong.
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 2, currentPoses: 2);
+        Assert.False(condition: history.HasPreviousView);
+        Assert.Equal(expected: 0u, actual: history.Frames);
     }
     [Fact]
     public void DisabledAndDebugViewsAccumulateNoJitter() {

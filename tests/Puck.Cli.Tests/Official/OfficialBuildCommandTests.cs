@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
 using Puck.Cli.Official;
 using Puck.Launcher.Release;
+using Puck.Testing;
 using Puck.World;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Decompiler;
@@ -13,9 +14,23 @@ using Xunit;
 
 namespace Puck.Cli.Tests.Official;
 
+/// <summary>Marks a test that needs the checkout's read-only browser-wasm AppBundle; the test is skipped, by name and with the
+/// step that produces the bundle, when the bundle has not been published here. CI publishes it before any test project runs.</summary>
+[AttributeUsage(validOn: AttributeTargets.Method)]
+public sealed class OfficialBuildFactAttribute : FactAttribute {
+    public OfficialBuildFactAttribute(
+        [System.Runtime.CompilerServices.CallerFilePath] string? sourceFilePath = null,
+        [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = -1
+    ) : base(sourceFilePath: sourceFilePath, sourceLineNumber: sourceLineNumber) {
+        if (!OfficialBuildFixture.HasAppBundle) {
+            Skip = "the read-only AppBundle is not published in this checkout; run: dotnet publish src/Puck.World.Browser -c Release";
+        }
+    }
+}
 /// <summary>Builds a real puck.official.manifest.v1 tree once, from this checkout's own worlds and the read-only browser-wasm
 /// AppBundle in the current checkout, so every test in <see cref="OfficialBuildCommandTests"/> exercises the actual
-/// verb end to end rather than a synthetic fixture.</summary>
+/// verb end to end rather than a synthetic fixture. When the bundle has not been published, no build runs and every
+/// test marked <see cref="OfficialBuildFactAttribute"/> is skipped; the unit tests that need no tree still run.</summary>
 public sealed class OfficialBuildFixture : IDisposable {
     // Build the browser in this checkout before running the official-content integration tests.
     public static string AppBundlePath {
@@ -32,23 +47,25 @@ public sealed class OfficialBuildFixture : IDisposable {
         }
     }
     public int ExitCode { get; }
+    public static bool HasAppBundle => (CliPaths.TryGetRepositoryRoot(repositoryRoot: out _) && Directory.Exists(path: AppBundlePath));
     public string OutRoot { get; }
     public string StdErr { get; }
     public string StdOut { get; }
 
     public const string Channel = "dev";
 
-    public OfficialBuildFixture() {
-        Assert.True(
-            condition: Directory.Exists(path: AppBundlePath),
-            userMessage: (((string)$"the read-only AppBundle at {AppBundlePath} does not exist. Publish the browser first: dotnet publish src/Puck.World.Browser -c Release. CI's artifacts job always publishes it before ") +
-                "any test project runs, so this failure means a local run reached this fixture without that step.")
-        );
+    // A locked file from a still-draining stream never fails the suite.
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-official-tests-");
 
-        OutRoot = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-official-tests-{Guid.NewGuid():n}"
-        );
+    public OfficialBuildFixture() {
+        OutRoot = m_directory.PathOf(name: "tree");
+
+        if (!HasAppBundle) {
+            (ExitCode, StdOut, StdErr) = (-1, string.Empty, string.Empty);
+
+            return;
+        }
+
         (ExitCode, StdOut, StdErr) = RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
             "--tree", OutRoot,
             "--channel", Channel,
@@ -60,18 +77,7 @@ public sealed class OfficialBuildFixture : IDisposable {
     internal static (int ExitCode, string StdOut, string StdErr) RunCapturingConsole(Func<int> run) =>
         ConsoleCapture.RunSplit(run: run);
 
-    public void Dispose() {
-        try {
-            if (Directory.Exists(path: OutRoot)) {
-                Directory.Delete(
-                    path: OutRoot,
-                    recursive: true
-                );
-            }
-        } catch (IOException) {
-            // Best-effort cleanup — a locked file from a still-draining stream never fails the suite.
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
 }
 /// <summary>Exercises <c>puck official build</c> and <c>puck official verify</c> end to end against a real tree, and
 /// <see cref="OfficialBuildCommand.IsDirtyPorcelainOutput"/> as a pure unit in isolation. The tree state a build is
@@ -150,7 +156,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         }
     }
 
-    [Fact]
+    [OfficialBuildFact]
     public void Build_PublishesEveryPuckSourceOnceByteForByte() {
         var sources = ReadManifest().Sources;
         var sourceFiles = Directory.EnumerateFiles(
@@ -178,7 +184,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             );
         }
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Build_PublishesTheLocksAndSourcelessDocumentsTheWorkspaceCompilesFrom() {
         var names = ReadManifest().Sources.Select(selector: static entry => entry.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -221,76 +227,67 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             expected: "games/wordspy.embeddings.json"
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Build_TheMountedSourcesCompileToEveryPublishedDocument() {
         var manifest = ReadManifest();
-        var mount = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-official-sources-{Guid.NewGuid():n}"
-        );
+        using var temporary = new TemporaryDirectory(prefix: "puck-official-sources-");
+        var mount = temporary.RootPath;
 
-        try {
-            foreach (var entry in manifest.Sources) {
-                var target = Path.Combine(
+        foreach (var entry in manifest.Sources) {
+            var target = Path.Combine(
+                path1: mount,
+                path2: entry.Name
+            );
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+            File.WriteAllBytes(
+                bytes: ReadObject(path: entry.Path),
+                path: target
+            );
+        }
+
+        // Each source compiles once; a composition's worlds are named beside it, as `puck compile` writes them.
+        var compiled = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var source in manifest.Documents.Select(selector: static document => document.Source).Distinct().Where(predicate: static source => WorldDocumentName.IsSourceFile(path: source))) {
+            var compilation = WorldCompiler.CompileFile(
+                allowMultiple: true,
+                cancellationToken: TestContext.Current.CancellationToken,
+                path: Path.Combine(
                     path1: mount,
-                    path2: entry.Name
-                );
+                    path2: source
+                )
+            );
 
-                Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-                File.WriteAllBytes(
-                    bytes: ReadObject(path: entry.Path),
-                    path: target
-                );
-            }
+            Assert.True(
+                condition: compilation.Success,
+                userMessage: $"{source}: {string.Join(separator: "; ", values: compilation.Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code} {diagnostic.Message}"))}"
+            );
 
-            // Each source compiles once; a composition's worlds are named beside it, as `puck compile` writes them.
-            var compiled = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-            foreach (var source in manifest.Documents.Select(selector: static document => document.Source).Distinct().Where(predicate: static source => WorldDocumentName.IsSourceFile(path: source))) {
-                var compilation = WorldCompiler.CompileFile(
-                    allowMultiple: true,
-                    cancellationToken: TestContext.Current.CancellationToken,
-                    path: Path.Combine(
-                        path1: mount,
-                        path2: source
-                    )
-                );
-
-                Assert.True(
-                    condition: compilation.Success,
-                    userMessage: $"{source}: {string.Join(separator: "; ", values: compilation.Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code} {diagnostic.Message}"))}"
-                );
-
-                if (compilation.Worlds.Count == 0) {
-                    compiled[WorldDocumentName.OfSourceFile(path: source)] = compilation.RequireJson().ToJsonString();
-                } else {
-                    foreach (var world in compilation.Worlds) {
-                        compiled[(source[..(source.LastIndexOf(value: '/') + 1)] + world.Name)] = world.Json.ToJsonString();
-                    }
+            if (compilation.Worlds.Count == 0) {
+                compiled[WorldDocumentName.OfSourceFile(path: source)] = compilation.RequireJson().ToJsonString();
+            } else {
+                foreach (var world in compilation.Worlds) {
+                    compiled[(source[..(source.LastIndexOf(value: '/') + 1)] + world.Name)] = world.Json.ToJsonString();
                 }
             }
+        }
 
-            foreach (var document in manifest.Documents.Where(predicate: static document => WorldDocumentName.IsSourceFile(path: document.Source))) {
-                Assert.True(
-                    condition: compiled.TryGetValue(
-                        key: document.Name,
-                        value: out var json
-                    ),
-                    userMessage: $"{document.Source} compiles to no document named '{document.Name}'."
-                );
-                Assert.Equal(
-                    expected: Encoding.UTF8.GetString(bytes: ReadObject(path: document.Path)),
-                    actual: json
-                );
-            }
-        } finally {
-            Directory.Delete(
-                path: mount,
-                recursive: true
+        foreach (var document in manifest.Documents.Where(predicate: static document => WorldDocumentName.IsSourceFile(path: document.Source))) {
+            Assert.True(
+                condition: compiled.TryGetValue(
+                    key: document.Name,
+                    value: out var json
+                ),
+                userMessage: $"{document.Source} compiles to no document named '{document.Name}'."
+            );
+            Assert.Equal(
+                expected: Encoding.UTF8.GetString(bytes: ReadObject(path: document.Path)),
+                actual: json
             );
         }
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Build_EveryDocumentIsNamedByItsDocumentNameAndNamesTheSourceThatAuthorsIt() {
         var manifest = ReadManifest();
         var sources = manifest.Sources.ToDictionary(
@@ -346,12 +343,21 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             actual: Assert.Single(collection: manifest.Composed).Name
         );
     }
-    [Fact]
+
+    // Whether the worlds-relative source names a module library, which emits no document.
+    private static bool IsModuleLibrary(string name) => (Puck.World.Transpiler.Composition.WorldSourceIndex.Declaration(path: Path.Combine(
+        path1: WorldsDirectory,
+        path2: name
+    )) is { EmitsDocument: false, Worlds.Count: 0 });
+
+    [OfficialBuildFact]
     public void Build_PublishesEveryDocumentTheWorkspaceAuthors() {
         var manifest = ReadManifest();
         var authoring = manifest.Documents.Select(selector: static document => document.Source).ToHashSet(comparer: StringComparer.Ordinal);
 
-        foreach (var source in manifest.Sources.Where(predicate: static source => (WorldDocumentName.IsSourceFile(path: source.Name) || WorldDocumentName.IsDocumentFile(path: source.Name)))) {
+        // A module library carries no document name (WorldCompilation.EmittedNames): the sources importing it publish
+        // what it declares, so it is a source the workspace reads and authors no document of its own.
+        foreach (var source in manifest.Sources.Where(predicate: static source => ((WorldDocumentName.IsSourceFile(path: source.Name) && !IsModuleLibrary(name: source.Name)) || WorldDocumentName.IsDocumentFile(path: source.Name)))) {
             Assert.True(
                 condition: authoring.Contains(item: source.Name),
                 userMessage: $"'{source.Name}' authors no published document."
@@ -367,14 +373,12 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
     }
     // The root and the basis resolve by document name, so either authored as a .puck source publishes and composes
     // like any other; a composition source publishes one document per world it declares.
-    [Fact]
+    [OfficialBuildFact]
     public void Build_ResolvesTheRootAndBasisByNameAndPublishesEachWorldACompositionDeclares() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
-        var scratch = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-official-authored-{Guid.NewGuid():n}"
-        );
+        using var temporary = new TemporaryDirectory(prefix: "puck-official-authored-");
+        var scratch = temporary.RootPath;
         var worlds = Path.Combine(
             path1: scratch,
             path2: "worlds"
@@ -384,145 +388,145 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             path2: "tree"
         );
 
-        try {
-            foreach (var file in Directory.EnumerateFiles(
-                path: WorldsDirectory,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*"
-            )) {
-                var target = Path.Combine(
-                    path1: worlds,
-                    path2: Path.GetRelativePath(
-                        path: file,
-                        relativeTo: WorldsDirectory
-                    )
-                );
-
-                Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-                File.Copy(
-                    destFileName: target,
-                    sourceFileName: file
-                );
-            }
-
-            foreach (var name in ((string[])["puck", "standard"])) {
-                var document = Path.Combine(
-                    path1: worlds,
-                    path2: WorldDocumentName.DocumentFile(name: name)
-                );
-
-                File.WriteAllText(
-                    contents: WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: document)),
-                    path: Path.Combine(
-                        path1: worlds,
-                        path2: WorldDocumentName.SourceFile(name: name)
-                    )
-                );
-                File.Delete(path: document);
-            }
-
-            Directory.CreateDirectory(path: Path.Combine(
+        foreach (var file in Directory.EnumerateFiles(
+            path: WorldsDirectory,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*"
+        )) {
+            var target = Path.Combine(
                 path1: worlds,
-                path2: "beacons"
-            ));
-
-            foreach (var file in Directory.EnumerateFiles(
-                path: Path.Combine(
-                    path1: repositoryRoot!,
-                    path2: "worlds/beacons"
-                ),
-                searchPattern: "*.puck"
-            )) {
-                File.Copy(
-                    destFileName: Path.Combine(
-                        path1: worlds,
-                        path2: "beacons",
-                        path3: Path.GetFileName(path: file)
-                    ),
-                    sourceFileName: file
-                );
-            }
-
-            var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
-                "--tree", tree,
-                "--channel", OfficialBuildFixture.Channel,
-                "--engine", OfficialBuildFixture.AppBundlePath,
-                "--worlds", worlds,
-                "--allow-dirty",
-            ]).Invoke());
-
-            Assert.True(
-                condition: (exitCode == 0),
-                userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
+                path2: Path.GetRelativePath(
+                    path: file,
+                    relativeTo: WorldsDirectory
+                )
             );
 
-            var manifest = JsonSerializer.Deserialize<OfficialManifest>(
-                options: DocumentJsonOptions.Shared,
-                utf8Json: File.ReadAllBytes(path: Path.Combine(
-                    path1: tree,
-                    path2: OfficialBuildFixture.Channel,
-                    path3: "manifest.json"
-                ))
-            )!;
-            var bySource = manifest.Documents.ToLookup(
-                comparer: StringComparer.Ordinal,
-                keySelector: static document => document.Source
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+            File.Copy(
+                destFileName: target,
+                sourceFileName: file
             );
-
-            Assert.Equal(
-                expected: ["puck"],
-                actual: bySource["puck.puck"].Select(selector: static document => document.Name)
-            );
-            Assert.Equal(
-                expected: [("standard", OfficialDocumentRoles.Basis)],
-                actual: bySource["standard.puck"].Select(selector: static document => (document.Name, document.Role))
-            );
-            Assert.Equal(
-                expected: ["beacons/north", "beacons/south"],
-                actual: bySource["beacons/beacons.puck"].Select(selector: static document => document.Name).Order(comparer: StringComparer.Ordinal)
-            );
-            // beacon.puck is the module library the composition expands: it emits no document of its own.
-            Assert.Empty(collection: bySource["beacons/beacon.puck"]);
-            Assert.Contains(
-                collection: manifest.Sources,
-                filter: static source => (source.Name == "beacons/beacon.puck")
-            );
-            Assert.Equal(
-                expected: "puck",
-                actual: Assert.Single(collection: manifest.Composed).Name
-            );
-            // The scratch worlds directory sits in no checkout, so no commit names the tree it was built from.
-            Assert.Equal(
-                expected: (OfficialBuildInfo.NoCommit, true),
-                actual: (manifest.Build.Commit, manifest.Build.Dirty)
-            );
-
-            var (verifyExitCode, verifyStdOut, verifyStdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
-                "--tree", tree,
-                "--channel", OfficialBuildFixture.Channel,
-            ]).Invoke());
-
-            Assert.True(
-                condition: (verifyExitCode == 0),
-                userMessage: $"official verify exited {verifyExitCode}:\nSTDOUT:\n{verifyStdOut}\nSTDERR:\n{verifyStdErr}"
-            );
-        } finally {
-            if (Directory.Exists(path: scratch)) {
-                Directory.Delete(
-                    path: scratch,
-                    recursive: true
-                );
-            }
         }
+
+        // The basis already ships as its .puck source; the root is authored as one here.
+        foreach (var name in ((string[])["puck", "standard"])) {
+            var document = Path.Combine(
+                path1: worlds,
+                path2: WorldDocumentName.DocumentFile(name: name)
+            );
+
+            if (!File.Exists(path: document)) {
+                Assert.True(condition: File.Exists(path: Path.Combine(
+                    path1: worlds,
+                    path2: WorldDocumentName.SourceFile(name: name)
+                )), userMessage: name);
+                continue;
+            }
+
+            File.WriteAllText(
+                contents: WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: document)),
+                path: Path.Combine(
+                    path1: worlds,
+                    path2: WorldDocumentName.SourceFile(name: name)
+                )
+            );
+            File.Delete(path: document);
+        }
+
+        Directory.CreateDirectory(path: Path.Combine(
+            path1: worlds,
+            path2: "beacons"
+        ));
+
+        foreach (var file in Directory.EnumerateFiles(
+            path: Path.Combine(
+                path1: repositoryRoot!,
+                path2: "worlds/beacons"
+            ),
+            searchPattern: "*.puck"
+        )) {
+            File.Copy(
+                destFileName: Path.Combine(
+                    path1: worlds,
+                    path2: "beacons",
+                    path3: Path.GetFileName(path: file)
+                ),
+                sourceFileName: file
+            );
+        }
+
+        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
+            "--tree", tree,
+            "--channel", OfficialBuildFixture.Channel,
+            "--engine", OfficialBuildFixture.AppBundlePath,
+            "--worlds", worlds,
+            "--allow-dirty",
+        ]).Invoke());
+
+        Assert.True(
+            condition: (exitCode == 0),
+            userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
+        );
+
+        var manifest = JsonSerializer.Deserialize<OfficialManifest>(
+            options: DocumentJsonOptions.Shared,
+            utf8Json: File.ReadAllBytes(path: Path.Combine(
+                path1: tree,
+                path2: OfficialBuildFixture.Channel,
+                path3: "manifest.json"
+            ))
+        )!;
+        var bySource = manifest.Documents.ToLookup(
+            comparer: StringComparer.Ordinal,
+            keySelector: static document => document.Source
+        );
+
+        Assert.Equal(
+            expected: ["puck"],
+            actual: bySource["puck.puck"].Select(selector: static document => document.Name)
+        );
+        Assert.Equal(
+            expected: [("standard", OfficialDocumentRoles.Basis)],
+            actual: bySource["standard.puck"].Select(selector: static document => (document.Name, document.Role))
+        );
+        Assert.Equal(
+            expected: ["beacons/north", "beacons/south"],
+            actual: bySource["beacons/beacons.puck"].Select(selector: static document => document.Name).Order(comparer: StringComparer.Ordinal)
+        );
+        // beacon.puck is the module library the composition expands: it emits no document of its own.
+        Assert.Empty(collection: bySource["beacons/beacon.puck"]);
+        Assert.Contains(
+            collection: manifest.Sources,
+            filter: static source => (source.Name == "beacons/beacon.puck")
+        );
+        Assert.Equal(
+            expected: "puck",
+            actual: Assert.Single(collection: manifest.Composed).Name
+        );
+        // The scratch worlds directory sits in no checkout, so no commit names the tree it was built from.
+        Assert.Equal(
+            expected: (OfficialBuildInfo.NoCommit, true),
+            actual: (manifest.Build.Commit, manifest.Build.Dirty)
+        );
+
+        var (verifyExitCode, verifyStdOut, verifyStdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
+            "--tree", tree,
+            "--channel", OfficialBuildFixture.Channel,
+        ]).Invoke());
+
+        Assert.True(
+            condition: (verifyExitCode == 0),
+            userMessage: $"official verify exited {verifyExitCode}:\nSTDOUT:\n{verifyStdOut}\nSTDERR:\n{verifyStdErr}"
+        );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Build_Succeeds() {
         Assert.True(
             condition: (fixture.ExitCode == 0),
             userMessage: $"official build exited {fixture.ExitCode}:\nSTDOUT:\n{fixture.StdOut}\nSTDERR:\n{fixture.StdErr}"
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Build_WritesChannelAndBuildsManifests() {
         var channelManifestPath = Path.Combine(
             path1: fixture.OutRoot,
@@ -595,7 +599,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             actual: OfficialBuildCommand.IsDirtyPorcelainOutput(porcelainStdout: porcelain)
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void SecondBuild_RewritesNoObjectsAndReproducesTheSameManifestBytes() {
         var objectPaths = Directory.EnumerateFiles(
             path: Path.Combine(
@@ -640,7 +644,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             actual: File.ReadAllBytes(path: channelManifestPath)
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void TamperedObject_MakesVerifyFailNamingIt() {
         using var manifestDocument = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
             path1: fixture.OutRoot,
@@ -680,7 +684,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             );
         }
     }
-    [Fact]
+    [OfficialBuildFact]
     public void TamperedSourceObject_MakesVerifyFailNamingIt() {
         var source = ReadManifest().Sources.First(predicate: static entry => entry.Name.EndsWith(
             comparisonType: StringComparison.Ordinal,
@@ -718,7 +722,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             );
         }
     }
-    [Fact]
+    [OfficialBuildFact]
     public void DanglingDocumentSource_MakesVerifyFailNamingIt() {
         var (exitCode, stdErr) = VerifyWithTamperedManifest(tamper: static manifest => {
             manifest["documents"]![0]!["source"] = "games/absent.puck";
@@ -735,7 +739,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             expectedSubstring: "documents[0].source: 'games/absent.puck' does not name a file in sources."
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void FileFormDocumentName_MakesVerifyFailNamingIt() {
         var (exitCode, stdErr) = VerifyWithTamperedManifest(tamper: static manifest => {
             var klondike = manifest["documents"]!.AsArray().Single(predicate: static document => (((string?)document!["name"]) == "games/klondike"))!;
@@ -754,12 +758,12 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             expectedSubstring: "documents[games/klondike.world.json]: 'games/klondike.world.json' names a file"
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void DocumentAuthoredByAnotherDocumentsFile_MakesVerifyFailNamingIt() {
         var (exitCode, stdErr) = VerifyWithTamperedManifest(tamper: static manifest => {
             var arcade = manifest["documents"]!.AsArray().Single(predicate: static document => (((string?)document!["name"]) == "modules/arcade"))!;
 
-            arcade["source"] = "modules/kart.world.json";
+            arcade["source"] = "modules/kart.puck";
 
             return manifest;
         });
@@ -770,10 +774,10 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         );
         Assert.Contains(
             actualString: stdErr,
-            expectedSubstring: "documents[modules/arcade]: source 'modules/kart.world.json' is another document's file."
+            expectedSubstring: "documents[modules/arcade]: source 'modules/kart.puck' is another document's file."
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void DuplicateSourceName_MakesVerifyFailNamingIt() {
         var (exitCode, stdErr) = VerifyWithTamperedManifest(tamper: static manifest => {
             var sources = manifest["sources"]!.AsArray();
@@ -792,59 +796,48 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             expectedSubstring: "is declared more than once."
         );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void TwoIndependentBuilds_ProduceByteIdenticalCommitManifest() {
-        var secondRoot = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-official-tests-{Guid.NewGuid():n}"
+        using var temporary = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-official-tests-");
+        var secondRoot = temporary.PathOf(name: "tree");
+
+        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
+            "--tree", secondRoot,
+            "--channel", OfficialBuildFixture.Channel,
+            "--engine", OfficialBuildFixture.AppBundlePath,
+            "--allow-dirty",
+        ]).Invoke());
+
+        Assert.True(
+            condition: (exitCode == 0),
+            userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
         );
 
-        try {
-            var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
-                "--tree", secondRoot,
-                "--channel", OfficialBuildFixture.Channel,
-                "--engine", OfficialBuildFixture.AppBundlePath,
-                "--allow-dirty",
-            ]).Invoke());
+        using var firstManifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: fixture.OutRoot,
+            path2: OfficialBuildFixture.Channel,
+            path3: "manifest.json"
+        )));
+        var commit = firstManifest.RootElement.GetProperty(propertyName: "build").GetProperty(propertyName: "commit").GetString()!;
+        var firstBuildsManifest = Path.Combine(
+            path1: fixture.OutRoot,
+            path2: "builds",
+            path3: commit,
+            path4: "manifest.json"
+        );
+        var secondBuildsManifest = Path.Combine(
+            path1: secondRoot,
+            path2: "builds",
+            path3: commit,
+            path4: "manifest.json"
+        );
 
-            Assert.True(
-                condition: (exitCode == 0),
-                userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}"
-            );
-
-            using var firstManifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
-                path1: fixture.OutRoot,
-                path2: OfficialBuildFixture.Channel,
-                path3: "manifest.json"
-            )));
-            var commit = firstManifest.RootElement.GetProperty(propertyName: "build").GetProperty(propertyName: "commit").GetString()!;
-            var firstBuildsManifest = Path.Combine(
-                path1: fixture.OutRoot,
-                path2: "builds",
-                path3: commit,
-                path4: "manifest.json"
-            );
-            var secondBuildsManifest = Path.Combine(
-                path1: secondRoot,
-                path2: "builds",
-                path3: commit,
-                path4: "manifest.json"
-            );
-
-            Assert.Equal(
-                expected: File.ReadAllBytes(path: firstBuildsManifest),
-                actual: File.ReadAllBytes(path: secondBuildsManifest)
-            );
-        } finally {
-            if (Directory.Exists(path: secondRoot)) {
-                Directory.Delete(
-                    path: secondRoot,
-                    recursive: true
-                );
-            }
-        }
+        Assert.Equal(
+            expected: File.ReadAllBytes(path: firstBuildsManifest),
+            actual: File.ReadAllBytes(path: secondBuildsManifest)
+        );
     }
-    [Fact]
+    [OfficialBuildFact]
     public void Verify_PassesOnTheFreshTree() {
         var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
             "--tree", fixture.OutRoot,

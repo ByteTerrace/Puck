@@ -74,121 +74,18 @@ void writeInstanceMaskSummary(uint maskBase, uint maskWordCount) {
 // so the center's HOME cell lies in that slab's cell range and the instance is found. An instance reached from several
 // slabs sets its bit more than once — idempotent (OR). So every flat-set bit is set here; and since only cell/always
 // members are tested by the identical rule, no extra bit is set: the grid mask equals the flat mask.
-void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, uint maskBase, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
-    // (1) The always-tested list.
+void collectInstanceGridMask(SdfInstanceGridHeader grid, uint instanceOffset, uint maskBase, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture, float radius) {
+    SdfGridQuery query = sdfGridCone(rayOrigin, centerDirection, chord, inverseAperture, radius, 1.0e20);
+    SdfGridWalk walk = sdfGridWalkBegin(grid, query, 0u, 1u);
+    uint index;
     [loop]
-    for (uint a = 0u; (a < grid.alwaysCount); a++) {
-        uint index = sdfGridWordAt(grid, grid.alwaysWord + a);
-        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
-
-        if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) && !sdfInstanceCameraHidden(instanceOffset, index)) {
+    while (sdfGridWalkNext(grid, query, walk, index)) {
+        if (sdfGridQueryContains(query, sdfInstanceBoundAt(instanceOffset, index)) &&
+            (sdfLightCamera() || !sdfInstanceCameraHidden(instanceOffset, index))) {
             sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
         }
     }
-
-    // (2) The cone footprint's grid cells.
-    float3 gridMin = grid.origin;
-    float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
-    // The march's far bound: the largest ray depth at which a binned instance can still pass the cull. A hit at t
-    // needs the center within (chord*t + pad) of ray(t), so t - proj(center) <= chord*t + pad, and with proj(center)
-    // <= proj(farCorner) (the per-axis corner maximizing the projection): t <= (proj + pad) / (1 - chord). The divisor
-    // floor only ever GROWS the bound (a degenerate near-1 chord walks farther, never truncates).
-    float3 farCorner = float3(
-        ((centerDirection.x > 0.0) ? gridMax.x : gridMin.x),
-        ((centerDirection.y > 0.0) ? gridMax.y : gridMin.y),
-        ((centerDirection.z > 0.0) ? gridMax.z : gridMin.z)
-    );
-    float projection = max(dot((farCorner - rayOrigin), centerDirection), 0.0);
-    float tFar = ((projection + grid.footprintPad) / max((1.0 - chord), 0.01));
-
-    // Clip the march to the ray's overlap with the grid AABB inflated by the LARGEST query pad any slab uses — the
-    // robust slabs method (a near-parallel axis constrains nothing unless the origin already lies outside its slab,
-    // in which case the whole cone provably misses the grid: the ray never moves on that axis, and the inflation
-    // already covers every pad). This is the lateral-miss early-out AND the entry clamp: a sky tile behind the grid,
-    // or a corridor tile aimed past it, walks ZERO slabs.
-    float inflate = ((chord * tFar) + grid.footprintPad);
-    float3 clipMin = (gridMin - inflate);
-    float3 clipMax = (gridMax + inflate);
-    float tEnter = 0.0;
-    float tExit = tFar;
-
-    [unroll]
-    for (int axis = 0; (axis < 3); axis++) {
-        float direction = centerDirection[axis];
-        float origin = rayOrigin[axis];
-
-        if (abs(direction) > 1.0e-8) {
-            float tA = ((clipMin[axis] - origin) / direction);
-            float tB = ((clipMax[axis] - origin) / direction);
-
-            tEnter = max(tEnter, min(tA, tB));
-            tExit = min(tExit, max(tA, tB));
-        }
-        else if ((origin < clipMin[axis]) || (origin > clipMax[axis])) {
-            return;
-        }
-    }
-
-    if (tEnter > tExit) {
-        return; // the cone never reaches the grid
-    }
-
-    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
-    float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
-    float t0 = tEnter;
-
-    [loop]
-    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
-        // The LAST budget slab force-covers the remaining interval whole: a truncated walk would silently drop the
-        // instances past it (a hole-in-the-world bug); one oversized final slab is merely conservative.
-        float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
-        float3 c0 = (rayOrigin + (centerDirection * t0));
-        float3 c1 = (rayOrigin + (centerDirection * t1));
-        float radius = ((chord * t1) + grid.footprintPad);
-        float3 low = (min(c0, c1) - radius);
-        float3 high = (max(c0, c1) + radius);
-
-        // Skip a slab whose own AABB still misses the raw grid (the clip interval is inflated, so entry/exit slabs can
-        // sit outside it). clamp() would otherwise pin an off-grid AABB onto boundary cells and test them spuriously.
-        if (all(high >= gridMin) && all(low <= gridMax)) {
-            // No integer over-cover ring: the host folded a float-safety epsilon into footprintPad (so `low`/`high`
-            // already sit strictly past any floor() rounding disagreement with the host's center binning), and floor is
-            // monotone — a ±1-cell ring here multiplied the walked cells by up to 27x for a ~1-ulp boundary event.
-            int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-            int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-
-            [loop]
-            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
-                [loop]
-                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
-                    [loop]
-                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
-                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
-                        uint entryStart = sdfGridWordAt(grid, grid.cellStartWord + cell);
-                        uint entryEnd = sdfGridWordAt(grid, grid.cellStartWord + cell + 1u);
-
-                        [loop]
-                        for (uint k = entryStart; (k < entryEnd); k++) {
-                            uint index = sdfGridWordAt(grid, grid.entryWord + k);
-                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
-
-                            if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) && !sdfInstanceCameraHidden(instanceOffset, index)) {
-                                sdfInstanceMasksRW[maskBase + (index >> 5u)] |= (1u << (index & 31u));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (t1 >= tExit) {
-            break;
-        }
-
-        t0 = t1;
-    }
 }
-
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint viewIndex = worldViewOf(id.z);
@@ -243,13 +140,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfInstanceMasksRW[maskBase + word] = 0u;
         }
 
-        collectInstanceGridMask(grid, instanceOffset, maskBase, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+        collectInstanceGridMask(grid, instanceOffset, maskBase, cone.origin, cone.centerDirection, cone.chord, cone.inverseAperture, cone.radius + passGroup.lightSweepRadius);
     } else {
         // FLAT fallback (a degenerate grid — zero binnable or a single cell — or a grid-suppressed program): the
         // pre-grid path, testing every instance per mask word. Byte-identical to the grid path's mask by construction.
         [loop]
         for (uint word = 0u; (word < maskWordCount); word++) {
-            sdfInstanceMasksRW[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, view.position.xyz, cone.centerDirection, cone.chord, cone.inverseAperture);
+            sdfInstanceMasksRW[maskBase + word] = collectInstanceMaskWord(instanceOffset, word, instanceCount, cone.origin, cone.centerDirection, cone.chord, cone.inverseAperture, cone.radius + passGroup.lightSweepRadius);
         }
     }
 
@@ -257,4 +154,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The masks are buffers and the cull walks no field, so its row stays zero.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 }

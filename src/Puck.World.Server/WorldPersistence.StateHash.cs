@@ -34,6 +34,10 @@ public sealed partial class WorldPersistence {
                 }
 
                 break;
+            case WorldStateHashComponent.BodyContinuation:
+                Host.Population.AppendContinuationHash(hash: ref hash);
+
+                break;
             case WorldStateHashComponent.Declaration:
                 WorldStateHashComposition.AppendDeclaration(
                     hash: ref hash,

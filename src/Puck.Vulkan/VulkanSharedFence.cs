@@ -109,7 +109,7 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
                 m_device.Handle,
                 m_semaphore,
                 out var value
-            ).ThrowIfFailed(operation: "vkGetSemaphoreCounterValue");
+            ).ThrowIfFailed(device: m_device, operation: "vkGetSemaphoreCounterValue");
 
             return value;
         }

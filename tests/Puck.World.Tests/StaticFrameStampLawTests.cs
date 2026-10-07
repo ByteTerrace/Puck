@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// is not animated and a placement of it stamps statically. The creation is the <c>uploaded-sources</c> canary's
 /// session ball, whose empty <c>idle</c> frame once sent it through the stamp pool.</summary>
 public sealed class StaticFrameStampLawTests {
-    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.world.json";
+    private const string SessionWorld = "tests/Puck.World.Canaries/uploaded-sources/session.puck";
 
     private static (WorldPrototype Creation, WorldPlacement Placement) Ball(IReadOnlyList<FrameDocument> frames) {
         var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);

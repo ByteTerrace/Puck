@@ -1,25 +1,68 @@
+using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldTemporalCaptureLawTests {
+    [Fact]
+    public void AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing() {
+        using var state = new TemporaryDirectory(prefix: "puck-window-capture-");
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Windowed,
+            stateDirectory: state,
+            world: "tests/Puck.Counters/counters.puck"
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var position = new Vector3(x: 12f, y: 0f, z: 0f);
+
+        client.DeliverSnapshot(snapshot: Snapshot(position: Vector3.Zero, tick: 0));
+        client.DeliverSnapshot(snapshot: Snapshot(position: position, tick: 1));
+        client.StateMirror.Install(engineTick: 0, tick: 0);
+        client.StateMirror.Refresh(stamp: new WorldStateStamp(EngineTick: 1680, Everything: false, MovedRows: Array.Empty<int>(), Tick: 1));
+        var pending = false;
+
+        presenter.CapturePending = () => pending;
+
+        foreach (var owesCapture in new[] { false, true, false }) {
+            pending = owesCapture;
+            var frame = presenter.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 0.25f, width: 64);
+
+            Assert.Equal(expected: new PresentedTick(Fraction: 0d, Whole: (owesCapture ? 1680UL : 420UL)), actual: frame.Clock);
+            Assert.Equal(expected: (position * (owesCapture ? 1f : 0.25f)), actual: client.Position(index: 0));
+        }
+    }
+
+    private static WorldSnapshot Snapshot(Vector3 position, ulong tick) => new(
+        EngineTick: (tick * 1680UL),
+        Entries: new[] { new EntitySnapshot(
+            Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous,
+            Generation: 1, Index: 0, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: position) },
+        Revision: 0,
+        StepTicks: 1680,
+        Tick: tick
+    );
+
     [Fact]
     public void ConvergingPresentationHoldsEveryFrameValueAcrossDifferentHostIntervals() {
         using var state = new TemporaryDirectory(prefix: "puck-temporal-capture-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
-            world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+            world: "tests/Puck.Counters/counters.puck"
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         _ = presenter.CaptureFrame(deltaSeconds: 0.2f, height: 64, interpolationAlpha: 1f, width: 64);
-        var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: "temporal-frozen.png"), converge: 8);
+        var request = new FrameCaptureRequest(path: state.PathOf(name: "temporal-frozen.png"), converge: 8);
 
         presenter.BeginConvergence(request: request);
         var first = presenter.CaptureFrame(deltaSeconds: 0.7f, height: 64, interpolationAlpha: 1f, width: 64);
@@ -46,17 +89,25 @@ public sealed class WorldTemporalCaptureLawTests {
         Assert.True(condition: (resumed.Time > first.Time));
     }
 
+    // The pass block a frame writes, followed by the lights and sky records its tables pack.
     private static byte[] Block(SdfFrame frame) {
-        var environment = new float[Puck.SignedDistance.SdfEnvironment.LaneCount];
-
-        SdfFrameBlock.BakeEnvironment(frame: frame, rows: environment);
         var block = new byte[SdfFrameBlock.SizeBytes];
+        var lights = new Puck.SignedDistance.SdfLight[Puck.SignedDistance.SdfLights.MaxLights];
+        var layers = new Puck.SignedDistance.SdfSkyLayer[Puck.SignedDistance.SdfSky.MaxLayers];
 
         SdfFrameBlock.Write(
             block: block,
-            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0, Environment: environment),
+            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0),
             frame: frame, view: 0, width: 64, height: 64
         );
-        return block;
+        frame.Lights.Pack(records: lights);
+        frame.Sky.Pack(block: out var sky, details: new Puck.SignedDistance.SdfSkyDetails(), farDistance: frame.FarDistance, layers: layers, lights: frame.Lights);
+
+        return [
+            .. block,
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: lights.AsSpan()),
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: new ReadOnlySpan<Puck.SignedDistance.SdfSkyBlock>(reference: in sky)),
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: layers.AsSpan()),
+        ];
     }
 }

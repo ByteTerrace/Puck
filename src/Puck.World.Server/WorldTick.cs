@@ -122,6 +122,7 @@ public sealed partial class WorldTick {
     // after m_events.Collect — see the call site's own remarks for the projection order this depends on.
     private readonly Puck.Audio.Simulation.MusicClock? m_musicClock;
     private readonly Puck.Audio.Simulation.MusicDirector? m_musicDirector;
+    private readonly string? m_musicContentHash;
     // A federated player's device image is replicated state, not a packet-rate-shaped impulse. One authenticated
     // intent stream owns each slot at a time and the destination republishes its latest image on every authority
     // tick until that stream changes it or disconnects. This is what makes a 30 Hz player host driving a 240 Hz
@@ -144,6 +145,7 @@ public sealed partial class WorldTick {
     // point on the tick thread) can stamp itself with the server's actual current tick/step width rather than the
     // literal 0/0 that is only honest before the first Step has ever run — see BuildPrimerSnapshot.
     private ulong m_lastStepTicks;
+    private ulong m_deliveryTick;
     private int m_tickWrittenCount;
 
     private readonly WorldServer m_host;
@@ -152,6 +154,10 @@ public sealed partial class WorldTick {
     internal ulong CompletedEngineTicks => m_lastCompletedEngineTicks;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
     internal ulong CompletedTick => m_lastCompletedTick;
+    /// <summary>Gets the authoritative tick whose engine tick <see cref="CompletedEngineTicks"/> is: the tick the step
+    /// in progress produces while one runs, since a step settles its engine tick before it drains or delivers
+    /// anything, and the completed tick between steps.</summary>
+    internal ulong DeliveryTick => m_deliveryTick;
 
     /// <summary>Gets the server whose document, arena, entity table, grants and narration this tick advances.</summary>
     private WorldServer Host => m_host;
@@ -166,6 +172,13 @@ public sealed partial class WorldTick {
     /// <summary>Gets the event-driven segment director, or <see langword="null"/> for a world authoring no
     /// <c>music</c> row.</summary>
     internal Puck.Audio.Simulation.MusicDirector? MusicDirector => m_musicDirector;
+    // A load can replace the document's score without replacing this boot-compiled runtime. Such a checkpoint
+    // cannot reconstruct the running graph from its embedded definition.
+    internal bool MusicMatchesDefinition => string.Equals(
+        a: m_musicContentHash,
+        b: ((Host.Definition.Music is { Count: > 0 } music) ? music[0].Hash : null),
+        comparisonType: StringComparison.Ordinal
+    );
     /// <summary>Gets the one ordered domain every non-intent submission enqueues on.</summary>
     internal Queue<WorldOrderedEntry> Ordered => m_ordered;
     /// <summary>Gets the owning seat's own submission per seat, as the last write that touched a channel saw it.</summary>
@@ -228,6 +241,8 @@ public sealed partial class WorldTick {
 
             var tempo = score!.Tempo;
 
+            m_musicContentHash = row.Hash;
+
             m_musicClock = new Puck.Audio.Simulation.MusicClock(
                 beatsPerBar: (tempo.BeatsPerBar ?? 4),
                 ticksPerBeat: tempo.TicksPerBeat
@@ -243,6 +258,7 @@ public sealed partial class WorldTick {
     internal void RestoreClock(ulong completedEngineTicks, ulong completedTick, ulong lastStepTicks) {
         m_lastCompletedEngineTicks = completedEngineTicks;
         m_lastCompletedTick = completedTick;
+        m_deliveryTick = completedTick;
         m_lastStepTicks = lastStepTicks;
     }
     /// <summary>Drops every placement-deal memo and the definition the sweep last ran over, so the next sweep

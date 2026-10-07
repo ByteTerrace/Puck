@@ -1,13 +1,13 @@
 {
   "id": "arena-attack",
   "title": "The arena district's hp/targeting/attack suite lands damage on a training dummy in range and refuses it out of range",
-  "binding": "The positive leg boots a minimal host that imports modules/arena.world.json under alias arena, confirms world.imports names it with its declared exports, poses the local seat 1.5 units from one training dummy (auto-target locks onto it via $nearest:body:0:enemy since it is the only body tagged in the enemy row), arms world.rule.trace on arena$manual-attack, presses the attack channel once, and reads the trace back: the gate opens (channel pressed, target set, distance 1.5 <= 2.5, cooldown clear, attacker not dead) and its addState effect on arena$hp at the targeted body's cell applies -25 — the hp fall the task proves, read from the rule's own evaluation record rather than a raw hp number, since a raw hp reading drifts by whatever the regen suite ticks in during real-time console processing (not a per-run constant) while the traced gate/effect outcome is not. The discriminating leg reruns the identical approach-and-press with the seat 20 units away instead of 1.5: auto-target still locks the same dummy (targeting has no range limit), the channel presses exactly the same way, but the trace's distance conjunct now reads false and the gate never opens, so the exact addState line the positive leg proves never appears — the same rule, the same press, only the range differs.",
+  "binding": "The positive leg boots a minimal host that imports modules/arena.puck under alias arena, confirms world.imports names it with its declared exports, poses the local seat 1.5 units from one training dummy (auto-target locks onto it via $nearest:body:0:enemy since it is the only body tagged in the enemy row), arms world.rule.trace on arena$manual-attack, presses the attack channel once, and reads the trace back: the gate opens (channel pressed, target set, distance 1.5 <= 2.5, cooldown clear, attacker not dead) and its addState effect on arena$hp at the targeted body's cell applies -25 — the hp fall the task proves, read from the rule's own evaluation record rather than a raw hp number, since a raw hp reading drifts by whatever the regen suite ticks in during real-time console processing (not a per-run constant) while the traced gate/effect outcome is not. The discriminating leg reruns the identical approach-and-press with the seat 20 units away instead of 1.5: auto-target still locks the same dummy (targeting has no range limit), the channel presses exactly the same way, but the trace's distance conjunct now reads false and the gate never opens, so the exact addState line the positive leg proves never appears — the same rule, the same press, only the range differs.",
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 25,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
@@ -31,7 +31,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },

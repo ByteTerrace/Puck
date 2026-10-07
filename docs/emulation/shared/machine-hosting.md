@@ -1,7 +1,8 @@
 # Machine hosting runtime
 
 `Puck.Machines` supplies state serialization, fork ownership, and queued hosting
-for the [Humble](../hgb/README.md) and [Advanced](../agb/README.md) emulators.
+for the [Humble](../hgb/README.md), [Advanced](../agb/README.md) and
+[Humble Gaming Deck](../hgd/README.md) emulators.
 The hardware core owns its CPU, picture processing unit (PPU), audio processing
 unit (APU), bus, and cartridge. The shared layer controls how an application
 advances that core and consumes its outputs.
@@ -117,7 +118,8 @@ owns revision-specific startup behavior.
 
 ### Host-selected content admission
 
-`GamingBrickContentPolicies.Puck()` creates an immutable policy that admits
+`GamingBrickContentPolicies.Puck()`, in `Puck.GamingBricks.Forge` beside the
+cartridge document it names, creates an immutable policy that admits
 arbitrary user-authored cartridges with the verified `puck.cartridge.v1` source
 format. Authors do not need publisher approval for each cartridge. The generic
 `MachineContentAdmissionPolicy` also supports open admission, other explicitly
@@ -267,15 +269,17 @@ emit. Presentation resampling does not feed back into emulated state.
 Queued hosts implement `IMachineCheckpointRuntime`. Capture joins the worker
 queue after accepted steps and returns an owned, checksummed image of the core,
 held input, fractional clock conversion, completed-step count, and playback
-settings. Restore targets a fresh, unstepped host with identical firmware,
-cartridge, behavioral options, and snapshot format. Invalid checksums or content
-identities refuse before changing the core. Discard the fresh host if a core
-restore fails. Audio and uploaded pixels are presentation outputs rebuilt after
+settings. Restore targets a host with identical firmware, cartridge, behavioral
+options, and snapshot format: a fresh one, or the stepped host the image came
+from, which a world's in-session history rewinds in place. Restore joins the
+worker queue behind accepted steps like capture, and the completed-step count
+lands on the captured one either way. Invalid checksums or content identities
+refuse before changing the core. Discard a fresh host if a core restore fails. Audio and uploaded pixels are presentation outputs rebuilt after
 restore; queued audio from the retired host is not replayed.
 
 Enabled rewind history and cores lent to a live link currently refuse capture.
 Their history and shared medium need a complete persistence format before a
-world using them can qualify for release management. Both Post batteries exercise
+world using them can qualify for release management. All three Post batteries (Humble, Advanced and Deck) exercise
 checkpoint restoration and matching continuation through `queued-host-time-travel`,
 including nonzero fractional pacing, held input, and identity refusal. HGB core
 snapshots also preserve the cumulative instruction budget: resetting it to the
@@ -375,8 +379,9 @@ project's `GlobalUsings.cs`.
 The [shared test suite](../../../tests/Puck.Machines.Tests/README.md) owns its
 run instructions. QueuedHostContractProbe exercises backpressure, frame and
 audio publication, coherent hardware access, time travel, and whole frames written
-into an uploaded source's region against real adapters. Both the [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md)
-and [AGB Post battery](../../../src/Puck.AdvancedGamingBrick.Post/README.md) use it;
+into an uploaded source's region against real adapters. The [HGB Post battery](../../../src/Puck.HumbleGamingBrick.Post/README.md),
+the [AGB Post battery](../../../src/Puck.AdvancedGamingBrick.Post/README.md) and
+the [Deck Post battery](../../../src/Puck.HumbleGamingDeck.Post/README.md) use it;
 their fork-determinism stages also exercise pooled instance ownership.
 
 - [Shared emulation infrastructure](README.md) — related machine contracts.

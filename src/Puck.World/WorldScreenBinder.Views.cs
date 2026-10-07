@@ -5,8 +5,8 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-// The views the world renders beside its own, as the render graph runs them: each camera registration and each session
-// screen is an sdf.world instance (WorldViewInstances). A camera view is a view of the world's own frame, rendered from
+// The views the world renders beside its own, as the render graph runs them: each camera registration, session
+// screen and available infinity layer is an sdf.world instance (WorldViewInstances). A camera view is a view of the world's own frame, rendered from
 // the world's residency (FilmViews); a session screen renders a residency of its own, which the binder creates when the
 // render graph's package first resolves the instance and releases once the session is gone. The binder hands the
 // instances to its mappings, which the view graph host composes into the running set.
@@ -41,7 +41,7 @@ internal sealed partial class WorldScreenBinder {
 
     /// <summary>Hands the binder the frame the world renders once the presenter has captured it: its packed transforms and
     /// simulation tick, which the camera views filmed it with (<see cref="FilmViews"/>). The routed residencies no scene
-    /// presents any longer are released, and an armed crossing capture is served.</summary>
+    /// presents any longer are released, and an armed crossing capture follows the pinned route and render completion.</summary>
     /// <param name="transforms">The frame's packed dynamic transforms.</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
@@ -51,11 +51,11 @@ internal sealed partial class WorldScreenBinder {
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
         ReconcileRoutedResidencies();
-        CrossingCapture?.Present();
+        CrossingCapture?.Present(previousFrame: (Runtime?.Render ?? FrameRender.Waiting(reason: "the renderer is not built")));
     }
-    /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, or a session
-    /// screen's residency, created the first time the render graph's package asks for it once the views are
-    /// configured.</summary>
+    /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, a session
+    /// screen's residency, created the first time the render graph's package asks for it once the views are configured,
+    /// a fitted infinity layer, or a camera of another world's view of the residency that world renders through.</summary>
     /// <param name="name">The instance's name.</param>
     /// <param name="view">The view, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the instance is a view this binder registered and the views are
@@ -88,8 +88,13 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
-        if (SessionFeedOf(name: name) is not { FrameSource: { } source } feed) {
-            return false;
+        if (TryResolveInfinityView(name: name, view: out view)) { return true; }
+
+        if (SessionFeedOf(name: name) is not { } feed) {
+            return TryResolveNestedCameraView(
+                name: name,
+                view: out view
+            );
         }
 
         // A window joined to its destination's endpoint scene renders its view there, from the one residency that scene's
@@ -104,6 +109,27 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
+        if (SessionResidencyOf(feed: feed) is not { } residency) {
+            return false;
+        }
+
+        view = new SdfWorldView(
+            Residency: residency,
+            View: 0
+        );
+
+        return true;
+    }
+
+    // A session's own residency, rendering its frame source, created the first time a view resolves to it and made again
+    // when its frame source is another; null before the views are configured.
+    private SdfWorldResidency? SessionResidencyOf(SessionFeed feed) {
+        if (feed.FrameSource is not { } source) {
+            return null;
+        }
+
+        var name = feed.RegistrationName;
+
         if (
             !m_viewResidencies.TryGetValue(
                 key: name,
@@ -116,6 +142,7 @@ internal sealed partial class WorldScreenBinder {
         ) {
             ReleaseViewResidency(name: name);
             session = CreateSessionResidency(
+                feed: feed,
                 name: name,
                 source: source,
                 resolution: (feed.Resolution ?? new WorldScreenResolution(Height: WorldViewInstances.DefaultSessionHeight, Width: WorldViewInstances.DefaultSessionWidth))
@@ -123,23 +150,22 @@ internal sealed partial class WorldScreenBinder {
             m_viewResidencies[name] = session;
         }
 
-        view = new SdfWorldView(
-            Residency: session.Residency,
-            View: 0
-        );
-
-        return true;
+        return session.Residency;
     }
-
-    // A session screen's residency, rendering the session feed's frame source on its own clock.
-    private ViewResidency CreateSessionResidency(string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
+    // A session screen's residency, rendering the session feed's frame source on its own clock, its destination's screens
+    // showing what the feed's level shows.
+    private ViewResidency CreateSessionResidency(SessionFeed feed, string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
+            screenSources: new FeedScreenSources(
+                feed: feed
+            ),
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(
                 captureHostFirst: CaptureHostFirst,
                 inner: source,
-                resolution: resolution
+                resolution: resolution,
+                resolveResolution: (view, width, height) => ResolveResolution(height: height, name: name, view: view, width: width)
             ),
             height: ((uint)resolution.Height),
             instanceCapacity: source.WorstCaseInstanceCapacity,
@@ -205,6 +231,7 @@ internal sealed partial class WorldScreenBinder {
 
         m_viewResidencies.Clear();
         ReleaseRoutedResidencies();
+        ReleaseInfinityRoots();
     }
     // Sets every view from the camera registrations and the session screens and hands the views to the mappings when any
     // changed, which composes the running set again; a frame that changes nothing allocates nothing. A view's demand is
@@ -245,8 +272,10 @@ internal sealed partial class WorldScreenBinder {
                 Width: width
             ) { OutputExtent = new RenderGraphPixelExtent(Width: ((int)registration.Row.RenderWidth), Height: ((int)registration.Row.RenderHeight)) });
         }
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is not { FrameSource: not null } feed) {
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if ((feed.FrameSource is null) || !InfinityShown(feed: feed)) {
                 continue;
             }
 
@@ -268,8 +297,16 @@ internal sealed partial class WorldScreenBinder {
                     ? RenderGraphRefresh.EveryFrame
                     : refresh),
                 Width: width
-            ) { OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)) });
+            ) {
+                OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
+                Parent = (feed.ParentFeed?.RegistrationName ?? ((feed.ParentInfinity is { } infinity) ? InfinityParent(entry: infinity) : null)),
+                Reads = feed.Nested?.Reads,
+            });
         }
+
+        SetNestedCameraViews(refresh: refresh);
+        SetInfinityViews();
+        m_views.SetNestedSources(sources: m_nestedSources);
 
         if (m_views.TryPublish(instances: out var views)) {
             Mappings.ReconcileViews(views: views);

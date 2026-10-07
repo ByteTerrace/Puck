@@ -10,7 +10,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// The SameBoy co-simulation diagnostic: boots the same ROM through the same boot ROM on both Puck and SameBoy's
 /// <c>sb-trace events</c> tool, and reports the FIRST divergent conceptual event between them — so PPU/APU accuracy
 /// work can be trace-led instead of knob-swept. Investigative, not a gate (see "Oracle discipline" in
-/// docs/../.claude/skills/gaming-bricks/references/hardware-and-oracles.md): a foreign emulator's agreement or
+/// .claude/skills/gaming-bricks/references/hardware-and-oracles.md): a foreign emulator's agreement or
 /// disagreement never blocks the battery, it only says where to look next.
 /// </summary>
 internal static class CosimDiagnostic {

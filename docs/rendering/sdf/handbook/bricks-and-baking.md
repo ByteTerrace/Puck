@@ -98,9 +98,12 @@ precedent the glyph shape set, and it means a brick program stays honest even
 through a kernel that can't sample it.
 
 Sampling is a plain storage-buffer read with **manual trilinear interpolation** —
-eight explicit loads and lerps with floating-point contraction pinned off—so it
-is bit-stable across both GPU backends by the same argument as the point
-evaluator. (Hardware 3D textures with sampler filtering were evaluated and
+eight explicit loads followed by interpolation along x, y, then z. Each
+interpolation explicitly subtracts, multiplies and adds with floating-point
+contraction disabled on every intermediate, so the same voxel values and
+fractional coordinate produce the same result on both GPU backends. A `precise`
+result alone does not constrain the `lerp` intrinsic's SPIR-V `FMix` arithmetic.
+(Hardware 3D textures with sampler filtering were evaluated and
 rejected for now: their lerp precision is driver-variant, which would break
 cross-backend parity, and they'd need new abstraction seams where buffers already
 flow everywhere.)
@@ -198,14 +201,21 @@ already computes: it is presentation only, and nothing it produces is read back
 into simulation state. Unlike a brick, it is durable data keyed by its creation's
 content, so a build ships it in its bake pack and a device keeps it.
 
-**The mesh** is extracted by dual contouring over a cube of cells around the
+**The mesh** is extracted by manifold dual contouring over a cube of cells around the
 program's reach, one empty cell of padding on each side. A block of four cells a
 side whose center's scaled field value proves no surface lies within the block
 takes that center's sign at every corner, so empty space costs one evaluation
 per block; a corner is evaluated only when a sign-changing edge needs its value.
-Each crossed cell's vertex is the least-squares point of the tangent planes at
-its edges' crossings, drawn weakly toward their mean and clamped into the cell,
-and its normal is the field's gradient there. Each quad is split along the
+A crossed cell holds one vertex for each patch of the surface inside it: its
+patches are the connected pieces of the marching-cubes surface, found from the
+eight corner signs alone by joining the sign-changing cube edges along each face's
+marching-squares segments, so a cell two sheets cross, as a plate about a cell
+thick crosses its cells, holds a vertex for each and no edge of the mesh is shared
+by more than two quads. A face whose diagonal corners agree is cut to separate its
+inside corners whichever cell reads it, so the two cells that share a face agree
+and the mesh has no crack. A patch's vertex is the least-squares point of the
+tangent planes at its edges' crossings, drawn weakly toward their mean and clamped
+into the cell, and its normal is the field's gradient there. Each quad is split along the
 diagonal whose triangles face the way the corner normals point, else the shorter
 one. The mesh stays within half a cell of the field: the largest field magnitude
 at any vertex, edge midpoint or triangle centroid is at most half the cell size.
@@ -256,7 +266,9 @@ block alignment. Each usage filters its own way:
 - material identity keeps the id most of its four texels hold, the smallest id
   winning a tie. A box footprint has no nearest texel, since all four are
   equidistant from its center, and a blended id would name a material nothing
-  authored.
+  authored. An impostor's chain weights the vote by the albedo's coverage: a texel
+  the view's ray missed holds 0 and casts no vote, so a coarse texel over two
+  misses and two hits names the hits' material, and 0 only where all four miss.
 
 **Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
 are the same on every machine, and an exact decoder that is its test oracle.
@@ -367,20 +379,65 @@ The engine is not ready until the bake schedule has reconciled and, while the
 presentation draws its bakes, settled, so a capture or `world.wait ready` never
 lands between a placement's field and its bake. The mesh region is always
 staged into device-local memory, never a ring in the host-visible device-local
-heap every residency's small tables share. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
-decoded once, and counts the switch from field to bake once per bake
+heap every residency's small tables share. `WorldBakeSchedule.TryGetDraw` hands out a ready prototype's mesh and
+impostor, decoded once, and counts the switch from field to bake once per bake
 (`sdf.bakes.drawn`); a bake landing moves the schedule's revision, so the static
 scene rebuilds on the next frame. A camera-hidden instance
 (`SdfInstanceRange.CameraHidden`, the second-highest bit of its segment-end lane)
 is left out of every camera mask the tile cull writes, so primary never marches
 it, while the shadow and ambient gathers still read it.
 
+**The impostor draws as a card, and each view records the mesh or the card, never
+both.** A baked placement emits two draws bounded by the impostor's sphere: its mesh,
+and a card (`SdfMeshCard.Mesh` with `SdfMeshDraw.Impostor`). A view's mesh part
+records the one its sphere's projected diameter selects (`SdfMeshLodSelector`): the
+card once the diameter, twice the world radius over the center's forward depth in
+the view's render pixels, falls under the impostor's view edge (16 at the standard
+tier, so one impostor texel covers at most one pixel), the mesh again once it passes
+that edge by a quarter. The choice is the CPU's, made from each view's own camera
+(two views at two distances choose apart), and the `sdf.mesh.lod` source counts the
+draws recorded as `near` and `far`. The impostor's five textures pack into their own
+atlases (`SdfMeshImpostor`, `SdfMeshAtlas` over impostors), bound in the World set of
+every pass and, for the depth, in the mesh pass's own set. Each view retains its
+choice by draw identity through list revisions and reordering, so motion of another
+mesh does not erase hysteresis. When the impostor atlases cannot be packed, every
+baked placement records its mesh.
+
+The mesh pass draws the cards after its meshes, through a second pipeline. The
+vertex stage places a card on the plane perpendicular to the view that touches the
+sphere's near side, centered on the ray through the sphere's center, as wide as the
+sphere's silhouette can be on that plane. The card's fragment stage
+(`sdf-mesh-impostor.frag.hlsl`) takes the pixel's ray into the prototype's unit-sphere
+coordinates (`frame/sdf-mesh-impostor.hlsli`) and, for each of the three views of
+the grid nearest the direction toward the camera, weighted as a triangle of the grid
+continued across the octahedral edges by reflection,
+marches it through the sphere in eight steps against that view's depth, refining the
+first step behind the surface linearly. The ray's hit is the weighted mean of the
+views that hit, and a pixel is covered when views holding half the weight agree; the
+stage discards the rest, so a card never hides what stands behind its empty corners.
+It writes the same three values a mesh pixel writes and the surface's depth,
+promising it is no nearer than the card (`SV_DepthLessEqual`), which Direct3D 12
+allows when the position is interpolated in screen space at the centroid. The hit
+passes shade a card pixel from the same views: albedo, normal and emission blended by
+view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
+sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
+with each texel's own material: the impostor stores a material plane (R8, the
+program material id, never blended), and the card takes the nearest texel, at the
+pixel's level, of the highest-weighted view whose nearest depth texel is covered, added to
+the draw's material as a mesh's texel entry is. That is the rule the trace discards a pixel
+by too, so coverage and material have one provenance and filtered alpha decides neither.
+The level depends on the draw and the camera alone, the pixel's size at the sphere's
+center. Primary stores that
+material in the visibility record, shared by picking and lighting. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
+and `SdfImpostorLawTests` hold it to the field's sphere and box.
+
 ---
 
 ## Related resources
 
 - API contracts for bake requests, pool layout, and sampled-region packing:
-  `SdfBrickBake`, `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
+  `BrickBakeRequest` and `BrickBakeStatus` (in `SdfBrickBake.cs`),
+  `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
   in [`src/Puck.SignedDistance`](../../../../src/Puck.SignedDistance/); the
   interactive carve-pool planner, `SdfCarveBakePlanner`, stays in
   [`src/Puck.SdfVm`](../../../../src/Puck.SdfVm/) (an engine behavior, not

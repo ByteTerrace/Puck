@@ -13,7 +13,7 @@ public sealed partial class WorldDocument {
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
     /// <param name="expectedContentHash">Replay only: the CAS content hash a recorded tape entry pins. When set,
     /// <see cref="ApplyRebuild"/> compares it against the hash it computes for this drive's own resolved candidate
-    /// (its own base for Reset, a fresh re-read of <see cref="WorldRebuildRequest.PathHint"/> for Load/Reload) and
+    /// (its own base for Reset, a fresh re-read of a file <see cref="WorldRebuildRequest.Origin"/> for Load/Reload) and
     /// refuses by name on a mismatch, before any other guard runs. <see langword="null"/> (the default) is the live
     /// path — nothing to compare against, since the live drive is what establishes the hash a later recording pins.
     /// <see cref="WorldReplaySnapshot.Drive"/> is the one caller that ever passes a non-null value.</param>
@@ -25,7 +25,7 @@ public sealed partial class WorldDocument {
 
         // A carried document is available at submission time, outside Step. Prove its neighbour claims here and carry
         // any refusal into the ordered tick-boundary decision; ApplyRebuild repeats only document-local checks.
-        var rebuildNeighbours = ((request.PathHint is { } candidatePath)
+        var rebuildNeighbours = ((request.Origin is WorldRebuildOrigin.File { Path: var candidatePath })
             ? ResolveRebuildNeighbours(path: candidatePath)
             : Host.Neighbours
         );

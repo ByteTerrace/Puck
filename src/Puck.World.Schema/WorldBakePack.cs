@@ -8,8 +8,9 @@ namespace Puck.World;
 /// The one file a build output's creation bakes ship in, so a bake shared by several compiled worlds is stored once. It
 /// is a <see cref="ChunkContainer"/> opening with <c>PWBK</c>, content-addressed by bake key
 /// (<see cref="Puck.World.Authoring.CreationBakeKey.Pin"/>): its header lists the keys, each as its pin's hex, in
-/// strictly ascending ordinal order after a count, and chunk <c>i</c>, coded <c>BAKE</c> and versioned with the baker
-/// that wrote it (<see cref="SdfBaker.Version"/>), holds key <c>i</c>'s encoded outcome
+/// strictly ascending ordinal order after a count, and chunk <c>i</c>, coded <c>BAKE</c> and versioned with the unsigned
+/// integer represented by the bake fingerprint's first eight hexadecimal digits
+/// (<see cref="DerivationFingerprint.BakeChunkVersion"/>), holds key <c>i</c>'s encoded outcome
 /// (<see cref="Puck.World.Authoring.CreationBakeCodec"/>). A compiled world's <c>BAKE</c> chunk
 /// (<see cref="WorldBakeChunk"/>) names the keys it needs and where this file lies relative to its document.
 /// <para>A build writes one beside the root of its output (<see cref="FileName"/>), holding exactly the keys its
@@ -67,7 +68,7 @@ public sealed class WorldBakePack {
             chunks.Add(item: new ContainerChunk(
                 code: EntryCode,
                 payload: outcome,
-                version: SdfBaker.Version
+                version: DerivationFingerprint.BakeChunkVersion
             ));
         }
 
@@ -75,7 +76,10 @@ public sealed class WorldBakePack {
             chunks: chunks,
             formatVersion: FormatVersion,
             header: header.WrittenSpan.ToArray()
-        ).Encode(magic: Magic);
+        ).Encode(
+            magic: Magic,
+            shape: FormatShapes.WorldBakePackFormatVersion
+        );
     }
     /// <summary>Returns the pack reference a document at <paramref name="documentPath"/> records for the pack at
     /// <paramref name="packPath"/>: the pack's path relative to the document's directory, with forward slashes.</summary>
@@ -118,7 +122,11 @@ public sealed class WorldBakePack {
         pack = null;
 
         try {
-            var container = ChunkContainer.Decode(content: content, magic: Magic);
+            var container = ChunkContainer.Decode(
+                content: content,
+                magic: Magic,
+                shape: FormatShapes.WorldBakePackFormatVersion
+            );
 
             if (container.FormatVersion != FormatVersion) {
                 reason = $"bake-pack format version {container.FormatVersion} is not {FormatVersion}";

@@ -258,10 +258,9 @@ public sealed class QueuedMachineWorker : IDisposable {
         if (request.Restore is { } restore) {
             if (
                 (restore.Identity != core.CheckpointIdentity) ||
-                (restore.CycleScale != core.CycleRate.Seconds) ||
-                (m_lifecycle.CompletedSteps != 0)
+                (restore.CycleScale != core.CycleRate.Seconds)
             ) {
-                request.Error = "machine restore requires matching content, configuration, and clock scale in an unstepped runtime";
+                request.Error = "machine restore requires matching content, configuration, and clock scale";
                 return;
             }
             core.RestoreState(
@@ -269,9 +268,11 @@ public sealed class QueuedMachineWorker : IDisposable {
                 length: restore.CoreState.Length
             );
             m_cyclePhase = new RationalRateAccumulator(phase: checked((long)restore.CycleRemainder));
+            // The reported count is this offset plus the steps the lifecycle has run, so a restore over a stepped
+            // runtime (a world history rewinding it) lands on the captured count as exactly as a fresh one does.
             Interlocked.Exchange(
                 location1: ref m_checkpointCompletedSteps,
-                value: restore.CompletedSteps
+                value: checked((restore.CompletedSteps - m_lifecycle.CompletedSteps))
             );
             m_timeTravel!.Reset();
             m_timeTravel.SetFastForward(factor: restore.FastForwardFactor);

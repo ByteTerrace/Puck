@@ -34,10 +34,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
     // use are expanded, a literal path and `<directory>/**/<file pattern>`; any other glob is refused rather than read
     // as naming nothing.
     private static IEnumerable<string> Expand(string projectDirectory, string include) {
-        var pattern = include.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var pattern = ForwardSlashed(path: include);
         var recursive = pattern.IndexOf(
             comparisonType: StringComparison.Ordinal,
             value: "**/"
@@ -81,10 +78,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
     // Whether one Exclude attribute, relative to its project directory, names a file: a literal path, or
     // `<directory>/**`, every file under that directory.
     private static bool Excludes(string projectDirectory, string exclude, string file) {
-        var pattern = exclude.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var pattern = ForwardSlashed(path: exclude);
 
         if (pattern.EndsWith(
             comparisonType: StringComparison.Ordinal,
@@ -115,6 +109,16 @@ public sealed partial class ShaderRegisterBindingLawTests {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
+    // A path an MSBuild attribute spells, refused unless it uses forward slashes: the repository's MSBuild files
+    // spell every path with '/', and a backslash read raw names no file outside Windows.
+    private static string ForwardSlashed(string path) {
+        Assert.DoesNotContain(
+            actualString: path,
+            expectedSubstring: "\\"
+        );
+
+        return path;
+    }
     // A project file and every file it imports by a literal path, which is where build/WorldAssets.targets declares
     // the pipeline sources of the project that imports it.
     private static IEnumerable<XDocument> ProjectAndImports(string project) {
@@ -128,7 +132,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
             if (!imported.Contains(value: '$')) {
                 yield return XDocument.Load(uri: Path.GetFullPath(path: Path.Combine(
                     path1: Path.GetDirectoryName(path: project)!,
-                    path2: imported
+                    path2: ForwardSlashed(path: imported)
                 )));
             }
         }

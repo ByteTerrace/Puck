@@ -28,7 +28,7 @@ public enum WorldReplayMode {
 /// <param name="VerifyFault">Why the post-persist re-drive itself could not complete — e.g. the mount pin refusing a
 /// world whose addon set moved since record-start (see <see cref="WorldReplaySnapshot.Drive"/>'s mount-pin remarks) —
 /// never a persistence failure, because the tape above is already on disk by the time this can be non-null.</param>
-public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerdict? Verdict, string? VerifyFault);
+public readonly record struct WorldReplayStopResult(string Path, WorldReplaySetVerdict? Verdict, string? VerifyFault);
 /// <summary>
 /// The record side of Puck.World's true deterministic replay. While armed it captures the live session's authoritative
 /// server-input stream — the intent submissions plus the ordered authority inputs (commands, grants, revokes) that reach
@@ -47,16 +47,11 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerd
 /// one path that does touch the session: it resets the running server to a tape's boot image through the server's
 /// own rebuild door and feeds the recorded ticks through the same doors the offline drive uses, one per live step,
 /// with the local seats' driving input masked at the loopback for the drive's whole span.</para>
-/// <para>The scope is honest but narrow. The captured starting state is the server simulation only — definition + active seats + the
-/// per-tick authority/intent stream. The rehydrated starting body state is the deterministic boot image of the captured
-/// definition (a fresh world reconstructs it exactly), not a per-body pose snapshot, and its starting grant table is
-/// likewise the captured definition's own document grants plus the permissive seed, not the live table as it stood at
-/// record-start. A MATCH is therefore a fidelity proof precisely when the live session was still at that boot state at
-/// record-start (a boot-anchored capture); a capture armed after the session has already diverged — a body moved, or a
-/// grant typed before the tape was armed — faithfully re-drives its stream but from a boot start, so
-/// <see cref="Verify"/> honestly reports MISMATCH rather than a false MATCH. Full record-start rehydration (so a
-/// mid-session capture also matches) is the identified next lever; the live-tail reference hash is the backstop that
-/// keeps the verdict honest until it lands. Screen machines, their pixels, cameras, overlays, and audio are
+/// <para>The captured starting state is the server simulation only. Armed before the world's first step, it is the
+/// definition and the active seats, and the re-drive rebuilds the definition's deterministic boot image. Armed later, it
+/// is an authority checkpoint of the live server taken at the arm (<see cref="WorldReplaySnapshot.StartCheckpoint"/>),
+/// without the owned-world catalog, so poses, cells, grants, latches, and checkpointed machine cores the session
+/// reached before the arm are where the re-drive begins. Screen machines' pixels, cameras, overlays, and audio are
 /// presentation and are excluded (see <see cref="WorldReplaySnapshot"/>).</para>
 /// <para>The mount pin: a guest's driving never crosses the loopback, so it is never captured; the replay re-runs the
 /// document's guests instead. That only stays honest while the modules it re-mounts are the ones that ran live, so
@@ -89,6 +84,11 @@ public sealed partial class WorldReplayTape {
     private WorldReplayMode m_mode;
     // The directory the live server's pipeline source reader resolved rows against at record-start, or null for none.
     private string? m_pipelineSourceDirectory;
+    // The directory the record-start definition was read from, so the re-drive resolves its relative paths there.
+    private string? m_documentDirectory;
+    // The recorded row's own document file, which its re-drive's cabinets read content beside; null for the
+    // booted row, whose re-drive's machine host already reads beside the booted document.
+    private string? m_documentPath;
     // The guests MOUNTED at record-start, copied out of the live server's runtime. Read once here rather than at stop:
     // the pin must describe the world that produced the recorded stream, and mounting is a boot-time act that a later
     // read could only re-report, never re-witness.
@@ -109,17 +109,6 @@ public sealed partial class WorldReplayTape {
     private readonly List<ulong> m_liveHashes = [];
     // The verdict trace: authoritative state-system lanes at the same post-step boundary as m_liveHashes.
     private readonly List<ulong> m_liveAuthoritativeHashes = [];
-    // The current tick's accumulating input, rotated into m_ticks at each NoteTick. ONE authority list, not one per
-    // kind: a command and a grant that crossed the link in a given order must replay in that order, and parallel lists
-    // have no relative order left to preserve.
-    private List<WorldReplayEntry> m_currentAuthority = new();
-    private List<IntentSubmission> m_currentIntents = new();
-    // The FIFO correlation between a Mutation entry MutationTap just added (by its index into m_currentAuthority)
-    // and the MutationOutcomeTap call that will patch its Outcome later the SAME tick — see MutationTap/
-    // MutationOutcomeTap's own remarks. Always empty by the time NoteTick rotates m_currentAuthority (every
-    // mutation tapped this tick is also drained this tick), but cleared defensively alongside the rest of a
-    // recording's mutable state.
-    private readonly Queue<int> m_openMutationEntryIndices = new();
 
     /// <summary>Initializes the tape over the live server it snapshots the starting state from, the profile catalog a
     /// replay's seats re-resolve against, and the loopback whose per-tick submissions it taps.</summary>
@@ -161,13 +150,22 @@ public sealed partial class WorldReplayTape {
 
     /// <summary>Gets the tape's current mode.</summary>
     public WorldReplayMode Mode => m_mode;
+
+    // Every mode change goes through here, so the catalog this tape reads knows while a recording is under way.
+    private void SetMode(WorldReplayMode mode) {
+        if ((m_mode == WorldReplayMode.Recording) != (mode == WorldReplayMode.Recording)) {
+            m_profiles.NoteRecording(recording: (mode == WorldReplayMode.Recording));
+        }
+        m_mode = mode;
+    }
+
     /// <summary>Gets the name the active recording will persist under.</summary>
     public string? Name => m_recordName;
     /// <summary>Gets the ticks captured so far in the active recording.</summary>
     public int TickCount => (m_ticks?.Count ?? 0);
 
-    // Snapshot the seats active at record-start: their slot and their seated profile — its name AND the locomotion
-    // rates it carried right now, which is the whole reason this reads the live handle rather than only its name. Those
+    // Snapshot the seats active at record-start: their slot and their seated identity projection, including the id,
+    // records and locomotion rates it carried right now, rather than only its name. Those
     // rates are simulation INPUT (WorldBody.Advance reads them every frame), so pinning them here is what stops a later
     // identity.motion from re-driving a different world under this recording's stream. Only the four local seats can be
     // active; a peer/inhabitant is boot-derived from the definition.
@@ -178,7 +176,7 @@ public sealed partial class WorldReplayTape {
             if (m_liveServer.Population.IsActive(index: slot)) {
                 seats.Add(item: new WorldReplaySeat(
                     Slot: slot,
-                    Profile: PinProfile(profile: m_liveServer.Body(index: slot)?.Profile)
+                    Profile: m_liveServer.Body(index: slot)?.Profile?.Project()
                 ));
             }
         }
@@ -209,52 +207,27 @@ public sealed partial class WorldReplayTape {
             )
         );
     }
-    private void DetachTaps() {
-        m_transport.IntentTap = null;
-        m_transport.CommandTap = null;
-        m_transport.DesignationTap = null;
-        m_transport.GrantTap = null;
-        m_transport.RevokeTap = null;
-        m_transport.SessionTap = null;
-        m_transport.UndoTap = null;
-        m_transport.CompositionTap = null;
-        m_transport.QueryTap = null;
-        m_liveServer.LinkDeliveryTap = null;
-        m_liveServer.MutationTap = null;
-        m_liveServer.MutationOutcomeTap = null;
-        m_liveServer.RebuildTap = null;
-        m_liveServer.ScreenOpTap = null;
-        m_liveServer.ServerEventTap = null;
-    }
-    // Read straight off the live handle in the simulation's own fixed-point currency — never through the float
-    // accessors, which would quantize a rate that is already exact.
-    private static WorldReplayProfilePin? PinProfile(WorldIdentity? profile) {
-        if (profile is null) {
-            return null;
-        }
-
-        return new WorldReplayProfilePin(
-            Name: profile.Name,
-            MoveSpeed: profile.FixedMoveSpeed,
-            TurnSpeed: profile.FixedTurnSpeed
-        );
-    }
     // Shared by StopRecording (every exit path, via try/finally) and CancelRecording: a recording's whole mutable
     // state, back to Idle. m_mode always ends at Idle here — leaving it at Recording with no live recording behind
     // it is the zombie state this method exists to prevent.
     private void ResetRecordingState() {
-        m_mode = WorldReplayMode.Idle;
+        SetMode(mode: WorldReplayMode.Idle);
         m_recordName = null;
         m_definitionJson = null;
+        m_startCheckpoint = null;
+        m_startSkipAuthority = 0;
+        m_startSkipIntents = 0;
         m_forkedFrom = null;
         m_pipelineSourceDirectory = null;
+        m_documentDirectory = null;
         m_recordRateHz = 0U;
         m_mountedAddons = null;
         m_seats = null;
         m_ticks = null;
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
-        m_openMutationEntryIndices.Clear();
+        m_recordPrefix.Clear();
+        RefreshCapture();
     }
 
     /// <summary>Aborts the active recording without persisting it: detaches the taps and drops the captured stream.</summary>
@@ -268,8 +241,8 @@ public sealed partial class WorldReplayTape {
             throw new InvalidOperationException(message: "No recording is active.");
         }
 
-        DetachTaps();
         ResetRecordingState();
+        CancelCompanions();
 
         return name;
     }
@@ -308,7 +281,20 @@ public sealed partial class WorldReplayTape {
             names.Add(item: Path.GetFileNameWithoutExtension(path: path));
         }
 
-        names.Sort(comparer: StringComparer.OrdinalIgnoreCase);
+        // Two names that differ only in case compare equal ignoring case, and the sort does not keep their listing order: the
+        // ordinal comparison settles them, so the list is the same on every host.
+        names.Sort(comparison: static (left, right) => {
+            var order = string.Compare(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                strA: left,
+                strB: right
+            );
+
+            return ((order != 0) ? order : string.CompareOrdinal(
+                strA: left,
+                strB: right
+            ));
+        });
 
         return names;
     }
@@ -320,44 +306,81 @@ public sealed partial class WorldReplayTape {
     /// instance's own state (never for a named instance's own lever: this tape covers the boot instance only).</summary>
     /// <param name="paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
     public void NoteRateLever(bool paused) {
-        if (m_mode != WorldReplayMode.Recording) {
+        if (!m_capturing) {
             return;
         }
 
         m_currentAuthority.Add(item: new WorldReplayEntry.RateLever(Paused: paused));
     }
-    /// <summary>Closes the current tick while recording: the submissions captured since the last call become one tick's
-    /// input group, and the accumulators reset for the next tick. Called once per fixed tick from
-    /// <c>Puck.World.WorldSimulation.Step</c> after the server step, when the tick's whole stream has been submitted. A
-    /// no-op while idle.</summary>
+    /// <summary>Closes the current tick: the submissions captured since the last call become one tick's input group,
+    /// handed to the active recording and to the attached <see cref="WorldHistory"/>, and the accumulators reset for
+    /// the next tick; a live drive compares and advances instead. Called once per fixed tick from
+    /// <see cref="WorldServerStepShell.Step"/> after the server step, when the tick's whole stream has been
+    /// submitted. A no-op while nothing captures.</summary>
     public void NoteTick() {
         if (m_mode == WorldReplayMode.Replaying) {
             NoteDriveTick();
+            m_history?.NoteUncapturedTick(reason: "a replay drive replaced the timeline");
 
             return;
         }
+
+        if (!m_capturing) {
+            return;
+        }
+
+        var authority = m_currentAuthority;
+        var intents = m_currentIntents;
+        // One authoritative fold per tick, shared by the recording's verdict trace and the history's own.
+        var authoritativeHash = WorldStateHashComposition.HashAuthoritative(
+            server: m_liveServer,
+            tick: (m_liveServer.NextInputTick - 1UL)
+        );
+
+        m_history?.NoteTick(
+            authoritativeHash: authoritativeHash,
+            input: new WorldReplayTickInput(Authority: authority, Intents: intents)
+        );
 
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_ticks is not { } ticks)
         ) {
+            // Only the history captures: it copies the group out, so the accumulators are reused and a steady tick
+            // allocates nothing here.
+            authority.Clear();
+            intents.Clear();
+
             return;
         }
 
-        ticks.Add(item: new WorldReplayTickInput(
-            Authority: m_currentAuthority,
-            Intents: m_currentIntents
-        ));
+        TrimStartSkip(
+            authority: authority,
+            intents: intents
+        );
+
+        if (m_recordPrefix.Count > 0) {
+            authority.InsertRange(
+                collection: m_recordPrefix,
+                index: 0
+            );
+            m_recordPrefix.Clear();
+        }
+
+        var input = new WorldReplayTickInput(
+            Authority: authority,
+            Intents: intents
+        );
+
+        // The recording keeps this group, so the next tick accumulates into fresh lists.
+        ticks.Add(item: input);
         m_currentAuthority = new List<WorldReplayEntry>();
         m_currentIntents = new List<IntentSubmission>();
         // Sample both traces AFTER this tick's server step and APPEND them (never overwrite). The authoritative
         // state-system trace drives the verdict; the pose trace lets inspection localize visible motion divergence.
         // Both stay one entry per tick, in lockstep with `ticks` above.
         m_liveHashes.Add(item: WorldReplaySnapshot.HashState(population: m_liveServer.Population));
-        m_liveAuthoritativeHashes.Add(item: WorldStateHashComposition.HashAuthoritative(
-            server: m_liveServer,
-            tick: (m_liveServer.NextInputTick - 1UL)
-        ));
+        m_liveAuthoritativeHashes.Add(item: authoritativeHash);
 
         // A REBUILD (world.reset/world.load/world.reload) applies inside THIS same tick's server.Step, before
         // NoteTick runs — so by now m_liveServer.Definition already reflects whatever it swapped to. A tape spans
@@ -390,39 +413,34 @@ public sealed partial class WorldReplayTape {
             }
         }
     }
-    /// <summary>Records one same-process transfer's decided outcome into the active recording's authority stream —
-    /// the local multi-authority tape contract. A no-op while <see cref="Mode"/> is
-    /// <see cref="WorldReplayMode.Idle"/>. The live cohort/resolver machinery lives on
-    /// <c>Puck.World.WorldInstanceHost</c>, a layer above this assembly (the same reason <see cref="NoteRateLever"/>
-    /// is called directly rather than tapped through the loopback), so <c>WorldInstanceHost.ApplyTransfer</c> calls
-    /// this the moment a transfer touching the boot instance (as source or destination) is fully decided —
-    /// committed or aborted, never at enqueue, since only the decided outcome is worth taping. This records the
-    /// crossing's outcome for <c>replay.verify</c> to refuse a tampered one by name; it does not let
-    /// <see cref="WorldReplaySnapshot.Drive"/> re-derive a destination instance's own simulation — the offline
-    /// re-drive constructs one shadow <see cref="Server.WorldServer"/> for the boot instance alone, so a crossing
-    /// that actually lands a body in another instance is, and remains, outside what this tape can
-    /// re-execute.</summary>
-    /// <param name="transferId">The transfer id minted for this crossing.</param>
-    /// <param name="destinationName">The resolved destinations row name.</param>
-    /// <param name="scopeKey">The resolved scope key.</param>
-    /// <param name="generationId">The resolver-issued generation id the cohort resolved against.</param>
+    /// <summary>Records a transfer this recording's authority settled as its source into the active recording's
+    /// authority stream — a no-op while <see cref="Mode"/> is <see cref="WorldReplayMode.Idle"/>. The cohort and
+    /// resolver machinery lives on <c>Puck.World.WorldInstanceHost</c>, which calls this when it settles the transfer:
+    /// committed, refused, or aborted. A committed transfer's departed slots leave the re-drive's population at the same
+    /// position they left live; the arrival is the destination's own fact, taped there.</summary>
+    /// <param name="transferId">The transfer id this authority minted for the crossing.</param>
+    /// <param name="target">The destination's authority identity, or empty when the transfer resolved none.</param>
+    /// <param name="targetRemote">Whether the destination is reached over federation.</param>
+    /// <param name="destinationName">The resolved destinations row name, or empty for a console transfer.</param>
+    /// <param name="scopeKey">The resolved scope key, or empty for a console transfer.</param>
+    /// <param name="generationId">The resolver-issued generation id, or 0 for a console transfer.</param>
     /// <param name="outcome">A short canonical outcome summary (e.g. <c>"committed:2/2"</c> or
-    /// <c>"aborted:&lt;reason&gt;"</c>) — narration only, never re-interpreted by <see cref="WorldReplaySnapshot.Drive"/>.</param>
-    /// <param name="departedBootSlots">The 0-based boot local-seat slots this crossing actually removed from boot's
-    /// own population (empty unless this transfer's source is boot and it committed) — re-applied against the
-    /// replay's shadow population at re-drive so a departed body stops contributing to the population hash there exactly
-    /// as it stopped contributing live (see <see cref="WorldReplayEntry.Transfer"/>'s own remarks).</param>
-    public void NoteTransfer(ulong transferId, string destinationName, string scopeKey, ulong generationId, string outcome, IReadOnlyList<int> departedBootSlots) {
-        if (m_mode != WorldReplayMode.Recording) {
+    /// <c>"aborted:&lt;reason&gt;"</c>).</param>
+    /// <param name="departedSlots">The 0-based body indices the crossing removed from this authority's population;
+    /// empty unless it committed.</param>
+    public void NoteTransfer(ulong transferId, string target, bool targetRemote, string destinationName, string scopeKey, ulong generationId, string outcome, IReadOnlyList<int> departedSlots) {
+        if (!m_capturing) {
             return;
         }
 
         m_currentAuthority.Add(item: new WorldReplayEntry.Transfer(
-            DepartedBootSlots: departedBootSlots,
+            DepartedSlots: departedSlots,
             DestinationName: destinationName,
             GenerationId: generationId,
             Outcome: outcome,
             ScopeKey: scopeKey,
+            Target: target,
+            TargetRemote: targetRemote,
             TransferId: transferId
         ));
     }
@@ -438,10 +456,9 @@ public sealed partial class WorldReplayTape {
     /// <summary>Finalizes the active recording: persists the self-contained recording first (the tape is evidence of
     /// the capture — see <see cref="WorldReplayStopResult"/>), detaches the taps and resets the tape's state on every
     /// exit path, then re-drives the persisted recording once through a fresh world and reports the outcome. A MATCH
-    /// means the recording faithfully rehydrates — its captured starting state (the definition boot image + seats)
-    /// reproduces the live session under the recorded input stream; a MISMATCH means the live session had already
-    /// diverged from that boot image before record-start (a mid-session capture), which the fresh re-drive cannot
-    /// reproduce; and a <see cref="WorldReplayStopResult.VerifyFault"/> means the post-persist re-drive itself could
+    /// means the recording faithfully rehydrates — its captured starting state (the boot image and seats, or the start
+    /// checkpoint) reproduces the live session under the recorded input stream; a MISMATCH at the first tick indicts
+    /// that starting state, and a later one a determinism defect; and a <see cref="WorldReplayStopResult.VerifyFault"/> means the post-persist re-drive itself could
     /// not complete (e.g. the mount pin — see <see cref="WorldReplaySnapshot.Drive"/>'s remarks — refusing a world
     /// whose addon set has moved since record-start). Reporting the verdict (or fault) at stop time makes that
     /// boundary loud rather than hidden; persisting first means a refusal there never costs the operator the
@@ -527,7 +544,7 @@ public sealed partial class WorldReplayTape {
         // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.
         // The verify side re-drives a fresh world and compares against THIS, so a MATCH is a genuine live-vs-replay
         // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
-        var recording = SnapshotRecording();
+        var recording = SnapshotRecording(companions: StopCompanions());
         string path;
 
         try {
@@ -554,12 +571,11 @@ public sealed partial class WorldReplayTape {
             // recording itself is lost (never persisted) — loudly, by the exception this method still lets escape —
             // but the TAPE never gets stuck: it is Idle, its taps detached, ready to arm a fresh recording rather
             // than wedged mid-capture forever.
-            DetachTaps();
             ResetRecordingState();
         }
 
         try {
-            var verdict = Compare(recording: recording);
+            var verdict = CompareSet(recording: recording);
 
             return new WorldReplayStopResult(
                 Path: path,
@@ -581,30 +597,19 @@ public sealed partial class WorldReplayTape {
             );
         }
     }
-    /// <summary>Arms recording — refusing first when arming would be dishonest (the boot-anchored
-    /// contract): <see cref="Server.WorldServer.AnyAddonEverPumped"/> refuses if any addon has already had an
-    /// admitted execution attempted before this call, because offline replay creates fresh guests at sim-counter
-    /// zero — a guest's accumulated memory/tick state from before recording began is exactly what that fresh
-    /// re-drive can never re-establish.
-    /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) now
-    /// ride the shared grant/revoke leaf on tape.
-    /// <see cref="Server.WorldServer.AnyMachineEverPumped"/> refuses for the identical reason: offline replay rehydrates a fresh
-    /// <see cref="Server.IWorldMachineHost"/> from the tape's embedded definition — it can reconstruct a
-    /// boot-declared cartridge's boot image (and CAS-verify a later <c>screen.insert</c>/<c>.select</c>'s content),
-    /// but never a machine's accumulated core state (WRAM, CPU registers) once real ticks have run it, and the pose
-    /// hash covers no machine state at all to catch the divergence after the fact — see this file's own remarks on
-    /// hash-coverage scope. A world with a boot-declared cartridge means recording must arm before its first step,
-    /// exactly like a world that mounts an addon must arm before its first tick.
-    /// <see cref="Server.WorldServer.AnyScreenOpEverApplied"/> refuses for a related but distinct reason: screen ops
-    /// apply synchronously, between fixed steps — a <c>screen.insert</c> immediately
-    /// followed by <c>replay.record</c>, with no step run in between, still arms clean under the first two checks
-    /// (nothing has stepped), yet the insert already changed live <see cref="Server.IWorldMachineHost"/> state that
-    /// the record-start definition snapshot below never reflects (a screen op is not a document mutation, and only
-    /// ever joins the tape's own authority list from the moment this method's own <c>ScreenOpTap</c> attaches
-    /// onward — never retroactively for an op that already landed). Left ungated, offline replay would reconstruct a
-    /// screen with no machine at all where the live session already has one.
-    /// <para>On success: snapshots the record-start starting state (the live definition, the mounted addon
-    /// receipts, and the active seats) and attaches the loopback taps — intent, command, grant, revoke, session, and
+    /// <summary>Arms recording — refusing first when the tape could not re-drive from where it starts. Before the
+    /// world's first step (and before any guest or machine has run), the tape starts from its definition's boot image
+    /// with the active seats joined; <see cref="Server.WorldServer.AnyScreenOpEverApplied"/> refuses there, because a
+    /// screen operation applied between steps already changed live machine-host state the definition never reflects.
+    /// Once the world has stepped (or a guest or machine has run), the tape starts from an authority checkpoint of the
+    /// live state, captured now without the owned-world catalog (<see cref="WorldReplaySnapshot.ForTape"/>); a state no
+    /// checkpoint captures — a mounted or pumped addon guest, a screen operation, a stepped machine without checkpoint
+    /// support, a coupled link or rewind history, a live session, an engagement in flight, or an edit not yet applied —
+    /// refuses by name (<see cref="ReplayRefusal.StartNotCheckpointable"/>).
+    /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) ride the
+    /// shared grant/revoke leaf on tape.
+    /// <para>On success: snapshots the record-start starting state (the live definition, the start checkpoint when
+    /// there is one, the mounted addon receipts, and the active seats) and attaches the loopback taps — intent, command, grant, revoke, session, and
     /// mutation (submission-time via <see cref="Server.WorldServer.MutationTap"/>, its outcome patched in at drain
     /// via <see cref="Server.WorldServer.MutationOutcomeTap"/> — an addon row's mount/unmount/reload rides this same
     /// leaf as an ordinary <c>UpsertAddon</c>/<c>RemoveAddon</c> mutation, never a separate lifecycle leaf) plus
@@ -626,143 +631,64 @@ public sealed partial class WorldReplayTape {
             return false;
         }
 
-        if (m_liveServer.AnyAddonEverPumped) {
-            refusal = "an addon has already had an admitted execution attempted this session — offline replay creates FRESH guests at sim-counter zero, so a guest's accumulated memory/tick state from before recording began can never be re-established; record from a fresh boot, before any addon's first tick";
-            return false;
-        }
+        WorldAuthorityCheckpoint? start = null;
 
-        if (m_liveServer.AnyMachineEverPumped) {
-            refusal = "a screen machine has already stepped this session — offline replay reconstructs a FRESH WorldMachineHost from the tape's embedded definition, so a booted cartridge's accumulated core state (WRAM, CPU registers) from before recording began can never be re-established, and the population hash covers no machine state to catch the divergence; record from a fresh boot, before any machine's first step";
-            return false;
-        }
-
-        if (m_liveServer.AnyScreenOpEverApplied) {
+        // A world that has stepped, or run a guest or a machine, holds state its definition and seats cannot
+        // re-establish (bodies moved, cells written, a machine's synchronized bindings), so its recording starts from a
+        // checkpoint of that state, or refuses by name when the state is one no checkpoint captures.
+        if (
+            (m_liveServer.NextInputTick > 1UL) ||
+            m_liveServer.AnyAddonEverPumped ||
+            m_liveServer.AnyMachineEverPumped
+        ) {
+            if (!TryCaptureStart(reason: out var startRefusal, start: out start)) {
+                refusal = $"{nameof(ReplayRefusal.StartNotCheckpointable)}: the world has stepped, so a recording starts from a checkpoint of its live state, and this state cannot be captured — {startRefusal}";
+                return false;
+            }
+        } else if (m_liveServer.AnyScreenOpEverApplied) {
             refusal = "a screen or machine operation has already reached runtime execution this session; the current replay format cannot reconstruct its prior hardware state from the definition alone; record from a fresh boot before any operation executes";
             return false;
         }
 
         refusal = "";
         m_recordName = name;
-        m_definitionJson = WorldDefinitionSerialization.Serialize(definition: m_liveServer.Definition);
+        m_startCheckpoint = start;
+        m_startSkipAuthority = ((start is null) ? 0 : m_currentAuthority.Count);
+        m_startSkipIntents = ((start is null) ? 0 : m_currentIntents.Count);
+        m_definitionJson = ((start is null)
+            ? WorldDefinitionSerialization.Serialize(definition: m_liveServer.Definition)
+            : start.Server.DefinitionJson);
         // Stamped HERE, from the SAME record-start read as the definition snapshot above — the rate the recorded
         // span is actually about to run at. See this field's own remarks for why StopRecording must never re-read
         // the live rate instead.
         m_recordRateHz = ((uint)m_liveServer.Definition.SimulationRateHz);
         m_pipelineSourceDirectory = m_liveServer.PipelineSources?.DocumentDirectory;
+        m_documentDirectory = m_liveServer.Definition.DocumentDirectory;
         m_mountedAddons = [.. m_liveServer.AddonReceipts];
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
-        AttachTaps();
+        m_recordPrefix.Clear();
 
         // A session admitted before the arm is re-established at the tape's first tick, as it stands now, so the
-        // authority it holds reaches the replay too.
+        // authority it holds reaches the replay too. The prefix is the recording's own: history keeps only actual
+        // events from live ticks and refuses session state its authority keyframes cannot preserve.
         foreach (var serverEvent in m_liveServer.GrantTable.LiveSessionEvents()) {
-            m_currentAuthority.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
+            m_recordPrefix.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
         }
 
-        m_mode = WorldReplayMode.Recording;
+        SetMode(mode: WorldReplayMode.Recording);
+        RefreshCapture();
 
         return true;
     }
-
-    // Attaches every capture tap over fresh per-tick accumulators — the record half of arming, shared by
-    // TryBeginRecording and a fork's handover (which arrives with its prefix already in m_ticks/m_liveHashes).
-    private void AttachTaps() {
-        m_currentAuthority = new List<WorldReplayEntry>();
-        m_currentIntents = new List<IntentSubmission>();
-        m_openMutationEntryIndices.Clear();
-        m_transport.IntentTap = submission => m_currentIntents.Add(item: submission);
-        m_transport.CommandTap = command => m_currentAuthority.Add(item: new WorldReplayEntry.Command(Value: command));
-        m_transport.DesignationTap = (designation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Designation(
-            Actor: actor,
-            Value: designation
-        ));
-        m_transport.GrantTap = (grant, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Grant(
-            Actor: actor,
-            Value: grant
-        ));
-        m_transport.RevokeTap = (grant, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Revoke(
-            Actor: actor,
-            Value: grant
-        ));
-        m_transport.SessionTap = request => m_currentAuthority.Add(item: new WorldReplayEntry.Session(Value: request));
-        // Apply-time on the SERVER, not at the loopback: the loopback is only one of three mutation ingresses (a
-        // local console/client write, an admitted socket peer, and a traveller's submission forwarded by its source
-        // authority), and only the envelope dispatch sees all three with the actor each one stamped. Outcome starts
-        // false — MutationOutcomeTap patches it to the real accept/refuse verdict before this SAME tick closes (both
-        // fire from within the one server.Step this entry's own tick belongs to; see the field's own remarks).
-        m_liveServer.MutationTap = (mutation, actor) => {
-            m_openMutationEntryIndices.Enqueue(item: m_currentAuthority.Count);
-            m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
-                Actor: actor,
-                Outcome: false,
-                Value: mutation
-            ));
-        };
-        m_liveServer.MutationOutcomeTap = (_, applied) => {
-            // Correlates by POSITION, never by decoding mutation content: MutationTap and MutationOutcomeTap fire in
-            // the identical FIFO order — both ultimately driven by the one m_pending queue every mutation kind
-            // shares — so the Nth open entry always answers the Nth outcome, even across several mutations pending
-            // in the same tick.
-            if (
-                m_openMutationEntryIndices.TryDequeue(result: out var index) &&
-                (index < m_currentAuthority.Count) &&
-                (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)
-            ) {
-                m_currentAuthority[index] = (pending with { Outcome = applied });
-            }
-        };
-        m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
-        m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
-            Actor: actor,
-            Count: count
-        ));
-        m_transport.CompositionTap = (composition, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Composition(
-            Actor: actor,
-            Value: composition
-        ));
-        m_transport.QueryTap = (query, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Query(
-            Actor: actor,
-            Value: query
-        ));
-        // Apply-time, not submission-time — see WorldServer.RebuildTap's own remarks for why Reset's hash cannot be
-        // known any earlier (m_base is private, server-internal state that can move between submission and drain).
-        m_liveServer.RebuildTap = (request, actor, contentHash) => m_currentAuthority.Add(item: new WorldReplayEntry.Rebuild(
-            Kind: request.Kind,
-            PathHint: request.PathHint,
-            Force: request.Force,
-            ContentHash: contentHash,
-            Actor: actor
-        ));
-        // Apply-time, mirroring RebuildTap exactly — a screen op the Control gate refuses is still taped (fires
-        // AFTER the outcome is known, carrying a null hash for a refusal or for any non-Insert kind).
-        m_liveServer.ScreenOpTap = (op, contentHash, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.ScreenOp(
-            Actor: actor,
-            ContentHash: contentHash,
-            Value: op
-        ));
-        m_liveServer.ServerEventTap = serverEvent => {
-            switch (serverEvent) {
-                case WorldServerEvent.PeerAdmitted admitted:
-                    m_currentAuthority.Add(item: new WorldReplayEntry.PeerAdmitted(Value: admitted));
-                    break;
-                case WorldServerEvent.PeerDisconnected disconnected:
-                    m_currentAuthority.Add(item: new WorldReplayEntry.PeerDisconnected(Value: disconnected));
-                    break;
-                case WorldServerEvent.SessionAdmitted or WorldServerEvent.SessionEmbodied or WorldServerEvent.SessionEnded:
-                    m_currentAuthority.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
-                    break;
-            }
-        };
-    }
-
     /// <summary>Loads a saved recording, rehydrates a fresh world from it, re-drives the recorded server-input stream,
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
     /// verdict is readable the instant it returns. Never touches the live session.</summary>
     /// <param name="name">The saved recording's name.</param>
-    /// <returns>The comparison verdict, which names the first divergent tick when there is one.</returns>
+    /// <returns>The set's verdict: the recording's own and each companion's first divergent tick, if any, and every
+    /// crossing between them.</returns>
     /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
     /// <exception cref="InvalidDataException">The file is not a <c>.puckreplay</c> recording, does not carry this
     /// build's tape shape token — greenfield, so a foreign shape is refused outright rather than read tolerantly;
@@ -770,7 +696,7 @@ public sealed partial class WorldReplayTape {
     /// reproduce.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug in the re-drive (see
     /// <see cref="WorldReplaySnapshot.Drive"/>) — never tape data.</exception>
-    public WorldReplayVerdict Verify(string name) {
+    public WorldReplaySetVerdict Verify(string name) {
         var path = PathFor(name: name);
         WorldReplaySnapshot recording;
 
@@ -778,6 +704,6 @@ public sealed partial class WorldReplayTape {
             recording = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        return Compare(recording: recording);
+        return CompareSet(recording: recording);
     }
 }

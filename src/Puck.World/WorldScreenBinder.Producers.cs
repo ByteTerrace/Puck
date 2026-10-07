@@ -49,7 +49,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var slot in m_slots.Values) {
             if (
-                (ReadOf(screen: slot.Index) is { } instance) &&
+                (InstanceOf(screen: slot.Index) is { } instance) &&
                 (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
             ) {
                 m_fills.Ensure(
@@ -60,10 +60,6 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    private Vector3 ResolveLight(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
-        ? WorldImageLight.OfFill(rgba: feed.Descriptor.CaptureFill)
-        : feed.Light
-    );
 
     // The camera producer: a screen names a seat and a sensor, and the binder's shared per-device feeds serve it; the
     // feed a slot holds is only that (seat, sensor) reference, resolved every frame since the seat's device can change.
@@ -169,6 +165,13 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
+        public FrameRender Answer => WorldCaptureFrame.Answer(
+            ended: Feed.Ended,
+            fault: Feed.Fault,
+            gpuHandle: (Feed.GpuTargets?.LatestHandle() ?? 0),
+            gpuRoute: Feed.SamplesRing,
+            pixels: Feed.Pixels
+        );
         public ImageSourceDescriptor Descriptor { get; }
         public string? Fault => (Feed.Live
             ? null
@@ -181,13 +184,15 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();
-        public void Publish(in FrameContext context) {
+        public FrameRender Publish(in FrameContext context) {
             if (Feed.ShouldPull()) {
                 m_binder.CaptureWindow(
                     context: in context,
                     feed: Feed
                 );
             }
+
+            return Answer;
         }
     }
 }

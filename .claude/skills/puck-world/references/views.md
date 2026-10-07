@@ -26,7 +26,8 @@ Primary code:
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
-- `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs.
+- `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs
+  (`world.view.camera` itself lives in `WorldSeatCameraCommandModule.cs`).
 
 ## Document shape
 
@@ -141,8 +142,25 @@ facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
 facing snap turns the body, so binding it needs those three channels declared and
 `seatControl.yawReference: World` (the validator refuses otherwise).
 
+`seatControl.follow` (`{ "rate": <per second>, "whileIdle": false }`, optional) makes
+the camera yaw ease in behind the body's heading when there is no look input:
+`rate` is the exponential closing rate (about 63% of the remaining angle per
+`1/rate` seconds; larger is stiffer) and the validator refuses a rate that is not
+positive. Any look input (a deflected look stick, a held orbit or steer) is
+free look and the follow yields while it lasts. By default the follow runs only
+while the body has movement input, so after a free look the camera stays where
+it was left until the body moves; `whileIdle: true` also follows an idle body.
+The validator refuses `follow` unless `yawReference` is `World`, because a
+body-relative yaw already rides the body. Absent `follow` is a still camera that
+goes only where look input sends it.
+
 `seatControl.yawReference` is `World` for standard camera-relative movement or
-`Body` for an explicitly body-relative camera. Pitch values are radians,
+`Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's
+view by the door's turn (`WorldSeatViewState.Cross`): a `World` yaw turns, a
+`Body` yaw already rides the turned heading, and the chase boom turns either way.
+A traveler handed on by another process's authority turns the seat by the change
+in its accumulated arrival turn (`WorldFrameIsometry.AccumulateTurn`), which
+commits and routes carry and `WorldRoutedSeatTurns` holds per seat. Pitch values are radians,
 finite, ordered, and within `[-pi/2, pi/2]`.
 
 `seatLook` carries pointer radians-per-pixel, right-stick radians-per-second,
@@ -253,7 +271,11 @@ state. `views.layouts` maps normalized slots to joined seats, named cameras,
 or `views.graphs` instances (`instance`; a slot names at most one of `camera`
 and `instance`).
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
-duration and render scale remain authored on each layout. A layout whose
+duration and the mid-transition render-scale dip (`transitionRenderScale`)
+remain authored on each layout; a view's durable render quality is the
+`views.quality` rows (`WorldViewQuality`: a render view's `name`, or `*` for the
+player-view defaults, with `renderScale`, `renderScaleFloor` and `tier`; session
+pins have no document member). A layout whose
 `seatCount` no joined-seat count can reach (5+) is selectable only through
 `view.override layout <name>` — the authoring shape for an override-only view.
 Under a camera-only layout, a joined seat the layout binds no seat slot to
@@ -303,8 +325,15 @@ whole ordered list (`WorldMutation.SetViewPost`), so a pass is added, reordered
 or removed by writing the list, and the host recomposes the running root from
 the rows the document names then. A probe parameter's `post` target
 writes a row's float config field live (`WorldPostPasses`). A pane the
-active layout does not show is not scheduled, and a layout change places panes
-one frame later. The `rendering` skill owns the graph document, the scheduler
+active layout does not show is not scheduled. The world's capture composes
+cameras and places the current layout before scheduling that same frame. View
+and pane allocations reserve the largest extent of the transition in flight when
+its endpoints nest, including its spectator fallback, keep the start's extent when
+they oppose (growth on one axis, shrinkage on the other), and retain reservations
+through interruptions until the chain settles. Settled footprints request the
+occupant's own rect, subject to scheduler quantization and shrink hysteresis.
+Easing changes placement without rebuilding a node, and a transition allocates at
+most once. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
@@ -377,17 +406,31 @@ Free Cam do not alter the logical movement basis.
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover (a HUD panel, else the
   display pane the picker hovers), and system-release generation.
+  The host Console can supply `<x> <y>` or `clear` for inspection. Both GPU
+  shapes resolve that point through the published panes or whole-display view,
+  even without a drawn HUD cursor; offscreen coordinates are display pixels.
+- `world.view.pick <instance> [<x> <y>]` — the presentation automation seam to
+  an SDF view's GPU pick. With normalized coordinates in [0, 1) it requests a
+  pick at that point of the instance's image and echoes the request id as
+  `pending`; without them it echoes the latest result (`request`, `pixel`,
+  `kind`, `source`, `material`, and the hit's `placement`, `body` and `slot`,
+  each `none` when absent) or `pending`. It refuses an instance that is not a
+  rendered SDF view.
 - `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
   presentation picker's answer (`pick=instance:<name> pixel <x>,<y>` or
   `pick=none`) and how the hit walk through the live instance set ends
   (`walk=<end> steps=<n> in <instance> last <kind>:<source> pixel <x>,<y>`).
-  Each view's world producer reports the screens standing in the world
-  (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`), so a
-  walk from a view's pane continues through a screen: `Producer` on a producer,
-  machine or probe source's pixel, `Unread` on a screen showing a camera view,
-  which is no live instance yet. It ends with the pane the pointer hovers
+  Each view's world producer reports the screens standing in the world it
+  renders (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`,
+  or, for a seat presented in another world and for a session, that world's
+  own, `IWorldViewScenes.TryPlacements`), so a walk from a view's pane
+  continues through a screen, and through portals inside a destination to
+  `views.nestingDepth` screens: `Producer` on a producer, machine or probe
+  source's pixel (a fallback colour's past the depth), `DepthLimit` past the
+  set's nesting depth, `Unread` on a screen showing a camera view, which is no
+  live instance yet. It ends with the pane the pointer hovers
   (`hovered=pane<i> <kind>:<name> pixel <x>,<y>` or `hovered=none`): each
   frame `WorldCursorFeed` asks the host's picker through
   `WorldViewGraphHost.Hover` for the pointer's display point, whenever the
@@ -401,8 +444,43 @@ Free Cam do not alter the logical movement basis.
   a source, each ending in `mapping <SourceMapping.Describe()>` (the line
   `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot
   that presents nothing publishes no screen mapping (`none (not published)`).
-  It and `world.view-refresh` live in the core `ScreenCommandModule`, so
-  every boot shape answers them, offscreen and headless included.
+  It, `world.nesting` and `world.view-refresh` live in the core
+  `ScreenCommandModule`, so every boot shape answers them, offscreen and
+  headless included.
+- `world.nesting` — lists every level of nested worlds the presentation shows:
+  `depth <n>` (the boot world's `views.nestingDepth`), each world a seat is
+  presented in (`routed$<digest> depth 0 world <authority>`, the digest 16 hex characters of the identity's SHA-256), then each session view by name
+  (`session$<screen>`, one `$<screen>` more a level beneath it, or
+  `routed$<digest>$<screen>…` beneath a routed world) with its depth, its
+  destination, `via endpoint:<authority>` (the residency every seat and fully
+  disclosed window presenting that world shares) or `via own`, and
+  `screens <index>:<instance>…`: what each of its world's screens shows, a
+  session one level deeper, a camera view of that world
+  (`<level>$camera$<camera>`), a source instance (a machine's or probe's of that
+  world's own host, followed by the fault that leaves it dark in parentheses),
+  `source$color$<digest>` past the depth, `text`, or `none`; then
+  `text-fault <why>` when that world's fonts do not resolve.
+- `views.nestingDepth` (document) — how many observations deep a world shown
+  through screens or named infinity layers renders: 3 unauthored, 0 through 8,
+  refused by name past either end. The boot world's governs the presentation
+  and which worlds its authority opens observations for. `WorldObservationSite`
+  distinguishes physical screen indices from named sky layers; both use the
+  same destination admission, re-admission and release path in
+  `WorldInstanceHost`. Presentation reads `ScreenSession` or `InfinitySession`
+  and never opens an observation itself. Only physical portal faces forward
+  input. A session screen at the depth shows its session's
+  `fallback` colour (`#RRGGBB`, black unauthored). Every other screen of a
+  world shown through a screen, or of a world a seat is presented in, shows
+  that world's own source: its machines from its own host (stepped on its own
+  ticks, and read only while the delivery declares them), its cameras as views
+  of it filmed under the level, its text through
+  its own fonts, and producers whose content is a function of their settings
+  (`testPattern`, `qr`, `color`) through the shared instance. A probe shows
+  nothing (only the boot world runs a probe host), nor does a local-device
+  producer. A world another authority runs shows neither its machines nor its
+  text (its definition carries no document directory) nor its session screens
+  (no message carries a remote screen session); its cameras and producers
+  show.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the

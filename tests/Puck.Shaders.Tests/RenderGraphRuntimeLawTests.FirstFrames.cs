@@ -1,3 +1,5 @@
+using Puck.Testing;
+
 namespace Puck.Shaders.Tests;
 
 public sealed partial class RenderGraphRuntimeLawTests {
@@ -13,16 +15,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             // The root renders over completed outputs as far as the frame thread can tell, while the queue has finished
             // none of the submissions behind them.
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        _ = frames.Next();
+            TestLiveness.Until(
+                reason: () => runtime.UnservedCaptureReason,
+                step: () => {
+                    _ = frames.Next();
 
-                        return (runtime.UnservedCaptureReason is null);
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: runtime.UnservedCaptureReason
+                    return (runtime.UnservedCaptureReason is null);
+                }
             );
             Assert.False(condition: runtime.FirstFramesCompleted);
             Assert.EndsWith(
@@ -40,16 +39,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.True(condition: runtime.FirstFramesCompleted);
             gpu.QueueHeld = true;
             _ = frames.Next();
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        _ = frames.Next();
+            TestLiveness.Until(
+                reason: () => runtime.UnservedCaptureReason,
+                step: () => {
+                    _ = frames.Next();
 
-                        return (runtime.UnservedCaptureReason is null);
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: runtime.UnservedCaptureReason
+                    return (runtime.UnservedCaptureReason is null);
+                }
             );
             Assert.False(condition: runtime.FirstFramesCompleted);
             gpu.QueueHeld = false;

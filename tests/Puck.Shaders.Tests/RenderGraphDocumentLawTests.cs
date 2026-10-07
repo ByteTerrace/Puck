@@ -247,10 +247,11 @@ public sealed class RenderGraphDocumentLawTests {
         }
     }
     // A checked-in document may run a shipped package's kernel as a shader pass of its own, compiled from the kernel's
-    // source through the interface the pass's config generates. That config restates the package's, so it must restate
-    // all of it: a field the package has and the document lacks leaves the kernel reading a member the pass block does
-    // not declare, and the pass fails to compile. Every such pass, its kernel's file named for its package, declares
-    // exactly the package's config.
+    // source through the interface the pass's config generates. That config restates the package's pass block, so it
+    // must restate all of it: a field the package has and the document lacks leaves the kernel reading a member the pass
+    // block does not declare, and the pass fails to compile. Every such pass, its kernel's file named for its package,
+    // declares exactly the package's config and, as config of its own type, each pass-block value the package's recorder
+    // writes (every value but the work counter row, which a document pass has no counters for).
     [Fact]
     public void EveryCheckedInPassCompilingAShippedPackageKernelDeclaresThatPackagesConfig() {
         var root = RepositoryPaths.RequireRoot();
@@ -294,13 +295,26 @@ public sealed class RenderGraphDocumentLawTests {
                 matched++;
 
                 var expected = (package.Config ?? new Dictionary<string, ShaderConfigField>());
+                var values = package.Members.Where(predicate: static member => (
+                    (member.Kind == ShaderInterfaceMemberKind.Value) &&
+                    (member.Group == ShaderInterfaceGroup.Pass) &&
+                    !ShaderWorkCounters.Members.Contains(value: member)
+                )).ToArray();
                 var actual = (pass.Config ?? new Dictionary<string, ShaderConfigField>());
                 var where = $"{Path.GetRelativePath(path: path, relativeTo: root)} pass '{pass.Name}' ({package.Id})";
+                var names = expected.Keys.Concat(second: values.Select(selector: static value => value.Name)).Order(comparer: StringComparer.Ordinal).ToArray();
 
                 Assert.True(
-                    condition: expected.Keys.Order(comparer: StringComparer.Ordinal).SequenceEqual(second: actual.Keys.Order(comparer: StringComparer.Ordinal)),
-                    userMessage: $"{where} declares [{string.Join(separator: ", ", values: actual.Keys.Order(comparer: StringComparer.Ordinal))}] where the package declares [{string.Join(separator: ", ", values: expected.Keys.Order(comparer: StringComparer.Ordinal))}]"
+                    condition: names.SequenceEqual(second: actual.Keys.Order(comparer: StringComparer.Ordinal)),
+                    userMessage: $"{where} declares [{string.Join(separator: ", ", values: actual.Keys.Order(comparer: StringComparer.Ordinal))}] where the package declares [{string.Join(separator: ", ", values: names)}]"
                 );
+
+                foreach (var value in values) {
+                    Assert.True(
+                        condition: ((actual[value.Name].Type == value.Type) && (actual[value.Name].Length == value.Length)),
+                        userMessage: $"{where} field '{value.Name}' is not the package's pass-block value"
+                    );
+                }
 
                 foreach (var (name, field) in expected) {
                     var declared = actual[name];

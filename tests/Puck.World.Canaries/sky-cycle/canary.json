@@ -1,7 +1,7 @@
 {
   "id": "sky-cycle",
   "title": "The courtyard sky toggles between its authored keys and restores the same pixels",
-  "binding": "The fixture carries the courtyard render sky and cycle unchanged, viewed through a still empty camera. It starts at the courtyard day key, changes skyMode to the other authored key through the ordinary state mutation, then restores the day key. Day and night must differ by more than the capture noise floor, and the restored day must agree. The discriminating leg submits the day key at the middle transition, so the day-to-night difference fails while restoration holds.",
+  "binding": "The fixture carries the courtyard render sky, its keys and the timeline clock they read unchanged, viewed through a still empty camera. It starts at the courtyard day key, changes skyMode to the other authored key through the ordinary state mutation, then restores the day key. Day and night must differ by more than the capture noise floor, and the restored day must agree. The discriminating leg submits the day key at the middle transition, so the day-to-night difference fails while restoration holds.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sky-cycle/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sky-cycle/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -90,7 +90,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sky-cycle/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sky-cycle/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

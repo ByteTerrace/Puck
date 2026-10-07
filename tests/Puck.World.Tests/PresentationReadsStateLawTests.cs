@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.Commands;
+using Puck.SignedDistance;
 using Puck.World.Client;
 
 using Xunit;
@@ -134,7 +135,7 @@ public sealed class PresentationReadsStateLawTests {
     // resolved as opaque (alpha ignored) here, matching every other opaque render-path color.
     [Fact]
     public void SkyZenith_AcceptsAnAlphaSuffixLiteral_IgnoringAlpha() {
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var definition = Fixtures.BuildDocument() with {
             RenderRaw = WorldRenderDefaults.Absent with {
                 Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
@@ -167,14 +168,14 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0x23 / 255f),
                 z: (0x50 / 255f)
             ),
-            actual: settings.GetSkyStop(index: 1).Color
+            actual: settings.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }
     // --- The sky reads a cell ---
 
     [Fact]
     public void SkyZenith_BoundToStateTextCell_RecolorsOnTheNextEmit_WithNoRebake() {
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
                     Elevation: -1f,
                     Color: new BindableColor(Raw: "#000000")
@@ -203,7 +204,7 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0x22 / 255f),
                 z: (0x33 / 255f)
             ),
-            actual: first.GetSkyStop(index: 1).Color
+            actual: first.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
 
         var moved = new WorldStateRow(
@@ -228,7 +229,7 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0xBB / 255f),
                 z: (0xCC / 255f)
             ),
-            actual: second.GetSkyStop(index: 1).Color
+            actual: second.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }
 }

@@ -190,7 +190,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
                     Format: vkFormat,
                     ImageHandle: imageHandle
                 )
-            ).ThrowIfFailed(operation: "vkCreateImageView");
+            ).ThrowIfFailed(device: device.Commands, operation: "vkCreateImageView");
             commandResources = commandResourcesFactory.Create(
                 commandBufferCount: 2,
                 logicalDevice: device
@@ -203,7 +203,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
                     commandBufferHandle: commandBufferHandle,
                     device: device.Commands,
                     resubmittedWhilePending: true
-                ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+                ).ThrowIfFailed(device: device.Commands, operation: "vkBeginCommandBuffer");
                 RecordHandoff(
                     commandBufferHandle: commandBufferHandle,
                     device: device.Commands,
@@ -215,7 +215,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
                 recording.EndCommandBuffer(
                     commandBufferHandle: commandBufferHandle,
                     device: device.Commands
-                ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+                ).ThrowIfFailed(device: device.Commands, operation: "vkEndCommandBuffer");
             }
 
             image = new VulkanImportedWritableImage(

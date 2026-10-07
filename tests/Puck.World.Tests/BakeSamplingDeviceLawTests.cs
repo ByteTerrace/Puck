@@ -18,6 +18,7 @@ namespace Puck.World.Tests;
 /// hardware adapter and on the software (WARP) renderer, and skips by name where the host has none.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class BakeSamplingDeviceLawTests {
     private const string KernelName = "bake-sampling.comp";
     // The probe kernel's one group and its bindings, each register at its binding in the group's space.

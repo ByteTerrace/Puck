@@ -1,4 +1,4 @@
-// Generated from shader interface 'overlay' (sha256/fb4e212313e769fbff2cd2f519102d70ae461f87388b9c9e31ad49097894afe5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'overlay' (sha256/192026822ff30b1eb27e7b6b88e52215c9c1435b491cc8870f9eeb455e8f78e4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_OVERLAY
 #define PUCK_SHADER_INTERFACE_OVERLAY
 
@@ -19,6 +19,8 @@ struct OverlayFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<OverlayFrame> frameGroup : register(b0, space0);
 
@@ -31,6 +33,7 @@ struct OverlayPass {
     [[vk::offset(32)]] float4 misc;
     [[vk::offset(48)]] float4 sdf;
     [[vk::offset(64)]] uint workCounterRow;
+    [[vk::offset(68)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<OverlayPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> source : register(t1, space3);
@@ -47,11 +50,23 @@ struct OverlayPass {
 [[vk::binding(12, 3)]] RWStructuredBuffer<uint> workCounters : register(u12, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. An interface declaring no work counters declares the same two functions empty.
-static const uint PuckWorkRowWords = 4u;
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
+// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels, indirect hits, samples and unresolved work,
+// followed by shape evaluations and shape gradients, as a
+// 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
+// empty.
+static const uint PuckWorkRowWords = 34u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
+static const uint PuckWorkSkyWord = 4u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
+static const uint PuckWorkShadowWord = 10u;
+static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkShadowPixelsWord = 22u;
+static const uint PuckWorkIndirectWord = 24u;
+static const uint PuckWorkShapesWord = 30u;
+static const uint PuckWorkGradientsWord = 32u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -78,6 +93,52 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
+}
+// Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
+// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    if (passGroup.workCounterRowDetail == 0u) {
+        return;
+    }
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork((row + PuckWorkStepsWord), steps);
+    puckAddWork((row + PuckWorkTexelsWord), texels);
+    puckAddWork((row + PuckWorkSkyWord), evaluations);
+    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
+    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+}
+void puckCountShapes(uint shapes, uint gradients) {
+    uint waveShapes = WaveActiveSum(shapes);
+    uint waveGradients = WaveActiveSum(gradients);
+    if (WaveIsFirstLane()) {
+        uint row = passGroup.workCounterRow * PuckWorkRowWords;
+        puckAddWork(row + PuckWorkShapesWord, waveShapes);
+        puckAddWork(row + PuckWorkGradientsWord, waveGradients);
+    }
+}
+// Each invocation names its level or proof detail; those rows sum into the pass once at readback.
+void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+    uint row = ((passGroup.workCounterRowDetail == 0u)
+        ? passGroup.workCounterRow
+        : (passGroup.workCounterRowDetail + detail)) * PuckWorkRowWords;
+    puckAddWork((row + PuckWorkIndirectWord), hits);
+    puckAddWork((row + PuckWorkIndirectWord + 2u), samples);
+    puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);
+}
+// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
+// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
+void puckCountShadow(uint slot, uint steps) {
+    if (slot < PuckWorkShadowSlots) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
+    }
+}
+// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
+// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
+void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+    puckAddWork(row + PuckWorkStepsWord, steps);
+    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

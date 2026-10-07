@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 // GPU-only history: before overwriting this frame's tables, copy the rows changed in the preceding consumed frame.
 // One settle copy after motion stops is owed; later still frames copy nothing. A row with no previous pose of its own
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
-// a program upload or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
+// a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
 // draw whose identity at its index changed (SdfMeshDraw.Identity). Keeping mesh matrices in a compact table preserves
 // GpuRegion's CPU-shadow contract and sends no second matrix over the host bus.
 public sealed partial class SdfWorldTables {

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -150,7 +151,49 @@ public sealed record SdfMesh {
 /// <param name="Identity">What the draw is across frames, compared with <see cref="object.Equals(object)"/>: the draw
 /// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
 /// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
-public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity);
+public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
+    /// <summary>Gets the draw's whole-placement indirect policy. Default follows <see cref="IsDynamic"/> and the
+    /// consuming residency's body policy, matching the retained SDF at the same tier.</summary>
+    public SdfIndirectParticipation Indirect { get; init; }
+    /// <summary>Gets whether the draw belongs to a moving body or animated placement. Its Default indirect policy
+    /// receives at Medium and casts and receives at High, unless the frame overrides that body default.</summary>
+    public bool IsDynamic { get; init; }
+    /// <summary>Gets whether this draw is a bake of geometry the same frame also carries in its SDF at the same pose.
+    /// Only that emitting seam can certify the conservative field sweep; an independent triangle mesh cannot acquire
+    /// this certificate from its bounds or identity. The light camera falls back when any draw is uncertified.</summary>
+    public bool FieldBacked { get; init; }
+
+    /// <summary>Gets the draw's policy in its retained field. A field-backed draw in a coupled program casts with
+    /// that complete field; an independent mesh keeps its authored policy.</summary>
+    /// <param name="instancesComposable">Whether the retained program permits independent instance participation.</param>
+    /// <returns>The policy packed for shading and used to select indirect casters.</returns>
+    public SdfIndirectParticipation EffectiveIndirectParticipation(bool instancesComposable) =>
+        ((FieldBacked && !instancesComposable) ? SdfIndirectParticipation.Cast : Indirect);
+
+    /// <summary>Gets the draw's level of detail when it is one of a baked placement's two representations, the mesh or the
+    /// impostor (<see cref="SdfMeshLod"/>): a view records the draw of the pair its projected size selects. Null for a draw
+    /// every view records.</summary>
+    public SdfMeshLod? Lod { get; init; }
+    /// <summary>Gets the impostor a card draw shows: the draw's mesh is then the card (<see cref="SdfMeshCard.Mesh"/>),
+    /// which the mesh pass places in front of the impostor's sphere facing each view, and the hit passes find the surface
+    /// behind each of its pixels in the impostor's views. Null for a mesh draw.</summary>
+    public SdfMeshImpostor? Impostor { get; init; }
+}
+/// <summary>The mesh every impostor draw uses: a unit quad of two triangles, whose vertex positions are the card's corners
+/// as fractions of its half extent. The mesh pass reads only their signs, so one mesh serves every impostor.</summary>
+public static class SdfMeshCard {
+    /// <summary>Gets the card's mesh: corners <c>(-1, -1)</c>, <c>(1, -1)</c>, <c>(1, 1)</c> and <c>(-1, 1)</c> in the plane
+    /// of zero <c>z</c>, wound counter-clockwise.</summary>
+    public static SdfMesh Mesh { get; } = new(
+        indices: new uint[] { 0u, 1u, 2u, 0u, 2u, 3u },
+        positions: new Vector3[] {
+            new(x: -1f, y: -1f, z: 0f),
+            new(x: 1f, y: -1f, z: 0f),
+            new(x: 1f, y: 1f, z: 0f),
+            new(x: -1f, y: 1f, z: 0f),
+        }
+    );
+}
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldTables.MeshRegionLayout"/>),
 /// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
@@ -165,24 +208,29 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// its first triangle material
 /// sits at (words 16 to 21), then its normal matrix, the inverse transpose of the matrix's upper 3×3, row by row (words
 /// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
-/// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Its word offsets are counted from the
+/// (a singular matrix, which draws no area, writes its own upper 3×3 instead), then its impostor (words 31 to 40, zero
+/// for a draw without one, <see cref="ImpostorFlag"/> clear): the bounding sphere's object-space center (31 to 33) and
+/// radius (34), the views along each side of the view grid (35), the texels along each side of a view (36), and where
+/// the impostor's rectangle sits in the impostor atlases (37 to 40, the scale then the offset,
+/// <see cref="SdfMeshAtlas.Placement"/>). Its word offsets are counted from the
 /// region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the vertex whose eight words
 /// start at <c>vertexWord + (8 * index)</c>. A vertex without a normal or texture coordinate holds zeros there, and
 /// the flags say which a mesh has. A mesh whose textures the mesh atlases hold (<see cref="SdfMeshAtlas"/>) carries
 /// <see cref="TexturesFlag"/>, and its vertices' texture coordinates are written moved into the atlases, so a reader
-/// samples them as they stand. The record is thirty-one whole words, so it has no padding a structured-buffer reader
+/// samples them as they stand. The record is forty-one whole words, so it has no padding a structured-buffer reader
 /// could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
-    /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh and its normal matrix.</summary>
-    public const int DrawWords = 31;
+    /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh, its normal matrix and its
+    /// impostor.</summary>
+    public const int DrawWords = 41;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
-    /// <see cref="SdfWorldInterfaces.MeshViewShift"/>, and writes a covered pixel's draw plus one as a float, which holds
+    /// <see cref="SdfKernelInterfaces.MeshViewShift"/>, and writes a covered pixel's draw plus one as a float, which holds
     /// 2^24 exactly.</summary>
-    public const int MaxDraws = (1 << SdfWorldInterfaces.MeshViewShift);
+    public const int MaxDraws = (1 << SdfKernelInterfaces.MeshViewShift);
     /// <summary>The bytes of one index.</summary>
     public const int IndexBytes = sizeof(uint);
     /// <summary>The words of one vertex: its position, its normal and its texture coordinate, as floats.</summary>
@@ -195,6 +243,11 @@ public static class SdfMeshRegion {
     public const uint MaterialsFlag = 2u;
     /// <summary>The flag a record carries when the mesh atlases hold its mesh's <see cref="SdfMesh.Textures"/>.</summary>
     public const uint TexturesFlag = 4u;
+    /// <summary>The flag a record carries when it is an impostor card (<see cref="SdfMeshDraw.Impostor"/>) whose views the
+    /// impostor atlases hold.</summary>
+    public const uint ImpostorFlag = 8u;
+    /// <summary>The flag a record carries when <see cref="SdfMeshDraw.IsDynamic"/> is true.</summary>
+    public const uint DynamicFlag = 16u;
 
     /// <summary>Counts the region a list of draws needs.</summary>
     /// <param name="draws">The draws.</param>
@@ -234,6 +287,8 @@ public static class SdfMeshRegion {
         for (var draw = 0; (draw < draws.Count); draw++) {
             var mesh = draws[draw].Mesh;
 
+            if (!Enum.IsDefined(value: draws[draw].Indirect)) { throw new ArgumentException(message: "A mesh draw's indirect policy must be Default, Cast, Receive or Off.", paramName: nameof(draws)); }
+
             if (meshes.TryAdd(
                 key: mesh,
                 value: new SdfMeshRegionMesh(
@@ -266,10 +321,14 @@ public static class SdfMeshRegion {
     /// those are written.</param>
     /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/> when it binds none: a mesh whose
     /// textures they hold is written with <see cref="TexturesFlag"/> and its texture coordinates moved into them.</param>
+    /// <param name="impostors">The impostor atlases the frame binds, or <see langword="null"/> when it binds none: a card
+    /// draw whose impostor they hold is written with <see cref="ImpostorFlag"/> and its atlas rectangle.</param>
+    /// <param name="indirectInstancesComposable">Whether the retained field permits independent instance participation;
+    /// standalone mesh regions have no coupled field and use <see langword="true"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null) {
+    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
 
@@ -282,6 +341,9 @@ public static class SdfMeshRegion {
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var (mesh, matrix, material, _) = draws[draw];
+            var impostor = (((draws[draw].Impostor is { } shown) && (impostors?.Holds(textures: shown) ?? false))
+                ? shown
+                : null);
             var placement = meshes[mesh];
             var record = destination.Slice(
                 length: DrawWords,
@@ -308,11 +370,17 @@ public static class SdfMeshRegion {
             record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
-            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u);
+            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag)
+                | (draws[draw].IsDynamic ? DynamicFlag : 0u) | (((uint)draws[draw].EffectiveIndirectParticipation(instancesComposable: indirectInstancesComposable)) << SdfProgram.IndirectInstanceShift);
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,
                 record: record[22..]
+            );
+            WriteImpostor(
+                atlas: impostors,
+                impostor: impostor,
+                record: record[31..]
             );
         }
 
@@ -350,6 +418,27 @@ public static class SdfMeshRegion {
         }
     }
 
+    // A draw's impostor words: the sphere, the view grid and the atlas rectangle, or zeros.
+    private static void WriteImpostor(SdfMeshImpostor? impostor, SdfMeshAtlas? atlas, Span<uint> record) {
+        record[..10].Clear();
+
+        if ((impostor is null) || (atlas is null)) {
+            return;
+        }
+
+        var placement = atlas.Placement(textures: impostor);
+
+        record[0] = BitConverter.SingleToUInt32Bits(value: impostor.Center.X);
+        record[1] = BitConverter.SingleToUInt32Bits(value: impostor.Center.Y);
+        record[2] = BitConverter.SingleToUInt32Bits(value: impostor.Center.Z);
+        record[3] = BitConverter.SingleToUInt32Bits(value: impostor.Radius);
+        record[4] = ((uint)impostor.Views);
+        record[5] = ((uint)impostor.ViewTexels);
+        record[6] = BitConverter.SingleToUInt32Bits(value: placement.X);
+        record[7] = BitConverter.SingleToUInt32Bits(value: placement.Y);
+        record[8] = BitConverter.SingleToUInt32Bits(value: placement.Z);
+        record[9] = BitConverter.SingleToUInt32Bits(value: placement.W);
+    }
     // Whether a mesh's textures are in the atlases a frame binds.
     private static bool Textured(SdfMesh mesh, SdfMeshAtlas? atlas) =>
         ((mesh.Textures is not null) && (atlas is not null) && atlas.Holds(textures: mesh.Textures));

@@ -2,6 +2,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Networking;
 using Puck.Storage;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -91,11 +92,22 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         ));
     }
     /// <summary>Resolves a path exactly like <c>--world</c>: rooted, or relative to the current directory, and naming
-    /// a file that exists. A path a document authors never reaches here relative; it is resolved beside that document
-    /// first (<see cref="WorldDocumentPaths"/>).</summary>
+    /// a document that exists. A document path with a <c>.puck</c> source of its name resolves to that source,
+    /// which wins over a document file beside it, so a reference and a source boot share one origin. A path a document
+    /// authors never reaches here relative; it is resolved beside that document first (<see cref="WorldDocumentPaths"/>).</summary>
     public static bool TryResolveCanonicalPath(string path, out string resolved) {
         try {
-            var direct = Path.GetFullPath(path: path);
+            var direct = PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+
+            if (WorldDocumentName.IsDocumentFile(path: direct)) {
+                var source = WorldDocumentName.SourceFile(name: WorldDocumentName.OfDocumentFile(path: direct));
+
+                if (File.Exists(path: source)) {
+                    resolved = source;
+
+                    return true;
+                }
+            }
 
             if (File.Exists(path: direct)) {
                 resolved = direct;
@@ -178,13 +190,19 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         m_store = store;
         m_target = target;
         m_world = world;
-        Identity = $"owner/{owner:D}/{world.Value}";
+        Store = new WorldRebuildOrigin.Store(
+            Owner: owner,
+            World: world
+        );
+        Identity = Store.ToString();
     }
 
     /// <summary>Gets the bound on reading the hosted definition, on the host clock.</summary>
     public static TimeSpan OperationTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
     /// <inheritdoc/>
     public override string Identity { get; }
+    /// <summary>Gets the store this origin reads, as a rebuild names it.</summary>
+    public WorldRebuildOrigin.Store Store { get; }
     /// <inheritdoc/>
     public override IWorldNeighbourResolver Neighbours => new WorldStorageNeighbourResolver(
         containerId: m_owner,

@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 public sealed class WorldExtensionHostLawTests {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
-    private static WorldExtensionHost Host(WorldServer server, WorldExternalOperationJournal journal, Provider provider,
+    private static WorldExtensionHost Host(WorldServer server, WorldExternalOperationJournal journal, IWorldExternalOperationProvider provider,
         TimeProvider? clock = null, WorldExtensionHostOptions? options = null) => new(
             server,
             journal,
@@ -213,6 +213,44 @@ public sealed class WorldExtensionHostLawTests {
             actual: provider.Executions,
             expected: 1
         );
+    }
+    [Fact]
+    public async Task DisposalReturnsOnlyAfterTheOwnedWorkerHasLeftAProviderThatIsSlowToHonorCancellation() {
+        using var world = Fixtures.FreshServer();
+        var provider = new ParkedProvider();
+        var host = Host(
+            world.Server,
+            Journal(),
+            provider
+        );
+
+        using var caller = host.CreateClient(
+            Principal.Addon(name: "actor"),
+            ["delete"],
+            []
+        );
+
+        await caller.InvokeAsync(
+            "delete",
+            "death/5",
+            "{}",
+            Cancel
+        );
+        host.Start();
+        await provider.Entered.Task.WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 15), cancellationToken: Cancel);
+
+        var disposal = host.DisposeAsync().AsTask();
+
+        try {
+            await provider.Cancelled.Task.WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 15), cancellationToken: Cancel);
+            // The worker is still inside the provider, so disposal has to be waiting for it.
+            Assert.False(condition: disposal.IsCompleted, userMessage: "DisposeAsync returned while its worker was still inside a provider call.");
+        } finally {
+            provider.Release.TrySetResult();
+        }
+
+        await disposal.WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 15), cancellationToken: Cancel);
+        Assert.True(condition: provider.Returned);
     }
     [Fact]
     public async Task RestartRecoversPendingAndPollsRunningWithoutResending_AndHonorsDelay() {
@@ -439,6 +477,34 @@ public sealed class WorldExtensionHostLawTests {
                 Status: WorldExternalOperationStatus.Succeeded
             ));
         }
+    }
+    private sealed class ParkedProvider : IWorldExternalOperationProvider {
+        public string Identity => "parked-resource";
+
+        public volatile bool Returned;
+
+        public TaskCompletionSource Cancelled { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Entered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<WorldExternalOperationResult> ExecuteAsync(WorldExternalOperation operation, CancellationToken cancellationToken) {
+            Entered.TrySetResult();
+            try {
+                await Task.Delay(
+                    cancellationToken: cancellationToken,
+                    millisecondsDelay: Timeout.Infinite
+                );
+            } catch (OperationCanceledException) {
+                Cancelled.TrySetResult();
+                await Release.Task;
+                Returned = true;
+                throw;
+            }
+
+            throw new InvalidOperationException(message: "Unreachable.");
+        }
+        public ValueTask<WorldExternalOperationResult> ReconcileAsync(WorldExternalOperation operation, WorldExternalOperationResult previous, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(message: "Nothing is reconciled.");
     }
     private sealed class BlockingProvider : IWorldExternalOperationProvider {
         public string Identity => "bounded-resource";

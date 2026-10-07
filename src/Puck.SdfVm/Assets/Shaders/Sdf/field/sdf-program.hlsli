@@ -1,6 +1,31 @@
 // The program word stream, its instance directory and frame instance grid, the group masks, and the variant strip tiers every tape interpreter reads.
 #ifndef FIELD_SDF_PROGRAM_HLSLI
 #define FIELD_SDF_PROGRAM_HLSLI
+static uint sdfWorkShapes = 0u;
+static uint sdfWorkGradients = 0u;
+uint sdfProgramVectorCount() {
+    uint count;
+    uint stride;
+    sdfWords.GetDimensions(count, stride);
+    return count;
+}
+bool sdfProgramRange(uint first, uint count, uint stride) {
+    uint capacity = sdfProgramVectorCount();
+    return stride != 0u && first <= capacity && count <= (capacity - first) / stride;
+}
+uint4 sdfProgramWord(uint index) {
+    if (index >= sdfProgramVectorCount()) { return 0u; }
+    return sdfWords[index];
+}
+#ifdef SDF_DYNAMIC_TRANSFORMS
+float4 sdfDynamicTransformRow(uint index) {
+    uint count;
+    uint stride;
+    sdfDynamicTransforms.GetDimensions(count, stride);
+    if (index >= count) { return 0.0; }
+    return sdfDynamicTransforms[index];
+}
+#endif
 // Program word stream (sdfWords, each element one uint4 = 16 bytes), read-only: the program is never written. Layout:
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
@@ -10,7 +35,7 @@
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances, world render path only): one
-//                           (instanceCount, 0, 0, 0) header uint4, then 2 uint4 per instance — i0 = bound
+//                           (instanceCount, partProgramOffset, shadingFlags, tapeTokens) header uint4, then 2 uint4 per instance — i0 = bound
 //                           center/offset.xyz + radius (float bits), i1 = (mode, dynamicSlot, segmentFirst,
 //                           segmentEnd) — segmentFirst/segmentEnd index the SEGMENT directory (not raw
 //                           instructions): every segment in that range is owned by exactly that instance, so
@@ -34,6 +59,7 @@
 // view, the beam prepass's own cone march) passes this, so an instanced program still
 // renders its complete picture through them; only sdf-world-views.comp narrows it to a real per-tile mask base.
 #define SDF_INSTANCE_MASK_ALL 0xFFFFFFFFu
+#define SDF_INSTANCE_MASK_MAX_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
 
 // SDF_INSTANCE_SHADOW_TRANSPARENT_BIT, the high bit of the instance meta's segmentEnd lane (i1.w), marks an instance
 // whose compose only REMOVES material (a Subtraction-family carve), so omitting it from a shadow march can only make
@@ -76,13 +102,25 @@ static bool sdfAmbientMaskActive = false;
 #endif
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
-// Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). shade/sdf-light-stage.hlsli
+// Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). passes/sdf-light-stage.hlsli
 // flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
-// False everywhere else (including the beam/instance-cull kernels, which define SDF_DYNAMIC_TRANSFORMS but never set it),
-// so the camera/AO/coverage enumerations are unchanged and a default-casts frame is byte-identical.
+// Indirect queries and their conservative light camera use their own instance policy. Ordinary camera/AO/coverage
+// enumerations leave it false, so their participation is unchanged.
 static bool sdfShadowParticipationActive = false;
 #endif
+
+// Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
+static bool sdfIndirectParticipationActive = false;
+uint sdfIndirectPolicy(uint policy, bool isDynamic) {
+    if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
+    if (!isDynamic) { return SDF_INDIRECT_PARTICIPATION_CAST; }
+    return passGroup.indirectBodies != SDF_INDIRECT_PARTICIPATION_DEFAULT ? passGroup.indirectBodies :
+        passGroup.indirectTier == SDF_INDIRECT_TIER_HIGH ? SDF_INDIRECT_PARTICIPATION_CAST : SDF_INDIRECT_PARTICIPATION_RECEIVE;
+}
+uint sdfInstanceIndirectPolicy(uint4 meta) {
+    return sdfIndirectPolicy((meta.w & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, meta.x == SDF_BOUND_DYNAMIC);
+}
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word
@@ -99,6 +137,7 @@ uint sdfInstanceMaskWordCount(uint instanceCount) {
 // every kernel compiled without SDF_INSTANCE_MASKS, where no mask buffer is bound at all). wordIndex <
 // sdfInstanceMaskWordCount(instanceCount) by contract, so `remaining` is always >= 1.
 uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCount) {
+    if (instanceCount > SDF_MAX_INSTANCES || wordIndex >= sdfInstanceMaskWordCount(instanceCount)) { return 0u; }
     uint word = 0xFFFFFFFFu;
 
 #ifdef SDF_SCREEN_SOURCES
@@ -113,6 +152,10 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
     {
 #ifdef SDF_INSTANCE_MASKS
         if (instanceMaskBase != SDF_INSTANCE_MASK_ALL) {
+            uint count;
+            uint stride;
+            sdfInstanceMasks.GetDimensions(count, stride);
+            if (instanceMaskBase >= count || wordIndex >= count - instanceMaskBase) { return 0u; }
             word = sdfInstanceMasks[instanceMaskBase + wordIndex];
         }
 #endif
@@ -141,13 +184,13 @@ bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
 // The SEGMENT directory's element offset in sdfWords: header -> materials -> shape-bound table -> segment directory.
 // KEEP IN SYNC with SdfProgram's offset math.
 uint sdfSegmentDirectoryOffset() {
-    uint4 header = sdfWords[0];
+    uint4 header = sdfProgramWord(0);
 
     return ((SDF_PROGRAM_MATERIAL_OFFSET(header) + (SDF_MATERIAL_VECTORS_PER_ENTRY * SDF_PROGRAM_MATERIAL_COUNT(header))) + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
 }
 // The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory
 // (sdfLoadProgramLayout has both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so
-// re-deriving them costs a real reload of sdfWords[0] on Vulkan — the reason sdfLoadProgramLayout exists: mapCore/
+// re-deriving them costs a real reload of sdfProgramWord(0) on Vulkan — the reason sdfLoadProgramLayout exists: mapCore/
 // mapGradCore used to re-run this whole chain on EVERY call, and marchers call them once per march step.
 uint sdfInstanceDirectoryOffsetFrom(uint segmentOffset, uint segmentCount) {
     return (segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segmentCount));
@@ -157,7 +200,7 @@ uint sdfInstanceDirectoryOffsetFrom(uint segmentOffset, uint segmentCount) {
 uint sdfInstanceDirectoryOffset() {
     uint segmentOffset = sdfSegmentDirectoryOffset();
 
-    return sdfInstanceDirectoryOffsetFrom(segmentOffset, SDF_SEGMENT_COUNT(sdfWords[segmentOffset]));
+    return sdfInstanceDirectoryOffsetFrom(segmentOffset, SDF_SEGMENT_COUNT(sdfProgramWord(segmentOffset)));
 }
 // The per-PROGRAM Lipschitz STEP SCALE (1/L in (0, 1]), baked HOST-SIDE into the segment-directory header's otherwise-
 // free .y lane (SdfProgram.AnalyzeLipschitz). mapCore multiplies EVERY returned distance by it, so a consumer that
@@ -166,7 +209,7 @@ uint sdfInstanceDirectoryOffset() {
 // bit for every finite x), so those scenes stay byte-identical. The `> 0` guard keeps a pre-writer all-zero stream
 // rendering as before.
 float sdfStepScale() {
-    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfWords[sdfSegmentDirectoryOffset()]));
+    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfProgramWord(sdfSegmentDirectoryOffset())));
 
     return ((stepScale > 0.0) ? stepScale : 1.0);
 }
@@ -177,7 +220,7 @@ uint sdfInstanceEntryOffset(uint instanceOffset, uint index) {
 }
 // The packed instance count (the directory's header lane).
 uint sdfInstanceCount() {
-    return SDF_INSTANCE_COUNT(sdfWords[sdfInstanceDirectoryOffset()]);
+    return SDF_INSTANCE_COUNT(sdfProgramWord(sdfInstanceDirectoryOffset()));
 }
 
 // The ceiling-clamped instance count. The mask-buffer indexing contract itself (entry width, tile base) lives in
@@ -199,11 +242,13 @@ uint sdfInstanceCountClamped() {
 // legal walk — and the LAST budget slab force-covers the remaining interval whole (see collectInstanceGridMask), so
 // even a pathological clip can only get more conservative, never truncate.
 #define SDF_GRID_MAX_SLABS 128u
+#define SDF_GRID_MAX_CELLS (SDF_GRID_MAX_DIM * SDF_GRID_MAX_DIM * SDF_GRID_MAX_DIM)
+#define SDF_GRID_MAX_ADVANCES (SDF_GRID_MAX_SLABS * (SDF_GRID_MAX_CELLS + 1u) + 1u)
 
 // One uint of the program word stream. The stream is a StructuredBuffer<uint4>; every table before the grid is
 // uint4-granular, but the grid block is uint-granular, so it reads through this component index.
 uint sdfWordAt(uint wordIndex) {
-    return sdfWords[wordIndex >> 2u][wordIndex & 3u];
+    return sdfProgramWord(wordIndex >> 2u)[wordIndex & 3u];
 }
 
 // Ring-local instance grid rebuilt from this frame's dynamic bound centers. Only the instance-cull and Stage-1
@@ -213,8 +258,15 @@ uint sdfWordAt(uint wordIndex) {
 // instance count the caller already holds (mapCore and the beam both resolve them). The block sits one uint4 (the
 // world-segment header) plus the world-segment entries past the instance directory's own span.
 uint sdfGridBaseWord(uint instanceOffset, uint instanceCount) {
+    uint vectors;
+    uint stride;
+    sdfWords.GetDimensions(vectors, stride);
+    if (vectors > 0xFFFFFFFFu / 4u || instanceOffset >= vectors || instanceCount > SDF_MAX_INSTANCES
+        || instanceCount > (vectors - instanceOffset - SDF_DIRECTORY_HEADER_VECTORS) / SDF_BOUND_RECORD_VECTORS) { return 0xFFFFFFFFu; }
     uint worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount)); // uint4 index of the world-segment header
-    uint worldSegmentCount = SDF_WORLD_SEGMENT_COUNT(sdfWords[worldSegmentOffset]);
+    if (worldSegmentOffset >= vectors) { return 0xFFFFFFFFu; }
+    uint worldSegmentCount = SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset));
+    if (worldSegmentCount > vectors - worldSegmentOffset - SDF_DIRECTORY_HEADER_VECTORS) { return 0xFFFFFFFFu; }
     uint gridBaseVector = (worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldSegmentCount);    // uint4 index of the grid block
 
     return (gridBaseVector << 2u); // the grid block is uint-granular from here
@@ -237,14 +289,27 @@ struct SdfInstanceGridHeader {
     uint alwaysWord;    // block-relative uint offset of the always-tested list
     uint alwaysCount;
     uint cellCount;     // dims.x * dims.y * dims.z
+    uint wordCount;     // actual buffer words available from baseWord
+    uint entryCount;
+    uint instanceCount;
 };
 
 SdfInstanceGridHeader sdfLoadInstanceGridHeader(uint instanceOffset, uint instanceCount) {
 #ifdef SDF_FRAME_INSTANCE_GRID
     uint base = 0u;
+    uint wordCount;
+    uint stride;
+    sdfFrameInstanceGrid.GetDimensions(wordCount, stride);
 #else
     uint base = sdfGridBaseWord(instanceOffset, instanceCount);
+    uint vectors;
+    uint stride;
+    sdfWords.GetDimensions(vectors, stride);
+    uint wordCount = (base != 0xFFFFFFFFu && (base >> 2u) <= vectors) ? ((vectors - (base >> 2u)) * 4u) : 0u;
 #endif
+
+    SdfInstanceGridHeader grid = (SdfInstanceGridHeader)0;
+    if (wordCount < SDF_GRID_HEADER_WORDS || instanceCount > SDF_MAX_INSTANCES) { return grid; }
 
 #ifdef SDF_FRAME_INSTANCE_GRID
 #define SDF_GRID_HEADER_WORD(relativeWord) sdfFrameInstanceGrid[(relativeWord)]
@@ -252,8 +317,9 @@ SdfInstanceGridHeader sdfLoadInstanceGridHeader(uint instanceOffset, uint instan
 #define SDF_GRID_HEADER_WORD(relativeWord) sdfWordAt(base + (relativeWord))
 #endif
 
-    SdfInstanceGridHeader grid;
     grid.baseWord = base;
+    grid.wordCount = wordCount;
+    grid.instanceCount = instanceCount;
     grid.enabled = (SDF_GRID_HEADER_WORD(0u) != 0u);
     grid.dims = uint3(SDF_GRID_HEADER_WORD(1u), SDF_GRID_HEADER_WORD(2u), SDF_GRID_HEADER_WORD(3u));
     grid.origin = float3(asfloat(SDF_GRID_HEADER_WORD(4u)), asfloat(SDF_GRID_HEADER_WORD(5u)), asfloat(SDF_GRID_HEADER_WORD(6u)));
@@ -268,10 +334,28 @@ SdfInstanceGridHeader sdfLoadInstanceGridHeader(uint instanceOffset, uint instan
 
 #undef SDF_GRID_HEADER_WORD
 
+    // Validate the complete CSR envelope before a caller can use any data-derived offset or iteration count.
+    if (!grid.enabled) { return grid; }
+    bool dimensions = all(grid.dims > 0u) && all(grid.dims <= SDF_GRID_MAX_DIM);
+    uint cells = dimensions ? grid.dims.x * grid.dims.y * grid.dims.z : 0u;
+    bool spans = grid.cellStartWord >= SDF_GRID_HEADER_WORDS && grid.cellStartWord <= wordCount
+        && cells < wordCount - grid.cellStartWord
+        && grid.entryWord >= grid.cellStartWord + cells + 1u && grid.entryWord <= wordCount
+        && grid.alwaysWord >= grid.entryWord && grid.alwaysWord <= wordCount
+        && grid.alwaysCount <= wordCount - grid.alwaysWord && grid.alwaysCount <= instanceCount;
+    grid.entryCount = spans ? grid.alwaysWord - grid.entryWord : 0u;
+    grid.enabled = dimensions && spans && grid.cellCount == cells
+        && grid.entryCount <= instanceCount - min(grid.alwaysCount, instanceCount)
+        && all(isfinite(grid.origin)) && isfinite(grid.cellSize) && grid.cellSize > 0.0
+        && isfinite(grid.invCellSize) && grid.invCellSize > 0.0
+        && isfinite(grid.footprintPad) && grid.footprintPad >= 0.0
+        && all(isfinite(grid.origin + float3(grid.dims) * grid.cellSize));
+
     return grid;
 }
 
 uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
+    if (relativeWord >= grid.wordCount) { return 0u; }
 #ifdef SDF_FRAME_INSTANCE_GRID
     return sdfFrameInstanceGrid[relativeWord];
 #else
@@ -301,18 +385,15 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // --- instruction lanes ---
 // SDF_SHAPE_DETAIL_FLAG (Puck.SignedDistance.SdfInstruction.Detail) marks a SHADING-ONLY shape: skipped by
 // mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only shade
-// re-evaluation in shade/sdf-light-stage.hlsli). SDF_SHAPE_NO_SECONDARY_FLAG (SdfInstruction.Secondary == false) marks
+// re-evaluation in passes/sdf-light-stage.hlsli). SDF_SHAPE_NO_SECONDARY_FLAG (SdfInstruction.Secondary == false) marks
 // a SECONDARY-EXCLUDED shape: unlike a Detail shape it marches for the camera/beam/fine march and the hit-only shade
 // re-evaluations like any ordinary shape, and drops out ONLY under sdfSecondaryMarchActive, the soft-shadow and
-// ambient-occlusion field walks in shade/sdf-light-stage.hlsli and surface/sdf-surface.hlsli (eyelids and other small parts still shade and collide, they just
+// ambient-occlusion field walks in passes/sdf-light-stage.hlsli and surface/sdf-surface.hlsli (eyelids and other small parts still shade and collide, they just
 // cast no shadow and cost no AO tap).
 // SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
-// Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the running accumulator into a one-deep slot and
-// reseeds a fresh scope; POP composes the scope's field back into the saved parent as a candidate (reusing SHAPE's
-// blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads it; the real capacity is
-// the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which holds exactly ONE
-// parent. Raising the depth means making that pair an indexed array with push/pop-by-depth stack semantics HERE, not
-// just raising SdfProgramBuilder.MaxFieldScopeDepth.
+// Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the immediate parent and reseeds a fresh field;
+// POP composes only into that parent. Scalar/dual walks, deferred derivatives and tape certificates use the same
+// bounded SDF_MAX_FIELD_SCOPE_DEPTH stack; the program validator guarantees balanced, single-owner scopes.
 // Gaussian push: Data0=center/push.x, Data1=radii/push.y, header.y=push.z bits.
 // Per-shape lane-driven erosion (SdfOp.LaneErode): ordered immediately before the SdfOp.ShapeBlend it targets.
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
@@ -352,9 +433,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
 #define SDF_PI        3.141592653589793
 #define SDF_TAU       6.283185307179586    // 2*pi
-// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
-// rounds UP to 2^32, so the product can be exactly 1.0. Every consumer below is written to tolerate that.
-#define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
 // beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it
@@ -369,10 +447,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
 // a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.
 #define SDF_LOGSPHERE_MIN_RADIUS 1.0e-4
-// Floors the fold-safe boundary gap (relative to the sample's radius) so a sample landing exactly ON a shell boundary
-// cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
-// below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
-#define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
 // SDF_FLARE_MIN_SCALE floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that
 // drives it non-positive still yields a finite warp rather than a divide-by-zero or a sign flip.
 // SDF_LANE_ERODE_RAGGED_AMOUNT is SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered,

@@ -69,7 +69,7 @@ public sealed class AdmissionArrivalLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: transferId,
                 members: [new WorldTransferCommitMember(
@@ -82,7 +82,7 @@ public sealed class AdmissionArrivalLawTests {
                         VerticalVelocity: default
                     )],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 
@@ -101,7 +101,7 @@ public sealed class AdmissionArrivalLawTests {
         Members: [new WorldTransferReservationMember(
                 Principal: Principal.Console,
                 PreferredSlot: WorldBodiesLimits.LocalSeatCount,
-                Identity: identity,
+                Identity: identity?.Project(),
                 Source: IntentSource.Live,
                 BodyColor: default,
                 CatalogRig: 0,

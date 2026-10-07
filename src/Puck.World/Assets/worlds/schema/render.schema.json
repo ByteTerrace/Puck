@@ -26,14 +26,29 @@
       "default": false
     },
     "renderScale": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderScaleTier",
-      "description": "The boot render-scale tier.",
-      "default": "Native"
+      "description": "The scalar boot render-scale ceiling in [0.125, 1].",
+      "type": "number",
+      "default": 1
     },
     "upscaleSharpness": {
-      "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
+      "description": "The boot reconstruction sharpness: the spatial resolve\u0027s blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect\u0027s own extent.",
       "type": "number",
       "default": 0
+    },
+    "temporal": {
+      "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
+      "type": "boolean",
+      "default": false
+    },
+    "shadowAmortize": {
+      "description": "Whether secondary shadows boot reusing valid K history (world.shadow-amortize).",
+      "type": "boolean",
+      "default": false
+    },
+    "dynamicResolution": {
+      "description": "Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.",
+      "type": "boolean",
+      "default": false
     },
     "low": {
       "$ref": "./common.schema.json#/$defs/WorldQualityPreset",
@@ -51,48 +66,72 @@
       "default": null
     },
     "lighting": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
-      "description": "The scene\u0027s directional sun and ambient term. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
-      "default": null
-    },
-    "sky": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-      "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
-      "default": null
-    },
-    "cycle": {
-      "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
+      "description": "The scene\u0027s direct lights and curvature shading. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "state": {
-          "description": "The state row read (its slot cell; Fixed or Int).",
-          "type": "string"
+        "lights": {
+          "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "./common.schema.json#/$defs/WorldRenderLight"
+          },
+          "default": null
+        },
+        "curvature": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderCurvature",
+          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
+          "default": null
+        },
+        "clock": {
+          "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "keys": {
-          "description": "At least two keys, strictly ascending At in [0, 1).",
-          "type": "array",
+          "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it, blended by the field\u0027s type and eased by each key\u0027s ease; a field no key states keeps its authored value.",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
-            "description": "One point on a WorldRenderCycle.",
+            "description": "One key of Keys: a partial record of the section at one time.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "at": {
-                "description": "The row-value fraction this key sits at, in [0, 1).",
+                "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
                 "type": "number"
               },
-              "lighting": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
-                "description": "The lighting fields this key moves, or null.",
+              "ease": {
+                "$ref": "./common.schema.json#/$defs/WorldEase",
+                "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
                 "default": null
               },
-              "sky": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-                "description": "The sky fields this key moves, or null.",
+              "lights": {
+                "description": "The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light\u0027s name and shadowing are structure, which a key never states.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "$ref": "./common.schema.json#/$defs/WorldRenderLight"
+                },
+                "default": null
+              },
+              "curvature": {
+                "$ref": "./common.schema.json#/$defs/WorldRenderCurvature",
+                "description": "The curvature fields this key moves.",
                 "default": null
               }
             },
@@ -100,115 +139,219 @@
               "at"
             ],
             "additionalProperties": false,
-            "title": "WorldRenderCycleKey"
-          }
+            "title": "WorldRenderLightingKey"
+          },
+          "default": null
         }
       },
-      "required": [
-        "state",
-        "keys"
-      ],
       "additionalProperties": false,
       "default": null,
-      "title": "WorldRenderCycle"
+      "title": "WorldRenderLighting"
     },
-    "environment": {
-      "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
+    "sky": {
+      "description": "The repeatable sky-layer stack. Optional; an absent section renders the default look, the two-stop gradient SdfSky starts from, as data the kernels read like any authored sky.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "softboxes": {
-          "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+        "layers": {
+          "description": "The layers, lowest first.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "description": "One analytic studio-reflection softbox: a soft, angularly-extended highlight a GGX lobe catches in its mirror direction, widened by the surface\u0027s own roughness.",
+            "$ref": "./common.schema.json#/$defs/WorldRenderSkyLayer"
+          },
+          "default": null
+        },
+        "clock": {
+          "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "keys": {
+          "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One key of Keys: a partial record of the sky at one time.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
-              "direction": {
-                "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload)."
+              "at": {
+                "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
+                "type": "number"
               },
-              "size": {
-                "$ref": "./common.schema.json#/$defs/DocumentVector2",
-                "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive."
-              },
-              "color": {
-                "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
-                "default": null,
-                "title": "BindableColor",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "weight": {
-                "description": "The strength. Absent is 1.",
-                "type": [
-                  "number",
-                  "null"
-                ],
+              "ease": {
+                "$ref": "./common.schema.json#/$defs/WorldEase",
+                "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
                 "default": null
               },
-              "blur": {
-                "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+              "layers": {
+                "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer\u0027s name, blend, mask, visibility, tier and clock and the sun disc\u0027s light are structure, which a key never states.",
                 "type": [
-                  "number",
+                  "object",
                   "null"
                 ],
+                "additionalProperties": {
+                  "$ref": "./common.schema.json#/$defs/WorldRenderSkyLayer"
+                },
                 "default": null
               }
             },
             "required": [
-              "direction",
-              "size"
+              "at"
             ],
             "additionalProperties": false,
-            "title": "WorldRenderSoftbox"
+            "title": "WorldRenderSkyKey"
           },
           "default": null
         },
-        "horizon": {
-          "description": "The reflection horizon gradient. Absent is black \u2014 contributes nothing.",
+        "frame": {
+          "description": "Which way is up for the sky. Absent is world \u002By.",
           "type": [
             "object",
             "null"
           ],
           "properties": {
-            "low": {
-              "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "high": {
-              "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
+            "up": {
+              "$ref": "./common.schema.json#/$defs/DocumentVector3",
+              "description": "The sky\u0027s up direction in world space, any nonzero length. Absent is world \u002By.",
+              "default": null
             }
           },
           "additionalProperties": false,
           "default": null,
-          "title": "WorldRenderHorizon"
+          "title": "WorldRenderSkyFrame"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderSky"
+    },
+    "environment": {
+      "description": "The sky\u0027s bindable ambient and reflection gains, each defaulting to one. Zero disables that lighting contribution.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "ambient": {
+          "$ref": "./common.schema.json#/$defs/BindableScalar",
+          "description": "The diffuse irradiance gain. Absent is one; zero disables harmonic lighting.",
+          "default": null
+        },
+        "reflection": {
+          "$ref": "./common.schema.json#/$defs/BindableScalar",
+          "description": "The reflection gain. Absent is one; zero disables reflection lookups.",
+          "default": null
         }
       },
       "additionalProperties": false,
       "default": null,
       "title": "WorldRenderEnvironment"
+    },
+    "atmosphere": {
+      "description": "Fog, height fog, haze and a medium between the camera and what it sees. An absent section renders the default fog; an authored section contains exactly the kinds it states.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "fog": {
+          "description": "The fog: an exponential medium, level or thinning with height. Absent is no fog.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "density": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The density per world unit, at the base when Height is authored. Absent is the default look\u0027s density.",
+              "default": null
+            },
+            "color": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "BindableColor\u0027s grammar: the colour the fog in-scatters. Absent is the sky in the pixel\u0027s direction, so a distant surface fades into the horizon behind it.",
+              "default": null
+            },
+            "height": {
+              "$ref": "./common.schema.json#/$defs/WorldRenderAirHeight",
+              "description": "The height fog\u0027s profile. Absent is a fog alike at every height.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderFog"
+        },
+        "haze": {
+          "description": "The haze: aerial perspective that scatters the sky and the light of the bodies that cast light, brightest toward them. Absent is no haze.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The share of the light the haze takes over the far distance, in [0, 0.99]. Absent is zero, which draws none.",
+              "default": null
+            },
+            "anisotropy": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The Henyey-Greenstein anisotropy of its scattering toward the bodies, in [0, 0.9]: zero scatters alike in every direction. Absent is SdfAtmosphere.DefaultHazeAnisotropy.",
+              "default": null
+            },
+            "height": {
+              "$ref": "./common.schema.json#/$defs/WorldRenderAirHeight",
+              "description": "The haze\u0027s height profile, the amount taken at its base. Absent is a haze alike at every height.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderHaze"
+        },
+        "medium": {
+          "description": "The medium: water below a level surface, with its own extinction and colour. Absent is no medium.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "surface": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The surface\u0027s height. Absent is zero.",
+              "default": null
+            },
+            "extinction": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The extinction per world unit below the surface. Absent is SdfAtmosphere.DefaultMediumExtinction.",
+              "default": null
+            },
+            "color": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "BindableColor\u0027s grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderMedium"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderAtmosphere"
     },
     "tonemap": {
       "description": "The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
@@ -221,12 +364,150 @@
       "title": "WorldTonemap"
     },
     "farDistance": {
-      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
       "type": [
         "number",
         "null"
       ],
       "default": null
+    },
+    "shadowLights": {
+      "description": "The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.",
+      "type": "integer",
+      "default": 1
+    },
+    "shadowFadeSlots": {
+      "description": "The boot number of additional shadow handoff slots, from 0 through 2.",
+      "type": "integer",
+      "default": 0
+    },
+    "shadowFadeTicks": {
+      "description": "The boot length of a shadow handoff in delivered ticks; zero selects instant changes.",
+      "type": "integer",
+      "default": 0
+    },
+    "shadowOverflow": {
+      "description": "How a crossing proceeds when its handoff capacity is occupied.",
+      "enum": [
+        "instant",
+        "queue"
+      ],
+      "default": "instant",
+      "title": "WorldShadowOverflow"
+    },
+    "skyQuality": {
+      "description": "The sky\u0027s boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "high",
+      "title": "WorldSkyTier"
+    },
+    "indirect": {
+      "description": "The world\u0027s diffuse indirect-light participation defaults.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "bodies": {
+          "$ref": "./common.schema.json#/$defs/SdfIndirectParticipation",
+          "description": "Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.",
+          "default": "Default"
+        },
+        "sources": {
+          "description": "Bindable source gains in [0, 1]; absent gains are one.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "lights": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Explicit diffuse light gain.",
+              "default": null
+            },
+            "emission": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Material emission gain.",
+              "default": null
+            },
+            "screens": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Acquired screen-face emission gain.",
+              "default": null
+            },
+            "sky": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Physical radiance at certified world exits.",
+              "default": null
+            },
+            "feedback": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Reflected preceding-sweep radiance gain, once per bounce.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirectSources"
+        },
+        "bounces": {
+          "description": "Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier\u0027s limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "apply": {
+          "description": "Bindable receiver-only controls. They do not change cached radiance.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "intensity": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "Final indirect diffuse gain.",
+              "default": null
+            },
+            "tint": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "Final indirect diffuse tint.",
+              "default": null
+            },
+            "contact": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirectApply"
+        },
+        "tier": {
+          "description": "The boot cache tier, Medium by default. The live session lever and selected quality preset override it.",
+          "enum": [
+            "Off",
+            "Medium",
+            "High"
+          ],
+          "default": "Medium",
+          "title": "SdfIndirectTier"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderIndirect"
+    },
+    "skyFieldScale": {
+      "description": "The boot sky field grid fraction, one or one half, independent of view render scale.",
+      "type": "number",
+      "default": 1
     }
   },
   "additionalProperties": false,

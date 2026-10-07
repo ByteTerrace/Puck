@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Modules;
@@ -43,6 +44,9 @@ public sealed record WorldCompilation(
     IReadOnlyDictionary<string, HashSet<string>> DiscoveredEmbeddings,
     IReadOnlyList<WorldTestWorld> TestWorlds
 ) {
+    /// <summary>Gets the source content and every file fact this compile depends on. Text supplied by an editor
+    /// records that text's content, so an unsaved buffer cannot stand as the different file on disk.</summary>
+    public IReadOnlyList<CompileInput> Inputs { get; init; } = [];
     /// <summary>Gets every named world emitted by a composition, in declaration order. Empty for a single-document source.</summary>
     public IReadOnlyList<WorldOutput> Worlds { get; init; } = [];
     /// <summary>Gets the asset verification context. An explicit refresh is saved by the caller after validation.</summary>
@@ -135,6 +139,7 @@ public static class WorldCompiler {
     /// <param name="vocabulary">The described vocabulary every stage parses and lowers against; the shipped
     /// <see cref="WorldDocumentVocabulary.Instance"/> when omitted.</param>
     /// <param name="allowMultiple">Whether this consumer accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="includeTests">Whether to lower test blocks into generated worlds.</param>
     /// <param name="updateAssets">Prepares refreshed asset pins without writing them. The caller saves the lock only after validation succeeds.</param>
     /// <returns>The compilation.</returns>
     public static WorldCompilation Compile(
@@ -149,7 +154,8 @@ public static class WorldCompiler {
         CancellationToken cancellationToken = default,
         WorldDocumentVocabulary? vocabulary = null,
         bool allowMultiple = false,
-        bool updateAssets = false
+        bool updateAssets = false,
+        bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
@@ -157,15 +163,21 @@ public static class WorldCompiler {
         sourceMap ??= new SourceMap();
         vocabulary ??= WorldDocumentVocabulary.Instance;
         WorldBootWork.Count(kind: WorldBootWork.Compiles);
+        using var compilationWork = WorldBootWork.AttributeCompilation();
 
         // The modules the import walk parses are the .puck files it reads, so the walk's own reads are the count. The
         // basis read for its enums is a compile of its own, counted there or served held, so its reads are not.
         var reads = new CompileInputLog();
         var basisReads = new CompileInputLog();
         using var recording = CompileInputs.Record(log: reads);
+        var inputPath = ((sourcePath is null) ? null : Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourcePath)));
+
+        if (inputPath is not null) {
+            CompileInputs.Note(path: inputPath, content: System.Text.Encoding.UTF8.GetBytes(s: source));
+        }
 
         try {
-            return CompileRecorded(
+            var result = CompileRecorded(
                 allowMultiple: allowMultiple,
                 basePath: basePath,
                 basisReads: basisReads,
@@ -174,12 +186,15 @@ public static class WorldCompiler {
                 diagnostics: diagnostics,
                 embeddings: embeddings,
                 imports: imports,
+                includeTests: includeTests,
                 source: source,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath,
                 updateAssets: updateAssets,
                 vocabulary: vocabulary
             );
+
+            return result with { Inputs = reads.Inputs };
         } finally {
             var basisPaths = basisReads.Inputs.Select(selector: static input => input.Path).ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -187,6 +202,7 @@ public static class WorldCompiler {
                 amount: (1L + reads.Inputs.LongCount(predicate: input => (
                     (input.Kind == CompileInputKind.Content) &&
                     WorldDocumentName.IsSourceFile(path: input.Path) &&
+                    !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: input.Path)), y: inputPath) &&
                     !basisPaths.Contains(item: input.Path)
                 ))),
                 kind: WorldBootWork.PuckParses
@@ -195,7 +211,7 @@ public static class WorldCompiler {
     }
 
     private static WorldCompilation CompileRecorded(string source, string? sourcePath, string? basePath, ImportHandling imports, EmbeddingLock? embeddings, string? defaultSchema, DiagnosticBag diagnostics, SourceMap sourceMap,
-        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads) {
+        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads, bool includeTests) {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             defaultSchema: defaultSchema,
             diagnostics: diagnostics,
@@ -252,6 +268,7 @@ public static class WorldCompiler {
         var worlds = new List<WorldOutput>();
         var assets = ((sourcePath is null) ? null : new AssetCompilationContext(rootSourcePath: sourcePath, updateLock: updateAssets));
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            includeTests: includeTests,
             basePath: (basePath ?? ((sourcePath is null)
                 ? null
                 : Path.GetDirectoryName(path: sourcePath))),
@@ -299,6 +316,7 @@ public static class WorldCompiler {
     /// <param name="sourceMap">The map the lowering registers pointers in; a fresh one when omitted.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <param name="allowMultiple">Whether the caller accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="includeTests">Whether to lower test blocks into generated worlds.</param>
     /// <param name="updateAssets">Prepares refreshed asset pins for an explicit save after validation.</param>
     /// <returns>The compilation.</returns>
     /// <exception cref="IOException">The file could not be read.</exception>
@@ -310,21 +328,28 @@ public static class WorldCompiler {
         SourceMap? sourceMap = null,
         CancellationToken cancellationToken = default,
         bool allowMultiple = false,
-        bool updateAssets = false
+        bool updateAssets = false,
+        bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(argument: path);
 
-        return Compile(
+        var fullPath = Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+        var reads = new CompileInputLog();
+        using var recording = CompileInputs.Record(log: reads);
+        var result = Compile(
+            includeTests: includeTests,
             allowMultiple: allowMultiple,
             updateAssets: updateAssets,
             cancellationToken: cancellationToken,
             diagnostics: diagnostics,
             embeddings: embeddings,
             imports: imports,
-            source: CompileInputs.ReadAllText(path: path),
+            source: CompileInputs.ReadAllText(path: fullPath),
             sourceMap: sourceMap,
             sourcePath: path
         );
+        // The file reader records its original bytes before decoding, including an encoding's byte-order mark.
+        return result with { Inputs = reads.Inputs };
     }
 
     // The enums a source's basis declares, read from the basis's composed document through the one composer, so the

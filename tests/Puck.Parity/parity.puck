@@ -1,0 +1,765 @@
+schema: "puck.world.definition.v1"
+documentId: "parity-vocabulary"
+
+cameras [
+  {
+    anchor: null
+    name: "sky-cam"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "sky-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 80, 0]))
+        lookAt(subject: worldPoint(point: [0, 60, -300]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "materials-cam"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "materials-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 1.9, 12]))
+        lookAt(subject: worldPoint(point: [0, 1.9, 20.6]))
+        fieldOfView(fieldOfViewRadians: 0.75)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "lattice-cam"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "lattice-cam"
+      operations [
+        anchor(subject: worldPoint(point: [288, 6, -10]))
+        lookAt(subject: worldPoint(point: [288, 0.5, 0]))
+        fieldOfView(fieldOfViewRadians: 0.85)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "noise-cam"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "noise-cam"
+      operations [
+        anchor(subject: worldPoint(point: [400, 1, -4]))
+        lookAt(subject: worldPoint(point: [400, 1, 0]))
+        fieldOfView(fieldOfViewRadians: 0.75)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "vocabulary-cam"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "vocabulary-cam"
+      operations [
+        anchor(subject: worldPoint(point: [604, 9, -26]))
+        lookAt(subject: worldPoint(point: [604, 2, 0]))
+        fieldOfView(fieldOfViewRadians: 1.4)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "parity-select"
+    renderHeight: 480
+    renderWidth: 640
+    rig {
+      name: "parity-select"
+      operations [
+        selectProgram(cases: [
+          {
+            program: "sky-cam"
+            value: 0
+          }
+          {
+            program: "materials-cam"
+            value: 1
+          }
+          {
+            program: "lattice-cam"
+            value: 2
+          }
+          {
+            program: "noise-cam"
+            value: 3
+          }
+          {
+            program: "vocabulary-cam"
+            value: 4
+          }
+        ], default: "sky-cam", key: "state.station"
+        )
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+captures {
+  rows [
+    {
+      palette [
+        {
+          color: "#000000"
+          material: 0
+        }
+        {
+          color: "#FFFFFF"
+          material: 1
+        }
+      ]
+      instance: "world"
+      station: sky
+      ticks [600, 620, 640, 660]
+    }
+    {
+      palette [
+        {
+          color: "#2E333D"
+          material: 0
+        }
+        {
+          color: "#EBC74C"
+          material: 1
+        }
+      ]
+      instance: "world"
+      station: materials
+      ticks [720, 740]
+    }
+    {
+      palette [
+        {
+          color: "#80FFCC"
+          material: 0
+        }
+        {
+          color: "#4A805A"
+          material: 1
+        }
+        {
+          color: "#8C6460"
+          material: 2
+        }
+      ]
+      instance: "world"
+      station: lattice
+      ticks [860, 880]
+    }
+    {
+      palette [
+        {
+          color: "#D8594D"
+          material: 0
+        }
+        {
+          color: "#101010"
+          material: 1
+        }
+      ]
+      instance: "world"
+      station: noise
+      ticks [1010, 1030]
+    }
+    {
+      palette [
+        {
+          color: "#20242C"
+          material: 0
+        }
+        {
+          color: "#8C7A5D"
+          material: 1
+        }
+      ]
+      instance: "world"
+      station: vocabulary
+      ticks [1110, 1150]
+    }
+    {
+      instance: "binding"
+      palette [
+        {
+          color: "#000000"
+          material: 0
+        }
+        {
+          color: "#FFFFFF"
+          material: 1
+        }
+      ]
+      station: binding
+      ticks [1205, 1225]
+    }
+    {
+      instance: "bound"
+      palette [
+        {
+          color: "#000000"
+          material: 0
+        }
+        {
+          color: "#FFFFFF"
+          material: 1
+        }
+      ]
+      station: bound
+      ticks [1195, 1215]
+    }
+    {
+      converge: 8
+      instance: "world"
+      palette [
+        {
+          color: "#20242C"
+          material: 0
+        }
+        {
+          color: "#8C7A5D"
+          material: 1
+        }
+      ]
+      station: converge
+      ticks [1300, 1330]
+    }
+  ]
+}
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [SmoothUnionContact]
+}
+
+generation {
+  worldSeed: 424242
+}
+
+host {
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 480
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 640
+}
+
+placements {
+  placement "vocabScale1" {
+    prototype: "vocabRig"
+    position [588, 0, 0]
+  }
+
+  placement "vocabScale2" {
+    prototype: "vocabRig"
+    position [615, 0, 0]
+    scale: 2
+  }
+
+  placement "grooveSeam" {
+    prototype: "grooveSeam"
+    position [592, 1.5, -7]
+    scale: 1.5
+  }
+
+  placement "pipeSeam" {
+    prototype: "pipeSeam"
+    position [599, 1.5, -7]
+    scale: 1.5
+  }
+
+  placement "cellsF1" {
+    prototype: "cellsF1"
+    position [606, 1.5, -7]
+    scale: 1.5
+  }
+
+  placement "cellsF2" {
+    prototype: "cellsF2"
+    position [613, 1.5, -7]
+    scale: 1.5
+  }
+}
+
+prototypes {
+  prototype "vocabRig" {
+    document {
+      drivers [
+        {
+          blendInSeconds: 0
+          cadence: 1.4
+          name: "sway"
+          signal: "state.station"
+        }
+      ]
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "vocabRig"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+        {
+          color: "#C0455E"
+          roughness: 0.45
+          sheen: 0.05
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "chamferedBox" {
+        chamfer: 0.3
+        material: 0
+        position [-4, 0.8, 0]
+        scale [0.8, 0.8, 0.8]
+      }
+
+      shape Prism "panelPrism" {
+        material: 0
+        panel {
+          depth: 0.15
+          inset: 0.15
+          material: 1
+        }
+        position [-2, 0.8, 0]
+        profile {
+          cornerRadius: 0.25
+          kind: "ChamferedRectangle"
+        }
+        scale [0.8, 0.8, 0.6]
+      }
+
+      shape Cylinder "panelCylinder" {
+        chamfer: 0.2
+        material: 0
+        panel {
+          depth: -0.15
+          inset: 0.18
+          material: 1
+        }
+        position [0, 0.8, 0]
+        scale [0.7, 0.8, 0.7]
+      }
+
+      shape Sphere "wingHinge" {
+        material: 2
+        position [2.2, 1.6, 0]
+        scale [0.15, 0.15, 0.15]
+        swings [
+          {
+            amplitude: 0.45
+            axis [0, 0, 1]
+            driver: "sway"
+            phase: 0
+            pivot [2.2, 1.6, 0]
+            wave: "sine"
+          }
+        ]
+      }
+
+      shape Box "wingPanel" {
+        domain [
+          symmetry(normal: [1, 0, 0])
+        ]
+        material: 2
+        parent: "wingHinge"
+        position [2.6, 1.6, 0]
+        scale [0.5, 0.06, 0.3]
+      }
+
+      shape Box "repeatPlate" {
+        domain [
+          repeat(limit: [3, 0, 0], origin: [0.5, 0, 0], spacing: [0.5, 0.5, 0.5])
+        ]
+        material: 0
+        position [0, 0.2, 1.8]
+        scale [0.18, 0.15, 0.04]
+      }
+    }
+  }
+
+  prototype "grooveSeam" {
+    document {
+      name: "grooveSeam"
+      palette [
+        {
+          color: "#D19D50"
+          roughness: 0.42
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere {
+        material: 0
+        position [-0.65, 0, 0]
+      }
+
+      shape Sphere {
+        blend: "GrooveUnion"
+        material: 0
+        position [0.65, 0, 0]
+        smooth: 0.18
+      }
+    }
+  }
+
+  prototype "pipeSeam" {
+    document {
+      name: "pipeSeam"
+      palette [
+        {
+          color: "#65BDD0"
+          roughness: 0.42
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere {
+        material: 0
+        position [-0.65, 0, 0]
+      }
+
+      shape Sphere {
+        blend: "PipeUnion"
+        material: 0
+        position [0.65, 0, 0]
+        smooth: 0.25
+      }
+    }
+  }
+
+  prototype "cellsF1" {
+    document {
+      name: "cellsF1"
+      palette [
+        {
+          color: "#8BB879"
+          roughness: 0.42
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere {
+        cells {
+          amplitude: 0.28
+          frequency: 4
+          mode: "F1"
+          randomness: 0.46
+          seed: 3751
+        }
+        material: 0
+        position [0, 0, 0]
+      }
+    }
+  }
+
+  prototype "cellsF2" {
+    document {
+      name: "cellsF2"
+      palette [
+        {
+          color: "#C177A3"
+          roughness: 0.42
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere {
+        cells {
+          amplitude: 0.24
+          frequency: 4
+          mode: "F2MinusF1"
+          randomness: 0.2
+          seed: 3751
+        }
+        material: 0
+        position [0, 0, 0]
+      }
+    }
+  }
+}
+
+render {
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0.012 }, { at: 0.5, value: 0.035 }]
+      }
+    }
+  }
+  ambientOcclusion: true
+  temporal: false
+  lighting {
+    lights [
+      directional(name: "key", shadow: always)
+      point(color: "#29C8FF", position: [0, 2.6, 19.4], radius: 1.4, weight: 1.6)
+    ]
+  }
+  shadowLights: 1
+  shadows: High
+  sky {
+    layers [
+      gradient(stops: [
+        {
+          elevation: -1
+          color: "#101829"
+        }
+        {
+          elevation: 0
+          color: "#243455"
+        }
+        {
+          elevation: 1
+          color: "#071020"
+        }
+      ], name: "air"
+      )
+      sunDisc(light: 0, radius: 0.045, intensity: 2, name: "sun")
+      stars(density: 32, brightness: 4, seed: 3, twinkle: {
+        share: 1
+        depth: 0.8
+        rate: 1
+      }, name: "stars"
+      )
+      clouds(coverage: 0.4, softness: 0.2, scale: 0.5, seed: 5, color: "#91A5C8", drift: [0.2, 0.07], shear: [0.05, -0.03], spin: 0.2, curl: 0.3, name: "clouds")
+      panel(name: "studio-key", direction: [0.2, 1, 0.3], size: [0.2, 0.5], color: "#FFF4E8", intensity: 2, blur: 0.02, visibility: lighting)
+      panel(name: "studio-fill", direction: [-1, 0.3, 0.5], size: [0.4, 0.12], color: "#BBCDFF", intensity: 0.6, blur: 0.02, visibility: lighting)
+    ]
+    clock: skyMode
+    keys [
+      {
+        at: 0
+        layers {
+          air: gradient(stops: [
+            {
+              color: "#101829"
+            }
+            {
+              color: "#243455"
+            }
+            {
+              color: "#071020"
+            }
+          ]
+          )
+          sun: sunDisc(intensity: 2)
+          stars: stars(brightness: 4)
+          clouds: clouds(coverage: 0.4)
+        }
+      }
+      {
+        at: 0.5
+        layers {
+          air: gradient(stops: [
+            {
+              color: "#7E5360"
+            }
+            {
+              color: "#E39C75"
+            }
+            {
+              color: "#345C98"
+            }
+          ]
+          )
+          sun: sunDisc(intensity: 3)
+          stars: stars(brightness: 0.2)
+          clouds: clouds(coverage: 0.65)
+        }
+      }
+    ]
+  }
+}
+
+rule "toMaterials" {
+  when $tick >= 700
+  mode: Edge
+  station = 1
+}
+
+rule "toLattice" {
+  when $tick >= 850
+  mode: Edge
+  station = 2
+}
+
+rule "toNoise" {
+  when $tick >= 1000
+  mode: Edge
+  station = 3
+}
+
+rule "toVocabulary" {
+  when $tick >= 1100
+  mode: Edge
+  station = 4
+}
+
+rule "toGrainSeed" {
+  when $tick >= 1210
+  mode: Edge
+  grainSeed = 13
+}
+
+rule "sky-610" {
+  when $tick >= 610
+  mode: Edge
+  skyMode = 0.25
+}
+
+rule "sky-630" {
+  when $tick >= 630
+  mode: Edge
+  skyMode = 0.5
+}
+
+rule "sky-650" {
+  when $tick >= 650
+  mode: Edge
+  skyMode = 0.75
+}
+
+simulation {
+  rateHz: 240
+}
+
+state {
+  lattices [
+    field(cellSize: 1, depth: 16, layers: 1, name: "parityLattice", origin: [280, 0, -8], reactions: [], stepEveryTicks: 240, width: 16)
+  ]
+
+  world {
+    slot station = 0
+
+    slot grainSeed = 0
+
+    row {
+      domain: cellsOf(topology: parityLattice)
+      field {
+        color: "#3FAF6F"
+        heightScale: 2
+        initial: 0
+        max: 1
+        min: 0
+        paint [
+          rect(maxX: 292, maxZ: 4, minX: 284, minZ: -4, value: 1)
+        ]
+      }
+      kind: "Fixed"
+      name: "bump"
+    }
+
+    slot skyMode = 0.0
+  }
+}
+
+timeline {
+  clocks [
+    {
+      name: "skyMode"
+      state: skyMode
+    }
+  ]
+}
+
+views {
+  layout "parity" {
+    seatCount: 0
+    slots [
+      {
+        camera: "parity-select"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+      {
+        camera: null
+        height: 0.25
+        instance: "binding"
+        width: 0.25
+        x: 0.75
+        y: 0.75
+      }
+      {
+        camera: null
+        height: 0.25
+        instance: "bound"
+        width: 0.25
+        x: 0.5
+        y: 0.75
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "unusedSeatRig" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+
+  graph "binding" {
+    camera: null
+    source: "binding.graph.json"
+    timeScale: 1
+  }
+
+  graph "bound" {
+    camera: null
+    parameter grain.seed = "state.grainSeed"
+    source: "binding.graph.json"
+    tier: high
+    timeScale: 1
+  }
+}

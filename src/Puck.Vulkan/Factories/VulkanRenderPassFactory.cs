@@ -37,7 +37,7 @@ public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
             request: request
         );
 
-        result.ThrowIfFailed(operation: "vkCreateRenderPass");
+        result.ThrowIfFailed(device: request.Device, operation: "vkCreateRenderPass");
 
         if (0 == renderPassHandle) {
             throw new InvalidOperationException(message: "vkCreateRenderPass returned success without a valid render-pass handle.");

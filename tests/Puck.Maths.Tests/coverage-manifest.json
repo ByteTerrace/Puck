@@ -1412,6 +1412,51 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.CertifiedSweep..ctor(Puck.Maths.UnitInterval32,Puck.Maths.FixedPosition,Puck.Maths.CertifiedSweepOutcome,System.Int32)",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.BoundsQueries",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Fraction",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Outcome",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Reached",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Clear",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Contact",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Exhausted",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
       "CoveredBy": [
         "presented.homology-torsion-and-betti"
       ],
@@ -2815,6 +2860,13 @@
     },
     {
       "CoveredBy": [
+        "curvature-spline.binary-round-trip"
+      ],
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Read(System.IO.BinaryReader)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "curvature-spline.arc-length-table",
         "curvature-spline.arc-station-oracle",
         "curvature-spline.deterministic-recompile",
@@ -2840,6 +2892,13 @@
         "curvature-spline.evaluate-raw-station-boundaries"
       ],
       "Id": "Puck.Maths.CompiledCurvatureSpline.TotalLengthRaw",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "curvature-spline.binary-round-trip"
+      ],
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Write(System.IO.BinaryWriter)",
       "State": "covered"
     },
     {
@@ -5742,6 +5801,245 @@
     },
     {
       "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Abs(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arc-functions-enclose-the-series",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Acos(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arc-functions-enclose-the-series",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Asin(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.atan2-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Atan2(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Clamp(Puck.Maths.FixedInterval,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Contains(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Contains(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.circular-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Cos(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Entire",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Floor(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.FromPoint(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Hull(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.IsUnbounded",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Lower",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Magnitude(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Magnitude(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Max(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Min(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.pow-encloses-the-series"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Pow(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Round(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.circular-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Sin(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Sqrt(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Square(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Union(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Upper",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Addition(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Division(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Multiply(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Subtraction(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_UnaryNegation(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "mass-properties.fraction-bit-count-bound"
       ],
       "Id": "Puck.Maths.FixedMassProperties.MaximumFractionBitCount",
@@ -7760,7 +8058,8 @@
     {
       "CoveredBy": [
         "scalar.pow-envelope",
-        "scalar.pow-exact-lattice"
+        "scalar.pow-exact-lattice",
+        "scalar.pow-whole-correctly-rounded"
       ],
       "Id": "Puck.Maths.FixedQ4816.Pow(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered"
@@ -7815,6 +8114,14 @@
         "scalar.trigonometry-turns-deep"
       ],
       "Id": "Puck.Maths.FixedQ4816.SinCosTurns(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.smoothstep-correctly-rounded",
+        "scalar.smoothstep-edges"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Smoothstep(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -8154,6 +8461,7 @@
       "CoveredBy": [
         "quaternion.algebraic-sanity-and-fromto-poles",
         "quaternion.from-to-full-width-alignment",
+        "quaternion.from-to-near-antiparallel",
         "quaternion.from-to-shortest-arc"
       ],
       "Id": "Puck.Maths.FixedQuaternion.FromTo(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
@@ -8246,6 +8554,7 @@
     {
       "CoveredBy": [
         "quaternion.slerp-endpoints-and-arc",
+        "quaternion.slerp-follows-the-arc",
         "quaternion.slerp-ladder-transcription"
       ],
       "Id": "Puck.Maths.FixedQuaternion.Slerp(Puck.Maths.FixedQuaternion,Puck.Maths.FixedQuaternion,Puck.Maths.FixedQ4816)",
@@ -8491,6 +8800,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.exp-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -8547,6 +8857,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.log-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -9106,6 +9417,13 @@
     },
     {
       "CoveredBy": [
+        "vector.compare-length-matches-the-squares"
+      ],
+      "Id": "Puck.Maths.FixedVector3.CompareLengthTo(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.vector-cross-vs-oracle",
         "vector.construction-and-refusals",
         "vector.exact-algebra-on-the-sublattice",
@@ -9145,6 +9463,13 @@
         "vector.adoption-ladder"
       ],
       "Id": "Puck.Maths.FixedVector3.FromVector3(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.is-within-matches-length"
+      ],
+      "Id": "Puck.Maths.FixedVector3.IsWithin(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {
@@ -11060,6 +11385,11 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.ICertifiedSweepQuery.TryCertifiedSweep(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,System.Int32,Puck.Maths.FixedQ4816,Puck.Maths.CertifiedSweep&)",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
+      "State": "waived"
+    },
+    {
       "CoveredBy": [
         "presented.material-fused-identities"
       ],
@@ -11107,6 +11437,16 @@
     {
       "Id": "Puck.Maths.IDrawGenerator.NextUInt32(System.UInt32,System.UInt32)",
       "Reason": "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IFieldBounds.StepScale",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IFieldBounds.TryDistanceBounds(Puck.Maths.FixedPosition,Puck.Maths.FixedPosition,Puck.Maths.FixedInterval&)",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
       "State": "waived"
     },
     {
@@ -21218,13 +21558,16 @@
     },
     {
       "CoveredBy": [
-        "dynamics.create-constants-vs-oracle"
+        "dynamics.create-constants-vs-oracle",
+        "dynamics.decay-factor-vs-series"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.DecayRateRaw",
       "State": "covered"
     },
     {
       "CoveredBy": [
+        "dynamics.decay-factor-vs-series",
+        "dynamics.overdamped-wide-fast-pole",
         "dynamics.step-vs-evaluate-close-agreement"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.Evaluate(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,System.UInt64,System.UInt64)",
@@ -21314,6 +21657,7 @@
     },
     {
       "CoveredBy": [
+        "dynamics.decay-factor-vs-series",
         "dynamics.step-vs-evaluate-close-agreement"
       ],
       "Id": "Puck.Maths.SecondOrderSample.Value",

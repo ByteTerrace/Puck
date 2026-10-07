@@ -642,9 +642,17 @@ export type ActionTrigger = {
 
 export type ActionTriggerMode = "Level" | "Edge";
 
-export type BindableColor = string;
+export type BindableAngle = number | string | ShapeNonNullable5;
 
-export type BindableScalar = number | string;
+export type BindableColor = string | ShapeNonNullable3;
+
+export type BindableDirection = [number, number, number] | ShapeNonNullable;
+
+export type BindableScalar = number | string | ShapeNonNullable5;
+
+export type BindableVector2 = [number, number] | ShapeNonNullable7;
+
+export type BindableVector3 = [number, number, number] | ShapeNonNullable;
 
 export type BindingActivatorDefinition = {
   sequence: (string | null)[];
@@ -1086,6 +1094,8 @@ export type DocumentVector3 = [number, number, number] | string;
 
 export type DocumentWriteMask = string;
 
+export type DoubleList = number[];
+
 export type DrawTiming = "Boot" | "TickPeriod" | "Event";
 
 export type DynamicsRow = {
@@ -1119,11 +1129,11 @@ export type ExpressionProgram = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable20[];
+  instructions: ShapeNonNullable28[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable21[];
+  subprograms?: ShapeNonNullable29[];
   [k: string]: unknown;
 };
 
@@ -1134,11 +1144,11 @@ export type ExpressionProgramNonNullable = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable30[];
+  instructions: ShapeNonNullable38[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable31[];
+  subprograms?: ShapeNonNullable39[];
   [k: string]: unknown;
 };
 
@@ -1149,11 +1159,11 @@ export type ExpressionProgramNonNullable2 = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable40[];
+  instructions: ShapeNonNullable48[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable41[];
+  subprograms?: ShapeNonNullable49[];
   [k: string]: unknown;
 };
 
@@ -1323,7 +1333,7 @@ export type Int32List = number[];
 
 export type Int64List = number[];
 
-export type IntentSource = "Live" | "Idle" | Shape;
+export type IntentSource = "Live" | "Idle" | ShapeNonNullable8;
 
 export type LatticeTopology = LatticeTopologyGrid | LatticeTopologyRing | LatticeTopologyHex | LatticeTopologyBox | LatticeTopologyGraph | LatticeTopologyTiling | WorldFieldTopology | null;
 
@@ -1975,6 +1985,13 @@ export type RulePoolIteration = {
 
 export type SafeName = string;
 
+/**
+ * An independently composable instance's participation in diffuse indirect lighting.
+ */
+export type SdfIndirectParticipation = "Default" | "Cast" | "Receive" | "Off";
+
+export type SdfIndirectTier = "Off" | "Medium" | "High";
+
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
@@ -1982,173 +1999,224 @@ export type SeatActivationPolicy = "Eager" | "OnDemand";
 export type ShadowTier = "Off" | "Low" | "Medium" | "High";
 
 export type Shape = {
-  $type: "producer";
-  name: string;
+  at: number;
+  value: [number, number, number];
+  ease?: "Linear" | "Smooth" | "Step";
 };
 
-export type ShapeNonNullable = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
+export type ShapeNonNullable = {
+  clock: string;
+  keys: Shape[];
+};
 
-export type ShapeNonNullable10 = string | number | ShapeNonNullable8 | ShapeNonNullable9;
+export type ShapeNonNullable10 = {
+  op: ShapeNonNullable9;
+};
 
 export type ShapeNonNullable11 = {
-  channel: string;
-  arguments?: ShapeNonNullable10[];
-};
-
-export type ShapeNonNullable12 = {
-  binding: string;
-  field: string;
-};
-
-export type ShapeNonNullable13 = {
-  pool: string;
-  slot: number;
-  field: string;
-};
-
-export type ShapeNonNullable14 = {
-  op: "Operand";
-  name: StateChannelRef;
-  key?: StateChannelRef;
-};
-
-export type ShapeNonNullable15 = {
-  $type: "cell";
-  name: StateChannelRef;
-  key?: StateChannelRef;
-};
-
-export type ShapeNonNullable16 = {
-  $type: "literal";
-  value: string;
-};
-
-export type ShapeNonNullable17 = {
-  $type: "embed";
-  text: string;
-  space?: string;
-};
-
-export type ShapeNonNullable18 = ShapeNonNullable15 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable19 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable18;
-  right: ShapeNonNullable18;
-};
-
-export type ShapeNonNullable2 = {
-  op: ShapeNonNullable;
-};
-
-export type ShapeNonNullable20 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable14 | ShapeNonNullable19 | null;
-
-export type ShapeNonNullable21 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable20[];
-};
-
-export type ShapeNonNullable22 = {
-  zone: ExpressionProgram;
-};
-
-export type ShapeNonNullable23 = {
-  expression: ExpressionProgram;
-};
-
-export type ShapeNonNullable24 = string | number | ShapeNonNullable22 | ShapeNonNullable23;
-
-export type ShapeNonNullable25 = {
-  channel: string;
-  arguments?: ShapeNonNullable24[];
-};
-
-export type ShapeNonNullable26 = {
-  op: "Operand";
-  name: unknown;
-  key?: unknown;
-};
-
-export type ShapeNonNullable27 = {
-  $type: "cell";
-  name: unknown;
-  key?: unknown;
-};
-
-export type ShapeNonNullable28 = ShapeNonNullable27 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable29 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable28;
-  right: ShapeNonNullable28;
-};
-
-export type ShapeNonNullable3 = {
   op: "Argument";
   index: number;
 };
 
-export type ShapeNonNullable30 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable26 | ShapeNonNullable29 | null;
-
-export type ShapeNonNullable31 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable30[];
-};
-
-export type ShapeNonNullable32 = {
-  zone: ExpressionProgramNonNullable;
-};
-
-export type ShapeNonNullable33 = {
-  expression: ExpressionProgramNonNullable;
-};
-
-export type ShapeNonNullable34 = string | number | ShapeNonNullable32 | ShapeNonNullable33;
-
-export type ShapeNonNullable35 = {
-  channel: string;
-  arguments?: ShapeNonNullable34[];
-};
-
-export type ShapeNonNullable36 = {
-  op: "Operand";
-  name: StateChannelRefNonNullable2;
-  key?: StateChannelRefNonNullable2;
-};
-
-export type ShapeNonNullable37 = {
-  $type: "cell";
-  name: StateChannelRefNonNullable2;
-  key?: StateChannelRefNonNullable2;
-};
-
-export type ShapeNonNullable38 = ShapeNonNullable37 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable39 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable38;
-  right: ShapeNonNullable38;
-};
-
-export type ShapeNonNullable4 = {
+export type ShapeNonNullable12 = {
   op: "BoardShift" | "BoardRay" | "BoardImage";
   topology: string;
   index: string;
 };
 
-export type ShapeNonNullable40 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable36 | ShapeNonNullable39 | null;
-
-export type ShapeNonNullable41 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable40[];
+export type ShapeNonNullable13 = {
+  op: "Call";
+  subprogram: number;
 };
 
-export type ShapeNonNullable42 = number | string | boolean;
+export type ShapeNonNullable14 = {
+  op: "Constant";
+  value: number;
+};
+
+export type ShapeNonNullable15 = {
+  op: "All" | "Any" | "Count" | "Sum";
+  family: string;
+  binder: string;
+  subprogram: number;
+};
+
+export type ShapeNonNullable16 = {
+  zone: unknown;
+};
+
+export type ShapeNonNullable17 = {
+  expression: unknown;
+};
+
+export type ShapeNonNullable18 = string | number | ShapeNonNullable16 | ShapeNonNullable17;
+
+export type ShapeNonNullable19 = {
+  channel: string;
+  arguments?: ShapeNonNullable18[];
+};
+
+export type ShapeNonNullable2 = {
+  at: number;
+  value: string;
+  ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable20 = {
+  binding: string;
+  field: string;
+};
+
+export type ShapeNonNullable21 = {
+  pool: string;
+  slot: number;
+  field: string;
+};
+
+export type ShapeNonNullable22 = {
+  op: "Operand";
+  name: StateChannelRef;
+  key?: StateChannelRef;
+};
+
+export type ShapeNonNullable23 = {
+  $type: "cell";
+  name: StateChannelRef;
+  key?: StateChannelRef;
+};
+
+export type ShapeNonNullable24 = {
+  $type: "literal";
+  value: string;
+};
+
+export type ShapeNonNullable25 = {
+  $type: "embed";
+  text: string;
+  space?: string;
+};
+
+export type ShapeNonNullable26 = ShapeNonNullable23 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable27 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable26;
+  right: ShapeNonNullable26;
+};
+
+export type ShapeNonNullable28 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable22 | ShapeNonNullable27 | null;
+
+export type ShapeNonNullable29 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable28[];
+};
+
+export type ShapeNonNullable3 = {
+  clock: string;
+  keys: ShapeNonNullable2[];
+};
+
+export type ShapeNonNullable30 = {
+  zone: ExpressionProgram;
+};
+
+export type ShapeNonNullable31 = {
+  expression: ExpressionProgram;
+};
+
+export type ShapeNonNullable32 = string | number | ShapeNonNullable30 | ShapeNonNullable31;
+
+export type ShapeNonNullable33 = {
+  channel: string;
+  arguments?: ShapeNonNullable32[];
+};
+
+export type ShapeNonNullable34 = {
+  op: "Operand";
+  name: unknown;
+  key?: unknown;
+};
+
+export type ShapeNonNullable35 = {
+  $type: "cell";
+  name: unknown;
+  key?: unknown;
+};
+
+export type ShapeNonNullable36 = ShapeNonNullable35 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable37 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable36;
+  right: ShapeNonNullable36;
+};
+
+export type ShapeNonNullable38 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable34 | ShapeNonNullable37 | null;
+
+export type ShapeNonNullable39 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable38[];
+};
+
+export type ShapeNonNullable4 = {
+  at: number;
+  value: number;
+  ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable40 = {
+  zone: ExpressionProgramNonNullable;
+};
+
+export type ShapeNonNullable41 = {
+  expression: ExpressionProgramNonNullable;
+};
+
+export type ShapeNonNullable42 = string | number | ShapeNonNullable40 | ShapeNonNullable41;
 
 export type ShapeNonNullable43 = {
+  channel: string;
+  arguments?: ShapeNonNullable42[];
+};
+
+export type ShapeNonNullable44 = {
+  op: "Operand";
+  name: StateChannelRefNonNullable2;
+  key?: StateChannelRefNonNullable2;
+};
+
+export type ShapeNonNullable45 = {
+  $type: "cell";
+  name: StateChannelRefNonNullable2;
+  key?: StateChannelRefNonNullable2;
+};
+
+export type ShapeNonNullable46 = ShapeNonNullable45 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable47 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable46;
+  right: ShapeNonNullable46;
+};
+
+export type ShapeNonNullable48 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable44 | ShapeNonNullable47 | null;
+
+export type ShapeNonNullable49 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable48[];
+};
+
+export type ShapeNonNullable5 = {
+  clock: string;
+  keys: ShapeNonNullable4[];
+};
+
+export type ShapeNonNullable50 = number | string | boolean;
+
+export type ShapeNonNullable51 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -2156,30 +2224,23 @@ export type ShapeNonNullable43 = {
   substepTicks?: number;
 };
 
-export type ShapeNonNullable5 = {
-  op: "Call";
-  subprogram: number;
-};
-
 export type ShapeNonNullable6 = {
-  op: "Constant";
-  value: number;
+  at: number;
+  value: [number, number];
+  ease?: "Linear" | "Smooth" | "Step";
 };
 
 export type ShapeNonNullable7 = {
-  op: "All" | "Any" | "Count" | "Sum";
-  family: string;
-  binder: string;
-  subprogram: number;
+  clock: string;
+  keys: ShapeNonNullable6[];
 };
 
 export type ShapeNonNullable8 = {
-  zone: unknown;
+  $type: "producer";
+  name: string;
 };
 
-export type ShapeNonNullable9 = {
-  expression: unknown;
-};
+export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
 
 /**
  * One numeric key of a Sort, in its declared precedence order.
@@ -2226,11 +2287,11 @@ export type StateCellClock = {
   /**
    * A StateDynamics follower's position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row's stored-value kind.
    */
-  y0?: number;
+  y0?: string;
   /**
    * A StateDynamics follower's velocity at EpochTick, per second, as raw FixedQ4816 bits.
    */
-  v0?: number;
+  v0?: string;
   /**
    * Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle's own ticksPerStep.
    */
@@ -2240,17 +2301,17 @@ export type StateCellClock = {
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRef = string | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRef = string | ShapeNonNullable19 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable = string | ShapeNonNullable25 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRefNonNullable = string | ShapeNonNullable33 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable2 = string | ShapeNonNullable35 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRefNonNullable2 = string | ShapeNonNullable43 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
@@ -4037,13 +4098,13 @@ export type WorldCameraProgramOpOrbit = {
    */
   distance: number;
   /**
-   * The orbit heading in radians, as a literal or numeric state binding.
+   * The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.
    */
-  yaw: BindableScalar;
+  yaw: BindableAngle;
   /**
-   * The orbit tilt in radians, as a literal or numeric state binding.
+   * The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.
    */
-  pitch: BindableScalar;
+  pitch: BindableAngle;
   /**
    * The world-axis offset from the current subject's origin to the pivot.
    */
@@ -4063,13 +4124,13 @@ export type WorldCameraProgramOpOrbitNullable = {
    */
   distance: number;
   /**
-   * The orbit heading in radians, as a literal or numeric state binding.
+   * The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.
    */
-  yaw: BindableScalar;
+  yaw: BindableAngle;
   /**
-   * The orbit tilt in radians, as a literal or numeric state binding.
+   * The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.
    */
-  pitch: BindableScalar;
+  pitch: BindableAngle;
   /**
    * The world-axis offset from the current subject's origin to the pivot.
    */
@@ -4262,7 +4323,7 @@ export type WorldCaptureRow = {
    */
   palette: (WorldCapturePaletteEntry | null)[];
   /**
-   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it, and a world camera's name (one not relative to a seat) captures that camera's view, which renders while a screen, a HUD frame or a probe export shows it.
    */
   instance?: string | null;
   /**
@@ -4353,6 +4414,29 @@ export type WorldClock = {
    * A state clock's Fixed or Int row. Refused beside PeriodSeconds.
    */
   state?: string | null;
+  /**
+   * An anchored clock's anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.
+   */
+  anchor?: WorldClockAnchor | null;
+};
+
+export type WorldClockAnchor = {
+  /**
+   * The engine tick the anchor stands at.
+   */
+  tick: number;
+  /**
+   * The phase at Tick, a whole turn being 2^64.
+   */
+  phase: number;
+  /**
+   * The phase one authoritative tick adds, wrapping; zero for a clock held still.
+   */
+  rate?: number;
+  /**
+   * The engine ticks one authoritative tick spans; zero exactly when Rate is.
+   */
+  step?: number;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -4757,6 +4841,8 @@ export type WorldDistributionRegionScatter = {
   seed?: number;
 };
 
+export type WorldEase = "Linear" | "Smooth" | "Step";
+
 export type WorldEditorCamera = {
   /**
    * The orbit rate at full input, in radians per second; positive.
@@ -5039,7 +5125,7 @@ export type WorldEffectScaleVerticalVelocity = {
 };
 
 /**
- * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.
+ * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's facts row, together. An owned identity's row is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.
  */
 export type WorldEffectSetIdentityFact = {
   $type?: "setIdentityFact";
@@ -5816,7 +5902,7 @@ export type WorldHudDefaults = {
    */
   enabled: boolean;
   /**
-   * The drawn pointer cursor's presentation policy, or null for no drawn cursor at all — the engine draws no cursor of its own; the standard policy is AUTHORED, in Assets/worlds/standard.world.json. Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to hidden.
+   * The drawn pointer cursor's presentation policy, or null for no drawn cursor at all — the engine draws no cursor of its own; a world AUTHORS the policy or inherits its basis's. Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to hidden.
    */
   cursor?: WorldHudCursor | null;
   /**
@@ -6566,11 +6652,11 @@ export type WorldMarkerStyle = {
   /**
    * The ring's stroke color. Required exactly when Ring is authored; omitted otherwise.
    */
-  ringColor?: BindableColor | null;
+  ringColor?: BindableColor;
   /**
    * The ring's opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.
    */
-  ringAlpha?: BindableScalar | null;
+  ringAlpha?: BindableScalar;
 };
 
 export type WorldMemberIdentity = {
@@ -6965,6 +7051,10 @@ export type WorldPlacement = {
    * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
    */
   holding?: number;
+  /**
+   * The whole placement's indirect-light policy. Default follows static casting or the world's moving-body default; Receive receives without casting, Cast does both, and Off does neither.
+   */
+  indirect?: SdfIndirectParticipation;
 };
 
 /**
@@ -7786,9 +7876,9 @@ export type WorldPrototype = {
        */
       soften?: number | null;
       /**
-       * The bounce tint as #RRGGBB or a state binding (null = black — no bounce) — see Bounce.
+       * The fill tint as #RRGGBB or a state binding (null = black — no fill) — see Fill.
        */
-      bounce?: string | null;
+      fill?: string | null;
       /**
        * Optional refractive paint layer.
        */
@@ -7808,6 +7898,14 @@ export type WorldPrototype = {
           seed?: number;
         };
       } | null;
+      /**
+       * The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.
+       */
+      bleed?: string | null;
+      /**
+       * The finite nonnegative gain on received indirect light; null means one.
+       */
+      receive?: number | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).
@@ -7889,13 +7987,17 @@ export type WorldPrototype = {
          */
         spacing: unknown;
         /**
-         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
          */
         limit?: unknown;
         /**
          * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
          */
         origin?: unknown;
+        /**
+         * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+         */
+        isUnbounded?: boolean;
       } | {
         $type?: "polar";
         /**
@@ -7921,7 +8023,7 @@ export type WorldPrototype = {
       } | {
         $type?: "wallpaper";
         /**
-         * The wallpaper group.
+         * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
          */
         group: "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
         /**
@@ -7929,7 +8031,7 @@ export type WorldPrototype = {
          */
         cell: unknown;
         /**
-         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
          */
         limit?: unknown;
         /**
@@ -7940,10 +8042,6 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
-        /**
-         * The symmetry-LOD distance threshold (null = 0, off).
-         */
-        lodDistance?: number | null;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
@@ -8078,7 +8176,7 @@ export type WorldPrototype = {
        */
       panel?: {
         /**
-         * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
+         * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
          */
         inset: number;
         /**
@@ -8651,6 +8749,7 @@ export type WorldPrototype = {
       enabled?: boolean;
       coverage?: number | null;
       softness?: number | null;
+      scatter?: number | null;
       /**
        * Whether the family is supported.
        */
@@ -8686,15 +8785,59 @@ export type WorldQualityPreset = {
   /**
    * The soft-shadow tier the preset selects.
    */
-  shadows?: ShadowTier;
+  shadows: ShadowTier;
   /**
    * Whether the preset enables ambient occlusion.
    */
-  ambientOcclusion?: boolean;
+  ambientOcclusion: boolean;
   /**
-   * The render-scale tier the preset selects.
+   * The scalar render-scale ceiling the preset selects.
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale: number;
+  /**
+   * Whether the preset reconstructs the world's views over time (world.temporal).
+   */
+  temporal?: boolean;
+  /**
+   * Whether secondary shadows reuse valid K history (world.shadow-amortize).
+   */
+  shadowAmortize?: boolean;
+  /**
+   * Whether the preset moves each view's render extent with the load (world.render-scale auto).
+   */
+  dynamicResolution?: boolean;
+  /**
+   * The number of held shadow slots, from 0 through 4.
+   */
+  shadowLights?: number;
+  /**
+   * The number of additional shadow handoff slots, from 0 through 2.
+   */
+  shadowFadeSlots?: number;
+  /**
+   * The length of a shadow handoff in delivered ticks; zero selects instant changes.
+   */
+  shadowFadeTicks?: number;
+  /**
+   * How a crossing proceeds when its handoff capacity is occupied.
+   */
+  shadowOverflow?: WorldShadowOverflow;
+  /**
+   * The per-view floor tier the preset selects (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier;
+  /**
+   * The sky's quality tier the preset selects (world.sky-quality).
+   */
+  sky?: WorldSkyTier;
+  /**
+   * The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.
+   */
+  indirect?: SdfIndirectTier | null;
+  /**
+   * The independent sky field grid fraction, one or one half.
+   */
+  skyFieldScale?: number;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8811,59 +8954,62 @@ export type WorldReference = {
 };
 
 /**
+ * An air kind's height profile: its density falls by a factor of e over each Falloff world units above Base, and rises as much below it, so a ray's optical depth through it has a closed form.
+ */
+export type WorldRenderAirHeight = {
+  /**
+   * The height at which the kind's density is its authored one. Absent is zero.
+   */
+  base?: BindableScalar;
+  /**
+   * The rise over which the density thins by a factor of e, at least SdfAtmosphere.MinFalloff world units. Absent is SdfAtmosphere.DefaultFalloff.
+   */
+  falloff?: BindableScalar;
+};
+
+export type WorldRenderAtmosphere = {
+  /**
+   * The fog: an exponential medium, level or thinning with height. Absent is no fog.
+   */
+  fog?: WorldRenderFog | null;
+  /**
+   * The haze: aerial perspective that scatters the sky and the light of the bodies that cast light, brightest toward them. Absent is no haze.
+   */
+  haze?: WorldRenderHaze | null;
+  /**
+   * The medium: water below a level surface, with its own extinction and colour. Absent is no medium.
+   */
+  medium?: WorldRenderMedium | null;
+};
+
+/**
  * The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.
  */
 export type WorldRenderCurvature = {
   /**
    * How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.
    */
-  cavity?: number | null;
+  cavity?: BindableScalar;
   /**
    * How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.
    */
-  rim?: number | null;
+  rim?: BindableScalar;
   /**
    * The ink outline's strength where the curvature magnitude spikes. Zero draws none.
    */
-  ink?: number | null;
+  ink?: BindableScalar;
   /**
    * The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.
    */
-  inkLow?: number | null;
+  inkLow?: BindableScalar;
   /**
    * The curvature magnitude at which the outline saturates.
    */
-  inkHigh?: number | null;
+  inkHigh?: BindableScalar;
   /**
    * BindableColor's grammar: the outline colour.
    */
-  inkColor?: BindableColor | null;
-};
-
-export type WorldRenderCycle = {
-  /**
-   * The state row read (its slot cell; Fixed or Int).
-   */
-  state: string;
-  /**
-   * At least two keys, strictly ascending At in [0, 1).
-   */
-  keys: (WorldRenderCycleKey | null)[];
-};
-
-export type WorldRenderCycleKey = {
-  /**
-   * The row-value fraction this key sits at, in [0, 1).
-   */
-  at: number;
-  /**
-   * The lighting fields this key moves, or null.
-   */
-  lighting?: WorldRenderLighting | null;
-  /**
-   * The sky fields this key moves, or null.
-   */
-  sky?: WorldRenderSky | null;
+  inkColor?: BindableColor;
 };
 
 export type WorldRenderDefaults = {
@@ -8880,13 +9026,25 @@ export type WorldRenderDefaults = {
    */
   ambientOcclusion?: boolean;
   /**
-   * The boot render-scale tier.
+   * The scalar boot render-scale ceiling in [0.125, 1].
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale?: number;
   /**
-   * The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).
+   * The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.
    */
   upscaleSharpness?: number;
+  /**
+   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
+   */
+  temporal?: boolean;
+  /**
+   * Whether secondary shadows boot reusing valid K history (world.shadow-amortize).
+   */
+  shadowAmortize?: boolean;
+  /**
+   * Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.
+   */
+  dynamicResolution?: boolean;
   /**
    * The world.quality low preset.
    */
@@ -8900,57 +9058,165 @@ export type WorldRenderDefaults = {
    */
   high?: WorldQualityPreset | null;
   /**
-   * The scene's directional sun and ambient term. Optional, and every field within it is optional individually — an absent section, or an absent field within it, resolves to SdfFrame's pinned default for that field, so a world renders unchanged until it authors one.
+   * The scene's direct lights and curvature shading. Optional, and every field within it is optional individually — an absent section, or an absent field within it, resolves to SdfFrame's pinned default for that field, so a world renders unchanged until it authors one.
    */
   lighting?: WorldRenderLighting | null;
   /**
-   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.
+   * The repeatable sky-layer stack. Optional; an absent section renders the default look, the two-stop gradient SdfSky starts from, as data the kernels read like any authored sky.
    */
   sky?: WorldRenderSky | null;
   /**
-   * Lighting and sky keyed over a state row's value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.
-   */
-  cycle?: WorldRenderCycle | null;
-  /**
-   * The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.
+   * The sky's bindable ambient and reflection gains, each defaulting to one. Zero disables that lighting contribution.
    */
   environment?: WorldRenderEnvironment | null;
+  /**
+   * Fog, height fog, haze and a medium between the camera and what it sees. An absent section renders the default fog; an authored section contains exactly the kinds it states.
+   */
+  atmosphere?: WorldRenderAtmosphere | null;
   /**
    * The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None — the stylized shaded color, unchanged.
    */
   tonemap?: WorldTonemap | null;
   /**
-   * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
+   * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
+  /**
+   * The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.
+   */
+  shadowLights?: number;
+  /**
+   * The boot number of additional shadow handoff slots, from 0 through 2.
+   */
+  shadowFadeSlots?: number;
+  /**
+   * The boot length of a shadow handoff in delivered ticks; zero selects instant changes.
+   */
+  shadowFadeTicks?: number;
+  /**
+   * How a crossing proceeds when its handoff capacity is occupied.
+   */
+  shadowOverflow?: WorldShadowOverflow;
+  /**
+   * The sky's boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.
+   */
+  skyQuality?: WorldSkyTier;
+  /**
+   * The world's diffuse indirect-light participation defaults.
+   */
+  indirect?: WorldRenderIndirect | null;
+  /**
+   * The boot sky field grid fraction, one or one half, independent of view render scale.
+   */
+  skyFieldScale?: number;
 };
 
 export type WorldRenderEnvironment = {
   /**
-   * The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.
+   * The diffuse irradiance gain. Absent is one; zero disables harmonic lighting.
    */
-  softboxes?: (WorldRenderSoftbox | null)[] | null;
+  ambient?: BindableScalar;
   /**
-   * The reflection horizon gradient. Absent is black — contributes nothing.
+   * The reflection gain. Absent is one; zero disables reflection lookups.
    */
-  horizon?: WorldRenderHorizon | null;
+  reflection?: BindableScalar;
 };
 
-export type WorldRenderHorizon = {
+export type WorldRenderFog = {
   /**
-   * The ground-ward (direction.y = −1) colour. Absent is black.
+   * The density per world unit, at the base when Height is authored. Absent is the default look's density.
    */
-  low?: BindableColor | null;
+  density?: BindableScalar;
   /**
-   * The sky-ward (direction.y = 1) colour. Absent is black.
+   * BindableColor's grammar: the colour the fog in-scatters. Absent is the sky in the pixel's direction, so a distant surface fades into the horizon behind it.
    */
-  high?: BindableColor | null;
+  color?: BindableColor;
+  /**
+   * The height fog's profile. Absent is a fog alike at every height.
+   */
+  height?: WorldRenderAirHeight | null;
+};
+
+export type WorldRenderHaze = {
+  /**
+   * The share of the light the haze takes over the far distance, in [0, 0.99]. Absent is zero, which draws none.
+   */
+  amount?: BindableScalar;
+  /**
+   * The Henyey-Greenstein anisotropy of its scattering toward the bodies, in [0, 0.9]: zero scatters alike in every direction. Absent is SdfAtmosphere.DefaultHazeAnisotropy.
+   */
+  anisotropy?: BindableScalar;
+  /**
+   * The haze's height profile, the amount taken at its base. Absent is a haze alike at every height.
+   */
+  height?: WorldRenderAirHeight | null;
+};
+
+export type WorldRenderIndirect = {
+  /**
+   * Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.
+   */
+  bodies?: SdfIndirectParticipation;
+  /**
+   * Bindable source gains in [0, 1]; absent gains are one.
+   */
+  sources?: WorldRenderIndirectSources | null;
+  /**
+   * Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.
+   */
+  bounces?: number | null;
+  /**
+   * Bindable receiver-only controls. They do not change cached radiance.
+   */
+  apply?: WorldRenderIndirectApply | null;
+  /**
+   * The boot cache tier, Medium by default. The live session lever and selected quality preset override it.
+   */
+  tier?: SdfIndirectTier;
+};
+
+export type WorldRenderIndirectApply = {
+  /**
+   * Final indirect diffuse gain.
+   */
+  intensity?: BindableScalar;
+  /**
+   * Final indirect diffuse tint.
+   */
+  tint?: BindableColor;
+  /**
+   * How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.
+   */
+  contact?: BindableScalar;
+};
+
+export type WorldRenderIndirectSources = {
+  /**
+   * Explicit diffuse light gain.
+   */
+  lights?: BindableScalar;
+  /**
+   * Material emission gain.
+   */
+  emission?: BindableScalar;
+  /**
+   * Acquired screen-face emission gain.
+   */
+  screens?: BindableScalar;
+  /**
+   * Physical radiance at certified world exits.
+   */
+  sky?: BindableScalar;
+  /**
+   * Reflected preceding-sweep radiance gain, once per bounce.
+   */
+  feedback?: BindableScalar;
 };
 
 /**
- * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.
+ * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.
  */
-export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightHemisphere | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightOccluder | null;
+export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightOccluder | null;
 
 /**
  * A Lambert directional light.
@@ -8960,55 +9226,64 @@ export type WorldRenderLightDirectional = {
   /**
    * The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.
    */
-  direction?: DocumentVector3;
+  direction?: BindableDirection;
   /**
-   * The light's linear colour.
+   * The light's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The diffuse weight. Absent is the pinned sun weight.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
   /**
-   * The light's angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
+   * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
    */
-  angularRadius?: number | null;
+  angularRadius?: BindableAngle;
   /**
-   * Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.
+   * How this light competes for shadow slots. Absent is Never. A directional without a presented shadow slot is scaled by ambient occlusion instead.
    */
-  shadows?: boolean | null;
+  shadow?: WorldShadowMode | null;
+  /**
+   * The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
-
-/**
- * A hemisphere ambient: a floor plus a gradient on the surface normal's Y (sky above, darker below), scaled by ambient occlusion.
- */
-export type WorldRenderLightHemisphere = {
-  $type?: "hemisphere";
-  /**
-   * The ambient's linear colour.
-   */
-  color?: BindableColor | null;
-  /**
-   * The floor. Absent is the pinned ambient floor.
-   */
-  base?: number | null;
-  /**
-   * The hemisphere gradient. Absent is the pinned gradient.
-   */
-  gradient?: number | null;
-};
-
-export type WorldRenderLightList = (WorldRenderLight | null)[];
 
 /**
  * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.
  */
 export type WorldRenderLightOccluder = {
   $type?: "occluder";
-  position?: DocumentVector3;
-  radius?: number | null;
+  /**
+   * The world-space position, or the offset in the anchor's frame.
+   */
+  position?: BindableVector3;
+  /**
+   * The field's radius, positive.
+   */
+  radius?: BindableScalar;
+  /**
+   * An entity, entity part, or placement frame.
+   */
   anchor?: WorldAnchor | null;
-  weight?: number | null;
+  /**
+   * The attenuation, in [0, 1].
+   */
+  weight?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 /**
@@ -9019,23 +9294,32 @@ export type WorldRenderLightPoint = {
   /**
    * The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.
    */
-  position?: DocumentVector3;
+  position?: BindableVector3;
   /**
    * The falloff radius. Absent is the engine default.
    */
-  radius?: number | null;
+  radius?: BindableScalar;
   /**
    * An entity, entity part, or placement frame. A missing live target disables the light.
    */
   anchor?: WorldAnchor | null;
   /**
-   * The light's linear colour.
+   * The light's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The strength. Absent is the engine default.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 /**
@@ -9044,70 +9328,243 @@ export type WorldRenderLightPoint = {
 export type WorldRenderLightRim = {
   $type?: "rim";
   /**
-   * The rim's linear colour.
+   * The rim's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The strength. Absent is zero, which adds nothing.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
   /**
    * The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the engine default.
    */
-  power?: number | null;
+  power?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
-/**
- * The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its kind.
- */
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.
+   * The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
    */
-  lights?: WorldRenderLightList | null;
+  lights?: (WorldRenderLight | null)[] | null;
   /**
    * The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.
    */
   curvature?: WorldRenderCurvature | null;
+  /**
+   * The clock the section's keys read, by name in the timeline section. Required with Keys and refused without them.
+   */
+  clock?: string | null;
+  /**
+   * The section's keys, ascending in time. A field a key states is keyed on Clock through the keys that state it, blended by the field's type and eased by each key's ease; a field no key states keeps its authored value.
+   */
+  keys?: (WorldRenderLightingKey | null)[] | null;
+};
+
+export type WorldRenderLightingKey = {
+  /**
+   * Where on the section's clock the key sits, in the clock's span units, in [0, span).
+   */
+  at: number;
+  /**
+   * How time eases from this key to the next key that states each field. Absent is Linear.
+   */
+  ease?: WorldEase | null;
+  /**
+   * The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light's name and shadowing are structure, which a key never states.
+   */
+  lights?: {
+    [k: string]: WorldRenderLight | null;
+  } | null;
+  /**
+   * The curvature fields this key moves.
+   */
+  curvature?: WorldRenderCurvature | null;
+};
+
+export type WorldRenderMedium = {
+  /**
+   * The surface's height. Absent is zero.
+   */
+  surface?: BindableScalar;
+  /**
+   * The extinction per world unit below the surface. Absent is SdfAtmosphere.DefaultMediumExtinction.
+   */
+  extinction?: BindableScalar;
+  /**
+   * BindableColor's grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.
+   */
+  color?: BindableColor;
 };
 
 /**
- * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
+ * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
-/**
- * The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order — gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.
- */
 export type WorldRenderSky = {
   /**
-   * The layers.
+   * The layers, lowest first.
    */
-  layers?: WorldRenderSkyLayerList | null;
+  layers?: (WorldRenderSkyLayer | null)[] | null;
+  /**
+   * The clock the section's keys read, by name in the timeline section. Required with Keys and refused without them.
+   */
+  clock?: string | null;
+  /**
+   * The section's keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.
+   */
+  keys?: (WorldRenderSkyKey | null)[] | null;
+  /**
+   * Which way is up for the sky. Absent is world +y.
+   */
+  frame?: WorldRenderSkyFrame | null;
 };
 
 /**
- * One sky layer. The $type string is the JSON discriminator.
+ * A cone mask: the directions within Spread of Toward, in the sky frame.
  */
-export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerFog | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | null;
+export type WorldRenderSkyCone = {
+  /**
+   * The cone's axis in the sky frame, any nonzero length.
+   */
+  toward: DocumentVector3;
+  /**
+   * The cone's angular radius in radians, in (0, π].
+   */
+  spread: number;
+};
+
+export type WorldRenderSkyFrame = {
+  /**
+   * The sky's up direction in world space, any nonzero length. Absent is world +y.
+   */
+  up?: DocumentVector3;
+};
+
+export type WorldRenderSkyKey = {
+  /**
+   * Where on the section's clock the key sits, in the clock's span units, in [0, span).
+   */
+  at: number;
+  /**
+   * How time eases from this key to the next key that states each field. Absent is Linear.
+   */
+  ease?: WorldEase | null;
+  /**
+   * The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer's name, blend, mask, visibility, tier and clock and the sun disc's light are structure, which a key never states.
+   */
+  layers?: {
+    [k: string]: WorldRenderSkyLayer | null;
+  } | null;
+};
 
 /**
- * The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.
+ * One sky layer. The $type string is the JSON discriminator. Every layer also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.
+ */
+export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | WorldRenderSkyLayerAurora | WorldRenderSkyLayerNoise | WorldRenderSkyLayerPattern | WorldRenderSkyLayerPanorama | WorldRenderSkyLayerPanel | WorldRenderSkyLayerView | WorldRenderSkyLayerFar | null;
+
+/**
+ * Aurora curtains: rays rising from a wavering base, fading upward from Color to Top, moving with the layer's clock.
+ */
+export type WorldRenderSkyLayerAurora = {
+  $type?: "aurora";
+  /**
+   * The curtains' peak brightness. Absent is zero, which draws nothing.
+   */
+  intensity?: BindableScalar;
+  /**
+   * BindableColor's grammar: the colour at a curtain's base. Absent is green.
+   */
+  color?: BindableColor;
+  /**
+   * BindableColor's grammar: the colour at a curtain's top. Absent is violet.
+   */
+  top?: BindableColor;
+  /**
+   * The curtains' mean base elevation, in radians. Absent is about 17°.
+   */
+  base?: BindableAngle;
+  /**
+   * How far above its base a curtain rises, in radians. Absent is about 20°.
+   */
+  height?: BindableAngle;
+  /**
+   * How far the base wavers, in radians. Absent is about 5°.
+   */
+  fold?: BindableAngle;
+  /**
+   * The rays per turn of azimuth. Absent is 96.
+   */
+  rays?: number | null;
+  /**
+   * The base's waves per turn of azimuth. Absent is 5.
+   */
+  waves?: number | null;
+  /**
+   * The hash seed.
+   */
+  seed?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * The procedural cloud layer: a deterministic hashed-lattice noise on a dome above the camera, thresholded by coverage and fading into the horizon.
  */
 export type WorldRenderSkyLayerClouds = {
   $type?: "clouds";
   /**
    * The fraction of the sky the layer covers, in [0, 1]. Absent is zero.
    */
-  coverage?: number | null;
+  coverage?: BindableScalar;
   /**
    * The width of a cloud's edge, in (0, 1]. Absent is the engine default.
    */
-  softness?: number | null;
+  softness?: BindableScalar;
   /**
    * The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.
    */
-  scale?: number | null;
+  scale?: BindableScalar;
   /**
    * The hash seed folded into the lattice.
    */
@@ -9115,34 +9572,148 @@ export type WorldRenderSkyLayerClouds = {
   /**
    * BindableColor's grammar: the cloud colour. Absent is white.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
-   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.
+   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. A rate: it keys only on a tick clock, and binds no state row. Absent holds still.
    */
-  drift?: DocumentVector2;
+  drift?: BindableVector2;
   /**
-   * The layer's rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.
+   * The layer's rotation about the zenith in radians per second; positive is counter-clockwise seen from below. A rate, as Drift is. Absent is none.
    */
-  spin?: number | null;
+  spin?: BindableScalar;
   /**
-   * The Coriolis twist in radians at 45° elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.
+   * The Coriolis twist at 45° elevation, in radians, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.
    */
-  curl?: number | null;
+  curl?: BindableAngle;
   /**
-   * The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.
+   * The wind of the shaping field relative to the cloud field, in layer units per second. A rate, as Drift is. Absent holds the shapes.
    */
-  shear?: DocumentVector2;
+  shear?: BindableVector2;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  /**
+   * The fractal octaves at the high tier, one to eight. Absent is four.
+   */
+  octaves?: number | null;
+  /**
+   * How far the first fractal sum bends the second's domain, in cells. Absent is 0.6.
+   */
+  warp?: number | null;
+  /**
+   * The heightfield's rise per unit thickness, the steepness its lighting reads. Absent is 0.7.
+   */
+  relief?: number | null;
+  /**
+   * Beer's-law extinction per unit thickness: how quickly a cloud turns opaque. Absent is 3.5.
+   */
+  extinction?: number | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
- * The exponential distance fog fading toward the sky gradient.
+ * Far geometry: the same mechanism as View over a residency that holds only the named prototypes of this world, a planet or a ring of monoliths or a city on the horizon, rendered by the one sdf.world engine sized to its angular bound, so its cost scales with the pixels it covers and is counted under its own instance. Its image alpha is its coverage: the rest of the sky shows around it.
  */
-export type WorldRenderSkyLayerFog = {
-  $type?: "fog";
+export type WorldRenderSkyLayerFar = {
+  $type?: "far";
   /**
-   * The density per world unit. Absent is the pinned density.
+   * The layer's name, required, as View's.
    */
-  density?: number | null;
+  name?: string | null;
+  /**
+   * The prototypes the residency holds, by their ids in prototypes. Required, at least one.
+   */
+  prototypes?: (string | null)[] | null;
+  /**
+   * The point the camera sits at, in this world. Absent is its origin.
+   */
+  anchor?: DocumentVector3;
+  /**
+   * The rotation about up applied to the viewer's frame, in degrees. Absent is none.
+   */
+  turn?: number | null;
+  /**
+   * As Scale.
+   */
+  scale?: number | null;
+  /**
+   * As Refresh.
+   */
+  refresh?: number | null;
+  /**
+   * The depth its march ends at, in world units. Absent is 1000.
+   */
+  farDistance?: number | null;
+  /**
+   * As Shadows.
+   */
+  shadows?: boolean | null;
+  /**
+   * As AmbientOcclusion.
+   */
+  ambientOcclusion?: boolean | null;
+  /**
+   * As Fallback.
+   */
+  fallback?: BindableColor;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
@@ -9151,12 +9722,287 @@ export type WorldRenderSkyLayerFog = {
 export type WorldRenderSkyLayerGradient = {
   $type?: "gradient";
   /**
-   * Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.
+   * Two to SdfSky.MaxStops stops, strictly ascending in elevation.
    */
   stops?: (WorldRenderSkyStop | null)[] | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
-export type WorldRenderSkyLayerList = (WorldRenderSkyLayer | null)[];
+/**
+ * A fractal noise field over the sky, coloured from Low to High and covered where it rises past one less its coverage, sliding with the layer's clock.
+ */
+export type WorldRenderSkyLayerNoise = {
+  $type?: "noise";
+  /**
+   * BindableColor's grammar: the colour where the noise is lowest. Absent is black.
+   */
+  low?: BindableColor;
+  /**
+   * BindableColor's grammar: the colour where it is highest. Absent is white.
+   */
+  high?: BindableColor;
+  /**
+   * The share of the sky the noise covers, in [0, 1]. Absent is one.
+   */
+  coverage?: BindableScalar;
+  /**
+   * The covered edge's width as a share of the noise's range, in (0, 1]. Absent is 0.25.
+   */
+  softness?: number | null;
+  /**
+   * The lattice cells per unit of direction. Absent is four.
+   */
+  scale?: number | null;
+  /**
+   * The fractal octaves at the high tier, one to eight. Absent is four.
+   */
+  octaves?: number | null;
+  /**
+   * Each octave's amplitude relative to the one before it, in (0, 1). Absent is one half.
+   */
+  gain?: number | null;
+  /**
+   * The hash seed.
+   */
+  seed?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * A rectangular emitter at infinity, evaluated analytically in reflections. Its default visibility is lighting only and its default blend is add.
+ */
+export type WorldRenderSkyLayerPanel = {
+  $type?: "panel";
+  /**
+   * The direction toward its centre in the layer frame. Absent is +y.
+   */
+  direction?: DocumentVector3;
+  /**
+   * The angular half extents in radians, both positive. Absent is (0.3, 0.3).
+   */
+  size?: DocumentVector2;
+  /**
+   * The linear radiance. Absent is white.
+   */
+  color?: BindableColor;
+  /**
+   * The nonnegative radiance gain. Absent is one.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The nonnegative angular edge softness. Absent is zero.
+   */
+  blur?: BindableScalar;
+  /**
+   * The name used by section keys and counted detail rows.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. Visibility defaults to the camera; lighting visibility projects the same acquired image into the residency's environment, following its completed publication and capture taint.
+ */
+export type WorldRenderSkyLayerPanorama = {
+  $type?: "panorama";
+  /**
+   * The screen's surface index (Index), a screen the world declares. Required.
+   */
+  screen?: number | null;
+  /**
+   * How a direction maps to the image. Absent is equirectangular.
+   */
+  projection?: WorldSkyProjection | null;
+  /**
+   * The image's brightness scale. Absent is one.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * A painted pattern over azimuth and elevation, scrolling one cell a cycle of the layer's clock.
+ */
+export type WorldRenderSkyLayerPattern = {
+  $type?: "pattern";
+  /**
+   * What it paints. Absent is a checker.
+   */
+  shape?: WorldSkyPatternShape | null;
+  /**
+   * Its two colours, in BindableColor's grammar. Absent is black and white.
+   */
+  colors?: BindableColor[] | null;
+  /**
+   * The cells per turn of azimuth, a whole number. Absent is 24.
+   */
+  cells?: number | null;
+  /**
+   * A stripe's or grid line's width as a share of a cell, in (0, 1). Absent is 0.1.
+   */
+  line?: number | null;
+  /**
+   * The edge's width as a share of a cell, in [0, 0.5]. Absent is 0.05.
+   */
+  softness?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
 
 /**
  * The procedural star field: a deterministic per-cell hash over an octahedral sky projection.
@@ -9170,7 +10016,7 @@ export type WorldRenderSkyLayerStars = {
   /**
    * The peak per-star brightness. Absent is zero, which draws nothing.
    */
-  brightness?: number | null;
+  brightness?: BindableScalar;
   /**
    * The hash seed folded into every cell.
    */
@@ -9179,10 +10025,51 @@ export type WorldRenderSkyLayerStars = {
    * Scintillation for a share of the stars. Optional; absent twinkles none.
    */
   twinkle?: WorldRenderSkyTwinkle | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  /**
+   * The share of the cells that carry a star, in (0, 1]. Absent is the engine default.
+   */
+  sparsity?: number | null;
+  /**
+   * A star's angular radius as a share of one cell's angular pitch, in (0, 0.5]. Absent is the engine default.
+   */
+  size?: number | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
- * The visible sun disc — an additive highlight about one directional light's direction.
+ * The visible sun disc about one directional light's direction: an additive glow, or with Texture the image a screen shows across the disc.
  */
 export type WorldRenderSkyLayerSunDisc = {
   $type?: "sunDisc";
@@ -9191,13 +10078,148 @@ export type WorldRenderSkyLayerSunDisc = {
    */
   light?: number | null;
   /**
-   * The disc's angular half-radius in radians, in (0, π/2]. Absent is the engine default.
+   * The disc's angular half-radius, in (0, π/2] radians. Absent is the engine default.
    */
-  radius?: number | null;
+  radius?: BindableAngle;
   /**
    * The peak additive brightness. Absent is zero, which draws nothing.
    */
-  intensity?: number | null;
+  intensity?: BindableScalar;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  /**
+   * BindableColor's grammar: the disc's tint. Absent is white.
+   */
+  color?: BindableColor;
+  /**
+   * The texture body shape: the screen whose image the disc shows. Absent is the glow.
+   */
+  texture?: WorldRenderSkyTexture | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * Another world, seen at infinity: a second sdf.world instance (sky$<name>) rendering the destination's session from a fixed anchor in it, turned with the viewer's camera and never translated by it. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.
+ */
+export type WorldRenderSkyLayerView = {
+  $type?: "view";
+  /**
+   * The layer's name, required: the instance is sky$name and its counted rows carry the name, so it is one part free of $ and ~, unique among the layers.
+   */
+  name?: string | null;
+  /**
+   * The destination world, by the name a session screen's destination takes. Required.
+   */
+  destination?: string | null;
+  /**
+   * The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.
+   */
+  anchor?: DocumentVector3;
+  /**
+   * The rotation about up that carries the viewer's frame into the destination's, in degrees. Absent is none: the destination's axes are the viewer's.
+   */
+  turn?: number | null;
+  /**
+   * The instance's render scale against the viewer's pixel density, in (0, 1]; below the high sky tier it renders at half of it. Absent is one half.
+   */
+  scale?: number | null;
+  /**
+   * It renders at most once every this many frames, at least one. Absent is two.
+   */
+  refresh?: number | null;
+  /**
+   * The depth its march ends at, in world units. Absent is 1000.
+   */
+  farDistance?: number | null;
+  /**
+   * Whether the instance is dressed with the key light's soft shadow. Absent is off.
+   */
+  shadows?: boolean | null;
+  /**
+   * Whether the instance is dressed with ambient occlusion. Absent is off.
+   */
+  ambientOcclusion?: boolean | null;
+  /**
+   * BindableColor's grammar: the colour drawn where the view cannot render, before its first image and past the nesting depth or the cap. Absent is black.
+   */
+  fallback?: BindableColor;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * Where a sky layer draws: an elevation band of the sky frame, or a cone about a direction. Exactly one of Band and Cone.
+ */
+export type WorldRenderSkyMask = {
+  /**
+   * The band's lowest and highest elevation in radians, two angles in [−π/2, π/2], ascending.
+   */
+  band?: DoubleList | null;
+  /**
+   * The cone.
+   */
+  cone?: WorldRenderSkyCone | null;
+  /**
+   * The width of the mask's edge, an angle in radians. Absent is a hard edge.
+   */
+  feather?: number | null;
 };
 
 /**
@@ -9207,11 +10229,35 @@ export type WorldRenderSkyStop = {
   /**
    * The direction's Y component this stop sits at, in [−1, 1].
    */
-  elevation?: number | null;
+  elevation?: BindableScalar;
   /**
-   * BindableColor's grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key's colour.
+   * BindableColor's grammar: the colour at this elevation. Absent is white.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
+};
+
+/**
+ * The texture body shape: the image a diegetic screen shows, drawn across a body's disc, as a panorama samples its screen.
+ */
+export type WorldRenderSkyTexture = {
+  /**
+   * The screen's surface index (Index), a screen the world declares.
+   */
+  screen: number;
+};
+
+/**
+ * A sky layer's own transform about the sky frame: a turn about its up, then a tilt about its right axis. Each angle may bind or key on a clock, so a layer turns over a day.
+ */
+export type WorldRenderSkyTransform = {
+  /**
+   * The turn about the sky frame's up. Absent is none.
+   */
+  turn?: BindableAngle;
+  /**
+   * The tilt about the sky frame's right axis. Absent is none.
+   */
+  tilt?: BindableAngle;
 };
 
 /**
@@ -9221,38 +10267,15 @@ export type WorldRenderSkyTwinkle = {
   /**
    * The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.
    */
-  share?: number | null;
+  share?: BindableScalar;
   /**
    * How far a twinkling star dips below its steady brightness, in [0, 1].
    */
-  depth?: number | null;
+  depth?: BindableScalar;
   /**
-   * The fundamental scintillation rate in hertz.
+   * The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.
    */
-  rate?: number | null;
-};
-
-export type WorldRenderSoftbox = {
-  /**
-   * From a reflecting surface toward the softbox, any nonzero length (normalized before upload).
-   */
-  direction: DocumentVector3;
-  /**
-   * The angular half-extent (width, height) the falloff widens by, both strictly positive.
-   */
-  size: DocumentVector2;
-  /**
-   * BindableColor's grammar: the softbox's linear colour. Absent is white.
-   */
-  color?: BindableColor | null;
-  /**
-   * The strength. Absent is 1.
-   */
-  weight?: number | null;
-  /**
-   * Additional falloff softening, in the same units as Size. Absent is 0.
-   */
-  blur?: number | null;
+  rate?: BindableScalar;
 };
 
 export type WorldRigid = {
@@ -9440,10 +10463,6 @@ export type WorldScreen = {
    */
   magazine?: WorldScreenMagazine | null;
   /**
-   * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
-   */
-  memory?: (WorldScreenMemory | null)[] | null;
-  /**
    * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
@@ -9463,31 +10482,6 @@ export type WorldScreenMagazine = {
    */
   wrap?: boolean;
 };
-
-export type WorldScreenMemory = {
-  /**
-   * The machine bus address the window starts at. Validated within 0..(MaxAddress - Width + 1) — outside the engine's addressable memory refuses by name at validation, never at runtime (a machine's own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).
-   */
-  address: number;
-  /**
-   * How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.
-   */
-  width: number;
-  /**
-   * The declared state.world row this binding mirrors to/from — must resolve to a kind=Int row.
-   */
-  row: string;
-  /**
-   * The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present — the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.
-   */
-  key?: string | null;
-  /**
-   * Which way the binding moves a value.
-   */
-  direction?: WorldScreenMemoryDirection;
-};
-
-export type WorldScreenMemoryDirection = "Read" | "Write";
 
 /**
  * How a Session face's destination render projects onto the face — an ordinary head-on camera image, or a WINDOW whose image shears with the viewer's own eye so the destination scene parallaxes against the aperture the way a real opening would.
@@ -9605,6 +10599,10 @@ export type WorldScreenSourceSession = {
    * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
+  /**
+   * The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.
+   */
+  fallback?: string | null;
 };
 
 /**
@@ -9964,6 +10962,10 @@ export type WorldSequenceNullable = {
   step: number;
 };
 
+export type WorldShadowMode = "always" | "auto" | "never";
+
+export type WorldShadowOverflow = "instant" | "queue";
+
 export type WorldShaping = {
   /**
    * The gate that must hold for this row to win, or null for the unconditional row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting body-fact kinds (now/recently/all/any/not) and held (a composition channel's own live read) — never a per-body action-state predicate.
@@ -10019,6 +11021,16 @@ export type WorldSimulationDefaults = {
    */
   rateHz: number;
 };
+
+export type WorldSkyBlend = "over" | "add" | "multiply" | "screen";
+
+export type WorldSkyPatternShape = "checker" | "stripes" | "grid";
+
+export type WorldSkyProjection = "equirect" | "octahedral";
+
+export type WorldSkyTier = "low" | "medium" | "high";
+
+export type WorldSkyVisibility = "camera" | "lighting" | "both";
 
 /**
  * A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration — the row is drawn but bodies pass through it.
@@ -10267,13 +11279,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable42;
+  value?: ShapeNonNullable50;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable42;
+    value: ShapeNonNullable50;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -10281,7 +11293,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable43;
+    clock?: ShapeNonNullable51;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -10410,7 +11422,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable43;
+  clock?: ShapeNonNullable51;
   /**
    * The vector space this row belongs to; required for Vector, refused for every other kind.
    */
@@ -10812,7 +11824,7 @@ export type WorldThemeRadius = {
 };
 
 /**
- * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator's theme validation for the literal-authoring floor).
+ * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.
  */
 export type WorldThemeScrim = {
   /**
@@ -11020,6 +12032,14 @@ export type WorldViewDefaults = {
    */
   post?: (WorldViewPostPass | null)[] | null;
   /**
+   * How many screens deep a view of a world shows another world's view, or null for DefaultNestingDepth; refused past MaxNestingDepth. NestingDepth is what a reader resolves through.
+   */
+  nestingDepth?: number | null;
+  /**
+   * Per-view render quality and tier floors; a row named * supplies the defaults.
+   */
+  quality?: (WorldViewQuality | null)[] | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -11161,6 +12181,25 @@ export type WorldViewPostPass = {
    * The package's config values, each absent field at its default, or null for every default. The graph compiler binds them against the package's schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.
    */
   config?: unknown;
+};
+
+export type WorldViewQuality = {
+  /**
+   * The render view's instance name, or * for the player-view defaults.
+   */
+  name: string;
+  /**
+   * The scalar allocation ceiling, or null to inherit the render defaults.
+   */
+  renderScale?: number | null;
+  /**
+   * The lowest dynamic grid tier, or null to use the selected tier's floor (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier | null;
+  /**
+   * The authored quality preset whose floor this view uses.
+   */
+  tier?: QualityTier | null;
 };
 
 export type WorldViewSlot = {

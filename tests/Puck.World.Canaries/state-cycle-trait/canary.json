@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/state-cycle-trait/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/state-cycle-trait/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -230,7 +230,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/state-cycle-trait/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/state-cycle-trait/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {

@@ -14,9 +14,9 @@ namespace Puck.World.Authoring;
 /// </summary>
 /// <param name="Inset">How far the panel copy shrinks on every local axis before it is placed — the copy's own
 /// scale is <c>shape scale − Inset</c> per axis (floored at <see cref="SdfSolidGeometry.MinimumScale"/>), a
-/// sharp-cornered shrink rather than a rounded Minkowski erosion: <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>
-/// is 1, so nothing is free to isolate a <see cref="SdfProgramBuilder.Dilate"/> field op to the copy alone inside the
-/// shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape's
+/// sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive
+/// dimensions rather than applying <see cref="SdfProgramBuilder.Dilate"/> to its field. Creation units.
+/// Finite and non-negative; refused by name past the shape's
 /// smallest local half-extent (the smallest of <see cref="SdfSolidGeometry.HalfExtent"/> over the X, Y, and Z local
 /// axes) — past that the eroded copy is empty everywhere.</param>
 /// <param name="Depth">How far the panel's own face sits from the plate's face along <see cref="Face"/>, in creation
@@ -45,15 +45,15 @@ namespace Puck.World.Authoring;
 /// <see cref="ShapeDocument.Onion"/>, which apply to the plate's own field only.</para>
 /// <para>A panel needs its own one-deep field scope (<c>PushField</c>/<c>PopField</c>) around
 /// <c>[plate primitive, panel copy]</c> so its subtraction/union bites only this shape, never a sibling that happens
-/// to occupy the same space — and because <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/> is 1, that scope cannot
-/// nest inside one a caller already opened. A panel is therefore refused by name on: a <see cref="SdfSolidPrimitive.Plane"/>
+/// to occupy the same space. The creation emitter supports this recipe only outside shared group/creation emission.
+/// A panel is refused by name on: a <see cref="SdfSolidPrimitive.Plane"/>
 /// (no meaningful local face); a shape carrying <see cref="ShapeDocument.Domain"/> ops (their fold already owns the
 /// shape's field, the same reason they refuse <see cref="ShapeDocument.Swings"/>/<see cref="ShapeDocument.Slides"/>/
 /// <see cref="ShapeDocument.Parent"/>); a shape whose <see cref="ShapeDocument.Group"/> is set (a blend group's
-/// members share one scope in the animated stamp pool, with none left over to nest); and a shape whose creation as a
+/// members use shared emission in the animated stamp pool); and a shape whose creation as a
 /// whole needs a field scope (<c>CreationStampEmitter.RequiresScope</c> — any other shape's non-Union blend, an
 /// engraved text run, or a noise facet), since the static placement path then shares one scope across the whole
-/// creation and a panel there would have nowhere of its own to nest either.</para>
+/// creation without lowering per-shape panel copies.</para>
 /// <para>The copy is emitted from its own transform chain (a second <c>ResetPoint</c> and prefix, then the face
 /// translate, then the primitive) rather than chained after the plate's shape instruction: the plate's own emission
 /// may leave a persistent <c>Scale</c> point op on the chain, which would scale the face translate and compound onto

@@ -36,6 +36,24 @@ float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
     return ((length(p * inverseRadii) - 1.0) * minRadius);
 }
 #ifndef SDF_STRIP_HEAVY
+float sdfSuperellipsoidNormFactor(float exponent) {
+    return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
+}
+bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
+    return ((asuint(approximate) & 0x7F800000u) == 0x7F800000u)
+        || approximate < sdfSuperellipsoidNormFactor(exponent) * norm || approximate > norm;
+}
+// For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
+// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. The tape certificate charges
+// the complete band width plus endpoint arithmetic error, without assuming an error bound for pow.
+float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
+    if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
+    return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
+}
+float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
+    float3 u = pow(q / m, exponent);
+    return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
+}
 // The superellipsoid: q = pow(abs(p) * inverseRadii, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r). EXACTLY
 // 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
 // AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
@@ -59,9 +77,11 @@ float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float expon
         return -minRadius;
     }
 
-    float3 u = pow(q / m, exponent);
-
-    return ((m * pow((u.x + u.y) + u.z, (1.0 / exponent))) - 1.0) * minRadius;
+    float norm = sdfSuperellipsoidPowerNorm(q, m, exponent);
+    if (exponent > 2.0 && exponent <= 3.0) {
+        norm = sdfClampSuperellipsoidNorm(norm, length(q), exponent);
+    }
+    return (norm - 1.0) * minRadius;
 }
 #endif
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
@@ -218,7 +238,7 @@ float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
 // uvec4 word in sdfWords, so vertex index i lives at word (tableOffset + (i >> 1)), lane .xy for an even index and
 // .zw for an odd one.
 float2 sdfPolygonVertex(uint tableOffset, uint index) {
-    uint4 packed = sdfWords[(tableOffset + (index >> 1u))];
+    uint4 packed = sdfProgramWord((tableOffset + (index >> 1u)));
 
     return (((index & 1u) != 0u) ? asfloat(packed.zw) : asfloat(packed.xy));
 }
@@ -227,13 +247,15 @@ float2 sdfPolygonVertex(uint tableOffset, uint index) {
 // here). The running minimum squared distance to every edge SEGMENT (projection clamped to [0, 1], not the infinite
 // line), signed by one even/odd crossing-parity flip per edge (iq's sdPolygon) — sqrt-free per edge, one sqrt total.
 float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
+    if (count < 3u || count > SDF_MAX_CONVEX_VERTICES || !sdfProgramRange(tableOffset, (count + 1u) / 2u, 1u)) { return SDF_FAR_DISTANCE; }
     float2 firstVertex = sdfPolygonVertex(tableOffset, 0u);
     float2 previous = sdfPolygonVertex(tableOffset, (count - 1u));
     float2 delta0 = (p - firstVertex);
     float d = dot(delta0, delta0);
     float s = 1.0;
 
-    for (uint i = 0u; (i < count); i++) {
+    for (uint i = 0u; i < SDF_MAX_CONVEX_VERTICES; i++) {
+        if (i >= count) { break; }
         float2 vertex = sdfPolygonVertex(tableOffset, i);
         float2 e = (previous - vertex);
         float2 w = (p - vertex);
@@ -286,17 +308,20 @@ float sdfPathStrokeEdge(float2 p, float2 a, float2 b, float ra, float rb) {
 }
 float sdfPathSolid(float3 p, float4 data0, float4 data1) {
     uint offset = asuint(data0.x);
+    if (!isfinite(data0.y) || data0.y < 0.0 || data0.y > (float)SDF_MAX_PATH_EDGES) { return SDF_FAR_DISTANCE; }
     uint count = (uint)data0.y;
+    if (!sdfProgramRange(offset, count, 2u)) { return SDF_FAR_DISTANCE; }
     float distance = SDF_FAR_DISTANCE;
     float squared = SDF_FAR_DISTANCE * SDF_FAR_DISTANCE;
     bool inside = false;
     bool stroke = data1.y > 0.5;
-    for (uint i = 0u; i < count; ++i) {
-        float4 edge = asfloat(sdfWords[offset + 2u * i]);
+    for (uint i = 0u; i < SDF_MAX_PATH_EDGES; ++i) {
+        if (i >= count) { break; }
+        float4 edge = asfloat(sdfProgramWord(offset + 2u * i));
         float2 a = edge.xy;
         float2 b = edge.zw;
         if (stroke) {
-            float2 radii = asfloat(sdfWords[offset + 2u * i + 1u].xy);
+            float2 radii = asfloat(sdfProgramWord(offset + 2u * i + 1u).xy);
             distance = min(distance, sdfPathStrokeEdge(p.xy, a, b, radii.x, radii.y));
         } else {
             float2 e = b - a;
@@ -434,9 +459,9 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // ordinary Subtraction-blend instance so the marches stop paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
 // (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
 // at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
-// unchanged zero set. Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
-// fp-contraction pinned OFF) is bit-stable across SPIR-V/DXIL by the same argument as the point evaluator; the baked
-// VALUES carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
+// unchanged zero set. Manual trilinear interpolation uses eight explicit loads and ordered, noncontracting arithmetic,
+// so the same voxel values and fractional coordinate interpolate identically across SPIR-V/DXIL; the baked VALUES
+// carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
 #ifdef SDF_SAMPLED_REGIONS
 // One brick voxel, clamped to the brick's own [0, dims-1] lattice so the trilinear stencil never reads past the brick's
 // words (clamp-to-edge). Sound because the brick's zero set sits strictly inside the box by the bake margin, so the
@@ -446,6 +471,15 @@ float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
     int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
 
     return sdfBrickPool[(baseWord + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * (dims.x * dims.y)))];
+}
+// A precise result of the lerp intrinsic can still lower to SPIR-V FMix, whose arithmetic need not match DXIL's.
+// Spell every operation and mark each intermediate so both backends retain the same subtraction, product and sum.
+float sdfBrickInterpolate(float left, float right, float weight) {
+    precise float difference = (right - left);
+    precise float weighted = (weight * difference);
+    precise float result = (left + weighted);
+
+    return result;
 }
 #endif
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
@@ -469,10 +503,14 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     uint packedDims = asuint(data1.y);
     uint3 dims = uint3((packedDims & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 10) & SDF_SAMPLED_REGION_DIM_MASK), ((packedDims >> 20) & SDF_SAMPLED_REGION_DIM_MASK));
     uint baseWord = asuint(data1.z);
+    uint voxelCount = dims.x * dims.y * dims.z;
+    if (any(dims == 0u) || baseWord > numVoxels || voxelCount > numVoxels - baseWord
+        || !isfinite(cellSize) || cellSize <= 0.0 || !all(isfinite(p)) || !all(isfinite(data0.xyz))) { return SDF_FAR_DISTANCE; }
     float3 boxMin = data0.xyz;
     float3 extent = (float3(dims) * cellSize);
     // Local coordinate in voxel units: [0, dims] spans the box.
     float3 local = ((p - boxMin) / cellSize);
+    if (!all(isfinite(local))) { return SDF_FAR_DISTANCE; }
 
     // OUTSIDE the box: dist(p, box) + boundaryFloor is a valid (scaled) lower bound on distance to any interior zero
     // — positive, so a Subtraction compose stays saturated and the accumulator is exact.
@@ -501,15 +539,14 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float c011 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 1, 1)));
     float c111 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 1, 1)));
 
-    // `precise` pins fp-contraction OFF across the whole interpolation chain, so DXC's SPIR-V and DXIL backends cannot
-    // contract a lerp into a differently-rounded FMA — the manual-bilinear discipline (sdfGlyphSampleField's sibling).
-    precise float c00 = lerp(c000, c100, f.x);
-    precise float c10 = lerp(c010, c110, f.x);
-    precise float c01 = lerp(c001, c101, f.x);
-    precise float c11 = lerp(c011, c111, f.x);
-    precise float c0 = lerp(c00, c10, f.y);
-    precise float c1 = lerp(c01, c11, f.y);
-    precise float result = lerp(c0, c1, f.z);
+    // Interpolate x, then y, then z, with contraction disabled on each operation inside sdfBrickInterpolate.
+    float c00 = sdfBrickInterpolate(c000, c100, f.x);
+    float c10 = sdfBrickInterpolate(c010, c110, f.x);
+    float c01 = sdfBrickInterpolate(c001, c101, f.x);
+    float c11 = sdfBrickInterpolate(c011, c111, f.x);
+    float c0 = sdfBrickInterpolate(c00, c10, f.y);
+    float c1 = sdfBrickInterpolate(c01, c11, f.y);
+    float result = sdfBrickInterpolate(c0, c1, f.z);
 
     return result;
 #else
@@ -527,9 +564,9 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 // One curve's table entry: 3 fixed uvec4 words at tableOffset in sdfWords — (A.xyz, radiusStart), (B.xyz,
 // radiusEnd), (C.xyz, bulge). KEEP IN SYNC with SdfProgram.PackSweepCurves.
 void sdfSweepCurve(uint tableOffset, out float3 a, out float3 b, out float3 c, out float radiusStart, out float radiusEnd, out float bulge) {
-    uint4 wordsA = sdfWords[tableOffset];
-    uint4 wordsB = sdfWords[(tableOffset + 1u)];
-    uint4 wordsC = sdfWords[(tableOffset + 2u)];
+    uint4 wordsA = sdfProgramWord(tableOffset);
+    uint4 wordsB = sdfProgramWord((tableOffset + 1u));
+    uint4 wordsC = sdfProgramWord((tableOffset + 2u));
 
     a = asfloat(wordsA.xyz);
     radiusStart = asfloat(wordsA.w);
@@ -632,10 +669,12 @@ float sdfSweep(float3 p, float4 data0, float4 data1) {
     float3 refAxis = ((abs(tangentDir.y) < 0.999) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
     float3 u = normalize(cross(tangentDir, refAxis));
     float3 v = cross(tangentDir, u);
-    uint strandCount = max(((uint)(strandsFloat + 0.5)), 1u);
+    if (!isfinite(strandsFloat) || strandsFloat < 1.0 || strandsFloat > (float)SDF_MAX_SWEEP_STRANDS) { return SDF_FAR_DISTANCE; }
+    uint strandCount = (uint)(strandsFloat + 0.5);
     float best = SDF_FAR_DISTANCE;
 
-    for (uint strand = 0u; (strand < strandCount); strand++) {
+    for (uint strand = 0u; strand < SDF_MAX_SWEEP_STRANDS; strand++) {
+        if (strand >= strandCount) { break; }
         float phase = ((t * twist * SDF_TAU) + ((float(strand) * SDF_TAU) / float(strandCount)));
         float sinP, cosP;
 
@@ -656,6 +695,7 @@ float sdfSweep(float3 p, float4 data0, float4 data1) {
 // each `case` separately, so a duplicated arm duplicates the whole primitive (the Box/ScreenSlab and Polygon/Star pairs
 // cost ~10% of this kernel's instructions when written twice).
 float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
+    sdfWorkShapes++;
     float result = SDF_FAR_DISTANCE;
 
     switch (shapeType) {

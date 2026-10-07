@@ -40,6 +40,16 @@ monolithic reference omits the filter because it has no completed neighbor
 records. Check silhouettes, ground-backed grass, changing cameras, multiple
 views and reduced render scales when changing this path.
 
+## Sky lighting
+
+The shared sky environment supplies second-order spherical-harmonic ambient
+irradiance and map reflections with analytic panel highlights. Ambient and
+reflection gains live in `render.environment`, default to one and skip their
+respective work at zero. Lighting visibility decides which layers contribute;
+camera visibility independently decides which layers appear behind geometry.
+The [environment map](../handbook/frame-rendering.md#the-environment-map)
+describes projection, refresh thresholds and counted work.
+
 ## Ambient occlusion
 
 The default ambient path samples three points along the hit normal. Each probe
@@ -52,11 +62,22 @@ field evaluations improve the target scenes.
 
 ## Shadows
 
-Soft shadows march toward each relevant light and estimate penumbra from the
-occluder distance. An 8×8 workgroup grid gather limits the candidate instance
+Soft shadows march toward each light in the allocator's stable slots and each
+active incoming handoff, estimating penumbra from that light's angular radius
+and the occluder distance. Up to four stable visibilities occupy the existing
+K word as 8-bit lanes. A directional outside the slots shades unshadowed, scaled
+by ambient occlusion. During a handoff, the outgoing light's own occlusion
+deficit fades to zero while the
+incoming light's grows from zero; each keeps its radiance. The
+[P18-7 contract](../../../plans/rendering.md#p18--sky-and-atmosphere) bounds the
+marches by K + F and provisions incoming visibility storage by policy.
+An 8×8 workgroup grid gather limits the candidate instance
 set for the shadow ray; each pixel then consumes the shared mask.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
-conservative sampled-region behavior as primary rays.
+conservative sampled-region behavior as primary rays. The minimum stride steps
+through an occluder thinner than itself, but a stride that reaches a fold wall
+(a log-sphere shell boundary) lands just past it, within the occlusion threshold, and samples the other side before
+striding on.
 
 Light culling must never exclude a light that can affect the pixel. Oversized
 cells cost work; undersized influence bounds create visible discontinuities.

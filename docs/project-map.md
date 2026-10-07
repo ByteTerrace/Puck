@@ -65,30 +65,32 @@ Engine services          Puck.AdvancedGamingBrick
                          Puck.HumbleGamingBrick.Forge  Puck.HumbleGamingDeck
                          Puck.Launcher  Puck.Machines  Puck.Overlays
                          Puck.Physics  Puck.Recording  Puck.SdfVm
-                         Puck.SignedDistance  Puck.State  Puck.State.Generators
-                         Puck.State.Rules  Puck.State.Search
-                         Puck.State.Topology  Puck.State.Vectors  Puck.Text
-                         Puck.Transpiler  Puck.World.Addons
-                         Puck.World.Authoring  Puck.World.Client
-                         Puck.World.Console  Puck.World.Embeddings
-                         Puck.World.Machines  Puck.World.Protocol
-                         Puck.World.Schema  Puck.World.Server
-                         Puck.World.Transpiler
+                         Puck.SdfVm.Model  Puck.SignedDistance  Puck.State
+                         Puck.State.Generators  Puck.State.Rules
+                         Puck.State.Search  Puck.State.Topology
+                         Puck.State.Vectors  Puck.Text  Puck.Transpiler
+                         Puck.World.Addons  Puck.World.Authoring
+                         Puck.World.Client  Puck.World.Console
+                         Puck.World.Embeddings  Puck.World.Machines
+                         Puck.World.Protocol  Puck.World.Schema
+                         Puck.World.Server  Puck.World.Transpiler
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan
 Shared substrate         Puck.Commands  Puck.Hosting  Puck.Input
                          Puck.Networking  Puck.Platform  Puck.Platform.Linux
                          Puck.Platform.Windows  Puck.Scripting  Puck.Shaders
+                         Puck.Shaders.Model
 Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.Azure  Puck.Maths  Puck.Storage
 (Test)                   Puck.Abstractions.Tests
                          Puck.AdvancedGamingBrick.Forge.Tests
                          Puck.AdvancedGamingBrick.Tests  Puck.Analyzers.Tests
                          Puck.Assets.Tests  Puck.Attestation.Tests
-                         Puck.Audio.Tests  Puck.Cli.Tests  Puck.Commands.Tests
-                         Puck.DirectX.Tests  Puck.GamingBricks.Transpiler.Tests
-                         Puck.Hosting.Tests  Puck.HumbleGamingBrick.Forge.Tests
+                         Puck.Audio.Tests  Puck.Azure.Tests  Puck.Cli.Tests
+                         Puck.Commands.Tests  Puck.DirectX.Tests
+                         Puck.GamingBricks.Transpiler.Tests  Puck.Hosting.Tests
+                         Puck.HumbleGamingBrick.Forge.Tests
                          Puck.HumbleGamingBrick.Tests
                          Puck.HumbleGamingDeck.Tests  Puck.Input.Tests
                          Puck.Launcher.Tests  Puck.Machines.Tests
@@ -104,7 +106,7 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.World.Azure.Tests  Puck.World.Browser.Tests
                          Puck.World.Protocol.Tests  Puck.World.Schema.Tests
                          Puck.World.Tests  Puck.World.Transpiler.Tests
-(Tool)                   Puck.Cli
+(Tool)                   Puck.Cli  Puck.Shaders.Generator
 (Analyzer)               Puck.Analyzers
 ```
 
@@ -170,7 +172,8 @@ the wrong ones.
 | `Puck.Platform` | The OS-neutral windowing/capture contracts (`INativeWindowFactory`/`INativeWindowBackend`, `IClipboardService`, `ICameraCaptureService`, `INativeImageCaptureService`, `IAudioRenderDeviceFactory`), the display-environment probe, the unmanaged allocator (`Puck.Memory`, mimalloc-backed), and the probes contracts (`Puck.Platform.Probes`: `ProbeReading`, `ProbeReadingRing`, `IProbeKernelHost`, `ProbeTrackPlayer`). No concrete platform backend lives here—`Puck.Platform.Windows`/`.Linux` each register the ones they carry. |
 | `Puck.Platform.Windows` | Win32 windowing and clipboard, HID and Xbox (XInput/GameInput) controller transports, Media Foundation camera capture, Windows Graphics Capture feeds, the Media Foundation hardware video-encoder ladder (AV1→H.264), WASAPI loopback/microphone capture and render, and the generated CsWin32 native interop. |
 | `Puck.Platform.Linux` | Wayland and XCB native windowing. No camera, recording, or audio-render backend exists yet—those seams register the declining/null implementations. |
-| `Puck.Shaders` | Shaders as data: the pass interface and the frame block generated from it, the config binder (`ShaderConfigBinding`, shared with probe kinds), the `puck.shader.package.v1` package manifest, and `PostProcessPackage`, which runs any post-process package of the engine catalog as one fullscreen graph pass from its deployed bytecode. Also compiled shader-bytecode loading, format detection, and validation, and the shared HLSL-to-SPIR-V/DXIL build recipe. Also the `puck.probe.manifest.v1` probe-kind manifest (`ProbeKindManifest`/`ProbeKindCatalog`)—a kind's declared input, channels, and (for a KERNEL-class kind) HLSL entry points, compiled to `cs_5_0` at build and shipped by placing its manifest in the deploy's tree, with no code registration; ships the `ir-blob` kernel. Also the `puck.render.graph.v1` frame-graph document (`RenderGraphDefinition`), the engine package catalog (`RenderGraphPackageCatalog.Engine`, where each package, post-process packages included, declares its members, config, stages and interface), and `RenderGraphCompiler`, which plans a graph through the pipeline planner. References `Puck.Abstractions`, `Puck.Assets`, `Puck.Hosting`. |
+| `Puck.Shaders` | Shaders as data on top of `Puck.Shaders.Model`: the `puck.shader.package.v1` package manifest, and `PostProcessPackage`, which runs any post-process package of the engine catalog as one fullscreen graph pass from its deployed bytecode. Also compiled shader-bytecode loading, format detection, validation and the bytecode readers, and the shared HLSL-to-SPIR-V/DXIL build recipe. Also the `puck.probe.manifest.v1` probe-kind manifest (`ProbeKindManifest`/`ProbeKindCatalog`)—a kind's declared input, channels, and (for a KERNEL-class kind) HLSL entry points, compiled to `cs_5_0` at build and shipped by placing its manifest in the deploy's tree, with no code registration; ships the `ir-blob` kernel. Also the `puck.render.graph.v1` frame-graph document (`RenderGraphDefinition`) and `RenderGraphCompiler`, which plans a graph through the pipeline planner. References `Puck.Abstractions`, `Puck.Assets`, `Puck.Hosting`, `Puck.Shaders.Model`. |
+| `Puck.Shaders.Model` | The model shader declarations are generated from, compiling no shader: the pass interface (`ShaderInterface`) and its generated HLSL (`ShaderInterfaceHlsl`), the frame block (`ShaderFrameInterface`, `ShaderPipelineParameterLayout`), the config binder (`ShaderConfigBinding`, shared with probe kinds), the pipeline document's records, and the engine package catalog (`RenderGraphPackageCatalog.Engine`, where each package, post-process packages included, declares its members, config, stages and interface, with the `sdf.world` fragment, `SdfWorldPackage`). References `Puck.Abstractions`, `Puck.Assets`, `Puck.Hosting`. |
 | `Puck.Networking` | The dialect-agnostic wire substrate, packed as `ByteTerrace.Puck.Networking`: the socketless frame grammar (`FrameCodec`, `[u32 length][u8 kind][payload]`) and the bounded forward-only reader/writer pair (`WireReader`/`WireWriter`) every socket frames its bytes through—the reader latches a named refusal over untrusted bytes (invalid UTF-8 and non-finite lanes included) and never throws—plus the refusal vocabulary (`WireRefusal`/`WireFailure`) and the async stream framing built on them (`WireFrame`, one buffer per frame with `Body` a slice over it; an over-cap length is refused before anything is allocated). Also carries the generic Hello/identity handshake grammar (`HandshakeWireFormat`, the one Hello writer), the challenge/proof authentication contract (`IAuthenticator`—a verified identity is what the proof itself derives, never a caller's assertion), the persistent authenticated request/response lane state machine (`PersistentRequestLane`/`ILaneProtocol`—one per-request deadline answering `RequestTimedOut`, re-send only where the protocol's `MayResend` allows, a worker that survives anything the protocol throws), and, in `Puck.Networking.Peers`, the symmetric peer substrate: `Peer`/`PeerLink` over the `IPeerTransport`/`IPeerListener`/`IPeerConnection` seam (streams plus a datagram slot), `QuicPeerTransport` (`System.Net.Quic`, TLS 1.3 with a certificate on both sides, one inbound stream per connection), a handshake that binds the offered P-256 identity to the key the transport proved (`ChannelUnbound` or `IdentityKeyInvalid` otherwise, every refusal named to the far side), and `Puck.Attestation`-signed messages verified against the identity proved at handshake. A refused message names its `PeerRefusal` and leaves the link open; a frame-grammar violation closes it; every channel (`Events`, `IncomingLinks`, `HandshakeRefusals`) and the count of in-flight handshakes is bounded, and `PeerEvent.Closed`/`PeerLink.CloseFailure` name why a link closed. No server role. Carries no document or protocol vocabulary of its own; depends only on `Puck.Maths`, `Puck.Attestation`, and `Puck.Assets` (whose `AtomicFile` writes a peer's private key). LocalEndpointCapability owns user-only discovery and mutual local authentication; host operation vocabulary stays in Hosting. |
 | `Puck.Scripting` | Deterministic, fuel-metered WASM addons: the neutral host, the module validator, the ABI, and the core's own declared-channel-name table decoder (`AddonChannelNameTableReader`, resolved through the injected `IAddonChannelResolver`). It references neither `Puck.Commands` nor `Puck.Input`—that absence is the point of the assembly split and is enforced by an exact-equality lane profile, not merely current. |
 
@@ -192,7 +195,8 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real `Puck
 | Project | Responsibility |
 |---|---|
 | `Puck.Launcher` | Generic application host: window loop, command pump, fixed-step accumulator, terminal control, genlock, and backend switching. Composition roots register platform and backend services and install their composed extensions with `AddPuckExtensions`. Optional self-update (`AddSelfUpdate`): `puck.release.v1` documents, a `sequence`-route `Puck.Attestation` claim as the anti-rollback mechanism, content-addressed delta staging, and an atomic `current`-pointer applier (`Puck.Launcher.Stub` reads the pointer at its own next launch) behind `update.status`/`update.check`/`update.apply`. An app that never calls `AddSelfUpdate` has no update path at all. |
-| `Puck.SdfVm` | The SDF GPU engine: world renderer, frame sources, render assembly, debug tools, composition and anchor seams, camera views. Consumes `Puck.SignedDistance` for the program model and ISA. |
+| `Puck.SdfVm` | The SDF GPU engine: world renderer, frame sources, render assembly, debug tools, composition and anchor seams, camera views. Consumes `Puck.SignedDistance` for the program model and ISA, and `Puck.SdfVm.Model` for its kernels' declarations. |
+| `Puck.SdfVm.Model` | The model the SDF kernels' declarations are generated from, compiling no shader: the instruction set's HLSL declaration and fingerprint (`SdfIsaHlsl`), the visibility record's shared words (`SdfVisibility`), the kernels' pass interfaces for any instruction-set stamp (`SdfKernelInterfaces`), and `ShaderDeclarations`, the one list of every HLSL declaration the C# model owns, which `puck shaders generate` and the kernel builds both run. References `Puck.Abstractions`, `Puck.Shaders.Model`, `Puck.SignedDistance`. |
 | `Puck.SignedDistance` | The signed-distance-function field as data: the instruction ISA, the packed-word program representation, the fluent authoring builder (including laying `Puck.Text`-authored strings out into marchable glyph geometry), the solid primitive vocabulary and its unit-size table (`SdfSolidPrimitive`/`SdfSolidGeometry`/`SdfSolidBounds`), the isometric domain-operator family as data (`SdfDomainOp`) with both of its readings—the point fold (`SdfDomainOps`) and the rigid copies it generates (`SdfDomainExpansion`/`SdfRigidFrame`, fixed point, for consumers that place geometry rather than transform a point)—and a warp-free deterministic fixed-point CPU interpreter (`Puck.SignedDistance.Queries`) that answers `Puck.Maths`' `IFieldEvaluator`/`IWorldQuery` seams, so authoritative simulation queries the same field a GPU renders. No GPU or shader-compiler dependency of any kind. |
 | `Puck.Text` | Font-atlas models, text layout, and deterministic coverage-to-distance atlas generation. It is render-agnostic. |
 | `Puck.State` | The state and rule engine as a standalone deterministic library, with no world, body, rendering, or presentation concept: the state section contract and vocabulary (`IStateSection`, `StateRow`/`StateCell`, the advance/dynamics/cycle traits, `StateDomain`, phases, visibility, the catalog and its handles, `StateReader`, `StateArena`), the compiled lattice topology (`LatticeTopology`/`CompiledTopology`/`TopologyCompilation`/`TilingGenerator`)—kept here rather than in `Puck.State.Topology` because the arena's own layout compiler resolves a document row's declared lattice while it lays out `StateArena`'s columns—authored randomness's document facet (`Draw`/`StateGenerator`, with the same layout-time reasoning), the pattern algebra's authored tree (`PatternNode`), `DynamicsRow`, the expression IR (`ExpressionProgram`/`Instruction`/`InstructionPayload`) and its infix spelling (`ExpressionSpelling`), the compiled opcode enum and the allocation-free Int/Q48.16 evaluator (`ExpressionOp`/`ExpressionArithmetic`), the `StateTransform` union, the validated-identifier family (`SafeName`/`CellName` and the owned-world file-name mapping), the reserved fact channels (`RuleFacts`) a host answers, and the comparison/trigger-mode vocabulary (`ExpressionComparisons` over `ExpressionOp`'s comparison subset, `ActionTriggerMode`) every gated trigger in the engine shares. `Puck.World.Schema` consumes and extends it for the world document through registries and derived records, never through edits inside it. Packable as `ByteTerrace.Puck.State`. |
@@ -254,7 +258,7 @@ kernels, direct hardware bring-up), `Puck.Platform.Switch`, and the quarantined 
 and both `scripts/` trees (`scripts/world`, `scripts/recording`).
 The quarantine rules—read as prior art, never build, run, fix, or revive —
 live in
-[CLAUDE.md](../CLAUDE.md) and
+[AGENTS.md](../AGENTS.md) and
 [experimental/README.md](../experimental/README.md); this map carries only
 the structural fact: no experimental tree is in `Puck.slnx`, the root build,
 or the architecture gate's scope—each carries its own
@@ -269,5 +273,6 @@ filter somewhere else.
 | `docs/examples/` | Reference documents for the live authoring families: `creations/` (`puck.creation.v1`) and `tunes/` (`puck.audio.v1`). Nothing loads them; they are read by hand. |
 | `src/Puck.Dashboard/` | The world-authoring studio: a TypeScript/React portal (`src/portal`) plus a module-federation host (`src/host`), outside `Puck.slnx` and the architecture gate—no `<PuckKind>`/`<PuckLayer>`, built and tested through `npm`, never `dotnet`. Edits `puck.world.definition.v1` documents and previews their rules; `Puck.World.Browser`'s `browser-wasm` publish is its native engine. |
 | `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), the layering report (`architecture`), and the repository automation CI runs (`artifacts`, `azure`, `nuget`). Kind `Tool`: it consumes the tree and nothing consumes it. |
+| `src/Puck.Shaders.Generator/` | The build-time host of `ShaderDeclarations`: every project whose kernels include a declaration the C# model owns references it with `ReferenceOutputAssembly="false"`, and its build writes each declaration whose text the model has changed before those kernels compile. A `Tool`, referenced as no assembly. |
 | `build/` | Build policy the whole tree imports: the `[VerifiedCode]` marker source, the architecture ledger (`Architecture.props`), the gate (`Puck.Architecture.targets` + `PuckArchitectureGate.cs`), and the NuGet packaging policy (`Packaging.targets`—shared version and metadata, applied only to projects that opt in with `<IsPackable>true</IsPackable>`; the tree default is `false`). |
 | `.claude/skills/` | Current factual and procedural agent references for repository-specific work. |

@@ -13,7 +13,7 @@ namespace Puck.SdfVm.Tests;
 /// contract is plain poses, plain scalars, and a look sample.
 /// </summary>
 public sealed class SdfCameraProgramLawTests {
-    // The framing standard.world.json's seatRig authors, transcribed op for op.
+    // The framing the island's seatRig authors (puck.world.json), transcribed op for op.
     private const float ChaseDistance = 5.4626001f;
     private const float ChaseFov = 0.9599311f;
     private const float ChasePitch = 0.4145069f;

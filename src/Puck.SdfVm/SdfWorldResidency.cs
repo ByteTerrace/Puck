@@ -48,8 +48,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private readonly ISdfScreenSources? m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
 
-    // Signaled while the tables exist, which a view's passes wait for before they install (SdfWorldPasses.Build).
-    private readonly ManualResetEventSlim m_ready = new(initialState: false);
+    // Completed while the residency is ready, which a view's passes await before they install (SdfWorldPasses.BuildAsync). A
+    // reset replaces only a completed source, so every wait begun before the next build sees it complete; its
+    // continuations run on the thread pool, never on the frame thread that completes it.
+    private TaskCompletionSource m_ready = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     // The image-view handle each screen index was bound to by the latest recorded frame.
     private readonly nint[] m_boundScreenSources = new nint[SdfWorldTables.MaxScreenSurfaces];
     // Owned here rather than by the tables, so submission identities keep increasing across a device-loss rebuild.
@@ -61,6 +63,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The lease on the pipeline set the views record with, shared through the composition's pipeline cache, built off
     // the frame thread and kept across rebuilds until a device loss or disposal releases it.
     private readonly SdfWorldPipelineSource m_pipelines;
+    private readonly SdfSkyDetails m_skyDetails;
 
     private SdfKernelSet m_kernels;
     private IGpuDeviceContext? m_deviceContext;
@@ -139,6 +142,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_instanceCapacity = instanceCapacity;
         m_kernels = kernels;
         m_pipelines = new SdfWorldPipelineSource(catalog: pipelines);
+        m_skyDetails = pipelines.SkyDetails;
         m_programWordCapacity = programWordCapacity;
         m_screenSources = screenSources;
         m_screenSurfaceTransforms = ((frameSource.ScreenSurfaceTransforms is { } transforms)
@@ -190,23 +194,53 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
-    /// <summary>Gets whether the residency's tables are built: its pipeline set is installed and its first frame captured
-    /// and packed. It is false again after a device loss until the rebuilt tables are.</summary>
-    public bool IsReady => (m_tables is not null);
+    /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
+    /// first frame captured and packed, its policy's shadow kernel and its program's views kernel, or a fuller one, are built. A program that
+    /// selects a stripped views variant never waits for the full ISA's. It is false again after a device loss until the
+    /// rebuilt tables are, and while a captured frame waits for a shadow or views kernel that is still building or was refused,
+    /// during which the residency holds the frame it last packed. A refused kernel is built again only on a kernel
+    /// reload (<see cref="RequestShaderReload"/>) or a device loss (<see cref="OnDeviceLost"/>).</summary>
+    public bool IsReady => ((m_tables is not null) && (m_pipelineWaiting is null) && Volatile.Read(location: ref m_ready).Task.IsCompletedSuccessfully);
     /// <summary>Gets whether every hold on the residency has been released (<see cref="Release"/>), after which it renders
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
-    /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come or
-    /// the refusal of its tables' latest build, which is retried when its inputs change, or <see langword="null"/> once it
+    /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come,
+    /// the refusal of its tables' latest build, which is retried when its inputs change, or the shadow or views kernel its frame
+    /// waits on and, when that kernel was refused, its failure, or <see langword="null"/> once it
     /// is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
     /// report.</summary>
     public string? NotReadyReason => (IsReady
         ? null
         : ((m_frame is null)
             ? $"residency '{Name}' has captured no frame"
-            : m_pipelines.Describe()));
-    /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
-    /// identities keep increasing across a device-loss rebuild.</summary>
+            : (((m_tables is { } tables) && (m_pipelineWaiting is { } views))
+                ? ((tables.PipelineRefusal(kernel: views) is { } refusal)
+                    ? $"residency '{Name}' holds its frame: the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                    : $"residency '{Name}' holds its frame until the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
+                : m_pipelines.Describe())));
+    /// <summary>Gets why the residency cannot become ready until something it is built from changes, or
+    /// <see langword="null"/> while it is ready or what it waits on is still building: the refused build of its tables
+    /// (the device, the kernels, its options or a reload retries it) or the refused shadow or views kernel its frame selects (a
+    /// kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
+    /// <see cref="SdfWorldPasses"/> reports it as its instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>), the one
+    /// channel a host reads, while <see cref="NotReadyReason"/> describes the wait.</summary>
+    public string? Refusal {
+        get {
+            if (IsReady) {
+                return null;
+            }
+            if (m_pipelines.Refusal is not null) {
+                return $"residency '{Name}': {m_pipelines.Describe()}";
+            }
+
+            return (((m_tables is { } tables) && (m_pipelineWaiting is { } views) && (tables.PipelineRefusal(kernel: views) is { } refusal))
+                ? $"residency '{Name}': the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                : null);
+        }
+    }
+    /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>), published by the
+    /// first <see cref="Prepare"/> of a frame that finds the upload's fence signaled; submission identities keep
+    /// increasing across a device-loss rebuild.</summary>
     public IGpuWorkSource Work => m_work;
     /// <summary>Gets the GPU objects the residency's tables have created, over its whole life.</summary>
     public IWorkCounterSource WorkLifetime => m_work;
@@ -262,16 +296,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_deviceContext.TryWaitIdle();
         m_tables?.Dispose();
         m_tables = null;
-        m_ready.Reset();
+        ResetReady();
         CancelShaderReload(reason: "the residency was released");
         m_pipelines.Release();
     }
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>
     public void Dispose() => Release();
-    /// <summary>Waits until the tables are built (<see cref="IsReady"/>), on a thread that is not the frame thread.</summary>
+    /// <summary>Returns a task that completes once the residency is ready (<see cref="IsReady"/>), for a build on the thread
+    /// pool, which awaits it and holds no thread meanwhile. It never completes on the frame thread's stack.</summary>
     /// <param name="cancellationToken">Cancels the wait.</param>
-    /// <exception cref="OperationCanceledException">The wait was canceled.</exception>
-    public void WaitReady(CancellationToken cancellationToken) => m_ready.Wait(cancellationToken: cancellationToken);
+    /// <returns>The task, canceled with <paramref name="cancellationToken"/>.</returns>
+    public Task WaitReadyAsync(CancellationToken cancellationToken) =>
+        Volatile.Read(location: ref m_ready).Task.WaitAsync(cancellationToken: cancellationToken);
     /// <summary>Blocks, on the frame thread between frames, until the pipeline builds the residency's frames started have
     /// finished, successfully or not: its pipeline set's, its region-copy and mesh pass pipelines', and a kernel reload's.
     /// It takes nothing and starts nothing, so the next frame (<see cref="Prepare"/>) builds the tables, refuses a failed
@@ -298,6 +334,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
     /// the frame is scheduled.</summary>
     public void BeginFrame() {
+        IndirectFrameBudget.BeginFrame();
+        m_receiverBudgetLogged = false;
         m_captured = false;
         m_packed = false;
         m_submitted = false;
@@ -338,14 +376,21 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool Prepare(in FrameContext context) {
         _ = HostFrame(context: in context);
 
-        if (m_packed) {
-            return (m_tables is not null);
+        if (!m_packed) {
+            m_packed = true;
+            // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
+            // upload a still view renders from is read back even though no later upload follows it.
+            m_work.Poll();
+            m_renders = PrepareOnce(context: in context);
         }
 
-        m_packed = true;
+        return m_renders;
+    }
 
+    // The frame's one preparation, whose answer Prepare repeats for the rest of the frame.
+    private bool PrepareOnce(in FrameContext context) {
         if (
-            (m_frame is not { } frame) ||
+            ((m_pendingFrame ?? m_frame) is not { } frame) ||
             !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device) ||
             !EnsureTables(
                 device: device,
@@ -357,39 +402,49 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var tables = m_tables!;
 
+        if (frame.IndirectTier != IndirectTier) { frame = frame with { IndirectTier = IndirectTier }; }
+        PrepareIndirect(frame: frame, tables: tables);
+
         ApplyPendingShaderReload();
+        tables.Pipelines.RequestShadowFadeVariants(cache: m_pipelines.Catalog.Pipelines, device: device,
+            variants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity));
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
-        BindScreens(tables: tables);
+        if (m_screenClosureFrame is null) {
+            BindScreens(
+                frame: frame,
+                tables: tables
+            );
 
-        foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
-            if (provider() is { } transform) {
-                tables.SetScreenSurface(
-                    screenIndex: screenIndex,
-                    origin: transform.Origin,
-                    right: transform.Right,
-                    up: transform.Up,
-                    halfWidth: transform.HalfWidth,
-                    halfHeight: transform.HalfHeight
-                );
-            }
-        }
-
-        // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
-        // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
-        if (m_frameSource.ScreenDecals is { } screenDecals) {
-            foreach (var (screenIndex, provider) in screenDecals) {
-                if (provider() is { } decal) {
-                    tables.SetScreenDecal(
+            foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
+                if (provider() is { } transform) {
+                    tables.SetScreenSurface(
                         screenIndex: screenIndex,
-                        columns: decal.Columns,
-                        rows: decal.Rows,
-                        distanceRange: decal.DistanceRange,
-                        cellWords: decal.Cells.Span
+                        origin: transform.Origin,
+                        right: transform.Right,
+                        up: transform.Up,
+                        halfWidth: transform.HalfWidth,
+                        halfHeight: transform.HalfHeight
                     );
-                } else {
-                    tables.ClearScreenDecal(screenIndex: screenIndex);
+                }
+            }
+
+            // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
+            // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
+            if (m_frameSource.ScreenDecals is { } screenDecals) {
+                foreach (var (screenIndex, provider) in screenDecals) {
+                    if (provider() is { } decal) {
+                        tables.SetScreenDecal(
+                            screenIndex: screenIndex,
+                            columns: decal.Columns,
+                            rows: decal.Rows,
+                            distanceRange: decal.DistanceRange,
+                            cellWords: decal.Cells.Span
+                        );
+                    } else {
+                        tables.ClearScreenDecal(screenIndex: screenIndex);
+                    }
                 }
             }
         }
@@ -399,7 +454,27 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objA: frame,
             objB: m_packedFrame
         )) {
+            // Policy changes wait before publishing the new F to graph planning. A source may recycle light tables,
+            // so the retained frame takes its own copy before the next capture can overwrite them.
+            if (tables.FrameWaiting(program: frame.Program, fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity) is { } waiting) {
+                m_pipelineWaiting = waiting;
+                m_pendingFrame = frame;
+                if ((m_packedFrame is { } packed) && !m_holdingFrame &&
+                    (packed.Lights.ShadowSlots.FadeCapacity != frame.Lights.ShadowSlots.FadeCapacity)) {
+                    var lights = new SdfLights();
+
+                    lights.CopyFrom(source: packed.Lights);
+                    m_packedFrame = packed with { Lights = lights };
+                    m_holdingFrame = true;
+                }
+                m_frame = (m_packedFrame ?? frame);
+                ResetReady();
+                return ((m_packedFrame is not null) && (tables.FrameWaiting(program: null) is null));
+            }
             if (m_programPending) {
+                // A program whose views kernel is still building, or was refused, is not uploaded: the residency holds the
+                // frame it last packed, which the live program's views render, until that kernel is built, as any rebuild
+                // does.
                 m_programPending = false;
                 UploadProgram(
                     program: frame.Program,
@@ -409,13 +484,27 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
             tables.Pack(frame: frame);
             m_packedFrame = frame;
+            m_frame = frame;
+            m_pendingFrame = null;
+            m_holdingFrame = false;
             LiveVolumes = frame.Volumes.Count;
         }
 
         tables.UpdateTablesSignature();
+        // The views render once the policy's shadow kernel and a usable views kernel are built; the residency is ready then.
+        m_pipelineWaiting = tables.FrameWaiting(program: null);
+
+        if (m_pipelineWaiting is not null) {
+            ResetReady();
+            return false;
+        }
+
+        ApplyIndirectReset(tables: tables);
+        _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;
     }
+
     /// <summary>Returns whether a view's latest render stands for this frame: the frame forces no render
     /// (<see cref="SdfWorldTables.ForcesRender"/>) and the view's signature is the one it last rendered at. A residency
     /// that filmed nothing this frame keeps its latest frame, which every view rendered already.</summary>
@@ -454,6 +543,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (!m_submitted) {
             m_submitted = true;
+            if (m_frame is { } frame) { tables.PlanIndirect(frame: frame); }
             tables.SubmitUpload();
         }
 
@@ -485,18 +575,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Returns the image a screen samples this frame from the images a view's render graph hands its pass, taking
     /// the image's lease into the frame's lease list the first time a pass of the frame samples it.</summary>
+    /// <param name="view">The view's index in the residency's frame, whose own read the screen samples
+    /// (<see cref="ISdfScreenSources.ReadOf"/>).</param>
     /// <param name="screen">The program-declared screen index.</param>
     /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or
     /// <see langword="null"/>.</param>
     /// <param name="leases">The frame's lease list, which retires the lease after the frame's submission.</param>
     /// <returns>The image view, or zero when the screen shows nothing this frame.</returns>
-    public nint ScreenImage(int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
+    public nint ScreenImage(int view, int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
         ArgumentNullException.ThrowIfNull(argument: leases);
 
         nint handle = 0;
 
         if (
-            (m_screenSources?.ReadOf(screen: screen) is { } read) &&
+            (m_screenSources?.ReadOf(
+                screen: screen,
+                view: view
+            ) is { } read) &&
             (reads is not null) &&
             (reads.IndexOf(producer: read) is var index and >= 0)
         ) {
@@ -513,9 +608,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return handle;
     }
+
+    /// <summary>Gets the detail rows the residency's sky counts its runs and layers in, the composition's one set
+    /// (<see cref="SdfWorldPipelineCatalog.SkyDetails"/>).</summary>
+    public SdfSkyDetails SkyDetails => m_skyDetails;
+
     /// <summary>Returns the counts a view of the residency allocates its counted scratch by at an extent: one viewport,
-    /// its tiles, and the instances the tables are provisioned for (<see cref="CapacityRevision"/>) and their per-tile
-    /// mask words.</summary>
+    /// its tiles, the provisioned instances and their mask words, and the current program's segment tape words
+    /// (<see cref="CapacityRevision"/>).</summary>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
     /// <returns>The counts.</returns>
@@ -527,6 +627,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             Width: width
         ) {
             InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
+            SegmentTapeWords = ((ulong)CountedTapeWords),
             Instances = ((ulong)instances),
             Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
             Viewports = 1,
@@ -534,11 +635,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     /// <summary>Gets a revision that moves whenever <see cref="CountsAt"/> would return another value at an unchanged
-    /// extent: the instance count the counts are sized by, the tables' capacity once they are built and, before, the
-    /// capacity they will be built with for the frame the residency captured, so building them moves it only when the
-    /// capacity differs.</summary>
-    public long CapacityRevision => CountedInstances;
+    /// extent: the provisioned instance count and the captured program's tape storage. Before the tables exist,
+    /// the instance count is the capacity they will receive for that captured frame.</summary>
+    public long CapacityRevision => (((long)CountedInstances) << 32) | ((uint)CountedTapeWords);
 
+    private int CountedTapeWords => SdfWorldPackage.SegmentTapeWordCountFor(
+        segments: (m_frame?.Program.SkipSegmentCount ?? 0), tokens: (m_frame?.Program.TapeTokenCount ?? 0));
     // The instances a view's counted scratch is sized for: the tables' capacity, or before they are built the one they are
     // built with, the larger of the captured program's instances and the residency's floor.
     private int CountedInstances => (m_tables?.InstanceCapacity ?? Math.Max(
@@ -554,7 +656,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_frameSource.NotifyDeviceLost();
         m_tables?.Dispose();
         m_tables = null;
-        m_ready.Reset();
+        ResetReady();
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt tables build their pipelines anew on the recreated one.
         CancelShaderReload(reason: "the device was lost");
@@ -568,25 +670,39 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
+    // A captured frame waiting for its shadow or views kernel. It survives a frame whose film gate captures nothing,
+    // while m_frame exposes the packed frame the views render; a newer capture replaces it.
+    private SdfFrame? m_pendingFrame;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
-    /// <summary>Freezes the presentation source for a converging capture.</summary>
+    /// <summary>Freezes the presentation source for a capture, retaining an exact completed finite answer or restarting radiance with reusable transport.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         if (!ReferenceEquals(objA: m_convergence, objB: request)) {
             m_convergence = request;
             m_frozenFrame = null;
+            m_captureLightingReset = !IndirectFrozen;
             m_frameSource.BeginConvergence(request: request);
         }
     }
 
     private bool m_programPending;
+    private bool m_holdingFrame;
+    // The shadow or views kernel the residency waits on while it holds its last packed frame (SdfWorldTables.FrameWaiting).
+    private SdfKernel? m_pipelineWaiting;
+    // Whether the frame's preparation left the tables holding a frame the views can render.
+    private bool m_renders;
 
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
     // the live tables, whose Ready flip bumps the source's content revision so the capture emits the brick this frame.
     private void Capture(in FrameContext context) {
+        if (m_screenClosureFrame is { } closure) {
+            m_frame = closure;
+            m_pendingFrame = null;
+            return;
+        }
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
         }
@@ -595,6 +711,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (converging && (m_frozenFrame is { } frozen)) {
             m_frame = frozen with { ProgramChanged = false };
+            m_pendingFrame = null;
             return;
         }
         if (!converging) {
@@ -613,6 +730,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         );
 
         m_frame = frame;
+        m_pendingFrame = null;
         if (converging) {
             m_frozenFrame = frame;
         }
@@ -636,6 +754,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = m_pipelines.TryBuild(
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
+                impostorRaster: passes.ImpostorRaster,
                 meshRaster: passes.MeshRaster,
                 options: inputs.Options,
                 pipelines: pipelines,
@@ -644,6 +763,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             device: device,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
+            shadowFadeVariants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity),
             inputsOf: static state => (
                 state.Residency,
                 state.Device,
@@ -664,9 +784,20 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_packedFrame = null;
         m_programPending = false;
         Array.Clear(array: m_renderedSignatures);
-        m_ready.Set();
 
         return true;
+    }
+    private static string KernelRole(SdfKernel kernel) => (SdfWorldPipelines.IsViews(kernel: kernel) ? "views kernel its program selects" : "shadow kernel its policy selects");
+    private void ResetReady() {
+        var ready = Volatile.Read(location: ref m_ready);
+
+        if (ready.Task.IsCompleted) {
+            _ = Interlocked.CompareExchange(
+                comparand: ready,
+                location1: ref m_ready,
+                value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
+            );
+        }
     }
     private SdfWorldTablesOptions TablesOptions(SdfFrame frame) =>
         new(
@@ -681,11 +812,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
             InstanceCapacity: m_instanceCapacity,
             Program: frame.Program,
             ProgramWordCapacity: m_programWordCapacity,
+            SkyDetails: m_skyDetails,
             WorkLedger: m_work
         );
-    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance its views
-    // read, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
-    private void BindScreens(SdfWorldTables tables) {
+    // Binds every screen's mapping, emission policy and bound flag: a screen shows a source while it names an instance some view of
+    // the frame reads, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
+    private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
         if (m_screenSources is not { } sources) {
             return;
         }
@@ -694,17 +826,25 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         for (var position = 0; (position < screens.Count); position++) {
             var screen = screens[position];
+            var bound = false;
+
+            for (var view = 0; (!bound && (view < frame.Views.Count)); view++) {
+                bound = (sources.ReadOf(
+                    screen: screen,
+                    view: view
+                ) is not null);
+            }
 
             tables.SetScreenBound(
-                bound: (sources.ReadOf(screen: screen) is not null),
+                bound: bound,
                 screenIndex: screen
             );
             tables.SetScreenMapping(
                 mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );
-            tables.SetScreenLight(
-                color: sources.Light(screen: screen),
+            tables.SetScreenEmission(
+                emits: sources.Emits(screen: screen),
                 screenIndex: screen
             );
         }

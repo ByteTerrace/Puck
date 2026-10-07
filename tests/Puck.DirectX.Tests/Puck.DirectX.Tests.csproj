@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -9,18 +10,14 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.DirectX\Puck.DirectX.csproj" />
+        <ProjectReference Include="../../src/Puck.DirectX/Puck.DirectX.csproj" />
+        <ProjectReference Include="../../src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
-        <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
-        <!-- The software device API and the devices the device laws run on. -->
-        <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
-        <Compile Include="..\Shared\DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
+        <!-- The devices the device laws run on. -->
+        <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
     </ItemGroup>
 </Project>

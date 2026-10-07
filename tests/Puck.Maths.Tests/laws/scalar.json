@@ -1373,7 +1373,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Log2 \u2014 the bit-length integer part plus Log2FractionQ61\u0027s 128-entry reciprocal table and quartic residual, narrowed Q61 \u2192 Q16 by round-half-UP",
+        "Subject": "FixedQ4816.Log2 \u2014 the bit-length integer part plus Log2FractionQ61\u0027s 128-entry reciprocal table and quartic residual, narrowed Q61 \u2192 Q16 to nearest, half up \u2014 the logarithm of a raw that is not a power of two is irrational, so a tie there is an artifact of the approximation and either neighbour is as near",
         "Against": "Oracles.EncloseLog2, which produces the fraction by REPEATED SQUARING of the exact mantissa with directed truncation \u2014 no table, no polynomial, no fixed-width intermediate. The statement is that the subject lies inside the enclosure widened by 0.75 raw ULP, the committed empirical envelope for log2; the doc\u0027s own claim (0.50 ULP max observed) is strictly tighter. ENVELOPE: Subjects.PositiveRaw clears the sign bit of every sampled raw, so the negative half of the space reaches this leg only as its mirror image, and the refusal there is stated structurally below",
         "Shared": "",
         "Citation": "",
@@ -1430,8 +1430,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Exp2 \u2014 a 128-entry mantissa table indexed by the exponent\u0027s top seven fraction bits, a quartic in the residual at Q62, and a round-half-UP right shift by 46 \u2212 \u230Aexponent\u230B",
-        "Against": "Oracles.EncloseExp2, which forms 2^u as the product of the ladder factors 2^(2\u207B\u2071) over the fraction\u0027s set bits, the ladder built by REPEATED INTEGER SQUARE ROOTS of two with directed rounding \u2014 no table, no polynomial. The envelope is DERIVED from the kernel\u0027s own two error terms rather than declared as a step: half a raw ULP for the closing round-half-UP narrowing, plus the mantissa\u0027s relative error carried up to the result\u0027s scale, bounded by 2\u207B\u2074\u2074. That second bound is the quartic\u0027s truncation of the exponential series \u2014 the omitted tail \u03A3_{n\u22655} (ln2\u00B7r)\u207F/n! is at most 3.85\u00B710\u207B\u00B9\u2074 at the largest residual r = 511/2\u00B9\u2076, and the six Q62 truncations with the table\u0027s own rounding add under 10\u207B\u00B9\u2078 to it. The absolute arm is ATTAINED, not slack: the \u221217 tie sits exactly half a ULP above its true value, because this is the family\u0027s one round-half-UP kernel. ENVELOPE: Subjects.Exp2ExponentRaw folds every sampled raw onto [\u221220, 47), the whole NON-saturating interior \u2014 above 47 the kernel deliberately answers MaxValue, which no envelope around the true value could contain, so that half-open tail is stated by the gate leg instead. RULED, and the correction is the point: this leg used to state a two-regime STEP \u2014 0.75 raw ULP absolute below a true result of 2\u00B2\u2077, 2\u207B\u2074\u2070 relative above it \u2014 which is discontinuous by a factor of ten at the switch and which the kernel breaches over the octave below it, where its own shape crosses three quarters of a ULP at about 2\u00B2\u2076\u00B7\u2078. The kernel is not defective there (0.816 raw ULP observed at the worst operand, a relative 9\u00B710\u207B\u00B9\u2074); the envelope was mis-stated, and the derived form above is strictly tighter than the step it replaces everywhere below 2\u00B2\u2076 and sixteen times tighter above 2\u00B2\u2077",
+        "Subject": "FixedQ4816.Exp2 \u2014 a 128-entry mantissa table indexed by the exponent\u0027s top seven fraction bits, a quartic in the residual at Q62, and a half-up right shift by 46 \u2212 \u230Aexponent\u230B; a whole exponent k is answered exactly as 2^k, the one place a true tie can occur",
+        "Against": "Oracles.EncloseExp2, which forms 2^u as the product of the ladder factors 2^(2\u207B\u2071) over the fraction\u0027s set bits, the ladder built by REPEATED INTEGER SQUARE ROOTS of two with directed rounding \u2014 no table, no polynomial. The envelope is DERIVED from the kernel\u0027s own two error terms rather than declared as a step: half a raw ULP for the closing half-up narrowing, plus the mantissa\u0027s relative error carried up to the result\u0027s scale, bounded by 2\u207B\u2074\u2074. That second bound is the quartic\u0027s truncation of the exponential series \u2014 the omitted tail \u03A3_{n\u22655} (ln2\u00B7r)\u207F/n! is at most 3.85\u00B710\u207B\u00B9\u2074 at the largest residual r = 511/2\u00B9\u2076, and the six Q62 truncations with the table\u0027s own rounding add under 10\u207B\u00B9\u2078 to it. The absolute arm is ATTAINED, not slack: the \u221217 tie sits exactly half a ULP from its true value, on the even Zero. ENVELOPE: Subjects.Exp2ExponentRaw folds every sampled raw onto [\u221220, 47), the whole NON-saturating interior \u2014 above 47 the kernel deliberately answers MaxValue, which no envelope around the true value could contain, so that half-open tail is stated by the gate leg instead. RULED, and the correction is the point: this leg used to state a two-regime STEP \u2014 0.75 raw ULP absolute below a true result of 2\u00B2\u2077, 2\u207B\u2074\u2070 relative above it \u2014 which is discontinuous by a factor of ten at the switch and which the kernel breaches over the octave below it, where its own shape crosses three quarters of a ULP at about 2\u00B2\u2076\u00B7\u2078. The kernel is not defective there (0.816 raw ULP observed at the worst operand, a relative 9\u00B710\u207B\u00B9\u2074); the envelope was mis-stated, and the derived form above is strictly tighter than the step it replaces everywhere below 2\u00B2\u2076 and sixteen times tighter above 2\u00B2\u2077",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1440,7 +1440,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQ4816.Exp2 at every whole exponent \u2014 the sixty-three values j\u00B7One for j from \u221216 through 46",
-        "Against": "the exact 2^(16\u002Bj), computed as a BigInteger shift. BIT-EXACT on both sides: at a whole exponent the residual vanishes, the table\u0027s zeroth entry is exactly 2\u2076\u00B2, and the half-up narrowing of 2\u2076\u00B2 by 62 \u2212 (16\u002Bj) has no residue to decide",
+        "Against": "the exact 2^(16\u002Bj), computed as a BigInteger shift. BIT-EXACT on both sides: at a whole exponent the residual vanishes, the table\u0027s zeroth entry is exactly 2\u2076\u00B2, and the ties-to-even narrowing of 2\u2076\u00B2 by 62 \u2212 (16\u002Bj) has no residue to decide",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1457,7 +1457,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the documented underflow gate is at \u221217: Exp2(\u221217\u00B7One) is exactly Epsilon \u2014 the true 2\u207B\u00B9\u2077 is half a ULP and this kernel rounds half UP, unlike the multiply, the divide, Round, FromDouble and Parse, which all round half to even \u2014 while every exponent strictly below \u221217, including \u221217 minus one epsilon, \u221218, \u221219, \u22122\u00B3\u00B9 and MinValue, returns Zero",
+        "Subject": "the documented underflow gate is at \u221217: Exp2(\u221217\u00B7One) is Zero \u2014 the true 2\u207B\u00B9\u2077 is exactly half a ULP and the whole-exponent answer ties it to even, like the multiply, the divide, Round, FromDouble, Parse and the whole-exponent Pow, so Exp2(\u221217) and Pow(2, \u221217) agree \u2014 while one raw above \u221217 is past the tie and answers Epsilon, and every exponent below, including \u221217 minus one epsilon, \u221218, \u221219, \u22122\u00B3\u00B9 and MinValue, returns Zero. RULED: a whole exponent is the only Exp2 input whose true value can be a tie, so the exact whole-exponent answer carries the family\u0027s ties-to-even rule there and Exp2(\u221217) and Pow(2, \u221217) give the same Zero; every other 2^x is irrational, and the narrowing that serves it rounds half up because a tie there is only an artifact",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1627,8 +1627,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow over the power-of-two lattice \u2014 every base 2^j and whole exponent n whose product j\u00B7n lands in [\u221216, 46], which is exactly the square-and-multiply path INCLUDING the negative-exponent branch that squares the correctly-rounded inverse base",
-        "Against": "the exact 2^(16 \u002B j\u00B7n) as a BigInteger shift. BIT-EXACT on both sides: every intermediate in the schedule is an exactly representable power of two, so nothing rounds anywhere in the chain and an error in the schedule, in the inverse branch or in either range gate cannot hide. This lattice CONTAINS the tree\u0027s two named Pow regressions, 0.5^\u221217 and 0.5^\u221218",
+        "Subject": "FixedQ4816.Pow over the power-of-two lattice: bases 2^j for -16 <= j <= 46 and whole exponents -32 <= n <= 32 whose product j*n lands in [-16, 46], including negative exponents that divide a power of two by the exact power",
+        "Against": "the exact raw 1L << (16 + j*n). BIT-EXACT: the result is a representable power of two, so the closing shift or division is exact. This lattice contains 0.5^-17 and 0.5^-18",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1636,8 +1636,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow over the small whole-exponent ladder \u2014 nine integer bases of magnitude at most 100 raised to exponents 0 through 4",
-        "Against": "the exact BigInteger.Pow, scaled \u2014 the ascending-bit square-and-multiply schedule reproduced by a plain sequential fold in arbitrary width, which is a DIFFERENT schedule reaching the same value because every intermediate is exact. Bit-exact on both sides",
+        "Subject": "FixedQ4816.Pow over nine positive integer bases of magnitude at most 100 raised to exponents 0 through 4",
+        "Against": "the exact BigInteger.Pow, scaled \u2014 arbitrary-width integers rather than the subject\u0027s fixed stack limb buffer, reaching the same value because both powers are exact. Bit-exact on both sides",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1657,13 +1657,13 @@
         "Subject": "the negative-base surface over a twenty-six-row table, reached BOTH by the static call and by a constrained generic call through IPowerFunctions\u003CFixedQ4816\u003E",
         "Against": "Subjects.FixedNegativeBasePowers, a constant (base raw, exponent raw, result raw) table",
         "Shared": "",
-        "Citation": "each row hand-derived from x^y and the 2\u207B\u00B9\u2076 grid \u2014 (\u22122)^0 through (\u22122)^4 and the reciprocal exponents, the odd and even powers of \u22121, both parities past the \u00B132 squaring band on the exponential path, both underflows, and MinValue at exponents 0, 1, 2, 3 and \u22121. No expectation is captured from the subject. RULED, and the correction is the point: this leg used to pin \u0027every negative base yields Zero\u0027, which is the shape .NET\u0027s IPowerFunctions\u003CTSelf\u003E.Pow contract does not have \u2014 the interface returns x raised to y, and an integral exponent has a perfectly representable answer whose sign is the exponent\u0027s parity. The refusal survives only where it is real: a NON-whole exponent at a negative base, whose real power is not a real number and which this carrier has no not-a-number to report",
+        "Citation": "each row hand-derived from x^y and the 2\u207B\u00B9\u2076 grid \u2014 (\u22122)^0 through (\u22122)^4 and the reciprocal exponents, the odd and even powers of \u22121, both parities past the \u00B132 exact band on the exponential path, both underflows, and MinValue at exponents 0, 1, 2, 3 and \u22121. No expectation is captured from the subject. RULED, and the correction is the point: this leg used to pin \u0027every negative base yields Zero\u0027, which is the shape .NET\u0027s IPowerFunctions\u003CTSelf\u003E.Pow contract does not have \u2014 the interface returns x raised to y, and an integral exponent has a perfectly representable answer whose sign is the exponent\u0027s parity. The refusal survives only where it is real: a NON-whole exponent at a negative base, whose real power is not a real number and which this carrier has no not-a-number to report",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the sign survives every saturation verdict, which is what makes the parity rule total rather than interior: the odd overflow (\u22122\u2074\u2070)\u00B3 answers MinValue where the even (\u22122\u2074\u2070)\u00B2 answers MaxValue, and MinValue \u2014 the one base whose magnitude 2\u2074\u2077 is a raw past the carrier and so never enters the squaring loop \u2014 answers itself at exponent one, MaxValue at two, MinValue at three and Zero at minus one",
+        "Subject": "the sign survives every saturation verdict, which is what makes the parity rule total rather than interior: the odd overflow (\u22122\u2074\u2070)\u00B3 answers MinValue where the even (\u22122\u2074\u2070)\u00B2 answers MaxValue, and MinValue \u2014 the one base whose magnitude 2\u2074\u2077 is a raw past the carrier and so never reaches the exact-power path \u2014 answers itself at exponent one, MaxValue at two, MinValue at three and Zero at minus one",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1672,7 +1672,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "overflow on the whole-exponent path is the LADDER'S own verdict \u2014 the loop saturates exactly when a step's rounded magnitude leaves the carrier, never from a log-derived estimate \u2014 so the exponent-one identity holds through the very top raw on both signs (the first raw the retired constant-slack gate wrongly answered MaxValue for, 9220202148413599469, now answers itself), a true overflow still saturates with its sign, and the log-derived shortcut still answers Zero below an exponent product of \u221218. RULED, and the correction is the point: a constant 32-raw slack sized for the worst exponent saturated 3.17\u00B710\u00B9\u2075 representable raws at exponent one alone",
+        "Subject": "overflow on the whole-exponent path is decided on the EXACT power \u2014 the result saturates exactly when its correct rounding leaves the carrier, never from a log-derived estimate \u2014 so the exponent-one identity holds through the very top raw on both signs (the first raw the retired constant-slack gate wrongly answered MaxValue for, 9220202148413599469, now answers itself), a true overflow still saturates with its sign, and a power below half a raw answers Zero. RULED, and the correction is the point: a constant 32-raw slack sized for the worst exponent saturated 3.17\u00B710\u00B9\u2075 representable raws at exponent one alone; and the squaring ladder that replaced it rounded every step, putting x\u00B9\u2076 up to 67,964 raws from its correct rounding, which scalar.pow-whole-correctly-rounded now pins",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1681,7 +1681,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the near-top squares either side of the exact exponent-two saturation threshold floor(\u221A(2\u2077\u2079 \u2212 2\u00B9\u2075)) \u2014 raws 777336460312, 777472127993 and 777472127994 at exponent two, where the ladder is the single rounded squaring",
+        "Subject": "the near-top squares either side of the exact exponent-two saturation threshold floor(\u221A(2\u2077\u2079 \u2212 2\u00B9\u2075)) \u2014 raws 777336460312, 777472127993 and 777472127994 at exponent two, where the exact power\u0027s one rounding is the multiply operator\u0027s own",
         "Against": "an independent BigInteger ties-to-even rounding of the exact square (Oracles.RoundRationalTiesToEven), saturated to MaxValue where it exceeds the carrier: the representable side must be BIT-EXACT \u2014 the answer the multiply operator itself gives \u2014 and the far side must saturate",
         "Shared": "",
         "Citation": "",
@@ -1691,6 +1691,45 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "the exponent product on the fractional path is formed at Int128 width BEFORE the gates, so an exponent that would wrap the public multiplication \u2014 the raw 2\u2074\u2076 against the base four \u2014 still saturates rather than returning an arbitrary value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Every whole exponent 2 <= |n| <= 32 at raw zero, both carrier extremes, both signs of raw one, neighbors of half/unit/two, exact-half bases 98304 and 163840, and the raw neighbors of the saturation and half-to-zero thresholds located independently by BigInteger bisection. Includes the ladder counterexample (-32767 raw)^-10 and both tie parities at exponent 17",
+        "Against": "FixedPowWholeMatchesOracle: BigInteger.Pow followed by Oracles.RoundRationalTiesToEven and signed saturation, independent of the subject\u0027s UInt128 lane, limbs, early verdicts and estimate-and-correct division",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.pow-whole-correctly-rounded",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Pow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pow at every whole exponent 2 \u2264 |n| \u2264 32 and both base signs, each base sampled over the full raw carrier and again folded so the true magnitude lands between 2\u207B\u00B2\u2070 and 2\u2075\u2070 \u2014 straddling both the underflow to Zero and the saturation at the top of the carrier; and, for every draw, again at a base within 32 raws of that exponent\u0027s own saturation threshold \u2014 the integer n-th root of 2^(63 \u002B 16(n \u2212 1)), or of 2^(16(m \u002B 1) \u2212 63) for a negative exponent \u2212m \u2014 where the result sits within a few raws of 2\u2076\u00B3, the only band where the negative path\u0027s one-shot quotient estimate can overshoot and its exact correction is what decides the answer; and, for every draw, at one of the eight true ties, 2\u00B9\u2075\u00B7o for odd o \u2264 13 at n = 17 and 2\u00B9\u2077 at n = \u221217 \u2014 the only bases whose exact power sits on a rounding midpoint, so the exponential estimate that answers first can never prove them and the exact path must",
+        "Against": "the exact power in BigInteger \u2014 BigInteger.Pow of the raw, shifted by 16\u00B7(n \u2212 1) or divided into 2^(16\u00B7(1 \u2212 n)) \u2014 rounded once to nearest with ties to even by Oracles.RoundRationalTiesToEven and saturated with the parity\u0027s sign where it leaves the carrier. BIT-EXACT on both sides: the documented contract is the correct rounding, not an envelope",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: whole exponents beyond \u00B132 take the exponential path, so their contract is scalar.pow-envelope\u0027s envelope, which samples them on one selector bit, not the correct rounding this law pins; the negative-base table pins both parities there; the exponents 0 and \u00B11 answer exactly and are pinned by scalar.pow-exact-lattice",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1711,8 +1750,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow on the FRACTIONAL path \u2014 Exp2 fed the once-rounded Q32 product y\u00B7Log2(x), the logarithm carried at Q46 and the exponential given twenty-five residual bits, which the operand fold reaches by forcing a non-zero exponent fraction",
-        "Against": "Oracles.EncloseExp2 applied to the interval product of the sampled exponent with Oracles.EncloseLog2\u0027s enclosure of log\u2082(x), widened by the DERIVED envelope: with L\u0302 the subject\u0027s logarithm (within 0.75 ULP by scalar.log2-vs-series) and e the Q16 rounding of y\u00B7L\u0302, the exponent error is \u03B5 \u2264 (3\u00B7|yRaw| \u002B 2\u00B9\u2077)/2\u00B3\u2074, so the result carries at most x^y\u00B7\u03B5 \u2014 using 2^\u03B5 \u2212 1 \u2264 \u03B5, valid because the operand fold keeps \u03B5 far below one \u2014 plus Exp2\u0027s own documented envelope. ENVELOPE: Subjects.FixedPowWithinEnvelope bounds the sampled exponent so that |y\u00B7log\u2082 x| stays under sixteen, which is the band where neither saturation gate fires; the gates themselves are pinned by scalar.pow-exact-lattice",
+        "Subject": "FixedQ4816.Pow on the EXPONENTIAL path \u2014 fractional exponents, and whole ones beyond \u00B132 \u2014 Exp2Q56 fed y\u00B7log\u2082x at Q56, the logarithm from Log2Wide: a balanced reduction about one, the last interval read as log\u2082(1 \u002B r) with r = m/2 \u2212 1, and the Taylor residual through degree six kept as a full Int128 product, so its error is RELATIVE to log\u2082x",
+        "Against": "Oracles.EncloseExp2 at a 48-bit exponent applied to the interval product of the sampled exponent with Oracles.EncloseLog2\u0027s enclosure of log\u2082(x) at 2\u207B\u2075\u2076, widened by the DERIVED envelope: the logarithm\u0027s error is below 2\u207B\u2075\u00B2\u00B7|log\u2082x| \u002B 2\u207B\u2076\u2070 (measured worst 0.73 of that bound over 300,000 raws spanning the carrier, the near-one band, interval edges and the last interval), the fraction\u0027s cut to 63 bits adds 2\u207B\u2076\u00B3 of the product and the floor to Q56 adds 2\u207B\u2075\u2076, stated with slack as \u03B5 \u2264 |y|\u00B7(\u2308|log\u2082x|\u2309 \u002B 1)\u00B72\u207B\u2075\u00B9 \u002B 2\u207B\u2075\u2075, so the result carries at most x^y\u00B7\u03B5 \u2014 using 2^\u03B5 \u2212 1 \u2264 \u03B5 \u2014 plus Exp2\u0027s own documented envelope. ENVELOPE: Subjects.FixedPowWithinEnvelope bounds the sampled exponent by the base\u0027s own |log\u2082x| so |y\u00B7log\u2082x| stays under forty, which reaches the large exponents a base near one admits, and on one selector bit draws a whole exponent beyond \u00B132 instead of a fractional one. RULED, and the correction is the point: the previous kernel carried the logarithm at Q46 from the quartic Log2 shares, whose error is ABSOLUTE \u2014 about r\u2074/5 of the logarithm, 2\u207B\u00B3\u2070 at an interval\u0027s edge \u2014 and rounded the exponent to Q32, so a large exponent multiplied that error: 63 raw ULP at whole exponents just past \u00B132 and 6.2\u00B710\u2076 (1.6\u00B710\u207B\u2078 relative) where |y\u00B7log\u2082x| reached forty; this envelope\u0027s earlier |yRaw|\u00B72\u207B\u2074\u2078 slack admitted it",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1857,6 +1896,57 @@
         "Flavor": "None",
         "Subject": "RealQuadratic.ToString renders identically under a host culture whose negative sign is U+2212 as it does invariantly, checked by switching CurrentCulture around the call and restoring it. Formatting BigInteger components with the ambient provider let a host culture inject U+200E, U+061C or U+2212 into text that reaches logs, snapshots and golden files, against this library's stated contract that nothing in it reads the current culture. The probe proves its own teeth in the same breath, by requiring that ambient formatting of the SAME component really does differ -- otherwise a host that changed nothing would green it vacuously. ENVELOPE: the member cannot be named in Members because the coverage surface excludes ToString, so this law gates it without crediting it",
         "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.smoothstep-correctly-rounded",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at edges drawn over the whole raw carrier in both orientations \u2014 including pairs at the two extremes, whose difference needs 65 signed bits \u2014 at a value drawn over the whole carrier (so the clamps are reached) and again at a value placed inside the edges at a drawn fraction, so the interior is swept whatever the edges\u0027 distance apart; and, per draw, at a true tie, t = o/64 for an odd o, in both orientations",
+        "Against": "Oracles.Smoothstep: the exact rational N\u00B2(3D \u2212 2N)/D\u00B3 for N = value \u2212 edge0 and D = edge1 \u2212 edge0, in BigInteger, scaled by 2\u00B9\u2076 and rounded ONCE, ties to even, by Oracles.RoundRationalTiesToEven. A different route from the subject, which floors the ratio to Q62 before an exact cubic: the oracle never quantizes the ratio. BIT-EXACT outside a band of 2\u207B\u2074\u2074 ULP about each rounding midpoint, inside which either neighbour is accepted; the subject\u0027s documented bound beyond the half ULP is 1.5\u00B72\u207B\u2074\u2076 ULP, below that band. True ties are exact on both sides, so the tie leg is bit-exact and pins the ties-to-even rule",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the curve is monotone in the value: at the interior value and its two raw neighbours the results never reverse the edges\u0027 direction (non-decreasing for edge0 \u003C edge1, non-increasing for edge0 \u003E edge1, the step at equal edges included). ENVELOPE: neighbouring raws only; the oracle agreement leg carries order over wider gaps, since two correctly rounded values of a monotone curve are themselves ordered",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.smoothstep-edges",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at six edge pairs in both orientations, the carrier extremes MinValue/MaxValue among them, and at five equal-edge steps",
+        "Against": "exact hand-derived expectations from the definition: Zero at edge0 and one raw beyond it, One at edge1 and one raw beyond it, exactly One/2 at the midpoint of an even span (t = 1/2 gives t\u00B2(3 \u2212 2t) = 1/2), and at equal edges the step value \u003C edge0 ? Zero : One",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

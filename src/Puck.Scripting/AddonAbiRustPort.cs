@@ -105,6 +105,8 @@ internal static class AddonAbiRustPort {
             sb: sb,
             type: typeof(AddonAbi)
         );
+        sb.Append(value: "/// `Puck.Scripting.AddonAbi.AbiShape`: the host's addon ABI shape fingerprint `").Append(value: AddonAbi.AbiShapeFingerprint).Append(value: "` as the word every guest returns from `puck_abi_shape`.\n");
+        sb.Append(value: "pub const ABI_SHAPE: u64 = 0x").Append(value: AddonAbi.AbiShapeFingerprint).Append(value: ";\n\n");
         AppendConstGroup(
             comment: "`Puck.Scripting.AddonAbi.OutCellOffsets` — the guest→host output cell field offsets.",
             csharpTypeName: "AddonAbi.OutCellOffsets",
@@ -194,10 +196,12 @@ internal static class AddonAbiRustPort {
                 : $"{rustPrefix}_")}{ToScreamingSnakeCase(pascal: field.Name)}";
             var rustType = RustTypeFor(field: field);
             var rawValue = field.GetRawConstantValue();
-            var valueText = Convert.ToString(
+            var valueText = ((rawValue is string text)
+                ? $"\"{text}\""
+                : Convert.ToString(
                 value: rawValue,
                 provider: CultureInfo.InvariantCulture
-            );
+            ));
 
             sb.Append(value: "/// `").Append(value: csharpTypeName).Append(value: '.').Append(value: field.Name).Append(value: "` (`").Append(value: valueText).Append(value: "`).\n");
             sb.Append(value: "pub const ").Append(value: rustName).Append(value: ": ").Append(value: rustType).Append(value: " = ").Append(value: valueText).Append(value: ";\n");
@@ -233,6 +237,10 @@ internal static class AddonAbiRustPort {
             comparisonType: StringComparison.Ordinal
         )) {
             return "i32";
+        }
+
+        if (field.FieldType == typeof(string)) {
+            return "&str";
         }
 
         if (field.FieldType == typeof(long)) {

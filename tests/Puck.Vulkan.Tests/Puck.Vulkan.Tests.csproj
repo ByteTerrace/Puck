@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -10,16 +11,11 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Vulkan\Puck.Vulkan.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
+        <ProjectReference Include="../../src/Puck.Vulkan/Puck.Vulkan.csproj" />
+        <ProjectReference Include="../../src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
-        <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
+        <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
     </ItemGroup>
 </Project>

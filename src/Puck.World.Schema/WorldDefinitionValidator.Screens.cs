@@ -250,17 +250,19 @@ public static partial class WorldDefinitionValidator {
                         errors: errors
                     );
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.OrbitYaw,
                         path: $"{opPath}.yaw",
-                        scalar: orbit.Yaw
+                        scalar: orbit.Yaw.Value
                     );
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.OrbitPitch,
                         path: $"{opPath}.pitch",
-                        scalar: orbit.Pitch
+                        scalar: orbit.Pitch.Value
                     );
 
                     if (
@@ -288,9 +290,10 @@ public static partial class WorldDefinitionValidator {
                         rowNoun: "curves",
                         value: pathOp.Curve
                     );
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.PathFraction,
                         path: $"{opPath}.fraction",
                         scalar: pathOp.Fraction
                     );
@@ -349,9 +352,10 @@ public static partial class WorldDefinitionValidator {
 
                     seenFov = true;
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.FieldOfView,
                         path: $"{opPath}.fieldOfViewRadians",
                         scalar: fov.FieldOfViewRadians
                     );
@@ -371,9 +375,10 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{opPath} needs non-empty program names 'a' and 'b'.");
                     }
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.BlendWeight,
                         path: $"{opPath}.weight",
                         scalar: blend.Weight
                     );
@@ -386,9 +391,10 @@ public static partial class WorldDefinitionValidator {
 
                     seenSelect = true;
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.SelectKey,
                         path: $"{opPath}.key",
                         scalar: select.Key
                     );
@@ -602,97 +608,6 @@ public static partial class WorldDefinitionValidator {
             !Enum.IsDefined(value: input)
         ) {
             errors.Add(item: $"{path}.input {((int)input)} is not a destination.");
-        }
-    }
-    // A screen's memory bindings: each window fits the engine's addressable bus, names a declared kind=Int row on
-    // the same (row, key) pair rule every other named-cell reference in this document follows, and spells a known
-    // direction.
-    private static void ValidateScreenMemory(WorldDefinition definition, IReadOnlyList<WorldScreenMemory>? bindings, string path, List<string> errors) {
-        if (bindings is not { Count: > 0 } memory) {
-            return;
-        }
-
-        for (var index = 0; (index < memory.Count); index++) {
-            var binding = memory[index];
-            var entryPath = $"{path}[{index}]";
-
-            if (binding is null) {
-                errors.Add(item: $"{entryPath} is required.");
-
-                continue;
-            }
-
-            if (
-                (binding.Width != 1) &&
-                (binding.Width != 2)
-            ) {
-                errors.Add(item: $"{entryPath}.width must be 1 or 2, not {binding.Width}.");
-            }
-
-            var span = Math.Max(
-                val1: binding.Width,
-                val2: 1
-            );
-
-            if (
-                (binding.Address < 0) ||
-                (((binding.Address + span) - 1) > WorldScreenMemory.MaxAddress)
-            ) {
-                errors.Add(item: $"{entryPath}.address {binding.Address} (width {binding.Width}) is outside the engine's memory 0..{WorldScreenMemory.MaxAddress}.");
-            }
-
-            ValidateMemoryRow(
-                row: binding.Row,
-                key: binding.Key,
-                entryPath: entryPath,
-                definition: definition,
-                errors: errors
-            );
-
-            if (!Enum.IsDefined(value: binding.Direction)) {
-                errors.Add(item: $"{entryPath}.direction '{binding.Direction}' is unknown.");
-            }
-        }
-    }
-    // The (row, key) pair rule every reader of a named cell enforces, specialized to a memory binding's own error
-    // text (kept separate from WorldDefinitionValidator.Response.cs's ValidateStateCell, which speaks of a response's
-    // comparand rather than a binding's mirrored cell).
-    private static void ValidateMemoryRow(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
-        if (
-            (row is null) ||
-            (WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: row
-        ) is not { } declared)
-        ) {
-            errors.Add(item: $"{entryPath}.row '{row}' does not name a declared state.world row.");
-
-            return;
-        }
-
-        if (declared.Kind != CellKind.Int) {
-            errors.Add(item: $"{entryPath}.row '{row}' is kind={declared.Kind} — a machine-memory binding mirrors an Int cell only.");
-        }
-
-        if (
-            declared.IsKeyed &&
-            (key is null)
-        ) {
-            errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
-        } else if (
-            !declared.IsKeyed &&
-            (key is not null)
-        ) {
-            errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
-        } else if (
-            (key is not null) &&
-            !CellName.TryParse(
-            candidate: key,
-            name: out _,
-            reason: out var reason
-        )
-        ) {
-            errors.Add(item: $"{entryPath} key '{key}' {reason}");
         }
     }
 
@@ -949,6 +864,13 @@ public static partial class WorldDefinitionValidator {
             if (portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: not null }) {
                 errors.Add(item: $"{path}.session.projection 'window' requires THIS SAME face's portal facet to author arrival 'mapped' with a counterpart — a window has no destination-space aperture to fit a frustum against without a mapped border pair.");
             }
+        }
+
+        if (
+            (session.Fallback is { } fallback) &&
+            !IsHexColor(value: fallback)
+        ) {
+            errors.Add(item: $"{path}.session.fallback '{fallback}' must be #RRGGBB.");
         }
 
         if (session.Resolution is { } resolution) {

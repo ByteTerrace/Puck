@@ -42,7 +42,7 @@ internal static partial class CompileCommand {
             comparisonType: StringComparison.Ordinal,
             value: ".."
         ) && !Path.IsPathRooted(path: outputFromTree)) {
-            Console.Error.WriteLine(value: $"error: the output '{directory}' lies inside the tree '{root}'; a tree run writes outside the sources it compiles.");
+            Console.Error.WriteLine(value: $"error: the output '{CliPaths.ToDisplay(fullPath: directory)}' lies inside the tree '{CliPaths.ToDisplay(fullPath: root)}'; a tree run writes outside the sources it compiles.");
 
             return 2;
         }
@@ -58,7 +58,7 @@ internal static partial class CompileCommand {
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: reportPath)!);
                 File.Delete(path: reportPath);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"error: the report '{reportPath}' could not be removed before the run: {exception.Message}");
+                Console.Error.WriteLine(value: $"error: the report '{CliPaths.ToDisplay(fullPath: reportPath)}' could not be removed before the run: {exception.Message}");
 
                 return 2;
             }
@@ -111,7 +111,7 @@ internal static partial class CompileCommand {
                 value: ".."
             )
             ) {
-                Console.Error.WriteLine(value: $"error: '{source}' does not lie under the tree '{root}'.");
+                Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: source)}' does not lie under the tree '{CliPaths.ToDisplay(fullPath: root)}'.");
 
                 return 2;
             }
@@ -184,12 +184,12 @@ internal static partial class CompileCommand {
                 try {
                     File.Delete(path: stale);
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    Console.Error.WriteLine(value: $"error: '{stale}' has no source in the tree and could not be removed: {exception.Message}");
+                    Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: stale)}' has no source in the tree and could not be removed: {exception.Message}");
 
                     return 2;
                 }
 
-                Console.WriteLine(value: $"Removed '{stale}': no source in the tree compiles to it.");
+                Console.WriteLine(value: $"Removed '{CliPaths.ToDisplay(fullPath: stale)}': no source in the tree compiles to it.");
             }
         }
 
@@ -212,12 +212,12 @@ internal static partial class CompileCommand {
                 path: reportPath
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not write the report '{reportPath}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not write the report '{CliPaths.ToDisplay(fullPath: reportPath)}': {exception.Message}");
 
             return 2;
         }
 
-        Console.WriteLine(value: $"Reported {written.Count:N0} written files in '{reportPath}'.");
+        Console.WriteLine(value: $"Reported {written.Count:N0} written files in '{CliPaths.ToDisplay(fullPath: reportPath)}'.");
 
         return 0;
     }
@@ -234,6 +234,7 @@ internal static partial class CompileCommand {
         );
         var packager = new ShaderPackager(
             compiler: new ShaderCompiler(cacheDirectory: PackageCommand.DefaultCacheDirectory),
+            removingAbandoned: static package => Console.WriteLine(value: $"Removing '{CliPaths.ToDisplay(fullPath: package)}': it holds no {ShaderPackageManifest.FileName}, so a publication or a clean stopped part way through it."),
             store: store
         );
         var packages = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
@@ -250,7 +251,7 @@ internal static partial class CompileCommand {
                 definition: out var definition,
                 reason: out var reason
             )) {
-                Console.Error.WriteLine(value: $"error: the compiled world '{compiledWorld}' of '{owner}' cannot be read for its pipelines: {reason}");
+                Console.Error.WriteLine(value: $"error: the compiled world '{CliPaths.ToDisplay(fullPath: compiledWorld)}' of '{CliPaths.ToDisplay(fullPath: owner)}' cannot be read for its pipelines: {reason}");
 
                 return 2;
             }
@@ -273,7 +274,7 @@ internal static partial class CompileCommand {
                     reason: out var unresolved,
                     resolved: out var source
                 )) {
-                    Console.Error.WriteLine(value: $"error: '{owner}' names graph instance '{row.Name}' by a source that does not resolve: {unresolved}.");
+                    Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: owner)}' names graph instance '{row.Name}' by a source that does not resolve: {unresolved}.");
 
                     return 1;
                 }
@@ -283,7 +284,7 @@ internal static partial class CompileCommand {
                 }
 
                 if (!File.Exists(path: source)) {
-                    Console.Error.WriteLine(value: $"error: '{owner}' names graph instance '{row.Name}' by the source '{row.Source}', and no file exists at '{source}'.");
+                    Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: owner)}' names graph instance '{row.Name}' by the source '{row.Source}', and no file exists at '{CliPaths.ToDisplay(fullPath: source)}'.");
 
                     return 1;
                 }
@@ -294,7 +295,7 @@ internal static partial class CompileCommand {
                 ).GetAwaiter().GetResult();
 
                 if (result.Status != ShaderPipelineLoadStatus.Compiled) {
-                    Console.Error.WriteLine(value: $"error: graph instance '{row.Name}' of '{owner}' could not be packaged from '{source}' ({result.Status}): {result.Message.ReplaceLineEndings(replacementText: " ")}");
+                    Console.Error.WriteLine(value: $"error: graph instance '{row.Name}' of '{CliPaths.ToDisplay(fullPath: owner)}' could not be packaged from '{CliPaths.ToDisplay(fullPath: source)}' ({result.Status}): {result.Message.ReplaceLineEndings(replacementText: " ")}");
 
                     return ((result.Status == ShaderPipelineLoadStatus.Unsupported)
                         ? 2
@@ -305,7 +306,7 @@ internal static partial class CompileCommand {
                     key: package,
                     value: owner
                 )) {
-                    Console.WriteLine(value: $"Packaged pipeline '{row.Name}' from '{source}' into '{package}'.");
+                    Console.WriteLine(value: $"Packaged pipeline '{row.Name}' from '{CliPaths.ToDisplay(fullPath: source)}' into '{CliPaths.ToDisplay(fullPath: package)}'.");
                 }
             }
         }
@@ -324,19 +325,35 @@ internal static partial class CompileCommand {
             return 0;
         }
 
-        foreach (var stale in Directory.EnumerateDirectories(path: store).Where(predicate: package => !packages.ContainsKey(key: Path.GetFullPath(path: package))).ToArray()) {
+        // Staging and replacement siblings belong to their writer, which can still be publishing another tree's run. The
+        // store itself may be reached through a link; a package inside it may not.
+        foreach (var stale in Directory.EnumerateDirectories(path: store).Where(predicate: package =>
+            (ShaderPackager.IsStorePackageName(name: Path.GetFileName(path: package)) &&
+            !packages.ContainsKey(key: Path.GetFullPath(path: package)))
+        ).ToArray()) {
             try {
-                Directory.Delete(
-                    path: stale,
-                    recursive: true
+                ShaderPackager.RequireUnlinkedStorePath(
+                    package: stale,
+                    store: store
                 );
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"error: the package '{stale}' has no pipeline in the tree naming it and could not be removed: {exception.Message}");
+
+                // Removal holds the package's lock, as recovery and publication do, so it never removes a package
+                // another writer is publishing.
+                using (ShaderPackager.LockPackageAsync(package: stale).GetAwaiter().GetResult()) {
+                    if (Directory.Exists(path: stale)) {
+                        Directory.Delete(
+                            path: stale,
+                            recursive: true
+                        );
+                    }
+                }
+            } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
+                Console.Error.WriteLine(value: $"error: the package '{CliPaths.ToDisplay(fullPath: stale)}' has no pipeline in the tree naming it and could not be removed: {exception.Message}");
 
                 return 2;
             }
 
-            Console.WriteLine(value: $"Removed '{stale}': no pipeline in the tree names it.");
+            Console.WriteLine(value: $"Removed '{CliPaths.ToDisplay(fullPath: stale)}': no pipeline in the tree names it.");
         }
 
         return 0;
@@ -398,7 +415,7 @@ internal static partial class CompileCommand {
             x: carrier,
             y: PuckPaths.Normalize(path: source)
         )) {
-            Console.WriteLine(value: $"Skipped '{source}': its source '{carrier}' carries the document.");
+            Console.WriteLine(value: $"Skipped '{CliPaths.ToDisplay(fullPath: source)}': its source '{CliPaths.ToDisplay(fullPath: carrier)}' carries the document.");
 
             return 0;
         }
@@ -425,7 +442,7 @@ internal static partial class CompileCommand {
                 path: target
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not ship document '{source}' as '{target}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not ship document '{CliPaths.ToDisplay(fullPath: source)}' as '{CliPaths.ToDisplay(fullPath: target)}': {exception.Message}");
 
             return 2;
         }
@@ -434,7 +451,7 @@ internal static partial class CompileCommand {
             key: target,
             value: source
         );
-        Console.WriteLine(value: $"Shipped '{source}' -> '{target}'.");
+        Console.WriteLine(value: $"Shipped '{CliPaths.ToDisplay(fullPath: source)}' -> '{CliPaths.ToDisplay(fullPath: target)}'.");
 
         return CompileDocument(
             besidePath: target,

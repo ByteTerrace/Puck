@@ -10,8 +10,10 @@ namespace Puck.World;
 /// prototypes, so it depends on <c>DEFN</c>, and records no inputs beyond the definition. Its payload is the reference to
 /// the build's bake pack (<see cref="WorldBakePack.Reference"/>, relative to the document's directory) as text, then a
 /// count and each distinct bake key at <see cref="Quality"/>, as its pin's hex, in ascending ordinal order. The keys
-/// carry the baker's version, so the chunk's <see cref="Version"/> is the baker's and a compiled world written by
-/// another baker is derived again. Baking is too heavy for a boot's critical path, so the chunk does not derive on boot:
+/// carry <see cref="DerivationFingerprint.Bake"/>, and the chunk's <see cref="Version"/> is the unsigned integer
+/// represented by the fingerprint's first eight hexadecimal digits (<see cref="DerivationFingerprint.BakeChunkVersion"/>).
+/// A compiled world written by another bake derivation is derived again. Baking is too heavy for a boot's critical
+/// path, so the chunk does not derive on boot:
 /// a boot that finds no compiled world holding it leaves it out, and the presentation bakes what it needs in the
 /// background (<c>WorldBakeSchedule</c>).
 /// <para>Deriving lists the keys and, given a <see cref="Store"/>, makes sure the store holds every key's outcome
@@ -45,7 +47,7 @@ public sealed class WorldBakeChunk(WorldBakeStore? store, string? packReference 
     /// <inheritdoc/>
     public bool DerivesOnBoot => false;
     /// <inheritdoc/>
-    public uint Version => SdfBaker.Version;
+    public uint Version => DerivationFingerprint.BakeChunkVersion;
 
     /// <summary>Returns <paramref name="chunks"/> with a <c>BAKE</c> chunk over <paramref name="store"/> appended.</summary>
     /// <param name="chunks">The derivations to extend.</param>

@@ -346,10 +346,8 @@ public sealed class WorldExtensionLawTests {
     public async Task JournalCapacityRefusesBeforeDispatch_AndRealDirectoryStorageRoundTrips() {
         using var fixture = Fixtures.FreshServer();
         using var extension = Extension(server: fixture.Server);
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-extension-{Guid.NewGuid():N}"
-        );
+        using var directory = new TemporaryDirectory(prefix: "puck-extension-");
+        var path = directory.PathOf(name: "storage");
         var address = new ObjectBlobAddress(
             Guid.NewGuid(),
             "operations.json"
@@ -369,36 +367,27 @@ public sealed class WorldExtensionLawTests {
             provider: provider
         );
 
-        try {
-            await dispatcher.CommitAsync(
-                Request,
-                "cause",
+        await dispatcher.CommitAsync(
+            Request,
+            "cause",
+            TestContext.Current.CancellationToken
+        );
+        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => dispatcher.CommitAsync(
+            Request with { Id = "another" },
+            "cause",
+            TestContext.Current.CancellationToken
+        ).AsTask());
+        Assert.Equal(
+            actual: provider.Executions,
+            expected: 0
+        );
+        Assert.Equal(
+            WorldExternalOperationStatus.Succeeded,
+            (await dispatcher.DispatchAsync(
+                Request.Id,
                 TestContext.Current.CancellationToken
-            );
-            await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => dispatcher.CommitAsync(
-                Request with { Id = "another" },
-                "cause",
-                TestContext.Current.CancellationToken
-            ).AsTask());
-            Assert.Equal(
-                actual: provider.Executions,
-                expected: 0
-            );
-            Assert.Equal(
-                WorldExternalOperationStatus.Succeeded,
-                (await dispatcher.DispatchAsync(
-                    Request.Id,
-                    TestContext.Current.CancellationToken
-                )).Status
-            );
-        } finally {
-            if (Directory.Exists(path: path)) {
-                Directory.Delete(
-                path,
-                recursive: true
-            );
-            }
-        }
+            )).Status
+        );
     }
     [InlineData(WorldExternalOperationStatus.Succeeded)]
     [InlineData(WorldExternalOperationStatus.Failed)]
@@ -649,7 +638,7 @@ public sealed class WorldExtensionLawTests {
         var stopped = tape.StopRecording();
 
         Assert.Null(@object: stopped.VerifyFault);
-        Assert.True(condition: stopped.Verdict!.Value.Match);
+        Assert.True(condition: stopped.Verdict!.Primary.Match);
         using var stream = File.OpenRead(path: stopped.Path);
         var recorded = WorldReplaySnapshot.Read(stream: stream);
 

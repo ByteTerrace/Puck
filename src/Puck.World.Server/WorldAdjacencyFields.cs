@@ -482,6 +482,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
         private readonly bool[] m_active = new bool[WorldBodiesLimits.CapacityCeiling];
         private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
+        private readonly string?[] m_placementIds = new string?[WorldBodiesLimits.CapacityCeiling];
         private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
         private readonly System.Numerics.Quaternion[] m_previousOrientations = new System.Numerics.Quaternion[WorldBodiesLimits.CapacityCeiling];
         private readonly System.Numerics.Vector3[] m_currentPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -634,6 +635,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             ? m_active[index]
             : mirror.IsActive(index: index)
         );
+        public string? PlacementId(int index) => (m_hasPin ? m_placementIds[index] : mirror.PlacementId(index: index));
         public WorldLook Look(int index) => (m_hasPin
             ? m_looks[index]
             : mirror.Look(index: index)
@@ -678,6 +680,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 currentOrientations: m_currentOrientations,
                 currentPositions: m_currentPositions,
                 looks: m_looks,
+                placementIds: m_placementIds,
                 previousOrientations: m_previousOrientations,
                 previousPositions: m_previousPositions,
                 revision: out m_pinnedSnapshotRevision,
