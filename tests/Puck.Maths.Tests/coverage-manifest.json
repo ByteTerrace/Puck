@@ -17323,6 +17323,14 @@
     },
     {
       "CoveredBy": [
+        "prime-selection.random-rank-and-budget",
+        "prime-selection.random-vs-independent"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.TryRandomPrime(System.UInt64,System.UInt64,TGenerator&,System.UInt64&,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.factorization-full-width-sweep",
         "core.prime-extensions-vs-trial-division"
       ],
@@ -17339,7 +17347,8 @@
     {
       "CoveredBy": [
         "core.prime-counting-is-dense-against-a-sieve",
-        "core.prime-extensions-vs-trial-division"
+        "core.prime-extensions-vs-trial-division",
+        "prime-selection.nth-vs-sieve"
       ],
       "Id": "Puck.Maths.PrimeExtensions.NthPrime(System.UInt32)",
       "State": "covered"

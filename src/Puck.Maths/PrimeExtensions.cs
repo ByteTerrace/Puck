@@ -691,21 +691,18 @@ public static class PrimeExtensions {
     /// the largest index addressable within the 32-bit range, since there are 203,280,221 primes below 2³².
     /// </returns>
     /// <remarks>
-    /// Cipolla's asymptotic expansion of the n-th prime seeds the search; the seed is aligned exactly with
+    /// The first seventeen primes use the existing small-factor constants; the remaining primes below 65,536
+    /// use the shared base-prime table, built once on first use. Larger ranks use Cipolla's asymptotic expansion
+    /// to seed the search; the seed is aligned exactly with
     /// <see cref="PrimeCountingFunction(uint)"/> and the residual error is walked off in whichever direction the
     /// target lies — with <see cref="IsPrime(uint)"/> when the target is a handful of primes away, and with a
     /// windowed sieve otherwise — so the answer does not depend on the seed erring to one side.
     /// </remarks>
     public static uint NthPrime(this uint value) {
         if (203280220U < value) { return 0U; }
-        if (3U > value) {
-            return ((0U == value)
-                ? 2U
-                : ((1U == value)
-                    ? 3U
-                    : 5U
-            ));
-        }
+        if (value == 0) { return 2; }
+        if (value <= 16) { return ((uint)PrimeKernels.SmallFactorPrimes[(((int)value) - 1)]); }
+        if (value <= 6541) { return PrimeKernels.BasePrimes[(((int)value) - 1)]; }
 
         var count = (value + 1U);
         var logarithm = Math.Log(d: count);

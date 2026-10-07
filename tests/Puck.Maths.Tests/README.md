@@ -59,7 +59,8 @@ Tier selection is fully declarative; no environment variable selects a tier. Eve
 `tier` trait, and Deep and Exhaustive cases are explicit, so a plain `dotnet test` runs **Smoke + Default** only. A run
 opts into the explicit cases with `--explicit on` and selects one tier with `--filter-trait tier=<tier>`; without
 `--explicit on`, a Deep or Exhaustive filter selects no test. To run one law, filter on its id, which is the case's
-display name: `--explicit on --filter-display-name <law-id>`.
+display name: `--explicit on --filter-display-name '<law-id>*'`. The trailing
+wildcard includes the runner's appended argument display; an exact bare id selects no row.
 
 | Tier | Command | Budget |
 | --- | --- | --- |

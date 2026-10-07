@@ -6,6 +6,50 @@ interval primes in ascending order; `Count` returns their number without a callb
 `NumberTheoryFunctions.SegmentedPrimeSieve`
 and `EnumeratePrimes` use the same enumeration implementation.
 
+## Selecting one prime
+
+Choose the operation from the requested answer, before choosing a marking strategy:
+
+| Request | Preferred API | Work performed |
+|---|---|---|
+| The Nth prime | `PrimeExtensions.NthPrime(uint)` | A small-rank lookup or an exact prime count followed by a local search. The index is zero-based: `999U.NthPrime()` returns the thousandth prime, 7919. |
+| A uniformly random prime in an interval | `PrimeExploration.TryRandomPrime` | Samples a prime table for small intervals, or samples wheel candidates and rejects composites. |
+| Whether one integer is prime | `PrimeExploration.IsPrime` | An exact decision without constructing a sieve. |
+| Every prime, or their count | `PrimeExploration.Enumerate` or `Count` | A segmented sieve amortizes initialization across many answers. |
+
+`NthPrime` returns uint primes, with indices through 203280220; larger indices
+return zero. The first seventeen entries use existing small-prime constants;
+entries through the 6542nd prime reuse the base-prime table through 65535.
+The table is generated once on first use and contains about 26 KiB of prime
+payload. Larger ranks retain the counting-based search. This is not an
+arbitrary-ulong rank selector.
+
+`TryRandomPrime(low, high, ref generator, out prime, maxAttempts: 256)` accepts
+an inclusive ulong interval and a caller-owned `IDrawGenerator` value type.
+With independent uniform input words, every prime in the interval is equally
+likely conditional on success. It samples directly from the prime table when
+`high <= 65535`; otherwise it samples the eight residues modulo thirty plus
+any of 2, 3 and 5 in the interval. Each rejected composite is replaced by a
+fresh draw. Advancing a random integer to the next prime would instead weight
+the answer by its preceding gap.
+
+The budget counts raw 64-bit draws, each assembled from two 32-bit draws,
+including draws rejected by unbiased range reduction. A failed attempt leaves
+`prime` zero and does not certify that the interval has no primes. Empty
+candidate sets and singleton small-table selections consume no draws. Reversed
+intervals and nonpositive budgets throw. Generator state is passed by reference,
+so identical starting states and arguments reproduce both the answer and final
+state. The caller supplies randomness; this API adds no entropy.
+
+The selector uses the exact uint test for small candidates. Above uint it
+rejects small factors through 59 using existing reciprocal tables, then uses
+the existing Baillie–PSW implementation. Its completeness over ulong rests on
+the published exhaustive computation below 2^64, not a theorem for arbitrary
+integers ([Baillie, Fiori and Wagstaff](https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf)).
+Unbiased range reduction uses multiply-high with rejection
+([Lemire](https://arxiv.org/abs/1805.10941)). Warm request benchmarks exclude
+first-use table generation; first-request latency must be considered separately.
+
 ## Coordinates and channels
 
 After the exceptional primes 2, 3 and 5, primes occupy eight residues modulo
@@ -236,6 +280,17 @@ The presieved stream excludes factors through 65,535; the prime-only stream
 isolates the cost of accepting primes. Setup checks every decision outside
 timing and reports the candidate count, prime count and stream identity.
 Sieving and candidate construction are excluded from these kernel times.
+
+`NthPrimeRequests` measures single rank lookups with independently checked
+answers. `RandomPrimeRequests` compares complete single-prime requests against
+uniform integer rejection with Miller–Rabin or Baillie–PSW. All paths share the
+same generator type, seed, request loop and checksum; static value-type wrappers
+allow specialization without interface dispatch. Samples contain 128 requests,
+reported per request, with the same 2048-draw budget for every policy so the
+integer-rejection control can finish the fixed stream. Setup checks that every
+request succeeds and verifies each answer independently. This measures the
+whole selection policy, including sampling and filtering, rather than only the
+primality kernel. The finite benchmark stream is not a distribution proof.
 
 `puck bench primes --upper 100000000 --primesieve <executable> --output <directory>`
 runs a serial survey with all strategies and both layouts, bulk patterns enabled and

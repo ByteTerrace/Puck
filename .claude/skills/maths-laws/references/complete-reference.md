@@ -552,7 +552,9 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit
 ```
 
 For a fast single-case loop, filter on the display name — which *is* the law
-id (`--filter-display-name <law-id>`, with `--explicit on` for an opt-in tier). Confirm from the run output
+id (`--filter-display-name '<law-id>*'`, with `--explicit on` for an opt-in tier).
+The wildcard includes the runner's appended argument display; an exact bare id
+selects no row. Confirm from the run output
 what actually executed rather than assuming a filter composed with the tier
 gate the way you expected, and remember that a filtered run regenerates only
 the artifacts of the checks it ran; the run that produces what you commit is

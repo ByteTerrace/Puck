@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 864 | 575 |
+| classical | — | 867 | 578 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 33 | 27 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1211 | 616 |
-| **total** | | **2368** | **805** |
+| structural | — | 1213 | 618 |
+| **total** | | **2373** | **808** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 113 | 149 | 123 | 21 |
-| law: Default | 663 | 937 | 1087 | 193 |
+| law: Default | 666 | 940 | 1089 | 193 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -1409,6 +1409,11 @@ adversarial review's job, not this file's.
 | prime-field.strong-round-vs-oracle | law: Default | structural | — | the direction a probable-prime test decides OUTRIGHT: every prime passes every base. The candidate's primality is settled independently by Oracles.ExactPrimality and, where it is prime, all six rounds are required to accept — so a false REJECT is caught here, which is the failure a differential against a probable-prime sibling can never see | — | — | — |
 | prime-field.strong-round-vs-oracle | law: Default | structural | — | the guards below the arithmetic: values under two are rejected, two is accepted, and every even value above two is rejected, at every base | — | — | — |
 | prime-field.strong-round-vs-oracle | law: Default | structural | — | ENVELOPE: a passed round proves nothing about primality and this law never says it does. What it pins is that the round is the round it CLAIMS to be. The composition's own thesis — that this round's pseudoprimes and the Lucas test's are disjoint populations — is pinned in prime-field.pseudoprime-populations, not here. This law and its two neighbours share the domain key prime-field-primality, so all three speak about one candidate stream | — | — | — |
+| prime-selection.nth-vs-sieve | law: Default | classical | — | Every prime rank below 100000, both sides of the shared-table boundary, large named ranks and the uint rank ceiling | Oracles.PrimeSieve uses integer-index crossing-out; the large named rank fixtures are independently checked with native primesieve outside this law. The oracle shares no base table or prime-counting implementation. | — | — |
+| prime-selection.random-rank-and-budget | law: Default | classical | — | Every selectable rank of tiny low, shifted, uint-boundary, high and final-ulong intervals, plus the three exceptional primes in a full-width interval | The reference constructs candidates with integer enumeration and BigInteger gcd; arbitrary-width inverse scaling chooses an accepted raw word for each rank. Oracles.ExactPrimality independently decides which ranks must succeed. This pins the bijection, not a statistical frequency approximation. | — | — |
+| prime-selection.random-rank-and-budget | law: Default | structural | — | Empty intervals consume no draws, singleton table selections consume none, each sampled candidate consumes two 32-bit draws, range-reduction and composite rejections exhaust the finite budget, failure leaves zero, and invalid arguments name the parameter. Uniformity follows from equal-size accepted scaling cells and a one-to-one candidate mapping, conditional on independent uniform generator words and success; no successor-gap weighting is used. | — | — | — |
+| prime-selection.random-vs-independent | law: Default | classical | — | 256 seeded requests each in small, uint, high-half ulong and full-ulong intervals | Oracles.ExactPrimality uses trial division and twenty BigInteger witness rounds; it shares neither Montgomery arithmetic nor the Lucas recurrence with the high selection path. ENVELOPE: this is sampled implementation evidence; full-domain BPSW completeness relies on the published exhaustive pseudoprime computation. | — | — |
+| prime-selection.random-vs-independent | law: Default | structural | — | Identical generator states yield identical selected primes and identical final generator states; every result lies within the inclusive bounds. | — | — | — |
 | q1648.add-vs-oracle | law: Default | classical | — | FixedQ1648.op_Addition | Oracles.WrapToRaw over an exact BigInteger sum — EXACT on both sides, so condition (B) drops out entirely and the statement is purely the two's-complement wrapping policy | — | — |
 | q1648.additive-ops-vs-oracle | law: Default | classical | — | FixedQ1648.op_Subtraction | Oracles.WrapToRaw over an exact BigInteger difference — EXACT on both sides, so condition (B) drops out and the statement is purely the two's-complement wrapping policy | — | — |
 | q1648.additive-ops-vs-oracle | law: Default | classical | — | FixedQ1648.op_UnaryNegation, op_Increment and op_Decrement | Oracles.WrapToRaw over the exact BigInteger −a, a + 2⁴⁸ and a − 2⁴⁸ — exact on both sides | — | — |

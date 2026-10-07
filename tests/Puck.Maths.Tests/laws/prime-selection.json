@@ -1,0 +1,26 @@
+[
+  {
+    "Id": "prime-selection.nth-vs-sieve",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExtensions", "Name": "NthPrime" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Every prime rank below 100000, both sides of the shared-table boundary, large named ranks and the uint rank ceiling", "Against": "Oracles.PrimeSieve uses integer-index crossing-out; the large named rank fixtures are independently checked with native primesieve outside this law. The oracle shares no base table or prime-counting implementation.", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "prime-selection.random-rank-and-budget",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "TryRandomPrime" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "Every selectable rank of tiny low, shifted, uint-boundary, high and final-ulong intervals, plus the three exceptional primes in a full-width interval", "Against": "The reference constructs candidates with integer enumeration and BigInteger gcd; arbitrary-width inverse scaling chooses an accepted raw word for each rank. Oracles.ExactPrimality independently decides which ranks must succeed. This pins the bijection, not a statistical frequency approximation.", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Empty intervals consume no draws, singleton table selections consume none, each sampled candidate consumes two 32-bit draws, range-reduction and composite rejections exhaust the finite budget, failure leaves zero, and invalid arguments name the parameter. Uniformity follows from equal-size accepted scaling cells and a one-to-one candidate mapping, conditional on independent uniform generator words and success; no successor-gap weighting is used.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  },
+  {
+    "Id": "prime-selection.random-vs-independent",
+    "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "TryRandomPrime" }],
+    "Legs": [
+      { "Kind": "Classical", "Flavor": "None", "Subject": "256 seeded requests each in small, uint, high-half ulong and full-ulong intervals", "Against": "Oracles.ExactPrimality uses trial division and twenty BigInteger witness rounds; it shares neither Montgomery arithmetic nor the Lucas recurrence with the high selection path. ENVELOPE: this is sampled implementation evidence; full-domain BPSW completeness relies on the published exhaustive pseudoprime computation.", "Shared": "", "Citation": "", "Absolute": "" },
+      { "Kind": "Structural", "Flavor": "None", "Subject": "Identical generator states yield identical selected primes and identical final generator states; every result lies within the inclusive bounds.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }
+    ]
+  }
+]

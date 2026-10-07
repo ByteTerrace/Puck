@@ -99,6 +99,10 @@ outside this contract and takes the references as written.
   bitmap metadata remains available. `PrimeSurvivorDecisions` compares existing
   primality tests on identical presieved and prime-only candidate streams,
   with candidate construction excluded from timing.
+  `NthPrimeRequests` and `RandomPrimeRequests` measure complete single-answer
+  operations. Random controls preserve uniform rejection semantics, generator
+  type and shared static traversal; a random-start successor walk is a different
+  distribution. Warm table lookups exclude first-use initialization.
   Samples follow warmup rounds with
   rotating, alternating variant order. Reports distinguish requested segments,
   Windows `--cpu` placement (also inherited by native children),

@@ -6,6 +6,28 @@ namespace Puck.Maths;
 /// Provides unbiased bounded integer sampling routines over 32-bit draw generators.
 /// </summary>
 internal static class BoundedRandomSampling {
+    // Lemire reduction at 64 bits. Count raw draws, including biased-window rejections, so a degenerate
+    // caller generator cannot turn a finite prime-selection budget into an unbounded inner loop.
+    internal readonly struct Range64(ulong exclusiveHigh) {
+        private readonly ulong m_exclusiveHigh = exclusiveHigh;
+        private readonly ulong m_threshold = (unchecked((0UL - exclusiveHigh)) % exclusiveHigh);
+
+        internal bool TrySample<TGenerator>(ref TGenerator generator, ref int attempts, out ulong value)
+            where TGenerator : struct, IDrawGenerator {
+            while (attempts > 0) {
+                --attempts;
+                var word = (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
+                var product = (((UInt128)word) * m_exclusiveHigh);
+
+                if (unchecked((ulong)product) < m_threshold) { continue; }
+                value = ((ulong)(product >> 64));
+                return true;
+            }
+            value = 0;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Computes a nearly-divisionless bounded draw in <c>[0, exclusiveHigh)</c> using Lemire's algorithm,
     /// rejecting the small biased window (<c>threshold = 2^32 mod exclusiveHigh</c>) so every value is

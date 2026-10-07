@@ -76,7 +76,7 @@ internal static class PrimeKernels {
     /// </remarks>
     private const int SplitAdvanceBudget = (1 << 24);
 
-    /// <summary>Defers the base-prime table until a sieve actually strides one.</summary>
+    /// <summary>Defers the shared base-prime table until a sieve or selection request needs it.</summary>
     private static class WindowSieve {
         internal static readonly uint[] BasePrimes;
 
@@ -235,6 +235,16 @@ internal static class PrimeKernels {
         }
 
         return true;
+    }
+    // Selection receives a wheel candidate above uint.MaxValue. Reuse the factorization ladder's
+    // inverse products to reject small factors before paying for the two Baillie–PSW rounds.
+    internal static bool IsPrimeSelectionCandidate(ulong value) {
+        var ceilings = SmallFactorCeilings;
+
+        for (var index = 2; (index < SmallFactorInverses.Length); ++index) {
+            if (unchecked((value * SmallFactorInverses[index])) <= ceilings[index]) { return false; }
+        }
+        return PrimeField64.IsBaillieProbablePrime(value: value);
     }
     /// <summary>Runs one strong-probable-prime round in an already-created odd residue ring.</summary>
     /// <param name="ring">The ring over an odd candidate greater than one.</param>
