@@ -79,13 +79,16 @@ internal sealed partial class RunDirectory : IDisposable {
 
         return Directory.CreateTempSubdirectory(prefix: $"{kind}{Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}-").FullName;
     }
-    /// <summary>The kind a prefix names: the prefix itself, with <see cref="Family"/> prepended when it lacks it.</summary>
+    /// <summary>The kind a prefix names: the prefix itself, with <see cref="Family"/> prepended when it lacks it and a
+    /// hyphen appended when it does not end in one, so the owner that follows is always its own name segment.</summary>
     /// <param name="prefix">The directory-name prefix.</param>
     /// <returns>The kind.</returns>
     public static string KindOf(string prefix) {
         ArgumentException.ThrowIfNullOrEmpty(argument: prefix);
 
-        return (prefix.StartsWith(comparisonType: StringComparison.Ordinal, value: Family) ? prefix : (Family + prefix));
+        var kind = (prefix.StartsWith(comparisonType: StringComparison.Ordinal, value: Family) ? prefix : (Family + prefix));
+
+        return (kind.EndsWith(value: '-') ? kind : (kind + "-"));
     }
     /// <summary>Concludes the run with its exit code: zero passes, anything else fails.</summary>
     /// <param name="exitCode">The run's exit code.</param>
