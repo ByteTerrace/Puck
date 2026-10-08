@@ -536,7 +536,7 @@ internal static partial class AzureCommand {
                 ))
             );
 
-            foreach (var source in Directory.EnumerateFiles(path: Path.Combine(
+            foreach (var source in HostedWorldFiles(directory: Path.Combine(
                 path1: fixture,
                 path2: "worlds"
             ))) {
