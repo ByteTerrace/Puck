@@ -122,8 +122,12 @@ does that, so the cross-host comparison always holds this host's own DXC output.
 
 An entry's last write time is when a compile last used it. Publishing an entry
 writes it, and every compile that reads one, or finds it current, stamps it
-with the time, as it does each duration record it reads. Nothing evicts
-entries on its own: `puck shaders cache prune --unused-minutes <n>` removes
+with the time, as it does each duration record it reads. A publication keeps the
+cache within `ShaderCompiler.Retention` (4096 outputs, 1 GiB), the least recently
+used outputs out, through the per-user caches' one
+[retention policy](../development/contributing.md#per-user-directory); a process
+lists the directory for this at most once a minute, and a staged publication or a
+duration record never counts. `puck shaders cache prune --unused-minutes <n>` removes
 every entry, duration record and abandoned staged publication (`*.tmp`) no
 compile has used for that long, and leaves any other file alone. A cache that a
 CI job restores, builds through and then prunes with a bound longer than the job
