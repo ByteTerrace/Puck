@@ -60,11 +60,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
 #if SDF_SHADOW_FADE_SLOTS > 0
             if (passGroup.shadowFadeCount > 0u) {
-#if SDF_SHADOW_FADE_SLOTS == 1
-                incoming.x = incomingVisibility.Load(int3(p.pixel, 0));
-#else
                 incoming = incomingVisibility.Load(int3(p.pixel, 0));
-#endif
             }
 #endif
         }

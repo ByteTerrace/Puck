@@ -20,8 +20,6 @@ public static class SdfWorldInterfaces {
     public static ShaderPipelineParameterLayout WorldParameters => Recorded.WorldParameters;
     /// <summary>Gets the residency cache's generated interface.</summary>
     public static ShaderPipelineParameterLayout IndirectParameters => Recorded.IndirectParameters;
-    /// <summary>Gets the world interface for each configured fade capacity.</summary>
-    public static IReadOnlyList<ShaderPipelineParameterLayout> WorldFadeParameters => Recorded.WorldFadeParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.ResolveParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout ResolveParameters => Recorded.ResolveParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.SkyParameters"/> for this build's instruction set.</summary>

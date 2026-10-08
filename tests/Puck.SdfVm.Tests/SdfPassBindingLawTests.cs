@@ -15,12 +15,10 @@ public sealed class SdfPassBindingLawTests {
     // the curvature shading, temporal history, indirect controls and 84 light-map rows, 16-aligned.
     private const uint PassBlockBytes = 2016;
 
-    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds,
-        SdfKernel.ViewsFade1, SdfKernel.ViewsCoreFade1, SdfKernel.ViewsFoldsFade1,
-        SdfKernel.ViewsFade2, SdfKernel.ViewsCoreFade2, SdfKernel.ViewsFoldsFade2];
+    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.ShadowFade1, SdfKernel.ShadowFade2, SdfKernel.IndirectShade, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.IndirectShade, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),

@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Puck.SignedDistance;
-using Puck.SdfVm;
 
 namespace Puck.World.Client;
 
@@ -21,15 +20,6 @@ public readonly record struct WorldShadowSettings(int Slots, int FadeSlots, ulon
     /// <param name="render">The world's render row.</param>
     /// <returns>The authored policy.</returns>
     public static WorldShadowSettings From(WorldRenderDefaults render) => new(render.ShadowLights, render.ShadowFadeSlots, render.ShadowFadeTicks, render.ShadowOverflow);
-    /// <summary>Returns the incoming capacities reachable through the boot row and every authored quality preset.
-    /// A free-form session lever adds its current capacity at the residency's first demand.</summary>
-    /// <param name="render">The current world's render policy rows.</param>
-    /// <returns>The additional pipeline variants those rows require.</returns>
-    public static SdfShadowFadeVariants FadeVariants(WorldRenderDefaults render) =>
-        SdfWorldPipelines.FadeVariantsFor(fadeCapacity: render.ShadowFadeSlots) |
-            SdfWorldPipelines.FadeVariantsFor(fadeCapacity: (render.LowRaw?.ShadowFadeSlots ?? 0)) |
-            SdfWorldPipelines.FadeVariantsFor(fadeCapacity: (render.MediumRaw?.ShadowFadeSlots ?? 0)) |
-            SdfWorldPipelines.FadeVariantsFor(fadeCapacity: (render.HighRaw?.ShadowFadeSlots ?? 0));
 }
 /// <summary>A held slot; its owner is outgoing while its handoff remains active.</summary>
 /// <param name="Slot">Stable slot index.</param>

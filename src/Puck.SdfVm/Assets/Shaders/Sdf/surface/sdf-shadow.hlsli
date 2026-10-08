@@ -162,11 +162,7 @@ void sdfShadowStage(SdfPixel p) {
     }
 #if SDF_SHADOW_FADE_SLOTS > 0
     if (passGroup.shadowFadeCount > 0u) {
-#if SDF_SHADOW_FADE_SLOTS == 1
-        incomingVisibilityRW[p.pixel] = incoming.x;
-#else
         incomingVisibilityRW[p.pixel] = incoming;
-#endif
         sdfWorkTexels += 1u;
     }
 #endif

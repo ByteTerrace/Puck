@@ -86,11 +86,7 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
         float2 incoming = 1.0;
 #if SDF_SHADOW_FADE_SLOTS > 0
         if (!worldSoftShadowsDisabled() && passGroup.shadowFadeCount > 0u) {
-#if SDF_SHADOW_FADE_SLOTS == 1
-            incoming.x = incomingVisibility.Load(int3(pixel, 0));
-#else
             incoming = incomingVisibility.Load(int3(pixel, 0));
-#endif
         }
 #endif
         sources = sdfIndirectAlternativeDiffuse(surfacePoint, visible.normal, direction, visible.material, shadows, incoming);

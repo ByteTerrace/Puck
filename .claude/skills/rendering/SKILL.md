@@ -990,7 +990,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `GpuBuildLease.Release(IReadOnlyList)` releases several leases at once,
   canceling every build it leaves unheld before it waits for any.
   `SdfWorldTables`' constructor takes a ready `SdfWorldPipelines` and creates
-  none. That set is one lease per base or reachable fade kernel variant
+  none. That set is one lease per up-front kernel
   (`SdfWorldPipelines.Acquire`, the brick baker only with a brick pool); every residency, the world's and each
   routed scene's or session view's, leases it through the `SdfWorldPipelineCatalog` the
   composition hands each of them (its pass-pipeline cache, region copy, mesh
@@ -1002,18 +1002,12 @@ These are one-line cautions; the owning pages hold the derivations.
   pipelines built and names the refused.
   A holder (`SdfWorldPipelineSource`) takes its leases on the frame thread when
   kernels are supplied, or on the pool when it must load them. Every pipeline
-  builds on the pool. `SdfFrame.ShadowFadeVariants` comes from the world's boot
-  shadow policy and every authored quality row (`WorldShadowSettings.FadeVariants`),
-  in host and session frames. The residency adds the live F. Each reachable
-  nonzero F requests four kernels: shadow and the full, core and folds views
-  variants. F = 0 alone requests none of them. Definition delivery, a quality
-  switch, a free-form `shadow-slots` session lever or following another world's
-  frame can add demand through `RequestShadowFadeVariants`; a handoff never does.
-  A policy change waits through `FrameWaiting` and `WaitReadyAsync` before its F
-  reaches graph planning, retaining the previous frame while the new shadow and
-  usable views pipelines build. The held light table survives the source recycling
-  its presentation buffers. Acquired variants stay leased until disposal or
-  device loss. The holder builds no tables until the set is ready, and keeps the
+  builds on the pool. One shadow kernel and one kernel per views variant serve
+  every shadow fade capacity, so no policy, quality switch, session lever or
+  handoff leases a pipeline, and a policy change waits for none
+  (`SdfShadowFadePipelinesLawTests`). A frame whose shadow or views kernel still
+  builds waits through `FrameWaiting`; a held light table survives the source
+  recycling its presentation buffers. The holder builds no tables until the set is ready, and keeps the
   leases until a device loss or the residency's last release gives them back.
   A residency builds its tables through `SdfWorldPipelineSource.TryBuild`, only
   when it has none: a failed build (the set's or the tables') is refused, never
@@ -1083,10 +1077,7 @@ These are one-line cautions; the owning pages hold the derivations.
   entries (`SdfWorldPipelines.PrepareReload`), awaits them off the frame
   thread, and swaps them into the residency's own set after the device is idle,
   releasing the replaced leases; another residency leasing the replaced entries
-  keeps them. Inactive fade bytecode is validated and installed without creating
-  its pipeline. If a changed fade variant is first requested after preparation,
-  installation refuses that stale reload by name; a fresh request includes the
-  newly active variant. Before it leases anything, a reload reflects each changed kernel
+  keeps them. Before it leases anything, a reload reflects each changed kernel
   (`ShaderBytecodeReflector`, SPIR-V managed and DXIL through the `dxcompiler`
   beside `dxc`) and holds it to the host's interface
   (`SdfKernelSet.InterfaceMismatch`, `ShaderInterfaceLayout.Mismatch`): the
@@ -1786,13 +1777,17 @@ Run `temporal-shadows` on both backends for image qualification. Qualify its
 receiver-only shader mutation separately, and record the counted-quarter
 comparison and floor-device ceilings before claiming savings verified.
 
-`incomingVisibility` is policy-sized retained graph storage: R8 at
-F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.
-Its allocation belongs to the graph's policy variant, never a handoff crossing.
-Recorders select the fade kernel and bind ports from the planned resource
-declarations in their context, including the incoming image's format, never
-from the live frame's fade capacity. The live policy can change during a build.
-`GpuWorkReport` includes its bytes. Each active 16-byte `SdfShadowHandoff`
+One shadow kernel and one kernel per views variant serve every fade capacity:
+they compile both fade slots and read the active fade count from the pass
+block. `incomingVisibility` is retained R8G8 graph storage at every nonzero F
+and absent at F = 0, where every pass binds the tables' 1×1 fillers
+(`SampledFiller`, `IncomingStorageFiller`). Its allocation belongs to the
+graph's policy plan, never a handoff crossing, and F = 1 and F = 2 plan the
+same graph. Recorders bind ports from the planned resource declarations in
+their context, never from the live frame's fade capacity: a recorder planned
+without the image writes a zero fade count (`SdfFrameBlock.WriteWithoutFades`),
+since the live policy can change during a build. `GpuWorkReport` includes its
+bytes, two a pixel at every nonzero F. Each active 16-byte `SdfShadowHandoff`
 record goes through the counted region upload: outgoing light index, incoming
 light index and stable slot as three integers, then the float weight. Generate
 its HLSL structure from that C# layout. Count every visibility write and keep

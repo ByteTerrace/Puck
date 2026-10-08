@@ -28,7 +28,8 @@ public enum SdfKernel {
     Surface,
     /// <summary>Ambient occlusion, updating the record's S row.</summary>
     Ambient,
-    /// <summary>The stable and incoming soft shadows, writing the record's K row.</summary>
+    /// <summary>The stable and incoming soft shadows, writing the record's K row and, at a nonzero fade capacity, the
+    /// incoming visibility image; one kernel serves every capacity.</summary>
     Shadow,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
@@ -51,20 +52,4 @@ public enum SdfKernel {
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
-    /// <summary>Shadows with one incoming handoff visibility channel.</summary>
-    ShadowFade1,
-    /// <summary>Shadows with two incoming handoff visibility channels.</summary>
-    ShadowFade2,
-    /// <summary>Full shading with one incoming handoff visibility channel.</summary>
-    ViewsFade1,
-    /// <summary>Core shading with one incoming handoff visibility channel.</summary>
-    ViewsCoreFade1,
-    /// <summary>Fold shading with one incoming handoff visibility channel.</summary>
-    ViewsFoldsFade1,
-    /// <summary>Full shading with two incoming handoff visibility channels.</summary>
-    ViewsFade2,
-    /// <summary>Core shading with two incoming handoff visibility channels.</summary>
-    ViewsCoreFade2,
-    /// <summary>Fold shading with two incoming handoff visibility channels.</summary>
-    ViewsFoldsFade2,
 }

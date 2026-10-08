@@ -1692,7 +1692,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
-            ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_client.Definition.Render),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.

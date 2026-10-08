@@ -406,8 +406,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareIndirect(frame: frame, tables: tables);
 
         ApplyPendingShaderReload();
-        tables.Pipelines.RequestShadowFadeVariants(cache: m_pipelines.Catalog.Pipelines, device: device,
-            variants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity));
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -454,9 +452,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objA: frame,
             objB: m_packedFrame
         )) {
-            // Policy changes wait before publishing the new F to graph planning. A source may recycle light tables,
-            // so the retained frame takes its own copy before the next capture can overwrite them.
-            if (tables.FrameWaiting(program: frame.Program, fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity) is { } waiting) {
+            // A frame whose shadow or views kernel still builds waits. A source may recycle light tables, so a retained
+            // frame of another fade capacity takes its own copy before the next capture can overwrite them.
+            if (tables.FrameWaiting(program: frame.Program) is { } waiting) {
                 m_pipelineWaiting = waiting;
                 m_pendingFrame = frame;
                 if ((m_packedFrame is { } packed) && !m_holdingFrame &&
@@ -763,7 +761,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             device: device,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
-            shadowFadeVariants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity),
             inputsOf: static state => (
                 state.Residency,
                 state.Device,

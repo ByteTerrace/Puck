@@ -6,7 +6,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Bounds the bytecode the indirect diagnostics hand to a driver. A field evaluation in an unrolled
 /// placement or sampling loop duplicates the entire interpreter; views read stored partitions instead.
-/// Stable and incoming indirect shadows share one fallback call site so fade variants retain the same ceiling.</summary>
+/// Stable and incoming indirect shadows share one fallback call site so the views kernels, which compile both fade slots, retain their ceiling.</summary>
 public sealed partial class SdfIndirectShaderSizeLawTests(ITestOutputHelper output) {
     [Fact]
     public void IndirectDiagnosticsKeepTheirCompiledInterpreterExpansionBounded() {

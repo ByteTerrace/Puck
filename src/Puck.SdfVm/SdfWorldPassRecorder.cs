@@ -50,6 +50,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
+    private static readonly uint IncomingVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.IncomingVisibility);
+    private static readonly uint IncomingVisibilityWrittenBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.IncomingVisibilityWritten);
     private static readonly uint ScreenSourcesBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ScreenSources);
 
     private readonly RenderGraphPackageRecorderContext m_context;
@@ -60,7 +62,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
     private readonly bool m_resolved;
-    private readonly int m_fadeCapacity;
+    // Whether the planned graph allocates the incoming handoff image (a policy allowing fades). Without it the passes
+    // bind the tables' fillers and read a zero fade count, whatever the live frame's handoffs.
+    private readonly bool m_incoming;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
@@ -131,11 +135,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         var incoming = context.Inputs.Concat(second: context.Outputs).SingleOrDefault(predicate: resource => (LocalName(resource: resource) == SdfWorldPackage.IncomingVisibility));
 
-        m_fadeCapacity = ((incoming is null) ? 0 : ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) switch {
-            GpuPixelFormat.R8Unorm => 1,
-            GpuPixelFormat.R8G8Unorm => 2,
-            _ => throw new InvalidOperationException(message: $"Pass '{context.Pass}' has an unsupported incoming visibility format '{incoming.Format}'."),
-        });
+        if ((incoming is not null) && (ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) != SdfWorldPackage.IncomingVisibilityFormat)) {
+            throw new InvalidOperationException(message: $"Pass '{context.Pass}' has an unsupported incoming visibility format '{incoming.Format}'.");
+        }
+        m_incoming = (incoming is not null);
 
         DeclareScreens(residency: view.Residency);
 
@@ -158,7 +161,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
-                groupLayoutHandles: tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)).GroupLayoutHandles,
+                groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Shadow).GroupLayoutHandles,
                 groups: groups
             );
 
@@ -359,6 +362,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             view: view,
             width: width
         );
+        // A graph planned without the incoming image marches and reads no incoming slot, as its policy requires, until a
+        // replanned graph allocates the image a live handoff needs.
+        if (!m_incoming) { SdfFrameBlock.WriteWithoutFades(block: recording.PassBlock); }
 
         var temporal = m_owner.TemporalOf(
             instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: width, renderHeight: height
@@ -532,8 +538,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.LightDepth => tables.Pipeline(kernel: SdfKernel.LightDepth),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
-            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)),
-            _ => tables.ViewsPipelineFor(fadeCapacity: m_fadeCapacity),
+            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
+            _ => tables.ViewsPipeline,
         };
 
         BindPorts(
@@ -821,8 +827,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var bindings = tables.Bindings;
         var output = tables.StorageFiller.ImageViewHandle;
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
+        // Every per-view interface declares the incoming handoff image; a graph without one binds the fillers.
         var incomingVisibility = tables.SampledFiller.ImageViewHandle;
-        var incomingWritten = tables.StorageFiller.ImageViewHandle;
+        var incomingWritten = tables.IncomingStorageFiller.ImageViewHandle;
 
         foreach (var member in ScratchMembers) {
             tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
@@ -875,16 +882,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             descriptorSetHandle: set,
             imageViewHandle: meshVisibility
         );
-        if (m_fadeCapacity != 0) {
-            var layout = SdfWorldInterfaces.WorldFadeParameters[m_fadeCapacity].Layout;
-
-            bindings.WriteSampledImage(arrayElement: 0,
-                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibility),
-                descriptorSetHandle: set, imageViewHandle: incomingVisibility);
-            bindings.WriteStorageImage(arrayElement: 0,
-                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibilityWritten),
-                descriptorSetHandle: set, imageViewHandle: incomingWritten);
-        }
+        bindings.WriteSampledImage(arrayElement: 0, binding: IncomingVisibilityBinding,
+            descriptorSetHandle: set, imageViewHandle: incomingVisibility);
+        bindings.WriteStorageImage(arrayElement: 0, binding: IncomingVisibilityWrittenBinding,
+            descriptorSetHandle: set, imageViewHandle: incomingWritten);
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
         m_shadowPorts[slot] = shadowPorts;

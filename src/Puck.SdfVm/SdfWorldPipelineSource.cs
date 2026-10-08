@@ -47,7 +47,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // frame thread, so a device loss reaches the host's recovery; the next call starts again. Leases whose kernels are
     // already loaded are taken on this call: taking one joins the cache's entry or starts its build, and never waits,
     // so a holder whose pipelines another holder already built has its set in the frame that first asks.
-    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, SdfShadowFadeVariants shadowFadeVariants) {
+    public SdfWorldPipelines? Poll(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         if (
             (m_lease is null) &&
             (kernels is not null) &&
@@ -56,8 +56,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             var leases = TakeLeases(
                 device: device,
                 hostsOnDirectX: hostsOnDirectX,
-                includeBrickPipelines: includeBrickPipelines, kernels: kernels,
-                shadowFadeVariants: shadowFadeVariants
+                includeBrickPipelines: includeBrickPipelines, kernels: kernels
             );
 
             m_lease = leases.Set;
@@ -70,8 +69,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
                 Start(
                     device: device,
                     hostsOnDirectX: hostsOnDirectX,
-                    includeBrickPipelines: includeBrickPipelines, kernels: kernels,
-                    shadowFadeVariants: shadowFadeVariants
+                    includeBrickPipelines: includeBrickPipelines, kernels: kernels
                 );
             }
 
@@ -92,7 +90,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_impostorRaster = leases.ImpostorRaster;
         }
 
-        m_lease.RequestShadowFadeVariants(cache: catalog.Pipelines, device: device, variants: shadowFadeVariants);
         m_ready = m_lease.PollRequired();
 
         return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_impostorRaster!.Poll() is null))
@@ -167,12 +164,12 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // release revision (IGpuBindings.HeapReleaseRevision) moves, as another owner returns its pools; a refusal of any
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
-    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct, SdfShadowFadeVariants shadowFadeVariants = SdfShadowFadeVariants.None) where TInputs : IEquatable<TInputs> {
+    public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
         var key = new BuildKey(
             Device: device,
             FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
             HostsOnDirectX: hostsOnDirectX,
-            IncludeBrickPipelines: includeBrickPipelines, ShadowFadeVariants: shadowFadeVariants,
+            IncludeBrickPipelines: includeBrickPipelines,
             Kernels: kernels,
             ImpostorRaster: ImpostorRaster,
             MeshRaster: MeshRaster,
@@ -205,8 +202,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             if (Poll(
                 device: device,
                 hostsOnDirectX: hostsOnDirectX,
-                includeBrickPipelines: includeBrickPipelines, kernels: kernels,
-                shadowFadeVariants: shadowFadeVariants
+                includeBrickPipelines: includeBrickPipelines, kernels: kernels
             ) is not { } pipelines) {
                 return null;
             }
@@ -261,23 +257,22 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, SdfShadowFadeVariants ShadowFadeVariants, GpuPassPipeline? ImpostorRaster, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfKernelSet? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? ImpostorRaster, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
-    private void Start(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, SdfShadowFadeVariants shadowFadeVariants) =>
+    private void Start(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) =>
         m_acquire.Start(build: _ => TakeLeases(
             device: device,
             hostsOnDirectX: hostsOnDirectX,
-            includeBrickPipelines: includeBrickPipelines, kernels: kernels,
-            shadowFadeVariants: shadowFadeVariants
+            includeBrickPipelines: includeBrickPipelines, kernels: kernels
         ));
     // Takes every lease a holder's engine needs. A pass-pipeline acquire that throws releases the leases taken before it.
-    private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, SdfShadowFadeVariants shadowFadeVariants) {
+    private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) {
         var set = SdfWorldPipelines.Acquire(
             cache: catalog.Pipelines,
             device: device,
-            includeBrickPipelines: includeBrickPipelines, shadowFadeVariants: shadowFadeVariants,
+            includeBrickPipelines: includeBrickPipelines,
             kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostsOnDirectX)))
         );
 

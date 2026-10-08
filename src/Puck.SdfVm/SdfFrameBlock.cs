@@ -99,6 +99,10 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
         WriteUInt32(block: block, offset: Temporal, value: (temporal ? 1u : 0u));
     }
+    /// <summary>Writes a zero active fade count, for a pass whose graph allocates no incoming visibility image: the one
+    /// shadow and views kernels read their fade count from the block, and a filler stands at the image.</summary>
+    /// <param name="block">The pass block <see cref="Write"/> filled.</param>
+    public static void WriteWithoutFades(Span<byte> block) => WriteUInt32(block: block, offset: ShadowFadeCount, value: 0u);
     /// <summary>Writes the shadow history policy and the two frame-uniform rejection masks.</summary>
     /// <param name="block">The common pass block.</param>
     /// <param name="enabled">Whether temporal secondary shadows are enabled.</param>

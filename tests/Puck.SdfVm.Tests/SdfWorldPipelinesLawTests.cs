@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a set leases one pass-pipeline cache entry
-/// per base or reachable fade kernel (the brick baker only when asked for and present), which the cache creates and counts once and
+/// per up-front kernel (the brick baker only when asked for and present), which the cache creates and counts once and
 /// persists the device's cache once for; a reload leases only the pipelines whose bytecode changed; the cache holds at
 /// most <see cref="GpuPassPipelineCache.BuildConcurrency"/> creations in the driver however many entries build; a set
 /// disposed while creations are in the driver waits for those alone and creates no more; and creations failing together

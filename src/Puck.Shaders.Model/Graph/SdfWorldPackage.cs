@@ -456,6 +456,7 @@ public static partial class SdfWorldPackage {
         ),
         ShaderWorkCounters.BufferMember,
         .. Tables,
+        .. IncomingMembers,
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates

@@ -7,34 +7,35 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Shadow handoff resources follow configured capacity and share one native control layout with HLSL.</summary>
+/// <summary>Shadow handoff resources follow configured capacity, one shadow kernel and one kernel per views variant
+/// serve every capacity, and the handoff controls share one native layout with HLSL.</summary>
 public sealed class SdfShadowResourceLawTests {
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
     [Theory]
-    public void ZeroFadeCapacityHasNoIncomingImageOrBinding(bool reconstructs, bool temporal) {
+    public void ZeroFadeCapacityAllocatesNoIncomingImageWhileEveryInterfaceDeclaresIt(bool reconstructs, bool temporal) {
         var fragment = SdfWorldPackage.FragmentFor(fadeCapacity: 0, reconstructs: reconstructs, temporal: temporal);
 
         Assert.DoesNotContain(collection: fragment.Resources, filter: resource => (resource.Name == SdfWorldPackage.IncomingVisibility));
-        Assert.DoesNotContain(collection: SdfWorldInterfaces.World.Members, filter: IsIncoming);
+        // The members stay declared so a pass binds the tables' fillers there (SdfWorldTables.IncomingStorageFiller).
+        Assert.Equal(expected: 2, actual: SdfWorldInterfaces.World.Members.Count(predicate: IsIncoming));
         Assert.All(collection: fragment.Passes, action: pass => {
             Assert.DoesNotContain(collection: pass.Inputs, filter: input => (input.Name == SdfWorldPackage.IncomingVisibility));
             Assert.DoesNotContain(collection: pass.Outputs, filter: output => (output.Name == SdfWorldPackage.IncomingVisibility));
         });
     }
-    [InlineData(1, GpuPixelFormat.R8Unorm, ShaderValueType.Float)]
-    [InlineData(2, GpuPixelFormat.R8G8Unorm, ShaderValueType.Float2)]
-    [Theory]
-    public void PolicyReservesExactlyItsIncomingChannelsAndOrdersTheirWriterBeforeReader(int capacity, GpuPixelFormat format, ShaderValueType type) {
+    [Fact]
+    public void EveryNonzeroCapacityPlansOneTwoChannelImageWrittenBeforeItIsRead() {
         foreach (var (reconstructs, temporal) in new[] { (false, false), (true, false), (false, true) }) {
-            var fragment = SdfWorldPackage.FragmentFor(fadeCapacity: capacity, reconstructs: reconstructs, temporal: temporal);
+            var fragment = SdfWorldPackage.FragmentFor(fadeCapacity: 1, reconstructs: reconstructs, temporal: temporal);
             var image = Assert.Single(collection: fragment.Resources, predicate: resource => (resource.Name == SdfWorldPackage.IncomingVisibility));
 
             Assert.True(condition: image.Retained);
             Assert.False(condition: image.Transient);
-            Assert.Equal(expected: format.ToString(), actual: image.Format);
-            Assert.Same(expected: fragment, actual: SdfWorldPackage.FragmentFor(fadeCapacity: capacity, reconstructs: reconstructs, temporal: temporal));
+            Assert.Equal(expected: GpuPixelFormat.R8G8Unorm.ToString(), actual: image.Format);
+            // Both capacities plan the same graph, so a policy moving between them rebuilds nothing.
+            Assert.Same(expected: fragment, actual: SdfWorldPackage.FragmentFor(fadeCapacity: 2, reconstructs: reconstructs, temporal: temporal));
             var shadow = fragment.Passes.Single(predicate: pass => (pass.Name == SdfWorldPackage.Parts.Shadow));
             var views = fragment.Passes.Single(predicate: pass => (pass.Name == SdfWorldPackage.Parts.Views));
 
@@ -42,30 +43,18 @@ public sealed class SdfShadowResourceLawTests {
             Assert.Equal(expected: RenderGraphPortAccess.ComputeWrite, actual: shadow.OutputAccesses[^1]);
             Assert.Equal(expected: SdfWorldPackage.IncomingVisibility, actual: views.Inputs[^1].Name);
             Assert.Equal(expected: RenderGraphPortAccess.ComputeRead, actual: views.InputAccesses[^1]);
-            Assert.All(collection: shadow.Members!.Where(predicate: IsIncoming), action: member => Assert.Equal(expected: type, actual: member.Type));
-            Assert.Equal(expected: 2, actual: shadow.Members!.Count(predicate: IsIncoming));
+            // The passes read the one world interface, whose incoming members serve every capacity.
+            Assert.Null(@object: shadow.Members);
+            Assert.Null(@object: views.Members);
         }
+        Assert.All(collection: SdfWorldInterfaces.World.Members.Where(predicate: IsIncoming), action: member => Assert.Equal(expected: ShaderValueType.Float2, actual: member.Type));
     }
     [Fact]
-    public void IncomingStorageDeclarationsUseTheConfiguredNormalizedByteFormat() {
-        foreach (var (capacity, format, type) in new[] { (1, "r8", "float"), (2, "rg8", "float2") }) {
-            var include = ShaderInterfaceHlsl.Generate(shaderInterface: SdfWorldInterfaces.WorldFadeParameters[capacity].Interface);
+    public void TheIncomingStorageDeclarationUsesTheTwoChannelNormalizedByteFormat() {
+        var include = ShaderInterfaceHlsl.Generate(shaderInterface: SdfWorldInterfaces.World);
 
-            Assert.Contains(actualString: include, expectedSubstring: $"[[vk::image_format(\"{format}\")]] RWTexture2D<{type}> incomingVisibilityRW");
-        }
-    }
-    [Fact]
-    public void FadeInterfacesKeepEveryCommonBlockOffsetAndBinding() {
-        foreach (var parameters in SdfWorldInterfaces.WorldFadeParameters) {
-            foreach (var value in SdfWorldPackage.Values) {
-                Assert.Equal(expected: SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: value.Name), actual: parameters.BlockOffsetOf(member: value.Name));
-            }
-            foreach (var group in SdfWorldInterfaces.WorldLayout.Groups) {
-                foreach (var resource in group.Resources) {
-                    Assert.Equal(expected: resource.Binding, actual: SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: resource.Member.Name));
-                }
-            }
-        }
+        Assert.Contains(actualString: include, expectedSubstring: "[[vk::image_format(\"rg8\")]] RWTexture2D<float2> incomingVisibilityRW");
+        Assert.Contains(actualString: include, expectedSubstring: "Texture2D<float2> incomingVisibility ");
     }
     [Fact]
     public void HandoffControlsAreFourNativeWordsInTheGeneratedWorldTable() {
@@ -91,14 +80,24 @@ public sealed class SdfShadowResourceLawTests {
         Assert.Contains(actualString: include, expectedSubstring: "StructuredBuffer<SdfShadowHandoff>");
     }
     [Fact]
-    public void ZeroFadeBytecodeDoesNotReadAnIncomingImageOrHandoffTable() {
+    public void OnlyTheShadowAndViewsBytecodeReadsTheIncomingImageAndHandoffTable() {
         var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv");
 
-        foreach (var kernel in new[] { SdfKernel.Shadow, SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds }) {
+        // The one shadow kernel writes the image and each views variant reads it, at every fade capacity.
+        foreach (var (kernel, member) in new[] {
+            (SdfKernel.Shadow, SdfWorldPackage.IncomingVisibilityWritten), (SdfKernel.Views, SdfWorldPackage.IncomingVisibility),
+            (SdfKernel.ViewsCore, SdfWorldPackage.IncomingVisibility), (SdfKernel.ViewsFolds, SdfWorldPackage.IncomingVisibility),
+        }) {
+            var bindings = SpirvInterfaceReader.Read(module: kernels[kernel].Span);
+
+            Assert.Contains(collection: bindings, filter: binding => binding.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: member));
+            Assert.Contains(collection: bindings, filter: binding => binding.Name.Contains(comparisonType: StringComparison.Ordinal, value: SdfKernelInterfaces.ShadowHandoffs));
+        }
+        // The passes before them compile no fade slot.
+        foreach (var kernel in new[] { SdfKernel.Primary, SdfKernel.Surface, SdfKernel.Ambient }) {
             var bindings = SpirvInterfaceReader.Read(module: kernels[kernel].Span);
 
             Assert.DoesNotContain(collection: bindings, filter: binding => binding.Name.Contains(comparisonType: StringComparison.Ordinal, value: SdfWorldPackage.IncomingVisibility));
-            Assert.DoesNotContain(collection: bindings, filter: binding => binding.Name.Contains(comparisonType: StringComparison.Ordinal, value: SdfKernelInterfaces.ShadowHandoffs));
         }
     }
 

@@ -8,16 +8,13 @@
 
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
-// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World. The incoming
+// handoff image is always declared; a kernel compiled with SDF_SHADOW_FADE_SLOTS reads its fade count from the pass block.
 #ifndef SDF_SHADOW_FADE_SLOTS
 #define SDF_SHADOW_FADE_SLOTS 0
 #endif
 #ifdef SDF_INDIRECT_PASS
 #include "../isa/indirect.interface.hlsli"
-#elif SDF_SHADOW_FADE_SLOTS == 1
-#include "../isa/sdf-world-fade1.interface.hlsli"
-#elif SDF_SHADOW_FADE_SLOTS == 2
-#include "../isa/sdf-world-fade2.interface.hlsli"
 #else
 #include "../isa/sdf-world.interface.hlsli"
 #endif

@@ -51,7 +51,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
     [Theory]
     public void TheBuildsOwnKernelsStartLongestFirst(string bytecodeExtension) {
         var kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
-        var order = SdfWorldPipelines.BuildOrder(kernels: kernels, shadowFadeVariants: SdfShadowFadeVariants.One | SdfShadowFadeVariants.Two);
+        var order = SdfWorldPipelines.BuildOrder(kernels: kernels);
 
         Assert.Equal(
             actual: kernels[order[0]].Length,

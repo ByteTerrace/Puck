@@ -31,6 +31,11 @@
 #if defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
 #define SDF_GROUP_SHADOW_GATHER
 #endif
+// One shadow kernel and one kernel per views variant serve every fade capacity: each compiles both fade slots and reads
+// the active fade count from the pass block, which a graph without the incoming image writes as zero.
+#if defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
+#define SDF_SHADOW_FADE_SLOTS 2
+#endif
 #define SDF_PART_RAY_BOUNDS
 // Every hit pass reads the beam's tile planes and part bounds through tiles, and the surviving-tile box from the cull-args
 // pass through cullBounds (sdf-cull-args.comp): its group origin, then its exclusive group end. The dispatch is

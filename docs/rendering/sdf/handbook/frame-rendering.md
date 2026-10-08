@@ -115,8 +115,9 @@ misses included. **surface** adds the geometric normal and curvature to it.
 **shadow** gathers and marches each selected light from each lit surface,
 packing four 8-bit stable visibilities into the record's K word. Each active
 handoff adds one incoming march, bounded by K + F; its visibility uses a
-policy-sized retained texture, one byte per pixel at F = 1 and two at F = 2,
-absent at F = 0. **views** reads those visibilities and computes materials, lighting and
+retained two-byte-per-pixel texture whenever the policy allows fades, absent at
+F = 0. One shadow kernel and one kernel per views variant serve every F, reading
+the active fade count from the pass block. **views** reads those visibilities and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
 render at different cost. Compare all five passes when measuring per-pixel field cost: moving

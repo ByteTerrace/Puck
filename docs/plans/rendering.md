@@ -7757,10 +7757,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      applies them to each light's own visibility in `shade/sdf-light.hlsli`.
      A directional outside every stable and active incoming slot is unshadowed,
      scaled by ambient occlusion.
-   - GPU storage: incoming fade visibility uses an R8 texture at
-     F = 1 (1 byte per pixel), an R8G8 texture at F = 2 (2 bytes per pixel),
-     and no texture, bytes or read binding at F = 0. Its memory is counted in
-     `GpuWorkReport` as transient-aliased storage, provisioned by the policy
+   - GPU storage: incoming fade visibility uses one R8G8 texture (2 bytes per
+     pixel) at every nonzero F, since one shadow kernel writes both channels,
+     and no texture at F = 0, where every pass binds the tables' 1×1 fillers
+     and reads a zero fade count. Its memory is counted in
+     `GpuWorkReport` as retained graph storage, provisioned by the policy
      before a handoff and never allocated mid-handoff. Each active handoff's
      16-byte `SdfShadowHandoff` control record uploads through the counted
      region path: outgoing light index, incoming light index and stable slot
@@ -7769,15 +7770,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      and the active incoming slots, with one gather and one march per slot.
      Stable visibility occupies four 8-bit lanes in the existing K word;
      neither the record size nor the allocator's decisions change.
-   - GPU pipelines: the boot policy and every authored quality row declare
-     the reachable fade capacities. Each nonzero capacity adds four pipelines:
-     shadow and the full, core and folds shading variants. Worlds whose rows
-     use F = 0 create none of these. A definition edit, a session shadow-policy
-     lever or following another world requests a newly reachable capacity
-     through the background pipeline cache. Readiness holds the previous frame
-     until that policy's shadow and shading pipelines are usable, before the
-     new F replans the graph and its incoming visibility image. Handoffs create
-     no pipelines. Requested variants remain leased for the residency's lifetime.
+   - GPU pipelines: one shadow kernel and one kernel per shading variant
+     (full, core and folds) serve every fade capacity. Each compiles both fade
+     slots and reads the active fade count from the pass block, so a policy
+     change and a handoff create no pipelines and wait for none. A change
+     between F = 0 and a nonzero F replans the graph and its incoming
+     visibility image; until the new graph installs, a pass planned without
+     the image writes a zero fade count.
    - Remaining: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
      motions (direction, orbit, keys, a state row), binding to a named light,
      and illumination by other bodies. Candidates remain light-keyed: a body
@@ -7811,7 +7810,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      settings change without an invalid intermediate. GPU integration has a
      CPU packing law and a device law that pack and unpack four visibilities
      exactly to 8 bits, layout laws for the control upload, and laws for
-     slot-table readers, absent F = 0 storage and per-slot counting. The
+     slot-table readers, F = 0 storage bound to fillers and per-slot counting. The
      `shadow-slots` canary observes two marched slots at `high` and one at
      `medium` over two suns and distinct-shadow geometry. Two disjoint floor
      regions compare against a shadows-off reference: both suns cast at high,
@@ -7826,8 +7825,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      on any frame, with fade slots' steps only while a fade runs, and required
      zeros past K + F. The incoming texture's
      bytes and the 16-byte active controls are counted as specified above;
-     F = 0 has zero incoming-visibility bytes, control uploads and image read
-     bindings. At the current `low`
+     F = 0 has zero incoming-visibility graph bytes and control uploads, and
+     binds the tables' fillers. At the current `low`
      preset every shadow row is zero. Final tier counts remain P18-14's call.
      The counter ledger also publishes `GpuWorkDetail` rows within a pass:
      the sky and composite name their layers (`gradient`, `disc`, `stars`,
@@ -8361,9 +8360,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 - **Shadow fades.** CPU reads inspect at most F active handoffs, deriving one
   progress value for each without allocating or advancing state. The
   GPU loop adds a march only while a handoff runs, bounded by K + F, and
-  scales each light's own occlusion deficit. Its incoming texture uses 0, 1
-  or 2 bytes per pixel at F = 0, 1 or 2, with counted 16-byte controls for
-  active handoffs. This is transient-aliased storage allocated with the policy,
+  scales each light's own occlusion deficit. Its incoming texture uses 0 bytes
+  per pixel at F = 0 and 2 at F = 1 or 2, with counted 16-byte controls for
+  active handoffs. This is retained storage allocated with the policy,
   so starting a handoff allocates nothing. Every visibility write counts.
   P18-14 chooses the tier values and their counted ceilings; floor-device
   measurement re-records moved ceilings for the delivered loop and counters.
