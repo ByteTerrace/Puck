@@ -3,7 +3,7 @@
 Puck.Analyzers provides the Roslyn analyzers and code fixes used when building
 the repository. It checks verified-code declarations, source-file length
 limits, comment smells, strict-enum usage, unmanaged function-pointer calls,
-environment reads, and the GPU trait on test classes. It is a
+environment reads, any-address listeners, and the GPU trait on test classes. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -30,6 +30,17 @@ and any read whose name is not a compile-time constant. Nothing in Puck is
 switched by an environment variable; the
 [configuration guide](../../docs/development/contributing.md#configuration-and-diagnostics)
 names what replaces one.
+
+NET001 refuses a listener bound to every network interface: `IPAddress.Any`,
+`IPAddress.IPv6Any` or `IPAddress.IPv6None`, Kestrel's `ListenAnyIP`,
+`TcpListener.Create` or a `TcpListener` or `UdpClient` built from a port alone,
+an `IPAddress` or `IPEndPoint` built from address 0, Orleans'
+`listenOnAnyHostAddress: true`, and any string literal spelling `0.0.0.0`,
+`[::]`, a bare `::` or a URL whose host is the `*` or `+` wildcard. Such a
+listener raises a firewall prompt on every local run. A listener takes its
+address from configuration and defaults to loopback. Only the deployment sites
+in `AnyAddressBindAllowlist`, each named by assembly, file and member with its
+reason, may name the any-address.
 
 GPU001 refuses a test class that reaches the host's GPU without
 `[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out

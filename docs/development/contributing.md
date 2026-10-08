@@ -726,6 +726,15 @@ meant to establish.
   `EnvironmentReadAllowlist`, and on any read whose name is not a compile-time
   constant. Make a switch a flag, a document or profile setting, or a test
   fixture instead ([configuration and diagnostics](#configuration-and-diagnostics)).
+- A listener takes its address from configuration and defaults to loopback
+  (`127.0.0.1`, or `::1` where the code is IPv6-first), so a local run, test or
+  canary raises no firewall prompt. A QUIC listener is the exception the address
+  cannot fix: on Windows, msquic opens its UDP port on every interface whatever
+  address it is given. `Puck.Analyzers` fails the build with NET001
+  on `IPAddress.Any`, `IPAddress.IPv6Any`, Kestrel's `ListenAnyIP`, a
+  port-only `TcpListener` or `UdpClient`, and any literal spelling `0.0.0.0`,
+  `[::]` or a `*`/`+` wildcard URL host, outside the deployment sites
+  `AnyAddressBindAllowlist` names with their reasons.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
