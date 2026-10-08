@@ -4,7 +4,6 @@ using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Security;
 using Windows.Win32.System.Com;
@@ -18,8 +17,8 @@ namespace Puck.DirectX.Interop;
 /// through the capability seam so every DirectX node in its subtree resolves — and shares — the same device.
 /// <para>
 /// The device is created lazily on first use, on the adapter identified by <c>adapterLuid</c> (so it can be
-/// matched to another backend's GPU for resource sharing) — falling back to the default adapter when the LUID
-/// is zero. Deferring lets the caller supply a LUID that is only known once the other backend's device exists.
+/// matched to another backend's GPU for resource sharing) — or, when the LUID is zero, on the first hardware adapter,
+/// never a software renderer (<see cref="Messages.DirectXAdapterDescription.IsSelectedBy"/>). Deferring lets the caller supply a LUID that is only known once the other backend's device exists.
 /// A creation this host cannot satisfy raises <see cref="GpuDeviceUnavailableException"/> from whichever member
 /// first needed the device.
 /// </para>
@@ -46,7 +45,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuMemoryProfile m_memoryProfile;
     private GpuDeviceCapabilities? m_capabilities;
 
-    /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
+    /// <summary>Initializes a new instance that creates its device on the first hardware adapter at feature level
+    /// 11.0.</summary>
     [OpensGpuDevice]
     public DirectXDeviceContext()
         : this(
@@ -56,7 +56,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     ) {
     }
     /// <summary>Initializes a new instance bound to a fixed adapter LUID.</summary>
-    /// <param name="adapterLuid">The adapter LUID to create the device on, or zero for the default adapter.</param>
+    /// <param name="adapterLuid">The adapter LUID to create the device on, or zero for the first hardware adapter.</param>
     /// <param name="deviceApi">The device API used to create the device on a specific adapter.</param>
     /// <param name="minimumFeatureLevel">The minimum Direct3D feature level the device must support.</param>
     /// <param name="pipelineCacheWork">The backend's pipeline counts; when supplied, each device this context creates
@@ -79,7 +79,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
-    /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
+    /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the first hardware adapter); invoked once, on first use.</param>
     /// <param name="deviceApi">The device API used to create the device on a specific adapter.</param>
     /// <param name="minimumFeatureLevel">The minimum Direct3D feature level the device must support.</param>
     /// <param name="pipelineCacheWork">The backend's pipeline counts; when supplied, each device this context creates
@@ -281,12 +281,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private void BringUp() {
         var adapterLuid = (m_adapterLuidProvider?.Invoke() ?? m_adapterLuid);
 
-        m_device = ((0 != adapterLuid)
-            ? m_deviceApi.CreateDevice(
-                adapterLuid: adapterLuid,
-                minimumFeatureLevel: FeatureLevel
-            )
-            : CreateDefaultDevice(minimumFeatureLevel: FeatureLevel)
+        m_device = m_deviceApi.CreateDevice(
+            adapterLuid: adapterLuid,
+            minimumFeatureLevel: FeatureLevel
         );
         m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
         m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
@@ -433,22 +430,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2060 ") +
             "(Turing), RTX 4070 (Ada), Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which ") +
             "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
-    }
-    private static DirectXDevice CreateDefaultDevice(DirectXFeatureLevel minimumFeatureLevel) {
-        void* device;
-        var deviceIid = ID3D12Device.IID_Guid;
-
-        PInvoke.D3D12CreateDevice(
-            MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)minimumFeatureLevel),
-            pAdapter: null,
-            ppDevice: &device,
-            riid: deviceIid
-        ).ThrowIfFailed(operation: "D3D12CreateDevice");
-
-        return new DirectXDevice(
-            deviceHandle: ((nint)device),
-            featureLevel: minimumFeatureLevel
-        );
     }
 
     /// <inheritdoc/>

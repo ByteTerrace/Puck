@@ -1299,7 +1299,12 @@ These are one-line cautions; the owning pages hold the derivations.
   device factory reads it (with the pipeline-cache UUID) and hangs it on
   `VulkanLogicalDevice.Identity`. Its one use beyond display is naming the
   device's pipeline-cache file; no selection, fallback or workaround may read a
-  vendor or driver from it. `IGpuDeviceContext.Capabilities`
+  vendor or driver from it. Adapter selection reads only the DXGI software
+  flag: a Direct3D 12 LUID of zero selects the first hardware adapter
+  (`DirectXAdapterDescription.IsSelectedBy`) and refuses when none remains,
+  because a process Windows cuts off from the GPU after repeated device faults
+  sees only the Basic Render Driver, which would run every kernel on the CPU.
+  `IGpuDeviceContext.Capabilities`
   (`GpuDeviceCapabilities`) is filled beside it and is recorded the same way:
   Vulkan's `maxBoundDescriptorSets`, `maxPushConstantsSize` and per-stage
   limits from the physical device's limits, Direct3D 12's binding tier, root
