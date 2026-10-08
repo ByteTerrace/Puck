@@ -7,9 +7,7 @@ namespace Puck.Cli.Shaders;
 /// <summary><c>puck shaders generate</c>: writes every file the C# model owns, each regenerated from the live types, or
 /// under <c>--check</c> regenerates them in memory and compares, the drift shape <c>puck schema --check</c> and
 /// <c>puck registry --check</c> share. The files are the HLSL declarations <see cref="ShaderDeclarations"/> lists, the one
-/// list the kernel builds generate before their kernels compile, and the build's shader recipe
-/// (<see cref="ShaderCompiler.BuildRecipePath"/>), which <c>build/Shaders.targets</c> imports when a build is evaluated
-/// and so is generated here alone. A checked-in <c>*.interface.hlsli</c> no generator owns, and a package whose include
+/// list the kernel builds generate before their kernels compile. A checked-in <c>*.interface.hlsli</c> no generator owns, and a package whose include
 /// cannot be found, fail both modes by name. A check also fails on a file that matches the model only in the working
 /// tree while its staged copy differs or is missing, since a kernel build writes every declaration the model changed: CI runs the check
 /// after its candidate CLI is built, and the commit, not the build, is what it judges. Exit 0 wrote or matched, 1 check
@@ -24,11 +22,9 @@ internal static class GenerateCommand {
     /// <param name="packages">The engine packages whose declared interfaces are owned includes.</param>
     /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
     /// named twice.</param>
-    /// <returns>The declarations in <see cref="ShaderDeclarations.Of"/>'s order, then the build's shader recipe.</returns>
-    internal static IReadOnlyList<ShaderDeclaration> Includes(IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) => [
-        .. ShaderDeclarations.Of(files: files, packages: packages, problems: problems),
-        new ShaderDeclaration(Generate: ShaderCompiler.GenerateBuildRecipe, Path: ShaderCompiler.BuildRecipePath),
-    ];
+    /// <returns>The declarations in <see cref="ShaderDeclarations.Of"/>'s order.</returns>
+    internal static IReadOnlyList<ShaderDeclaration> Includes(IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) =>
+        ShaderDeclarations.Of(files: files, packages: packages, problems: problems);
     /// <summary>Writes or checks every include the model owns in a tree.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="files">The tree's files, repository-relative with forward slashes.</param>
@@ -139,11 +135,6 @@ internal static class GenerateCommand {
         project whose kernels include these files references Puck.Shaders.Generator, whose build
         writes each one whose text the model has changed before any kernel compiles, so a kernel
         reading a declaration the model has just gained builds in one pass.
-
-        The build's shader recipe, build/ShaderRecipe.targets, is generated from
-        Puck.Shaders.ShaderCompiler.StepsOf: the DXC options build/Shaders.targets compiles every
-        stage source with, the options the runtime shader compiler runs. A build reads it when it
-        is evaluated, so only this verb writes it.
         """,
         name: "generate",
         run: Run

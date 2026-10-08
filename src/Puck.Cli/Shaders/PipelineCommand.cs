@@ -18,7 +18,7 @@ internal static class PipelineCommand {
         var source = new Argument<string>(name: "source") { Description = "Pipeline document, one-off shader source, or shader package directory." };
         var inspect = new Option<bool>("--inspect") { Description = "Validate and print the execution plan without compiling shaders." };
         var toolchain = new Option<string?>("--toolchain");
-        var cache = new Option<string?>("--cache") { Description = "Shader cache directory; defaults beneath the temporary directory." };
+        var cache = new Option<string?>("--cache") { Description = "Shader cache directory; defaults to the per-user shader cache the build shares." };
         var command = new Command(
             description: "Validate a connected pipeline and compile every pass for both GPU backends.",
             name: "pipeline"
@@ -52,10 +52,7 @@ internal static class PipelineCommand {
 
             try {
                 var compiler = new ShaderCompiler(
-                    cacheDirectory: (result.GetValue(option: cache) ?? Path.Combine(
-                        path1: Path.GetTempPath(),
-                        path2: "puck-shader-cache"
-                    )),
+                    cacheDirectory: (result.GetValue(option: cache) ?? ShaderCompiler.DefaultCacheDirectory),
                     toolchainDirectory: result.GetValue(option: toolchain)
                 );
 

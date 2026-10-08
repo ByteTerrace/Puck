@@ -10,8 +10,8 @@ internal sealed record ShaderBytecodeDifference(string Path, string Detail);
 /// <summary><c>puck shaders compare</c>: compares every compiled shader, SPIR-V and DXIL, in one tree with the same file in
 /// another, byte for byte, so the DXC build on one host can be held to the build of the same commit on another. With
 /// <c>--build</c> it first compiles the shaders of the checkout it runs in, through the build's own
-/// <c>CompileShaders</c> target in every project that declares DXC shader items, so both hosts compile with the same
-/// arguments. Exit 0 when every file matches and both trees hold the same files, 1 when any differs, is missing, or the
+/// <c>CompileShaders</c> target in every project that declares DXC shader items, into a shader cache that starts empty, so
+/// both hosts really compile, with the same arguments. Exit 0 when every file matches and both trees hold the same files, 1 when any differs, is missing, or the
 /// build fails, 2 when a tree holds no bytecode or cannot be read. <c>puck shaders collect</c> copies a checkout's
 /// compiled shaders into one tree at their repository paths, which is how one host hands its build to another.</summary>
 internal static class CompareCommand {
@@ -93,34 +93,48 @@ internal static class CompareCommand {
         .Where(predicate: project => XDocument.Load(uri: Path.Combine(path1: repositoryRoot, path2: project)).Descendants().Any(predicate: static element => DxcItems.Contains(value: element.Name.LocalName, comparer: StringComparer.Ordinal)))
         .Order(comparer: StringComparer.Ordinal)];
 
+    // The build-only host every shader project's CompileShaders target runs.
+    private const string ShaderBuildTool = "src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj";
+
     // Compiles the checkout's shaders through each shader project's own CompileShaders target, restoring first as
-    // dotnet build does, since a fresh checkout on another host has restored nothing.
+    // dotnet build does, since a fresh checkout on another host has restored nothing. Every output compiles into a cache
+    // directory that starts empty and is removed afterwards: a cache another run filled (on this host or, restored, on
+    // another) would answer with bytes this host's DXC never produced, and the comparison would prove nothing.
     private static bool TryBuild(string repositoryRoot) {
         var listed = CliGit.Run(repositoryRoot, "ls-files", "--", "*.csproj");
         var projects = ShaderProjects(
             projects: listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)),
             repositoryRoot: repositoryRoot
         );
+        var cache = Directory.CreateTempSubdirectory(prefix: "puck-shaders-compare-").FullName;
 
-        foreach (var project in projects) {
-            Console.Out.WriteLine(value: $"{Verb}: compiling {project}");
+        try {
+            foreach (var (project, target) in projects.Select(selector: static project => (project, "CompileShaders")).Prepend(element: (ShaderBuildTool, "Build"))) {
+                Console.Out.WriteLine(value: ((target == "Build") ? $"{Verb}: building {project}" : $"{Verb}: compiling {project}"));
 
-            var build = CliProcess.RunCaptured(
-                arguments: ["msbuild", project, "--disable-build-servers", "-restore", "-t:CompileShaders", "-p:Configuration=Release", "-nologo", "-v:minimal"],
-                fileName: "dotnet",
-                input: string.Empty,
-                timeout: TimeSpan.FromMinutes(minutes: 30),
-                workingDirectory: repositoryRoot
-            );
+                var build = CliProcess.RunCaptured(
+                    arguments: ["msbuild", project, "--disable-build-servers", "-restore", $"-t:{target}", "-p:Configuration=Release", $"-p:PuckShaderCacheDirectory={cache}", "-nologo", "-v:minimal"],
+                    fileName: "dotnet",
+                    input: string.Empty,
+                    timeout: TimeSpan.FromMinutes(minutes: 30),
+                    workingDirectory: repositoryRoot
+                );
 
-            if (build.ExitCode != 0) {
-                Console.Error.WriteLine(value: $"{Verb}: {project}'s CompileShaders exited {build.ExitCode}.{Environment.NewLine}{build.Stdout}{build.Stderr}".TrimEnd());
+                if (build.ExitCode != 0) {
+                    Console.Error.WriteLine(value: $"{Verb}: {project}'s {target} exited {build.ExitCode}.{Environment.NewLine}{build.Stdout}{build.Stderr}".TrimEnd());
 
-                return false;
+                    return false;
+                }
+            }
+
+            return true;
+        } finally {
+            try {
+                Directory.Delete(path: cache, recursive: true);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                Console.Error.WriteLine(value: $"{Verb}: could not remove the comparison's shader cache {cache}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
         }
-
-        return true;
     }
 
     /// <summary>Compares two trees and reports every difference, one line each.</summary>
@@ -235,17 +249,18 @@ internal static class CompareCommand {
     public static Command Create() {
         var expected = new Argument<string>(name: "expected") { Description = "The reference tree, such as another host's build of the same commit." };
         var actual = new Argument<string?>(name: "actual") { Arity = ArgumentArity.ZeroOrOne, Description = "The tree held to it; the repository root when omitted." };
-        var build = new Option<bool>("--build") { Description = "First compile the checkout's shaders through each shader project's CompileShaders target." };
+        var build = new Option<bool>("--build") { Description = "First compile the checkout's shaders through each shader project's CompileShaders target, into an empty shader cache." };
         var command = new Command(
             description: """
             Compare every compiled shader, SPIR-V and DXIL, with another tree's byte for byte.
 
             Walks both trees for .spv and .dxil files, skipping artifacts, bin, obj, .git, .tmp and
             node_modules, and matches them by relative path: a file in one tree only, or one whose bytes differ,
-            fails by name with its first differing byte. With --build it first runs the build's own
-            CompileShaders target (build/Shaders.targets) in every tracked project outside experimental/
-            that declares a vertex, fragment or compute shader item, with the dxc on the path, so a
-            second host compiles with exactly the arguments the first did. CI runs it on Linux against
+            fails by name with its first differing byte. With --build it first builds the shader build's
+            host, then runs the build's own CompileShaders target (build/Shaders.targets) in every
+            tracked project outside experimental/ that declares a vertex, fragment or compute shader
+            item, with the dxc on the path and an empty shader cache, so a second host really compiles
+            every output with exactly the arguments the first did. CI runs it on Linux against
             the Windows build's bytecode artifact, the P7 gate's cross-host leg.
 
             Exit 0 every file matches, 1 any differs or is missing or the build fails, 2 a tree holds

@@ -1,271 +1,109 @@
+using System.Reflection;
 using System.Xml.Linq;
 using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
 
-/// <summary>Exercises the shipped MSBuild targets in isolated projects. A CPU-only stand-in for DXC writes a complete
-/// output and can fail a later batch; the real sidecar tasks, incremental gates and pack collection still run.</summary>
+/// <summary>Exercises the shipped MSBuild targets in isolated projects: the real build host, the real shader build in
+/// the generator, and a CPU-only stand-in for DXC that records every compile it runs and can hold or fail one. Each
+/// fixture compiles into a shader cache of its own unless a law shares one on purpose.</summary>
 public sealed partial class ShaderBuildTargetsLawTests {
     private const string FakeDxc = "normal";
-    private const string ProcessDxc = "process";
 
     [Fact]
-    public async Task TwoInterleavedPublishersLeaveABytecodeAndSidecarOfOneGeneration() {
-        if (!OperatingSystem.IsWindows()) {
-            Assert.Skip(reason: "Stalling a rename by denying delete sharing requires Windows mandatory file sharing.");
+    public void AWarmBuildOfAnotherCheckoutPublishesFromTheCacheAndRunsNoCompiler() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-shader-targets-");
+        string[] cache = [$"PuckShaderCacheDirectory={Path.Combine(path1: scratch.RootPath, path2: "cache")}"];
+        var first = new Fixture(root: Path.Combine(path1: scratch.RootPath, path2: "first"));
+        var second = new Fixture(root: Path.Combine(path1: scratch.RootPath, path2: "elsewhere", path3: "second"));
+
+        foreach (var fixture in ((ReadOnlySpan<Fixture>)[first, second])) {
+            fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
+            fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"shared.hlsli\"\nfirst source");
+            fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
+            fixture.ShaderProject(body: Sources);
         }
 
-        using var fixture = new Fixture();
-        var directory = fixture.PathOf(path: "Assets/Shaders");
+        // One DXC for both checkouts: the toolchain is part of every key, the checkout is not.
+        string[] shared = [.. cache, $"DxcCommand={first.CompilerPath}"];
 
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
-        fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "earlier bytecode");
-        fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: "earlier sidecar");
-        fixture.ShaderProject(body: """
-            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
-            <Target Name="ResolveProjectReferences" />
-            """, dxc: "hold-process");
+        first.RequireSuccess(run: first.Run(properties: shared, target: "Build"));
+        Assert.Equal(expected: 2, actual: first.Compiles());
 
-        // Publisher A stalls holding its new sidecar: first the old sidecar is held open so A cannot replace or remove
-        // it, then A's own temporary sidecar is held so A cannot move it in.
-        using var heldSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"), share: FileShare.Read);
-        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build"));
-        Task<CliProcessResult>? second = null;
-        FileStream? heldTemporary = null;
-        string? secondCompiler = null;
-        using var secondWaiting = new ManualResetEventSlim();
+        var warm = second.Run(properties: shared, target: "Build");
 
-        try {
-            // Both publishers reach their compiler barriers before either publishes. Starting B only after A stalls
-            // makes A's bounded rename retries depend on B's cold process and task-compilation startup.
-            var firstCompiler = WaitFor(find: () => fixture.Started().SingleOrDefault());
-
-            second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build", waiting: secondWaiting));
-            secondCompiler = WaitFor(find: () => fixture.Started().SingleOrDefault(predicate: path => (path != firstCompiler)));
-            secondWaiting.Reset();
-            fixture.Write(path: $"release-{Path.GetFileName(path: firstCompiler)}", text: "release publisher A's compiler");
-            heldTemporary = WaitFor(find: () => {
-                var stalledSidecar = Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.hash.*.tmp").SingleOrDefault();
-
-                if (stalledSidecar is null) {
-                    return null;
-                }
-
-                try {
-                    // Denying write sharing succeeds only after A closes its writer; keep this handle to stall rename.
-                    return new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: stalledSidecar, share: FileShare.Read);
-                } catch (IOException) {
-                    return null;
-                }
-            });
-
-            heldSidecar.Dispose();
-            _ = WaitFor(find: () => (!File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")) ? "the old commit record was removed" : null));
-            fixture.Write(path: $"release-{Path.GetFileName(path: secondCompiler)}", text: "release publisher B's compiler");
-            RequireWaiting(process: second, waiting: secondWaiting);
-            Assert.False(condition: second.IsCompleted, userMessage: "Publisher B finished while publisher A held the source tree's publication lock.");
-        } finally {
-            heldTemporary?.Dispose();
-            heldSidecar.Dispose();
-            fixture.Write(path: "release", text: "release every test-owned compiler child");
-            _ = await first;
-            if (second is not null) { _ = await second; }
+        second.RequireSuccess(run: warm);
+        Assert.Equal(expected: 0, actual: second.Compiles());
+        Assert.Contains(expectedSubstring: "2 shader output(s): 0 current, 2 published from the cache, 0 compiled, in ", actualString: warm.Stdout);
+        foreach (var output in ((ReadOnlySpan<string>)["Assets/Shaders/a.comp.spv", "Assets/Shaders/b.comp.spv"])) {
+            Assert.Equal(expected: File.ReadAllBytes(path: first.PathOf(path: output)), actual: File.ReadAllBytes(path: second.PathOf(path: output)));
         }
-        fixture.RequireSuccess(run: await first);
-        fixture.RequireSuccess(run: await second!);
-        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
-        Assert.Equal(expected: $"compiled by process {Path.GetFileName(path: secondCompiler)}", actual: File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
-
-        // The pair on disk is one generation's: the freshness check holds the bytecode to its sidecar.
-        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+        second.RequireSuccess(run: second.Run(properties: shared, target: "CollectShaderBytecode"));
     }
     [Fact]
-    public async Task PublishersWithDifferentIntermediateDirectoriesShareTheSourceTreesLock() {
+    public void EditingOneIncludeRecompilesOnlyTheOutputsWhoseClosureHoldsIt() {
         using var fixture = new Fixture();
 
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
-        fixture.Write(path: "obj/shader-publish.lock", text: string.Empty);
-        fixture.ShaderProject(body: """
-            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
-            <Target Name="ResolveProjectReferences" />
-            """, dxc: ProcessDxc);
+        fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
+        fixture.Write(path: "Assets/Shaders/a-only.hlsli", text: "a's declaration");
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"a-only.hlsli\"\n#include \"shared.hlsli\"\nfirst source");
+        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "#include \"shared.hlsli\"\nsecond source");
+        fixture.Write(path: "Assets/Shaders/c.comp.hlsl", text: "independent source");
+        fixture.ShaderProject(body: Sources);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: 3, actual: fixture.Compiles());
 
-        using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
-        using var firstWaiting = new ManualResetEventSlim();
-        using var secondWaiting = new ManualResetEventSlim();
-        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/first/"], target: "Build", waiting: firstWaiting));
-        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/second/"], target: "Build", waiting: secondWaiting));
+        fixture.Write(path: "Assets/Shaders/a-only.hlsli", text: "a's changed declaration");
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: ["a.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 3));
 
-        try {
-            // Both compilers finish while publication is held, including on Linux. Moving managed intermediates does
-            // not create a second lock for the same source-tree outputs, and the lock is never held during compilation.
-            _ = WaitFor(find: () => (((first.IsCompleted || second.IsCompleted) || (Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets/Shaders"), searchPattern: "a.comp.spv.*.tmp").Count() == 2)) ? "publishers reached publication" : null));
-            RequireWaiting(process: first, waiting: firstWaiting);
-            RequireWaiting(process: second, waiting: secondWaiting);
-            Assert.False(condition: (first.IsCompleted || second.IsCompleted), userMessage: "A publisher finished while the source tree's publication lock was held.");
-            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
-            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
-        } finally {
-            heldLock.Dispose();
-            fixture.RequireSuccess(run: await first);
-            fixture.RequireSuccess(run: await second);
-        }
-
-        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
-    }
-    [InlineData(false)]
-    [InlineData(true)]
-    [Theory]
-    public async Task ANoBuildPackWaitsForTheFirstPublicationBeforeCollectingAndRequiresItsCommitRecord(bool commitSidecar) {
-        using var fixture = new Fixture();
-
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
-        fixture.Write(path: "obj/shader-publish.lock", text: string.Empty);
-        fixture.ShaderProject(body: """
-            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
-            <Target Name="CollectionStarted" BeforeTargets="CollectShaderBytecode">
-              <WriteLinesToFile File="collecting.txt" Lines="collecting" Overwrite="true" />
-            </Target>
-            <Target Name="_GetPackageFiles">
-              <WriteLinesToFile File="packed.txt" Lines="@(Content->'%(Identity)')" Overwrite="true" />
-            </Target>
-            """);
-
-        using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
-        using var waiting = new ManualResetEventSlim();
-        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true", "PuckDxcComputeSpirv=fixture-recipe"], target: "_GetPackageFiles", waiting: waiting));
-
-        try {
-            _ = WaitFor(find: () => (File.Exists(path: fixture.PathOf(path: "collecting.txt")) ? "collecting" : null));
-            RequireWaiting(process: pack, waiting: waiting);
-            Assert.False(condition: pack.IsCompleted, userMessage: "Collection inspected missing outputs without waiting for the publisher's lock.");
-
-            // This process owns the publication lock. It materializes the first bytecode, then either commits its
-            // sidecar or simulates a publisher cut short before writing the commit record.
-            fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "bytecode");
-            if (commitSidecar) {
-                var sourceHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "source")));
-                var bytecodeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "bytecode")));
-                var recipeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: $".spv\n\"{fixture.CompilerPath}\" fixture-recipe")));
-
-                fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: $"source:{sourceHash}\nrecipe:{recipeHash}\nbytecode:{bytecodeHash}\n");
-            }
-        } finally {
-            heldLock.Dispose();
-            _ = await pack;
-        }
-
-        var result = await pack;
-
-        if (commitSidecar) {
-            fixture.RequireSuccess(run: result);
-            Assert.Equal(expected: ["Assets/Shaders/a.comp.spv"], actual: File.ReadAllLines(path: fixture.PathOf(path: "packed.txt")));
-        } else {
-            Assert.NotEqual(expected: 0, actual: result.ExitCode);
-            Assert.Contains(expectedSubstring: "has no '.hash' sidecar", actualString: result.Stdout);
-            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "packed.txt")));
-        }
+        fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "changed shared declaration");
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: ["a.comp.hlsl", "b.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 4).Order(comparer: StringComparer.Ordinal));
     }
     [Fact]
-    public void AFailedLaterCompileRemovesEveryTemporaryFromThatInvocation() {
+    public void AnEmptyCacheCompilesEveryOutputAgainHoweverCurrentTheTree() {
         using var fixture = new Fixture();
 
         fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
-        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "failing source");
-        fixture.ShaderProject(body: """
-            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
-            <Target Name="ResolveProjectReferences" />
-            """);
-
-        var build = fixture.Run(target: "Build");
-
-        Assert.NotEqual(expected: 0, actual: build.ExitCode);
-        Assert.Contains(expectedSubstring: "deliberate compiler failure", actualString: build.Stdout);
-        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.spv", searchOption: SearchOption.AllDirectories));
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
-    }
-    [Fact]
-    public void AnIncludeRestoredByAReferenceIsAnInputOnTheFirstBuildAndTheNextBuildSkipsCompilation() {
-        using var fixture = new Fixture();
-
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
-        fixture.Write(path: "Assets/Shaders/conventional.hlsli", text: "conventional declaration");
-        fixture.Write(path: "Shared/outside.hlsli", text: "explicit outside declaration");
-        fixture.ShaderProject(body: """
-            <ItemGroup>
-              <ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" />
-              <ShaderInclude Include="Assets/Shaders/*.hlsli" />
-              <ShaderInclude Include="Shared/outside.hlsli" />
-            </ItemGroup>
-            <Target Name="ResolveProjectReferences">
-              <WriteLinesToFile File="Assets/Shaders/generated.hlsli" Lines="generated declaration" WriteOnlyWhenDifferent="true" Overwrite="true" />
-            </Target>
-            """);
-
+        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
+        fixture.ShaderProject(body: Sources);
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        var bytecode = fixture.PathOf(path: "Assets/Shaders/a.comp.spv");
-        var settled = File.GetLastWriteTimeUtc(path: bytecode);
-        var sidecar = fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash");
-        var committed = File.ReadAllText(path: sidecar);
-
-        // A fresh no-build evaluation must use the publisher's include order, including the explicit outside row.
-        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
-        Assert.Equal(expected: committed, actual: File.ReadAllText(path: sidecar));
-        Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));
-        Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: bytecode));
-
-        // Restore identical tracked inputs with newer timestamps, as a persistent proof clone can do. Content is
-        // unchanged, so neither compilation nor publication may run again, even with inputs newer than every output.
-        var rewritten = File.GetLastWriteTimeUtc(path: sidecar).AddSeconds(value: 10);
-
-        foreach (var path in new[] { "fixture.proj", "Assets/Shaders/a.comp.hlsl", "Assets/Shaders/conventional.hlsli", "Assets/Shaders/generated.hlsli", "Shared/outside.hlsli" }) {
-            fixture.Write(path: path, text: File.ReadAllText(path: fixture.PathOf(path: path)));
-            File.SetLastWriteTimeUtc(path: fixture.PathOf(path: path), lastWriteTimeUtc: rewritten);
-        }
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Single(collection: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")));
-        Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: bytecode));
-        Assert.Equal(expected: committed, actual: File.ReadAllText(path: sidecar));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
+
+        fixture.RequireSuccess(run: fixture.Run(properties: [$"PuckShaderCacheDirectory={fixture.PathOf(path: "fresh-cache")}"], target: "Build"));
+        Assert.Equal(expected: 4, actual: fixture.Compiles());
     }
-    [InlineData("source", 3)]
-    [InlineData("include", 4)]
-    [InlineData("options", 4)]
-    [InlineData("command", 4)]
-    [InlineData("bytecode", 3)]
-    [InlineData("sidecar", 3)]
-    [InlineData("recipe-missing", 3)]
-    [InlineData("bytecode-missing", 3)]
-    [InlineData("sidecar-missing", 3)]
+    [InlineData("source", 3, true)]
+    [InlineData("include", 3, true)]
+    [InlineData("command", 4, false)]
+    [InlineData("bytecode", 2, true)]
+    [InlineData("sidecar", 2, true)]
+    [InlineData("bytecode-missing", 2, true)]
+    [InlineData("sidecar-missing", 2, true)]
     [Theory]
-    public void ChangedContentOrRecipeRecompilesOnlyInvalidPairs(string change, int expectedCompiles) {
+    public void AChangedInputCompilesOnlyWhatItChangedAndAPackThatSkipsTheBuildRefusesIt(string change, int expectedCompiles, bool checkRefuses) {
         using var fixture = new Fixture();
 
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"shared.hlsli\"\nfirst source");
         fixture.Write(path: "Assets/Shaders/c.comp.hlsl", text: "independent source");
         fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
-        fixture.ShaderProject(body: """
-            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
-            <Target Name="ResolveProjectReferences" />
-            """);
+        fixture.ShaderProject(body: Sources);
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
 
-        var source = fixture.PathOf(path: "Assets/Shaders/a.comp.hlsl");
-        var include = fixture.PathOf(path: "Assets/Shaders/shared.hlsli");
         var bytecode = fixture.PathOf(path: "Assets/Shaders/a.comp.spv");
         var sidecar = (bytecode + ".hash");
         string[] properties = [];
 
         switch (change) {
-            case "source": File.WriteAllText(contents: "changed source", path: source); break;
-            case "include": File.WriteAllText(contents: "changed declaration", path: include); break;
-            case "options": properties = ["PuckDxcComputeSpirv=-spirv -O3 -T cs_6_6 -E main -D CHANGED_RECIPE=1"]; break;
+            case "source": fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"shared.hlsli\"\nchanged source"); break;
+            case "include": fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "changed declaration"); break;
             case "command":
-                // A distinct real command changes the recipe while running the same controlled compiler behavior.
+                // Another DXC is another toolchain: every output compiles again, though a pack's check, which holds the
+                // published bytes to their sources and options, needs no toolchain and still passes.
                 var alternate = fixture.PathOf(path: ("another-dxc" + Path.GetExtension(path: fixture.CompilerPath)));
                 File.Copy(sourceFileName: fixture.CompilerPath, destFileName: alternate);
                 if (!OperatingSystem.IsWindows()) {
@@ -275,45 +113,84 @@ public sealed partial class ShaderBuildTargetsLawTests {
                 break;
             case "bytecode": File.WriteAllText(contents: "corrupted compiled bytes", path: bytecode); break;
             case "sidecar": File.AppendAllText(path: sidecar, contents: File.ReadAllText(path: sidecar)); break;
-            case "recipe-missing": File.WriteAllLines(path: sidecar, contents: File.ReadAllLines(path: sidecar).Where(predicate: static line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "recipe:"))); break;
             case "bytecode-missing": File.Delete(path: bytecode); break;
             case "sidecar-missing": File.Delete(path: sidecar); break;
             default: throw new ArgumentOutOfRangeException(paramName: nameof(change));
         }
-        // Old input times cannot make changed bytes fresh; collection must refuse before a compiler repairs them.
-        foreach (var path in new[] { source, include }) {
-            File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UnixEpoch, path: path);
-        }
-        var collect = fixture.Run(target: "CollectShaderBytecode", properties: properties);
 
-        Assert.NotEqual(expected: 0, actual: collect.ExitCode);
-        Assert.Equal(expected: 2, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+        var check = fixture.Run(target: "CollectShaderBytecode", properties: properties);
+
+        Assert.Equal(expected: checkRefuses, actual: (check.ExitCode != 0));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
         fixture.RequireSuccess(run: fixture.Run(target: "Build", properties: properties));
-        Assert.Equal(expected: expectedCompiles, actual: File.ReadAllLines(path: fixture.PathOf(path: "compiles.txt")).Length);
+        Assert.Equal(expected: expectedCompiles, actual: fixture.Compiles());
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode", properties: properties));
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
     }
-    [Fact]
-    public void ACompilerThatProducesNoOutputCannotBlessCachedBytecodeWithANewSidecar() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ANoBuildPackWaitsForThePublicationLockAndRequiresTheCommitRecord(bool commitSidecar) {
         using var fixture = new Fixture();
 
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "changed source");
-        fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "cached bytecode");
-        fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: "original sidecar");
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
         fixture.ShaderProject(body: """
-            <ItemGroup>
-              <Cached Include="Assets/Shaders/a.comp.spv" SourcePath="$(MSBuildProjectDirectory)/Assets/Shaders/a.comp.hlsl" />
-            </ItemGroup>
-            <Target Name="Publish">
-              <PuckWriteShaderHashSidecars BytecodeFiles="@(Cached)" LockFile="$(_PuckShaderPublishLock)" Token="missing-output" />
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            <Target Name="_GetPackageFiles">
+              <WriteLinesToFile File="packed.txt" Lines="@(Content->'%(FullPath)')" Overwrite="true" />
             </Target>
             """);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        if (!commitSidecar) {
+            // A publication cut short leaves the bytecode without its commit record.
+            File.Delete(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"));
+        }
 
-        var publish = fixture.Run(target: "Publish");
+        using var waiting = new ManualResetEventSlim();
+        Task<CliProcessResult> pack;
 
-        Assert.NotEqual(expected: 0, actual: publish.ExitCode);
-        Assert.Contains(expectedSubstring: "produced no temporary bytecode", actualString: publish.Stdout);
-        Assert.Equal(expected: "cached bytecode", actual: File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
-        Assert.Equal(expected: "original sidecar", actual: File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+        using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None)) {
+            pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true"], target: "_GetPackageFiles", waiting: waiting));
+            RequireWaiting(process: pack, waiting: waiting);
+            Assert.False(condition: pack.IsCompleted, userMessage: "A pack read the published shaders while their publication lock was held.");
+        }
+
+        var result = await pack;
+
+        if (commitSidecar) {
+            fixture.RequireSuccess(run: result);
+            Assert.Equal(expected: [Path.GetFullPath(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv"))], actual: File.ReadAllLines(path: fixture.PathOf(path: "packed.txt")));
+        } else {
+            Assert.NotEqual(expected: 0, actual: result.ExitCode);
+            Assert.Contains(expectedSubstring: "has no '.hash' sidecar", actualString: result.Stdout);
+            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "packed.txt")));
+        }
+        Assert.Equal(expected: 1, actual: fixture.Compiles());
+    }
+    [Fact]
+    public void ABuildRemovesTheBytecodeItWroteForADeletedSourceAndRefusesBytecodeItDidNotWrite() {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
+        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
+        fixture.ShaderProject(body: Sources);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+
+        File.Delete(path: fixture.PathOf(path: "Assets/Shaders/b.comp.hlsl"));
+        var removed = fixture.Run(target: "Build");
+
+        fixture.RequireSuccess(run: removed);
+        Assert.Contains(expectedSubstring: "Removed orphaned shader bytecode 'Assets/Shaders/b.comp.spv'", actualString: removed.Stdout);
+        Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/b.comp.spv")));
+        Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/b.comp.spv.hash")));
+
+        fixture.Write(path: "Assets/Shaders/foreign.comp.spv", text: "bytecode no build wrote");
+        var refused = fixture.Run(target: "Build");
+
+        Assert.NotEqual(expected: 0, actual: refused.ExitCode);
+        Assert.Contains(expectedSubstring: "Shader bytecode 'Assets/Shaders/foreign.comp.spv' has no matching HLSL source", actualString: refused.Stdout);
+        Assert.True(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/foreign.comp.spv")));
     }
     [Fact]
     public void ANoBuildPackRefusesAMissingDirect3D11EntryAndCollectsExistingEntriesOnce() {
@@ -348,11 +225,16 @@ public sealed partial class ShaderBuildTargetsLawTests {
         Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: fixture.PathOf(path: "Assets/Probes/probe.first.dxbc")));
     }
 
+    private const string Sources = """
+        <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+        <Target Name="ResolveProjectReferences" />
+        """;
+
     private static T WaitFor<T>(Func<T?> find) where T : class {
         T? found = null;
 
         TestLiveness.Until(
-            reason: () => "The publisher never reached the awaited point.",
+            reason: () => "The build never reached the awaited point.",
             step: () => ((found = find()) is not null)
         );
 
@@ -364,6 +246,9 @@ public sealed partial class ShaderBuildTargetsLawTests {
     }
 
     internal sealed partial class Fixture : IDisposable {
+        // The generator the targets run is the one this law's own build produced, in its configuration.
+        private static readonly string Configuration = (typeof(Fixture).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Release");
+
         private readonly TemporaryDirectory? m_directory;
 
         public Fixture(string? root = null) {
@@ -371,14 +256,7 @@ public sealed partial class ShaderBuildTargetsLawTests {
             Root = (root ?? m_directory!.RootPath);
             _ = Directory.CreateDirectory(path: Root);
             _ = Directory.CreateDirectory(path: PathOf(path: "started"));
-            var pin = PathOf(path: "global.json");
-
-            if (File.Exists(path: pin)) {
-                // A reused proof tree already carries its source checkout's pin; prove it agrees before building.
-                Assert.Equal(expected: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "global.json")), actual: File.ReadAllBytes(path: pin));
-            } else {
-                CliScratchDirectories.PinSdk(directory: Root);
-            }
+            CliScratchDirectories.PinSdk(directory: Root);
         }
 
         public string Root { get; }
@@ -391,24 +269,34 @@ public sealed partial class ShaderBuildTargetsLawTests {
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: fullPath)!);
             File.WriteAllText(contents: text, path: fullPath);
         }
+        // The compiles the fake DXC finished in this fixture.
+        public int Compiles() => CompiledSources().Length;
+        // The stage source each finished compile read, by file name, in completion order.
+        public string[] CompiledSources() => (File.Exists(path: PathOf(path: "compiles.txt"))
+            ? [.. File.ReadAllLines(path: PathOf(path: "compiles.txt")).Where(predicate: static line => (line.Length != 0)).Select(selector: static line => Path.GetFileName(path: line.Trim()))]
+            : []);
         public void ShaderProject(string body, string buildDependencies = "ResolveProjectReferences", string dxc = FakeDxc) {
             var project = XElement.Parse(text: $"<Project>{body}</Project>");
 
             WriteCompiler(mode: dxc);
-            // Recipe item metadata is evaluated by the import, so the compiler must be selected before it.
-            project.AddFirst(content: new XElement("PropertyGroup", new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"), new XElement("DxcCommand", CompilerPath)));
+            // The output items are evaluated by the import, so the compiler, the backends and the fixture's own cache are
+            // selected before it.
+            project.AddFirst(content: new XElement("PropertyGroup",
+                new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"),
+                new XElement("DxcCommand", CompilerPath),
+                new XElement("PuckShaderCacheDirectory", PathOf(path: "cache"))));
             project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());
         }
         public CliProcessResult Run(string target, string[]? properties = null, ManualResetEventSlim? waiting = null) => CliProcess.RunCaptured(
-            arguments: ["msbuild", "--disable-build-servers", PathOf(path: "fixture.proj"), "-nologo", "-v:n", "-m:4", "-nodeReuse:false", $"-t:{target}", .. (properties ?? []).Select(selector: static property => $"-p:{property}")],
+            arguments: ["msbuild", "--disable-build-servers", PathOf(path: "fixture.proj"), "-nologo", "-v:n", "-m:4", "-nodeReuse:false", $"-t:{target}", $"-p:Configuration={Configuration}", .. (properties ?? []).Select(selector: static property => $"-p:{property}")],
             cancellationToken: TestContext.Current.CancellationToken,
             fileName: "dotnet",
             input: string.Empty,
             onOutput: output => {
                 if (output.Line.Contains(comparisonType: StringComparison.Ordinal, value: "Waiting for another build's shader publication to finish") &&
-                    output.Line.Contains(value: Path.GetFullPath(path: PathOf(path: "obj/shader-publish.lock")), comparisonType: StringComparison.Ordinal)) {
+                    output.Line.Contains(value: Path.GetFullPath(path: PathOf(path: "obj/shader-publish.lock")), comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     waiting?.Set();
                 }
             },

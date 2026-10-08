@@ -732,7 +732,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "508d00a8cebebddc",
+            "shape": "6cda4643c8b85a8c",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -909,19 +909,19 @@
                 "M:Puck.Abstractions.Presentation.QualityTiers.DefineValue(Puck.Abstractions.Presentation.QualityTier)",
                 "M:Puck.Abstractions.Presentation.QualityTiers.Name(Puck.Abstractions.Presentation.QualityTier)",
                 "M:Puck.Assets.AtomicFile.ReadAllBytes(System.String)",
-                "M:Puck.Assets.ContentPin.Compute(System.ReadOnlySpan{System.Byte})",
+                "M:Puck.Assets.AtomicFile.WriteAllText(System.String,System.String)",
                 "M:Puck.Shaders.CompiledShader.#ctor(System.String,System.String,System.String,System.Collections.Generic.IReadOnlyDictionary{Puck.Shaders.ShaderStage,System.ReadOnlyMemory{System.Byte}},System.Collections.Generic.IReadOnlyDictionary{Puck.Shaders.ShaderStage,System.ReadOnlyMemory{System.Byte}},System.Collections.Generic.IReadOnlyList{Puck.Shaders.ShaderDiagnostic},Puck.Shaders.ShaderCompileIdentity)",
                 "M:Puck.Shaders.IShaderProcessRunner.RunAsync(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.Threading.CancellationToken)",
                 "M:Puck.Shaders.ShaderSourceClosure.Collect(System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.String,System.String}},Puck.Shaders.ShaderSourceLimits,System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.Func{System.String,System.String})",
                 "M:Puck.Shaders.ShaderSourceClosure.HashOf(System.String)",
                 "M:Puck.Shaders.ShaderSourceClosure.IsWithin(System.String,System.String)",
-                "M:Puck.Shaders.ShaderSourceClosure.WithIncludes(System.String,System.String,System.Func{System.String,System.String})",
+                "M:Puck.Shaders.ShaderSourceClosure.WithIncludes(System.String,System.String,System.Func{System.String,System.String,System.String})",
                 "M:Puck.Shaders.ShaderToolMissingException.#ctor(System.String,System.String)",
                 "M:Puck.Shaders.ShaderToolchain.Resolve(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "8b25f6ff7e59dc20",
-            "source": "src/Puck.Shaders/ShaderCompiler.cs",
+            "shape": "fecf956b57c6da7e",
+            "source": "src/Puck.Shaders.Model/Compiler/ShaderCompiler.cs",
             "token": "puck-shader-compiler-1"
         },
         "ShaderPackageManifest.SchemaName": {
