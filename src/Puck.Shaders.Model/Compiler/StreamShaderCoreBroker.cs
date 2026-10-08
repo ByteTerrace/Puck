@@ -16,6 +16,9 @@ namespace Puck.Shaders;
 /// <para>A request abandoned by its cancellation token is still answered by the host; the broker releases that grant as
 /// soon as it arrives, so no core stays held for a request nobody waits on. When the answers end, every pending request
 /// fails with an <see cref="IOException"/>.</para>
+/// <para>The host may answer <c>closed</c> instead of a grant: it grants no more cores, so that request and every later
+/// one fail with an <see cref="IOException"/> while the build finishes on the cores it holds. The line <c>cancel</c>, or
+/// the end of the answers, invokes the cancellation callback, which stops the build and joins its compilers.</para>
 /// </remarks>
 public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
     /// <summary>The prefix of every line the broker writes.</summary>
@@ -24,6 +27,7 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
     private const string Granted = "granted ";
 
     private readonly TextWriter m_requests;
+    private readonly Action? m_cancel;
 
     private readonly Lock m_gate = new();
     private readonly Queue<TaskCompletionSource<int>> m_pending = new();
@@ -35,18 +39,24 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
     /// <param name="answers">The host's answers, one a line.</param>
     /// <param name="requests">Receives each request and release as one line. Writes are serialized on the writer
     /// itself, so a log sharing it keeps whole lines.</param>
-    public StreamShaderCoreBroker(TextReader answers, TextWriter requests) {
+    /// <param name="cancel">Signals the build to cancel and join its compilers when its host cancels or disconnects.</param>
+    public StreamShaderCoreBroker(TextReader answers, TextWriter requests, Action? cancel = null) {
         ArgumentNullException.ThrowIfNull(argument: answers);
         ArgumentNullException.ThrowIfNull(argument: requests);
         m_requests = requests;
+        m_cancel = cancel;
         new Thread(start: () => Read(answers: answers)) { IsBackground = true, Name = "Puck shader core answers" }.Start();
     }
 
     /// <inheritdoc/>
     public Task<int> RequestAsync(int count, CancellationToken cancellationToken) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: count, other: 1);
+        if (cancellationToken.IsCancellationRequested) {
+            return Task.FromCanceled<int>(cancellationToken: cancellationToken);
+        }
 
         var pending = new TaskCompletionSource<int>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationTokenRegistration registration;
 
         lock (m_gate) {
             if (m_ended) {
@@ -54,11 +64,15 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
             }
             // Queued before the line is written, so an answer can never arrive ahead of its request.
             m_pending.Enqueue(item: pending);
+            // Cancellation is registered before writing: an immediate answer must not grant a request already cancelled.
+            registration = cancellationToken.Register(callback: static state => ((TaskCompletionSource<int>)state!).TrySetCanceled(), state: pending);
+            try {
+                Write(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Prefix}request {count}"));
+            } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
+                End();
+            }
         }
-        Write(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Prefix}request {count}"));
         // A cancelled request stays queued: the host still answers it, and Read gives that grant straight back.
-        var registration = cancellationToken.Register(callback: static state => ((TaskCompletionSource<int>)state!).TrySetCanceled(), state: pending);
-
         _ = pending.Task.ContinueWith(
             continuationAction: (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
             scheduler: TaskScheduler.Default,
@@ -84,8 +98,20 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
             }
             if (line is null) {
                 End();
+                CancelBuild();
 
                 return;
+            }
+            if (line == "cancel") {
+                CancelBuild();
+                End();
+
+                return;
+            }
+            if (line == "closed") {
+                // The host has granted its whole budget, but keeps this channel open for build cancellation.
+                End(message: "The build host grants no more cores.");
+                continue;
             }
 
             TaskCompletionSource<int>? pending;
@@ -105,11 +131,21 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
                 return;
             }
             if (!pending.TrySetResult(result: granted)) {
-                Release(count: granted);
+                try {
+                    Release(count: granted);
+                } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
+                    // The host owns the held-core count and releases it when this transport disappears.
+                    End();
+
+                    return;
+                }
             }
         }
     }
-    private void End() {
+    private void CancelBuild() {
+        try { m_cancel?.Invoke(); } catch (ObjectDisposedException) { } // The command already finished and disposed its cancellation source.
+    }
+    private void End(string message = "The build host stopped answering core requests.") {
         TaskCompletionSource<int>[] pending;
 
         lock (m_gate) {
@@ -118,7 +154,7 @@ public sealed class StreamShaderCoreBroker : IShaderCoreBroker {
             m_pending.Clear();
         }
         foreach (var request in pending) {
-            _ = request.TrySetException(exception: new IOException(message: "The build host stopped answering core requests."));
+            _ = request.TrySetException(exception: new IOException(message: message));
         }
     }
     private void Write(string line) {

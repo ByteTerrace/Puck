@@ -523,9 +523,9 @@ reachable from a running world. Use `world.debug-view` for live diagnostics.
 `ShaderCompiler` and its per-user cache and publishes the bytecode beside each
 source. It needs `dxc` on the path (override with `/p:DxcCommand=path/to/dxc`)
 even when it compiles nothing, since the content of that `dxc` is part of every
-cache key. A kernel any checkout on the machine compiled is published from the
-cache, and an edit to one module
-recompiles only the kernels whose include closure reaches it. The `.spv`/`.dxil`
+cache key. A valid entry with matching inputs can be published in another
+checkout without DXC, and an edit to one module invalidates only the kernels
+whose include closure reaches it. The `.spv`/`.dxil`
 bytecode and `.hash` sidecars are ignored build outputs; never commit them. When
 a `.hlsl` source is deleted, the build removes the bytecode and sidecars it
 wrote for it and prints one line per file. Bytecode without a same-stem source

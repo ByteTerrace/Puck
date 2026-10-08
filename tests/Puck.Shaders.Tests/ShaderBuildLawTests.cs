@@ -142,13 +142,15 @@ public sealed partial class ShaderBuildLawTests {
         Assert.Empty(collection: build.Compiled);
         Assert.All(collection: checkout.Outputs, action: static output => Assert.False(condition: File.Exists(path: output.OutputPath)));
     }
-    [Fact]
-    public async Task ACompilerThatExitsCleanlyWithoutOutputFailsTheBuildAndPublishesNothing() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ACompilerThatExitsCleanlyWithoutOutputFailsTheBuildAndPublishesNothing(bool emptyFile) {
         using var scratch = new TemporaryDirectory(prefix: "puck-shader-build-");
         var checkout = Checkout(root: Path.Combine(path1: scratch.RootPath, path2: "one"));
         var cache = Path.Combine(path1: scratch.RootPath, path2: "cache");
         var log = new StringWriter();
-        var build = BuildOf(cache: cache, checkout: checkout, log: log, runner: new Runner { Silent = true });
+        var build = BuildOf(cache: cache, checkout: checkout, log: log, runner: new Runner { Empty = emptyFile, Silent = !emptyFile });
 
         Assert.False(condition: await build.CompileAsync(cancellationToken: TestContext.Current.CancellationToken, cores: new FixedShaderCoreBroker(cores: 1), outputs: checkout.Outputs));
         Assert.Contains(expectedSubstring: "error PUCKSHADER: dxc (SPIR-V) exited with code 0", actualString: log.ToString());
@@ -209,6 +211,7 @@ public sealed partial class ShaderBuildLawTests {
 
         public Dictionary<string, TimeSpan> Delays { get; } = new(comparer: StringComparer.Ordinal);
 
+        public bool Empty { get; init; }
         public string? Failing { get; init; }
         public string[] Inputs => [.. m_inputs];
         public int PeakConcurrent => Volatile.Read(location: ref m_peak);
@@ -244,7 +247,7 @@ public sealed partial class ShaderBuildLawTests {
                     return new ChildProcessResult(ExitCode: 0, Stderr: string.Empty, Stdout: string.Empty);
                 }
 
-                await File.WriteAllBytesAsync(bytes: await File.ReadAllBytesAsync(cancellationToken: cancellationToken, path: input), cancellationToken: cancellationToken, path: output);
+                await File.WriteAllBytesAsync(bytes: (Empty ? [] : await File.ReadAllBytesAsync(cancellationToken: cancellationToken, path: input)), cancellationToken: cancellationToken, path: output);
 
                 return new ChildProcessResult(ExitCode: 0, Stderr: string.Empty, Stdout: string.Empty);
             } finally {

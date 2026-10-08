@@ -7,6 +7,67 @@ namespace Puck.Cli.Tests;
 /// <summary>The proof's persistent tree: its lease and its incremental reuse, over the shared fixtures of
 /// <see cref="LawProofLaws"/>.</summary>
 public sealed class LawProofTreeLawTests : LawProofLaws {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AProofBuildUsesTheSharedShaderCacheAndWithheldShaderContentStillCompiles(bool withholdShader) {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-shader-proof-");
+        using var cache = new TemporaryDirectory(prefix: "puck-laws-shader-cache-");
+        using var shaders = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: checkout.Root, path2: "src/Lib"));
+        const string Source = "src/Lib/Assets/Shaders/a.comp.hlsl";
+
+        checkout.Write(name: ".gitignore", text: "bin/\nobj/\n*.spv\n*.dxil\n*.hash\ncompiles.txt\nstarted/\n");
+        checkout.Write(name: "src/Lib/Lib.csproj", text: "<Project />\n");
+        checkout.Write(name: Source, text: "original shader");
+        shaders.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            """);
+        _ = checkout.Commit(message: "lib: shader source and build");
+        checkout.Write(name: FixPath, text: "fixed");
+        if (withholdShader) { checkout.Write(name: Source, text: "fixed shader"); }
+        var fix = checkout.Commit(message: "lib: fix");
+        string[] properties = [$"PuckShaderCacheDirectory={cache.RootPath}", $"DxcCommand={shaders.CompilerPath}"];
+
+        shaders.RequireSuccess(run: shaders.Run(properties: properties, target: "Build"));
+        Assert.Equal(expected: 1, actual: shaders.Compiles());
+        shaders.Write(path: "bin/managed.dll", text: "never transfer managed output");
+        shaders.Write(path: "obj/managed.cache", text: "never transfer managed intermediate");
+        var originalBytes = File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv"));
+        var builds = 0;
+        var runner = new FakeRunner {
+            BeforeBuild = (tree, _) => {
+                using var proof = new ShaderBuildTargetsLawTests.Fixture(root: Path.Combine(path1: tree, path2: "src/Lib"));
+
+                if (++builds == 1) {
+                    Assert.False(condition: File.Exists(path: proof.PathOf(path: "Assets/Shaders/a.comp.spv")), userMessage: "The proof copied ignored shader output instead of obtaining it through its build.");
+                }
+                Assert.False(condition: File.Exists(path: proof.PathOf(path: "bin/managed.dll")));
+                Assert.False(condition: File.Exists(path: proof.PathOf(path: "obj/managed.cache")));
+                // The real target and generator run in the proof clone. The isolated shared directory replaces only
+                // the per-user cache location; no bytecode or sidecar is copied between checkout and clone.
+                var build = proof.Run(properties: properties, target: "Build");
+
+                proof.RequireSuccess(run: build);
+                Assert.Equal(expected: (withholdShader ? 1 : 0), actual: proof.Compiles());
+                if (builds == 2) {
+                    Assert.Equal(expected: originalBytes, actual: File.ReadAllBytes(path: proof.PathOf(path: "Assets/Shaders/a.comp.spv")));
+                    if (withholdShader) {
+                        Assert.Contains(expectedSubstring: "1 published from the cache, 0 compiled", actualString: build.Stdout);
+                    }
+                }
+            },
+        };
+
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, Source] : [FixPath]), Revision: fix), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+        Assert.Equal(actual: builds, expected: 2);
+        Assert.Equal(expected: 1, actual: shaders.Compiles());
+        Assert.Equal(expected: originalBytes, actual: File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv")));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
     [Fact]
     public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
         using var checkout = Checkout(initial: "broken");

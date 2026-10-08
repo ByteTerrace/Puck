@@ -37,10 +37,12 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
-  The clone's shader build publishes from the per-user shader cache every
-  checkout shares, so only a shader the proof withholds or changes compiles;
-  do not copy bytecode or managed outputs, or alter timestamps, to make a
-  proof appear incremental. Native proof builds use `-m:1` with build servers
+  The clone's ordinary shader build reaches the same default per-user shader
+  cache as the caller. Valid entries with matching closures, options, and
+  toolchain publish without DXC; missing or invalid entries compile. A cache
+  override used only on the caller's build is not forwarded to the proof.
+  Do not copy bytecode or managed outputs, or alter timestamps, to make a proof
+  appear incremental. Native proof builds use `-m:1` with build servers
   and node reuse disabled; shader compiles still run on the cores MSBuild
   grants.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`

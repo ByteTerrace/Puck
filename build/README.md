@@ -11,10 +11,12 @@ Every output compiles into one content-addressed cache, by default `shaders`
 under the per-user Puck directory, or the directory
 `-p:PuckShaderCacheDirectory=<dir>` names. An output's key hashes its stage
 source's include closure, its options and its `dxc`, not where the checkout
-lies, so a shader any checkout on the machine has compiled is published from the
-cache and runs no compiler, and an edited include recompiles only the outputs
-that reach it. Missing outputs compile concurrently on cores MSBuild grants
-through its own core budget, the longest first. The
+lies. A valid entry with matching inputs can be published in another checkout
+without a compiler run, and an edited include invalidates only the outputs
+that reach it. Entries are checked against their key and bytecode digest before
+reuse; damaged entries compile again. Missing outputs compile concurrently on cores MSBuild grants
+through its own core budget, the longest first. Each project takes one initial
+grant and returns unused cores; it makes no blocking follow-up engine request. The
 [shader reference](../docs/reference/shaders.md#freshness) owns the details.
 
 Kernel projects build their declaration generator before compiling shaders.

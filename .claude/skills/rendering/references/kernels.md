@@ -20,9 +20,10 @@ per-user cache, and publishes the bytecode beside the source.
 vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
 All three default to true. Each output's cache key hashes its stage source's
 include closure (paths relative to each other, and contents), its `StepsOf`
-options and the DXC identity, so an edit recompiles exactly the outputs whose
-closure holds the edited file, and an output any checkout compiled is published
-from the cache with no DXC run. The `.spv`, `.dxil`, and `.hash` outputs are
+options and the DXC identity, so an edit invalidates only the outputs whose
+closure holds the edited file. A valid matching cache entry can be published
+in any checkout with no DXC run; key and digest checks refuse damaged entries.
+The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them. The build removes bytecode
 without a same-stem `.hlsl` when its sidecar records its bytes (the build wrote
 it), printing one line per file, and fails on any other sourceless bytecode,

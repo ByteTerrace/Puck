@@ -2663,12 +2663,15 @@ pacing, and when briefing a review of such a change.
 
 Shader builds need no flags. Every output compiles through `ShaderCompiler`
 into the per-user shader cache, keyed by its include closure, its `StepsOf`
-options and its DXC, never by the checkout, so a fresh worktree publishes what
-any checkout on the machine compiled and runs DXC only for the closures it
-changed. Missing outputs compile concurrently on cores MSBuild grants
-(`IBuildEngine9.RequestCores`), the longest first, so a cold machine pays the
-slowest kernel rather than the serial sum, and parallel project nodes share one
-core budget. Never copy bytecode between trees or add a second cache: the cache
+options and its DXC, never by the checkout, so a fresh worktree reuses valid
+entries with matching closures, options, and toolchain. Missing outputs compile
+concurrently on cores MSBuild grants (`IBuildEngine9.RequestCores`), the longest
+first, and parallel project nodes share one core budget. Each project uses its
+initial grant; the host refuses later requests instead of entering an
+uncancellable engine call. Admission also checks
+free physical memory, with one compile per project allowed to make progress
+when memory is low; neither worker count nor ordering guarantees a build time.
+Never copy bytecode between trees or add a second cache: the cache
 is the one. To make a host really compile, as `puck shaders compare --build`
 must, point `-p:PuckShaderCacheDirectory` at an empty directory.
 

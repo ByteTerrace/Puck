@@ -19,8 +19,10 @@ namespace Puck.Shaders;
 /// toolchain's identity, and the stage's closure laid out as its compile snapshot lays it out, each file by its path
 /// relative to the deepest directory holding them all and its content hash. A closure compiled in one checkout is
 /// therefore a hit in every other checkout of the same files, and an edit invalidates exactly the outputs whose closure
-/// holds the edited file. Each entry is published whole by one rename and never replaced, so a reader in any process
-/// sees a complete file or none.
+/// holds the edited file. The key also names the entry layout, so compilers on different commits that lay entries out
+/// differently never read each other's entries from a shared cache. Each entry contains its key and the bytecode's SHA-256
+/// and is published whole by one rename and never replaced while valid; readers verify it before use, and a damaged entry
+/// is compiled again and replaced atomically.
 /// </remarks>
 public sealed partial class ShaderCompiler {
     // A content-identified note, not a header: this name is hashed into every compile identity, so a package built by another
@@ -77,8 +79,8 @@ public sealed partial class ShaderCompiler {
     }
 
     /// <summary>Gets the cache every compiler shares unless it is handed another: <c>shaders</c> in the per-user Puck
-    /// directory (<see cref="PuckUserDirectory"/>). The build compiles into it too, so a shader one checkout compiled
-    /// is never compiled again on this machine while its closure, recipe and toolchain are unchanged.</summary>
+    /// directory (<see cref="PuckUserDirectory"/>). The build compiles into it too, so valid entries are reused across
+    /// checkouts while their closure, recipe and toolchain are unchanged.</summary>
     public static string DefaultCacheDirectory => PuckUserDirectory.Resolve(name: "shaders");
     /// <summary>Gets the cache directory used by this compiler.</summary>
     public string CacheDirectory => m_cacheDirectory;
@@ -130,20 +132,17 @@ public sealed partial class ShaderCompiler {
             work: work
         );
     }
-    /// <summary>Indicates whether the cache holds a plan's output, without reading it.</summary>
+    /// <summary>Indicates whether the cache holds a verified copy of a plan's output.</summary>
     /// <param name="plan">The plan.</param>
-    /// <returns><see langword="true"/> when the entry exists.</returns>
+    /// <returns><see langword="true"/> when the entry's key and bytecode digest match.</returns>
     public bool IsCached(ShaderOutputPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
-        return File.Exists(path: EntryPath(
-            key: plan.Key,
-            target: plan.Target
-        ));
+        return (ReadCached(plan: plan) is not null);
     }
     /// <summary>Reads a plan's output from the cache.</summary>
     /// <param name="plan">The plan.</param>
-    /// <returns>The bytecode, or <see langword="null"/> when the cache does not hold it.</returns>
+    /// <returns>The verified bytecode, or <see langword="null"/> when the entry is absent or damaged.</returns>
     public byte[]? ReadCached(ShaderOutputPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
@@ -166,6 +165,7 @@ public sealed partial class ShaderCompiler {
                 var started = Stopwatch.GetTimestamp();
                 var outcome = await CompileStageAsync(
                     cancellationToken: cancellationToken,
+                    plannedKeys: [plan.Key],
                     targets: [plan.Target],
                     work: plan.Work
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -276,12 +276,16 @@ public sealed partial class ShaderCompiler {
     // One stage's outputs: each target's entry read from the cache, or compiled over one snapshot of the stage's closure
     // and published under its key. A per-key gate makes concurrent compiles of one output in this process share one tool
     // run; separate processes may both compile an output, and the first to publish it wins.
-    private async Task<StageOutcome> CompileStageAsync(StageWork work, IReadOnlyList<ShaderTarget> targets, CancellationToken cancellationToken) {
+    private async Task<StageOutcome> CompileStageAsync(StageWork work, IReadOnlyList<ShaderTarget> targets, CancellationToken cancellationToken, string[]? plannedKeys = null) {
         cancellationToken.ThrowIfCancellationRequested();
         var keys = targets.Select(selector: target => KeyOf(inputs: InputsOf(
             target: target,
             work: work
         ))).ToArray();
+
+        if ((plannedKeys is not null) && !plannedKeys.SequenceEqual(second: keys, comparer: StringComparer.Ordinal)) {
+            throw new IOException(message: "The shader toolchain changed after this output was planned; build again with a stable toolchain.");
+        }
         var bytecode = new byte[]?[targets.Count];
 
         if (TryReadAll(
@@ -429,7 +433,12 @@ public sealed partial class ShaderCompiler {
                     output: output,
                     step: work.Steps[((int)target)]
                 ).ConfigureAwait(continueOnCapturedContext: false);
+                // The tool's own time, measured before the toolchain is read again, orders later builds' compiles.
                 var elapsed = Stopwatch.GetElapsedTime(startingTimestamp: started);
+
+                if (!string.Equals(a: keys[index], b: KeyOf(inputs: InputsOf(target: target, work: work)), comparisonType: StringComparison.Ordinal)) {
+                    throw new IOException(message: "The shader toolchain changed during compilation; no output is cached or published.");
+                }
                 var stepDiagnostics = ParseDxcDiagnostics(
                     paths: diagnosticPaths,
                     stage: stage,
@@ -438,7 +447,8 @@ public sealed partial class ShaderCompiler {
 
                 if (
                     (run.ExitCode != 0) ||
-                    !File.Exists(path: output)
+                    !File.Exists(path: output) ||
+                    (new FileInfo(fileName: output).Length == 0)
                 ) {
                     AddToolFailure(
                         stepDiagnostics,
@@ -457,23 +467,12 @@ public sealed partial class ShaderCompiler {
                     key: keys[index],
                     target: target
                 );
-                // Written beside its entry first, so publication is one rename within the cache's own volume.
-                var staged = $"{entry}.{buildId}.tmp";
 
                 bytecode[index] = bytes;
-                await File.WriteAllBytesAsync(
+                PublishCached(
                     bytes: bytes,
-                    cancellationToken: cancellationToken,
-                    path: staged
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                try {
-                    PublishOnce(
-                        destination: entry,
-                        temporary: staged
-                    );
-                } finally {
-                    File.Delete(path: staged);
-                }
+                    path: entry
+                );
                 RecordDuration(
                     elapsed: elapsed,
                     target: target,
@@ -562,12 +561,22 @@ public sealed partial class ShaderCompiler {
         foreach (var option in step.Options) {
             builder.Append(value: option).Append(value: '\n');
         }
+        // Rewriting a directive changes DXIL bytes. Hash the transformed text too whenever the snapshot changes it,
+        // so an entry produced by a different snapshot transformation cannot masquerade as this output.
+        foreach (var (path, text) in work.Closure.Contents.Prepend(element: new KeyValuePair<string, string>(key: work.Stage.Path, value: work.Stage.Source)).OrderBy(keySelector: file => work.Snapshot[Path.GetFullPath(path: file.Key)], comparer: StringComparer.Ordinal)) {
+            var snapshot = SnapshotText(path: path, text: text, work: work);
+
+            if (!string.Equals(a: text, b: snapshot, comparisonType: StringComparison.Ordinal)) {
+                builder.Append(value: "snapshot|").Append(value: work.Snapshot[Path.GetFullPath(path: path)]).Append(value: '|').Append(value: ShaderSourceClosure.HashOf(text: snapshot)).Append(value: '\n');
+            }
+        }
 
         return ShaderSourceClosure.HashOf(text: builder.Append(value: work.Layout).ToString());
     }
-    // The toolchain is read on every key, so a dxc replaced under a long-lived compiler keys its next compile afresh;
-    // its files are hashed once a process while they stay unchanged (ShaderToolchain.Identity).
-    private string KeyOf(string inputs) => ShaderSourceClosure.HashOf(text: ((inputs + "|") + m_toolchain.Identity));
+    // The toolchain is read on every key, so a dxc replaced under a long-lived compiler keys its next compile afresh. The
+    // entry layout is keyed too, so compilers that lay entries out differently, on checkouts of different commits sharing
+    // one cache, read and write different names and never take one another's entries for bytecode.
+    private string KeyOf(string inputs) => ShaderSourceClosure.HashOf(text: ((((inputs + "|") + m_toolchain.Identity) + "|") + CacheEntryLayout));
     private string EntryPath(string key, ShaderTarget target) => Path.Combine(
         path1: m_cacheDirectory,
         path2: $"{key}.{ExtensionOf(target: target)}"
@@ -615,32 +624,8 @@ public sealed partial class ShaderCompiler {
             // A duration orders a later build's compiles; losing one costs only that order.
         }
     }
-    private static byte[]? TryRead(string path) {
-        try {
-            return (File.Exists(path: path) ? AtomicFile.ReadAllBytes(path: path) : null);
-        } catch (FileNotFoundException) {
-            return null;
-        }
-    }
-    /// <summary>Moves a finished file to its cache name unless a peer already published that name.</summary>
-    /// <remarks>Cache names are addressed by content, so a name that already exists holds what this build would have
-    /// written, and the first publisher wins. Replacing it instead races any compiler, in this process or another
-    /// sharing the directory, that is reading or publishing the same name, and the operating system refuses the
-    /// replacement. The unpublished temporary goes with the build directory.</remarks>
-    private static void PublishOnce(string temporary, string destination) {
-        try {
-            File.Move(
-                destFileName: destination,
-                overwrite: false,
-                sourceFileName: temporary
-            );
-        } catch (IOException) when (File.Exists(path: destination)) { }
-    }
     private async Task<ChildProcessResult> RunToolAsync(string name, IReadOnlyList<string> args, CancellationToken cancellationToken) {
-        var executable = ((m_toolchain.Directory is null)
-            ? name
-            : m_toolchain.Resolve(name: name)
-        );
+        var executable = m_toolchain.Resolve(name: name);
 
         try {
             return await m_processRunner.RunAsync(
@@ -690,7 +675,7 @@ public sealed partial class ShaderCompiler {
 
         return ShaderSourceClosure.WithIncludes(
             map: (include, written) => (
-                ((((directory.Length + 1) + written.Length) > IncludeJoinBudget) && work.Snapshot.TryGetValue(key: include, value: out var snapshot))
+                ((Path.IsPathRooted(path: written) || (((directory.Length + 1) + written.Length) > IncludeJoinBudget)) && work.Snapshot.TryGetValue(key: include, value: out var snapshot))
                     ? snapshot
                     : written
             ),

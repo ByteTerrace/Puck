@@ -8,6 +8,6 @@ namespace Puck.Shaders {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>ShaderCompiler.CompilerVersion</c>, declared in <c>src/Puck.Shaders.Model/Compiler/ShaderCompiler.cs</c>.</summary>
-        public const string ShaderCompilerCompilerVersion = "fecf956b57c6da7e";
+        public const string ShaderCompilerCompilerVersion = "9335615ca2cf8b1e";
     }
 }
