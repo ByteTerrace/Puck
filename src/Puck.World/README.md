@@ -258,7 +258,11 @@ exits 2 as described under the exit codes above. A local run names `127.0.0.1`
 (or `::1`); only a deployment's document names `0.0.0.0`. On Windows, msquic
 still opens the listener's UDP port on every interface whatever address the
 endpoint names, so a QUIC door can raise a firewall prompt that the address does
-not prevent. A dial to a loopback endpoint binds its own socket on loopback. The networking
+not prevent. Windows asks once per executable image path, so start a listening
+World as `dotnet Puck.World.dll`, the way every `puck` verb does, and one decision
+for the shared `dotnet` host covers every worktree
+([conventions](../../docs/development/contributing.md#code-and-documentation-conventions)).
+A dial to a loopback endpoint binds its own socket on loopback. The networking
 library owns TLS, certificate-bound identity, and bounded message delivery;
 there is no TCP fallback. `PeerStream` adapts those messages to World's byte
 codecs. After that peer handshake, an interactive connection crosses two
