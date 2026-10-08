@@ -20,7 +20,8 @@ namespace Puck.Shaders;
 /// relative to the deepest directory holding them all and its content hash. A closure compiled in one checkout is
 /// therefore a hit in every other checkout of the same files, and an edit invalidates exactly the outputs whose closure
 /// holds the edited file. Each entry is published whole by one rename and never replaced, so a reader in any process
-/// sees a complete file or none.
+/// sees a complete file or none. An entry's last write time is when a compile last used it: publishing writes it, and
+/// every read stamps it, so <see cref="Prune"/> removes exactly what no compile has used since a cutoff.
 /// </remarks>
 public sealed partial class ShaderCompiler {
     // A content-identified note, not a header: this name is hashed into every compile identity, so a package built by another
@@ -130,18 +131,27 @@ public sealed partial class ShaderCompiler {
             work: work
         );
     }
-    /// <summary>Indicates whether the cache holds a plan's output, without reading it.</summary>
+    /// <summary>Indicates whether the cache holds a plan's output, without reading it. An entry it finds is stamped as
+    /// used now (<see cref="Prune"/>).</summary>
     /// <param name="plan">The plan.</param>
     /// <returns><see langword="true"/> when the entry exists.</returns>
     public bool IsCached(ShaderOutputPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
-        return File.Exists(path: EntryPath(
+        var path = EntryPath(
             key: plan.Key,
             target: plan.Target
-        ));
+        );
+
+        if (!File.Exists(path: path)) {
+            return false;
+        }
+
+        Stamp(path: path);
+
+        return true;
     }
-    /// <summary>Reads a plan's output from the cache.</summary>
+    /// <summary>Reads a plan's output from the cache, stamping the entry as used now (<see cref="Prune"/>).</summary>
     /// <param name="plan">The plan.</param>
     /// <returns>The bytecode, or <see langword="null"/> when the cache does not hold it.</returns>
     public byte[]? ReadCached(ShaderOutputPlan plan) {
@@ -589,12 +599,20 @@ public sealed partial class ShaderCompiler {
                 work: work
             );
 
-            return ((File.Exists(path: path) && long.TryParse(
+            if (!File.Exists(path: path)) {
+                return null;
+            }
+
+            var text = Encoding.UTF8.GetString(bytes: AtomicFile.ReadAllBytes(path: path)).Trim();
+
+            Stamp(path: path);
+
+            return (long.TryParse(
                 provider: CultureInfo.InvariantCulture,
                 result: out var milliseconds,
-                s: Encoding.UTF8.GetString(bytes: AtomicFile.ReadAllBytes(path: path)).Trim(),
+                s: text,
                 style: NumberStyles.None
-            )) ? TimeSpan.FromMilliseconds(milliseconds: milliseconds) : null);
+            ) ? TimeSpan.FromMilliseconds(milliseconds: milliseconds) : null);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
         }
@@ -615,9 +633,18 @@ public sealed partial class ShaderCompiler {
             // A duration orders a later build's compiles; losing one costs only that order.
         }
     }
+    // A hit is stamped as used now, so a prune keeps it.
     private static byte[]? TryRead(string path) {
         try {
-            return (File.Exists(path: path) ? AtomicFile.ReadAllBytes(path: path) : null);
+            if (!File.Exists(path: path)) {
+                return null;
+            }
+
+            var bytes = AtomicFile.ReadAllBytes(path: path);
+
+            Stamp(path: path);
+
+            return bytes;
         } catch (FileNotFoundException) {
             return null;
         }
@@ -634,7 +661,9 @@ public sealed partial class ShaderCompiler {
                 overwrite: false,
                 sourceFileName: temporary
             );
-        } catch (IOException) when (File.Exists(path: destination)) { }
+        } catch (IOException) when (File.Exists(path: destination)) {
+            Stamp(path: destination);
+        }
     }
     private async Task<ChildProcessResult> RunToolAsync(string name, IReadOnlyList<string> args, CancellationToken cancellationToken) {
         var executable = ((m_toolchain.Directory is null)

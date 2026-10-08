@@ -3479,8 +3479,10 @@ collects the Windows build's shaders (`puck shaders collect`, the
 `shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
 compiles every shader through the build's own `CompileShaders` target and holds
 each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
-It runs only in CI: on every pull request and every push to `main`, through
-**Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
+It runs only in CI: through **Release Azure** on every pull request and every
+push to `main`, or by dispatching **Verify runtime behavior** by hand, and it
+compares only when its shader inputs or a DXC pin differ from the last passing
+comparison, whose saved Linux shader cache records it. The leg
 is proven when that job passes; a difference it names, such as DXIL the Linux
 compiler hashes or signs differently, is the gate's failure toward Slang. The
 leg's run is listed under [deferred to the end](#deferred-to-the-end).

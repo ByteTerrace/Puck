@@ -272,11 +272,19 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Linux cache verify.yml's shader-bytecode job saves after a passing comparison. This job only reads it: the
+      # image's DXC is the same pinned archive, so a restored entry is a hit inside the container too.
+      - if: matrix.shader-cache
+        name: Restore the Linux shader compiler cache
+        uses: ./.github/actions/shader-cache
+        with:
+          mode: restore
       - env:
           IMAGE: ${{ matrix.image }}
           PROJECT: ${{ matrix.project }}
+          SHADER_CACHE: ${{ matrix.shader-cache && '.tmp/shader-cache' || '' }}
         name: Build Linux container from the repository root
-        run: docker build --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
+        run: docker build ${SHADER_CACHE:+--build-context "shader-cache=$SHADER_CACHE"} --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
       - env:
           IMAGE: ${{ matrix.image }}
         name: Save the built image
@@ -294,8 +302,12 @@ jobs:
         include:
           - image: web-actors
             project: Puck.Actors
+            shader-cache: false
           - image: world-silo
             project: Puck.World.Silo
+            shader-cache: true
+    # Sized for a silo build that misses the shader cache entirely and compiles every shader its image ships cold; one
+    # restored from the cache compiles none.
     timeout-minutes: 45
   containers:
     name: Verify container (${{ matrix.image }})

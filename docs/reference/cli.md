@@ -124,7 +124,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
@@ -636,8 +636,9 @@ using the built candidate CLI and the restored source graph.
 ## `puck shaders`—shader compilation
 
 ```sh
+puck shaders cache prune --unused-minutes <n> [--cache <directory>]
 puck shaders collect <directory>
-puck shaders compare <expected> [<actual>] [--build]
+puck shaders compare <expected> [<actual>] [--build [--cache <directory>]]
 puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--stage compute|vertex|fragment] [--entry <name>]
 puck shaders generate [--check]
 puck shaders interface <source> [--write] [--echo]
@@ -667,12 +668,27 @@ restores and runs the build's own `CompileShaders` target
 (`build/Shaders.targets`) in every tracked project outside `experimental/` that
 declares a vertex, fragment or compute shader item, with the `dxc` on the path
 and a shader cache that starts empty (`PuckShaderCacheDirectory`), so a second
-host really compiles every output, with exactly the first host's arguments. `collect`
+host really compiles every output, with exactly the first host's arguments.
+`--cache <directory>` names that cache instead of a temporary one and keeps it
+afterwards; it must be absent or empty, or the verb refuses with exit 2, since
+a filled cache would answer with bytes this host's DXC never produced. CI saves
+the kept cache once the comparison passes. `collect`
 copies the checkout's compiled shaders into one directory at their repository
 paths, the tree `compare` reads on the other host. CI collects the Windows
 build's shaders and compares a Linux DXC build of the same commit against them
 ([CI tooling](../development/ci.md)), the binding contract's cross-host gate
 leg.
+
+`cache prune` removes every file of a shader compiler cache that no compile has
+used for `--unused-minutes` (at least 1): each entry (`*.spv`, `*.dxil`), each
+abandoned staged publication (`*.tmp`) and each duration record under
+`durations`, judged by its last write time, which every compile that reads or
+writes the file stamps ([freshness](shaders.md#freshness)). Any other file in
+the directory stays. `--cache` names the directory; without it the verb prunes
+the per-user cache the build and the other verbs share. It prints one line
+naming how many files it removed and kept and their sizes. CI prunes its
+restored cache before saving it. Exit 0 pruned (a missing directory holds
+nothing), 2 a bound under one minute.
 
 `generate` writes the files the C# model owns (`ShaderDeclarations`):
 `src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
@@ -698,8 +714,10 @@ and never to seed a header by hand
 writes every declaration the model changed, `--check` in a git work tree also
 fails on a file that matches the model only in the working tree while its
 staged copy differs or is missing: the index must carry each generated file.
-CI's artifacts and formatting jobs install their candidate CLI by building and
-packing the checkout, then run the check before the solution build.
+CI's formatting job installs its candidate CLI by building and packing the
+checkout and runs the check before the solution build; the artifacts job runs
+it after the solution build, with the CLI that build compiled, where the staged
+comparison catches what the build wrote.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with
