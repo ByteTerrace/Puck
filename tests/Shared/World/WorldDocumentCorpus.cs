@@ -15,7 +15,7 @@ internal static class WorldDocumentCorpus {
     /// <summary>The repository-relative directory of the canary manifests.</summary>
     public const string CanaryDirectory = "tests/Puck.World.Canaries";
     /// <summary>The repository-relative directory of the world documents this suite's laws boot as fixtures.</summary>
-    public const string FixtureDirectory = "tests/Puck.World.Tests/Fixtures";
+    public const string FixtureDirectory = "tests/Puck.World.Fixtures";
     /// <summary>The refusal <see cref="TryBoot"/> reports for a module library.</summary>
     public const string ModuleLibrary = "a module library emits no document";
 

@@ -416,8 +416,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `WorldCacheRoots`, both handed to the boot (`WorldBootInputs`) and taken by
   every consumer from its host; only `Program.cs` names their per-user
   defaults (`world`, `bakes`, `compiled-worlds`, `compilations`), and
-  `WorldStateRootIsolationLawTests` holds every assembly
-  `tests/Puck.World.Tests` links to that, so a fixture hands its own temporary
+  `WorldStateRootIsolationLawTests` (one per `tests/Puck.World*.Tests` suite) holds
+  every assembly its suite links to that, so a fixture hands its own temporary
   roots. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.
 - **Capture BOTH streams.** Read-back answers land on stdout; refusals,
@@ -510,7 +510,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
-  are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
+  are proved in `tests/Puck.World.Server.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
   behind — its history is in git, and its contract is validated by running
   the app until a law or canary owns it. Ask before creating new persisted

@@ -6,6 +6,8 @@ using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 
+
+
 namespace Puck.World.Testing;
 
 /// <summary>The carry laws' wall-and-carrier document, shared by the suites that step it.</summary>
@@ -192,4 +194,7 @@ internal static class CarryFixtures {
             ],
         };
     }
+
+    internal const int BallIndex = WorldBodiesLimits.LocalSeatCount;
+    internal const int CarrierIndex = 0;
 }

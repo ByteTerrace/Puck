@@ -3,14 +3,13 @@ using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Testing;
 
 /// <summary>The suite's one construction of creation documents, canonical prototypes, and the two emission paths a
 /// shape law judges: the static stamper (<see cref="CreationStampEmitter"/>) and the animated pool
-/// (<see cref="WorldStampPool"/>). A law states only the shape it is about.</summary>
+/// (<c>WorldStampPool</c>). A law states only the shape it is about.</summary>
 internal static partial class CreationFixtures {
     /// <summary>Gets a one-entry grey palette.</summary>
     public static IReadOnlyList<PaletteEntryDocument> Grey { get; } = [new(

@@ -63,4 +63,6 @@ internal static class CrossingIdentityFixtures {
     internal const string PrivatePanel = "private-hud-panel";
     internal const string PrivatePayload = "private-payload";
     internal const string PrivateRow = "private-secret-row";
+
+    internal static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
 }

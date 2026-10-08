@@ -191,7 +191,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         static WorldDefinition Scaled(double value) => ValueDomainFixtures.WithRow(
             definition: (AwayDocument() with {
                 RenderRaw = (WorldRenderDefaults.Absent with {
-                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{ValueDomainFixtures.Row}"))]),
                 }),
             }),
             value: value
@@ -212,7 +212,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
         Assert.Single(collection: reports);
-        Assert.Contains(expectedSubstring: $"render.sky.layers[0].scale reads 0 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: $"render.sky.layers[0].scale reads 0 from state.{ValueDomainFixtures.Row}", actualString: reports[0]);
     }
     // A destination replaced by another world, a different activation delivering a document, starts a routed view's
     // bindings fresh: the new world's cloud scale, out of range at its first look, does not wear the old world's last value.
@@ -221,7 +221,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         static WorldDefinition Scaled(double value) => ValueDomainFixtures.WithRow(
             definition: (AwayDocument() with {
                 RenderRaw = (WorldRenderDefaults.Absent with {
-                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{ValueDomainFixtures.Row}"))]),
                 }),
             }),
             value: value

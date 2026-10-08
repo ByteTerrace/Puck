@@ -33,19 +33,9 @@ namespace Puck.World.Tests;
 public sealed partial class WorldWindowFrustumFitLawTests {
     private const float Tolerance = 2e-3f;
 
-    // The destination's marker: a ball of radius 0.5 six units behind the arch.
-    internal static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
-
     // The destination's occluder: a slab four units in front of the arch, between the first two eyes, mapped, and the
     // arch's glass.
     private static readonly Vector3 Occluder = new(x: 0f, y: 1.5f, z: 4f);
-
-    // The first two are the canary's eyes: the camera its seat's view renders with at each of its two body poses.
-    internal static readonly Vector3[] Eyes = [
-        new(x: 1f, y: 1.6f, z: 6f),
-        new(x: -1f, y: 1.6f, z: 6f),
-        new(x: 0.4f, y: 2.1f, z: 3f),
-    ];
 
     // The point of a face at image coordinate (x, y): x across its Right, y down its Up, each in [0, 1].
     private static Vector3 FacePoint(WorldFaceGeometry face, float x, float y) =>

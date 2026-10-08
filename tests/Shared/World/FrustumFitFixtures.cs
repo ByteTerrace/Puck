@@ -55,4 +55,13 @@ internal static class FrustumFitFixtures {
     }
 
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
+
+    // The destination's marker: a ball of radius 0.5 six units behind the arch.
+    internal static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
+    // The first two are the canary's eyes: the camera its seat's view renders with at each of its two body poses.
+    internal static readonly Vector3[] Eyes = [
+        new(x: 1f, y: 1.6f, z: 6f),
+        new(x: -1f, y: 1.6f, z: 6f),
+        new(x: 0.4f, y: 2.1f, z: 3f),
+    ];
 }

@@ -182,7 +182,7 @@ solution. Its historical stages are prior art, not current verification. Use
 the live checks appropriate to the changed contract and report what remains
 untested; no single check covers the complete engine.
 
-The [World tests](../../tests/Puck.World.Tests/README.md) cover documents,
+The [World suites](../../tests/Puck.World.Tests/README.md) cover documents,
 protocol, authoritative simulation, and shipped game state programs. The
 architecture gate runs during builds, including `PUCKARCH008`: it rejects a
 compiled dependency denied by `PuckArchitectureDeniedApi` in

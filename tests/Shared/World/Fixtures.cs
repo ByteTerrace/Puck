@@ -10,14 +10,13 @@ using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
-using Puck.World.Server;
 using Puck.Physics.Motion;
 
 namespace Puck.World.Testing;
 
 /// <summary>
 /// Fixture construction — the Domains-module equivalent for this suite: where a law's raw material (a base
-/// document, a fresh in-process <see cref="WorldServer"/>) comes from, kept out of the law bodies themselves.
+/// document, a fresh in-process <c>WorldServer</c>) comes from, kept out of the law bodies themselves.
 /// The base document is COMPILER-MAINTAINED: <see cref="BuildDocument"/> constructs a minimal, valid
 /// <see cref="WorldDefinition"/> directly in code (never read from <c>src/Puck.World/Assets/worlds</c> — Puck.World,
 /// the composition root, is out of scope; see README.md, and AGENTS.md's greenfield/scope rules). A change to
@@ -576,8 +575,8 @@ internal static partial class Fixtures {
     /// <summary>Returns the base fixture document at the default <see cref="SimulationRateHz"/>.</summary>
     public static WorldDefinition BuildDocument() => BuildDocumentAtRate(rateHz: DefaultRateHz);
     /// <summary>Returns the base fixture document at an explicitly authored simulation rate.</summary>
-    /// <remarks>A fixture booted from this document through <see cref="FreshServer"/> steps one SIMULATION tick per
-    /// <see cref="WorldFixture.Step"/>, so <paramref name="rateHz"/> also sets how much world TIME one step spans.
+    /// <remarks>A fixture booted from this document through <c>FreshServer</c> steps one SIMULATION tick per
+    /// <c>Step</c>, so <paramref name="rateHz"/> also sets how much world TIME one step spans.
     /// Pass <see cref="RecordedTraceRateHz"/> for a law whose recorded trace or hand-derived tick counts were
     /// authored at that rate.</remarks>
     /// <param name="rateHz">The document's authored <c>simulation.rateHz</c>; must divide
@@ -651,8 +650,8 @@ internal static partial class Fixtures {
     /// over <see cref="BuildDocument"/>, freshly built and serialized on every call (cheap, and it keeps a caller
     /// free to mutate its own copy without a shared-buffer hazard). This is also the round-trip proof: the fixture
     /// is only trustworthy if <c>Deserialize(Serialize(BuildDocument()))</c> both succeeds AND validates, which
-    /// every consumer of this method exercises simply by using it (<see cref="FreshServer"/> deserializes these
-    /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <see cref="WorldServer"/> from
+    /// every consumer of this method exercises simply by using it (<c>FreshServer</c> deserializes these
+    /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <c>WorldServer</c> from
     /// the result).</summary>
     public static byte[] DefaultWorldBytes() => WorldDefinitionSerialization.Serialize(definition: BuildDocument());
     /// <summary>Loads a document file through the one admission door

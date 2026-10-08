@@ -47,7 +47,7 @@ internal static partial class Fixtures {
         var machines = new WorldMachineHost(
             screens: definition.Screens,
             catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestMachines.Catalog())),
-            documentPath: (documentPath ?? Path.Combine(AuthoredGameFixtures.Root, "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
+            documentPath: (documentPath ?? Path.Combine(RepositoryPaths.RequireRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
         );
         // The state directory is a PATH under the fixture's own scratch directory: WorldOwnedWorlds creates and
         // enumerates it itself, and WorldFixture.Dispose resolves the scratch directory. A host that may still hold a

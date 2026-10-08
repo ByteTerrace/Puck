@@ -7,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 /// — the closed-form second-order read a <see cref="StateDynamics"/> trait drives. <see cref="WorldStateReader.TryRead"/>
 /// (truth) is proved unaffected by a trait's presence; the mutation-side rebase (the arena a write composes through)
 /// is out of reach here (this project carries no <c>WorldServer</c>) and is proved by <c>StateDynamicsRebaseLawTests</c>
-/// in <c>Puck.World.Tests</c> instead.
+/// in <c>Puck.World.Server.Tests</c> instead.
 /// </summary>
 public sealed class StateDynamicsReadLawTests {
     private static readonly DynamicsRow Critical = new(

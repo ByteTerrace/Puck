@@ -48,7 +48,7 @@ internal static class ArtifactsCommand {
             destination: "artifacts/batteries/hgd",
             source: "src/Puck.HumbleGamingDeck.Post/bin/Release/net10.0"
         );
-        foreach (var project in new[] { "Puck.World.Azure.Tests", "Puck.World.Schema.Tests", "Puck.World.Tests" }) {
+        foreach (var project in new[] { "Puck.World.Azure.Tests", "Puck.World.Schema.Tests", "Puck.World.Silo.Tests" }) {
             CliFiles.CopyDirectory(
                 destination: $"artifacts/world-tests/{project}",
                 source: $"tests/{project}/bin/Release/net10.0"
@@ -324,7 +324,7 @@ internal static class ArtifactsCommand {
         foreach (var (project, testClass) in new[] {
             ("Puck.World.Azure.Tests", "EntraWorldAuthenticatorTests"),
             ("Puck.World.Schema.Tests", "WorldSiloDefinitionLawTests"),
-            ("Puck.World.Tests", "WorldSiloLifecycleLawTests"),
+            ("Puck.World.Silo.Tests", "WorldSiloLifecycleLawTests"),
         }) {
             var report = (project + ".trx");
 

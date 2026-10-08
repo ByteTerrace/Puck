@@ -73,7 +73,7 @@ consumes `IWorldHostRetirementObserver`. Metadata polling, event types and crede
 `Puck.World.Azure`, an Optional extensions project no shipped host references.
 The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
 owns provider-neutral configuration; the Azure README owns Azure provider keys. Verify with
-`ExtensionModelLawTests` (`tests/Puck.World.Tests`).
+`ExtensionModelLawTests` (`tests/Puck.World.Silo.Tests`).
 
 ## Production silo verification
 
