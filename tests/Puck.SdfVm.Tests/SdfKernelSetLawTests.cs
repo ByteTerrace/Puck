@@ -22,6 +22,7 @@ public sealed class SdfKernelSetLawTests {
         "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
         "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission",
         "sdf-indirect-classify", "sdf-indirect-trace", "sdf-indirect-shade", "sdf-light-primary", "sdf-light-depth",
+        "sdf-world-receiver",
     ];
 
     private static WorkCounterSet Work() =>

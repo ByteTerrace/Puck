@@ -18,11 +18,11 @@ public sealed class SdfPassBindingLawTests {
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.IndirectShade, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.Receiver, SdfKernel.IndirectShade, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.IndirectShade, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.Receiver, SdfKernel.IndirectShade, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

@@ -13,8 +13,8 @@ namespace Puck.SdfVm.Tests;
 /// <summary>One shadow kernel and one kernel per views variant serve every fade capacity: no capacity leases a pipeline of
 /// its own, and a policy change or a handoff crossing creates none and waits for none.</summary>
 public sealed class SdfShadowFadePipelinesLawTests {
-    // The residency owns sixteen kernels (including environment and screen reduction) plus three shared passes.
-    private const long Pipelines = 19;
+    // The residency owns seventeen kernels (the receiver and the environment and screen reductions among them) plus three shared passes.
+    private const long Pipelines = 20;
 
     [InlineData(0)]
     [InlineData(1)]

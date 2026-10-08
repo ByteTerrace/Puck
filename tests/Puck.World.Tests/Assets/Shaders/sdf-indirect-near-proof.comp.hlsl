@@ -1,4 +1,4 @@
-#define SDF_VIEWS_PASS
+#define SDF_RECEIVER_PASS
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-policy.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-incoming.hlsli"

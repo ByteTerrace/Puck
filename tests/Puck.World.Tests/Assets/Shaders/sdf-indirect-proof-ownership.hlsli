@@ -100,7 +100,7 @@ void CSMain(uint lane : SV_GroupIndex) {
     uint proof = 16u + entry * SdfIndirectProofWords;
     if (lane == 0u) {
         [loop] for (uint word = 0u; word < 128u; word++) { indirectCacheRW[word] = 0u; }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
         if (fixtureMode >= 1u && fixtureMode <= 6u) {
             indirectCacheRW[proof] = asuint(fixtureMode == 3u ? 0.09375 : (fixtureMode == 4u ? 0.35 : 0.25));
             indirectCacheRW[proof + 1u] = asuint(fixtureMode == 3u ? 0.46875 : 0.25);

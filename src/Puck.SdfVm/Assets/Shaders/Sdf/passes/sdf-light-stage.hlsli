@@ -218,8 +218,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
-            SdfIndirectSources indirect = sdfIndirectApply(p, s, surfacePoint, normal);
-            color += sdfIndirectSourceTotal(indirect) * shadeMaterial.albedo
+            float3 indirect = sdfIndirectApply(p, s, surfacePoint, normal);
+            color += indirect * shadeMaterial.albedo
                 * passGroup.indirectApply.rgb
                 * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                     * lerp(1.0, ambientOcclusion, passGroup.indirectContact));

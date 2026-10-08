@@ -31,6 +31,9 @@ public enum SdfKernel {
     /// <summary>The stable and incoming soft shadows, writing the record's K row and, at a nonzero fade capacity, the
     /// incoming visibility image; one kernel serves every capacity.</summary>
     Shadow,
+    /// <summary>The indirect receiver: each shaded pixel's proof against the residency's cache, its certificate and the
+    /// near-field or comparison answer that replaces its cache sample, which views reads. Full instruction set.</summary>
+    Receiver,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
     /// <summary>Shading with the exotic ops and shapes compiled out.</summary>

@@ -66,7 +66,7 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
 
     switch (p.viewMode) {
         case DebugViewModeIndirect: {
-            viewColor = sdfIndirectSourceTotal(sdfIndirectReceiverSources);
+            viewColor = sdfIndirectReceiverTotal;
             break;
         }
         case 1: { // depth

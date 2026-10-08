@@ -1,7 +1,8 @@
 // The hit passes' stages, one per pass over the pixel's visibility record: primary marches and writes its V, C and L
 // rows (march/sdf-primary.hlsli), surface its N and S rows and ambient its occlusion (surface/sdf-surface.hlsli), shadow
-// its K row (surface/sdf-shadow.hlsli), and views shades the record (sdfViewsStage below). Each kernel compiles only its
-// own stage.
+// its K row (surface/sdf-shadow.hlsli), the receiver its indirect certificate and answer
+// (indirect/sdf-indirect-receiver.hlsli), and views shades the record (sdfViewsStage below). Each kernel compiles only
+// its own stage.
 #ifndef PASSES_SDF_HIT_STAGES_HLSLI
 #define PASSES_SDF_HIT_STAGES_HLSLI
 #ifdef SDF_PART_RAY_BOUNDS
@@ -12,6 +13,7 @@
 #include "../march/sdf-primary.hlsli"
 #include "../surface/sdf-surface.hlsli"
 #include "../surface/sdf-shadow.hlsli"
+#include "../indirect/sdf-indirect-receiver.hlsli"
 #include "sdf-light-stage.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"

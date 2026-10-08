@@ -148,7 +148,23 @@ the existing unresolved row without changing immutable transport or ray budgets.
 Keep `IrradianceCacheModel`'s nullable generation samples consistent with that
 policy; its unknown-lighting share must not consult transport kind alone.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
-owns this flow and its remaining receiver work. Views consume the complete bank
+owns this flow and its remaining receiver work. The receiver pass
+(`sdf-world-receiver.comp`, `indirect/sdf-indirect-receiver.hlsli`), between
+shadow and views and present only with the residency's cache, owns every field
+query of a shaded pixel's indirect light: participation, the retained
+certificate or the level loop's launch and proof, the near-field sample and the
+comparison methods. It selects the level by the normal-independent support of
+the published bank (`sdfIndirectIrradianceSupported`) and writes a four-word
+answer per pixel (`indirect/sdf-indirect-answer.hlsli`: status, replacement,
+field evaluations, replacing source-masked total). Views reads the certificate
+and the answer, reads the bank at the certified launch with its shading normal
+(`sdfIndirectApply`), and performs no field query; a bank read that finds no
+resolved texel leaves the pixel unresolved, as a retained certificate's always
+did. The comparison methods fold over the bank read with the geometric normal.
+Both passes decide whether a pixel has an answer by `sdfIndirectAnswers`, and
+views takes a surface pick only once the receiver armed it
+(`SdfWorldPicker.Arm`), so the selected receiver record's two writers describe
+one pixel. Receivers consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its
 one admission word, requested only by pending view scopes. Each receiver
 claims an empty shared proof bucket before segment evaluation, through
@@ -158,16 +174,17 @@ Every unsuccessful owner releases its claim. Never transfer failed support as
 a shared mask-zero proof or make colliding keys wait forever. Successful same-key
 contenders share field work; failed attempts may reacquire within the unchanged
 allowance. Trace keeps its designated source-ray ownership. Each view separately
-owns an eight-byte deferred/reader census, explicitly transfer-cleared before Views and
-read back from its preserving compute-written version after the same fence.
-Views publishes its eight-word certificate through an explicit preserving
+owns an eight-byte deferred/reader census, explicitly transfer-cleared before the
+receiver, written by it, read by views and read back after views from that
+version after the same fence.
+The receiver publishes its eight-word certificate through an explicit preserving
 visibility version, qualified by the complete allocation identity and transport
 revision. Primary clears it on a new sample; repeating the exact submitted
 geometry, camera, jitter, grid and visibility allocation preserves it even with
 cadence off. Commit that identity only after successful submission. Completed
 brick writes are in the point-of-use geometry signature; unfinished bakes never
 preserve certificates. Completed unresolved results stand and deferred results retry.
-The fenced deferred count keeps Views active until
+The fenced deferred count keeps the receiver and views active until
 completion without making unchanged Primary read the cache. Capture also waits
 for its own view's current fenced receiver scope, not only the shared solve.
 An exact completed zero-reader census removes only indirect demand and the cache
@@ -216,7 +233,7 @@ Stable and incoming indirect light visibility share one rolled traversal in
 `sdfIndirectDiffuseVisibilities`. Select the light before its visibility call
 and the destination afterward: a second call inlines another full-field fallback
 interpreter in DXIL. Preserve stable-before-incoming order, counters and the
-zero-fade compile guard. All Views variants remain below the 3 MiB bytecode law.
+zero-fade compile guard. Every Views variant and the receiver remain below the 3 MiB bytecode law.
 Indirect march and segment samples reconstruct through `sdfIndirectPointAt`:
 precise multiply, then precise add, matching primary. Keep bracket witnesses and
 blocked-point reconstruction on that path; a contracted multiply-add can cross
@@ -345,19 +362,21 @@ register.
 
 The indirect comparison helper keeps its SPIR-V function boundary with
 `[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
-body into Views exceeds legalization capacity or crashes the compiler. DXIL
+body into the receiver exceeds legalization capacity or crashes the compiler. DXIL
 keeps ordinary inlining; retain identical arithmetic, policy restoration and
-work counts on both paths. The Views-only SPIR-V sample and gradient wrappers
+work counts on both paths. The receiver-only SPIR-V sample and gradient wrappers
 also retain their shared function bodies, preserving the tape/mask save and
 restore and the evaluation counters while reducing repeated VM expansion.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
-  curvature), ambient (AO), shadow (the selected slots' soft shadows), and views
-  (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
+  curvature), ambient (AO), shadow (the selected slots' soft shadows), the
+  indirect receiver (every field query of indirect light, with the cache only)
+  and views (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
   pass macros, each compiling its own stage over one pixel context (`SdfPixel`):
   `sdfPrimaryStage` in `march/sdf-primary.hlsli`, `sdfSurfaceStage` and
   `sdfAmbientStage` in `surface/sdf-surface.hlsli`, `sdfShadowStage` in
-  `surface/sdf-shadow.hlsli`, and `sdfViewsStage`
+  `surface/sdf-shadow.hlsli`, `sdfReceiverStage` in
+  `indirect/sdf-indirect-receiver.hlsli` (`SDF_RECEIVER_PASS`), and `sdfViewsStage`
   (`passes/sdf-hit-stages.hlsli`), which reads the record once as a surface
   sample (`SdfSurfaceSample`) and runs `sdfLightStage`
   (`passes/sdf-light-stage.hlsli`) and the debug views

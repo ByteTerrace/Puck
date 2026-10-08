@@ -457,6 +457,8 @@ public static partial class SdfWorldPackage {
         ShaderWorkCounters.BufferMember,
         .. Tables,
         .. IncomingMembers,
+        Read(element: ShaderValueType.Uint4, name: IndirectAnswer),
+        Written(element: ShaderValueType.Uint4, name: IndirectAnswerWritten),
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates
@@ -484,10 +486,7 @@ public static partial class SdfWorldPackage {
             Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
             Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
             Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit) with {
-                Outputs = [Parts.Lit, IndirectVisibility],
-                OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
-            },
+            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit),
             Pass(inputs: [Parts.Lit, Parts.CullBounds], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
             Pass(inputs: [Parts.Lit, Parts.CullBounds, Parts.ShadowVisibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
@@ -531,7 +530,6 @@ public static partial class SdfWorldPackage {
             Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
             Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
             Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
-            Visibility(from: Parts.ShadowVisibility, name: IndirectVisibility),
         ]
     );
 
@@ -645,6 +643,9 @@ public static partial class SdfWorldPackage {
         public const string Shadow = "shadow";
         /// <summary>Shading the hits into the lit image.</summary>
         public const string Views = "views";
+        /// <summary>The indirect receiver between shadow and views, present only with the residency's cache: each shaded
+        /// pixel's proof, certificate and replacing answer (<see cref="WithIndirect"/>).</summary>
+        public const string Receiver = "receiver";
         /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
         public const string Sky = "sky";
         /// <summary>The composite: the sky's runs in their authored order, the lit image over them by its coverage, then

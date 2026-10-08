@@ -1,3 +1,5 @@
+// The receiver pass owns the certificate store.
+#define SDF_RECEIVER_PASS
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> receiverRecords : register(u5, space3);
 [[vk::binding(60, 3)]] StructuredBuffer<float4> receiverCases : register(t60, space3);
 [[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> receiverResults : register(u61, space3);

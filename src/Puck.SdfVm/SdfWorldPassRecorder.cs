@@ -20,7 +20,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // Views attribute analytic sky lighting by layer; the shadow pass attributes secondary pixels by decision.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
-        SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
+        SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.Receiver => m_view.Residency.SkyDetails.Labels,
         SdfWorldPackage.Parts.Shadow => SdfShadowDecisions.Labels,
         _ => [],
     };
@@ -45,6 +45,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.IndirectCacheWritten,
         SdfWorldPackage.IndirectPickWritten,
         SdfWorldPackage.IndirectDeferredWritten,
+        SdfWorldPackage.IndirectAnswer,
+        SdfWorldPackage.IndirectAnswerWritten,
         SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.IndirectLightDepthWritten,
     ];
@@ -317,7 +319,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((m_part == SdfWorldPackage.IndirectReceiverReset)
         ? null : ((m_view.LightView && !m_owner.HasIndirectReaders(residency: m_view.Residency))
             ? m_view.Residency.IndirectLightViews.Revision
-            : m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context)));
+            : m_owner.SignatureOf(instance: m_context.Instance, part: SignaturePart, temporal: m_temporal, context: in context)));
+
+    // The receiver executes exactly when views does: it reads what views reads, and views reads its answers.
+    private string SignaturePart => ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.Parts.Views : m_part);
+
     public void Submitted() {
         if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Primary)) { m_owner.SubmittedReceiverSurface(instance: m_context.Instance); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_view.LightView) {
@@ -390,11 +396,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             SdfFrameBlock.WriteIndirectReceiverPreservation(block: recording.PassBlock, preserve: preserve);
         }
-        if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Views)) {
+        if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Receiver)) {
             var boundIndirect = BoundIndirect(recording: recording, tables: tables);
 
             SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
             SdfFrameBlock.WriteIndirectNear(block: recording.PassBlock, cache: boundIndirect, frame: frame, ready: residency.IsIndirectReady);
+            // The selected pixel's near ray and replacing sources are the receiver's part of its record; views takes
+            // the same armed request when it records next.
+            if ((boundIndirect is not null) && m_owner.PickerOf(instance: m_context.Instance).Arm(height: height, width: width, x: out var pickX, y: out var pickY)) {
+                SdfFrameBlock.WriteIndirectPick(block: recording.PassBlock, enabled: true, x: pickX, y: pickY);
+            }
+        }
+        if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Views)) {
+            var boundIndirect = BoundIndirect(recording: recording, tables: tables);
+
             m_recordedLighting = new(boundIndirect?.PublishedLightingSource, (boundIndirect?.PublishedStamp ?? 0u),
                 m_owner.ClosureEpochOf(residency: residency), (tables.SubmittedSkyEnvironment?.Publication ?? default),
                 (tables.SubmittedScreenEmission?.Publication ?? default));
@@ -421,20 +436,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WriteWorkCounterDetailRow(block: recording.PassBlock, row: recording.WorkDetailRow);
 
         if (m_pick is not null) {
+            // Build ports carry the storage declaration; the recording carries the version this pass reads or writes.
+            var deferredPort = Array.IndexOf(array: m_inputs, value: SdfWorldPackage.IndirectDeferredClear);
+
             m_pick.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
-                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecordsWritten)].Version,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
                 box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
-                cut: frame.Views[view].CutRevision);
+                cut: frame.Views[view].CutRevision, armedOnly: (deferredPort >= 0));
             var cachePort = Array.IndexOf(array: m_inputs, value: SdfWorldPackage.IndirectCache);
             var pickPort = Array.IndexOf(array: m_outputs, value: SdfWorldPackage.IndirectPick);
-            // Build ports carry the storage declaration; the recording carries its written successor version.
-            var deferredPort = Array.IndexOf(array: m_outputs, value: SdfWorldPackage.IndirectDeferredClear);
             var indirect = BoundIndirect(recording: recording, tables: tables);
             var receiverScope = ((indirect is null) ? default : m_owner.PrepareReceivers(m_context.Instance, indirect));
 
             m_pick.PrepareReceivers(recording.Slot, indirect,
-                ((deferredPort < 0) ? null : recording.Outputs[deferredPort].Version), receiverScope);
+                ((deferredPort < 0) ? null : recording.Inputs[deferredPort].Version), receiverScope);
             m_pick.PrepareIndirect(recording.Slot, indirect,
                 ((cachePort < 0) ? null : recording.Inputs[cachePort].Version),
                 ((pickPort < 0) ? null : recording.Outputs[pickPort].Version), recording.PassBlock);
@@ -539,6 +555,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
             SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
+            SdfWorldPackage.Parts.Receiver => tables.Pipeline(kernel: SdfKernel.Receiver),
             _ => tables.ViewsPipeline,
         };
 
@@ -588,7 +605,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             };
 
             residency.LogIndirectSubmission(("light-" + m_part), queries, residency.Frame!.Program.InstructionCount, (tables.Indirect?.Frame ?? 0));
-        } else if ((m_part == SdfWorldPackage.Parts.Views) && (tables.Indirect is { } cache)) {
+        } else if ((m_part == SdfWorldPackage.Parts.Receiver) && (tables.Indirect is { } cache)) {
             residency.LogReceiverProofs(cache: cache);
         }
 
@@ -931,14 +948,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
-        SdfWorldPackage.IndirectCache => ((m_part == SdfWorldPackage.Parts.Views) ? SdfWorldPackage.IndirectCacheWritten : SdfWorldPackage.IndirectCache),
+        SdfWorldPackage.IndirectCache => ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.IndirectCacheWritten : SdfWorldPackage.IndirectCache),
+        SdfWorldPackage.IndirectAnswer => SdfWorldPackage.IndirectAnswer,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapes,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility =>
-            ((m_part == SdfWorldPackage.Parts.Views) ? SdfWorldPackage.VisibilityRecordsWritten : SdfWorldPackage.VisibilityRecords),
+            ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.VisibilityRecordsWritten : SdfWorldPackage.VisibilityRecords),
         _ => null,
     };
     // A graph may still retain an old allocation while a tier or far-distance replacement installs. Never combine
@@ -953,6 +971,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
+        SdfWorldPackage.IndirectAnswer => SdfWorldPackage.IndirectAnswerWritten,
         SdfWorldPackage.IndirectDeferredClear => SdfWorldPackage.IndirectDeferredWritten,
         SdfWorldPackage.IndirectVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,

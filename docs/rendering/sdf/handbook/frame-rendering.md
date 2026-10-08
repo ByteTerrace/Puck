@@ -117,10 +117,13 @@ packing four 8-bit stable visibilities into the record's K word. Each active
 handoff adds one incoming march, bounded by K + F; its visibility uses a
 retained two-byte-per-pixel texture whenever the policy allows fades, absent at
 F = 0. One shadow kernel and one kernel per views variant serve every F, reading
-the active fade count from the pass block. **views** reads those visibilities and computes materials, lighting and
+the active fade count from the pass block. With indirect lighting on, the
+**receiver** proves each shaded pixel against the indirect cache, makes every field
+query of its indirect light and publishes its certificate and a short answer.
+**views** reads those visibilities and answers and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
-render at different cost. Compare all five passes when measuring per-pixel field cost: moving
+render at different cost. Compare all six passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized

@@ -179,15 +179,21 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
     return false;
 }
 
-// Preserve this shared comparison body in SPIR-V: expanding it into Views overflows or crashes legalization.
+// Whether a comparison method replaces this pixel's incoming light this frame: one render-pixel parity class a frame.
+bool sdfIndirectAlternativeAdmitted(SdfPixel p) {
+    if (passGroup.indirectMethod == SdfIndirectMethodCache || passGroup.indirectTier == SdfIndirectTierOff) { return false; }
+    uint phase = passGroup.historyFrames % SdfIndirectAlternativePhases;
+    return ((p.pixel.x & 1u) | ((p.pixel.y & 1u) << 1u)) == phase;
+}
+
+// Preserve this shared comparison body in SPIR-V: expanding it into the receiver overflows or crashes legalization.
 // DXIL retains ordinary inlining because its validator rejects vector values in retained helper functions.
 #ifdef __spirv__
 [noinline]
 #endif
 SdfIndirectSources sdfIndirectAlternative(SdfPixel p, SdfSurfaceSample receiver, float3 launched, SdfIndirectSources fallback) {
-    if (passGroup.indirectMethod == SdfIndirectMethodCache || passGroup.indirectTier == SdfIndirectTierOff) { return fallback; }
+    if (!sdfIndirectAlternativeAdmitted(p)) { return fallback; }
     uint phase = passGroup.historyFrames % SdfIndirectAlternativePhases;
-    if (((p.pixel.x & 1u) | ((p.pixel.y & 1u) << 1u)) != phase) { return fallback; }
     SdfIndirectSources total = (SdfIndirectSources)0;
     uint hits = 0u;
     uint samples = 0u;

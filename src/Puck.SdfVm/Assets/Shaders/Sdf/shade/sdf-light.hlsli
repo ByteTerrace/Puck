@@ -4,7 +4,7 @@
 // terms after the shade, and the attenuations into one factor on the reflected light.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#if defined(SDF_VIEWS_PASS) || defined(SDF_INDIRECT_SHADE)
+#if defined(SDF_VIEWS_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_INDIRECT_SHADE)
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;

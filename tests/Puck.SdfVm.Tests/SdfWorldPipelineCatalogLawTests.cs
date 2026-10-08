@@ -18,11 +18,11 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelineCatalogLawTests {
     private const uint Extent = 32;
-    // One shadow kernel and three views kernels serve every fade capacity; the three environment kernels join the thirteen base kernels.
-    // The fake brick baker is empty and resolve is acquired on demand.
-    private const long KernelPipelines = 16L;
+    // One shadow kernel and three views kernels serve every fade capacity; the receiver and the three environment kernels
+    // join the thirteen base kernels. The fake brick baker is empty and resolve is acquired on demand.
+    private const long KernelPipelines = 17L;
     // The kernels, the region copy, the mesh pass and its impostor card pass.
-    private const int ResidencyPipelines = 19;
+    private const int ResidencyPipelines = 20;
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {

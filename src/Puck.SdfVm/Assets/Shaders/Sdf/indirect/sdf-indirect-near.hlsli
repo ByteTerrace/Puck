@@ -8,13 +8,17 @@
 static uint sdfIndirectNearOutcome = SdfIndirectNearOutcomeNotAttempted;
 static float3 sdfIndirectNearDirection = 0.0;
 
+// The receiver's near-field sample: its incoming sources when answered, which replace the cache answer
+// (sdfIndirectNearResult); zero, with answered false, when not admitted or unresolved, keeping every cache source.
 #ifdef __spirv__
 [noinline]
 #endif
-SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3 launched,
-    SdfIndirectSources fallback, out uint countedLoads) {
+SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3 launched, out bool answered,
+    out uint countedLoads) {
     countedLoads = 0u;
-    if (passGroup.indirectNearEnabled == 0u || !sdfIndirectNearAdmitted(passGroup.indirectTier, passGroup.indirectMethod, p.pixel, passGroup.historyFrames)) { return fallback; }
+    answered = false;
+    SdfIndirectSources incoming = (SdfIndirectSources)0;
+    if (passGroup.indirectNearEnabled == 0u || !sdfIndirectNearAdmitted(passGroup.indirectTier, passGroup.indirectMethod, p.pixel, passGroup.historyFrames)) { return incoming; }
     // The selected pixel sees every radial stratum over four visits, rather than the same ray on every fourth frame.
     uint visit = passGroup.historyFrames / SdfIndirectNearPhases;
     float3 direction = sdfIndirectAlternativeDirection(receiver.normal, visit % SdfIndirectAlternativeRays,
@@ -31,10 +35,9 @@ SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3
     sdfShadowParticipationActive = true;
     uint beforeLoads = sdfIndirectLoads;
     uint beforeHashes = sdfIndirectHashes;
-    SdfIndirectSources incoming;
     bool hitSurface;
     uint evaluations;
-    bool answered = sdfIndirectNearIncoming(launched, direction, incoming, hitSurface, evaluations);
+    answered = sdfIndirectNearIncoming(launched, direction, incoming, hitSurface, evaluations);
     sdfIndirectPickActive = previousPick;
     sdfIndirectReceiverDeferred = previousDeferred;
     sdfIndirectReceiverPermit = previousPermit;
@@ -45,6 +48,7 @@ SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT_NEAR, evaluations, 0u, 0u, sdfIndirectHashes - beforeHashes, countedLoads);
     puckCountIndirect(SDF_SKY_DETAIL_INDIRECT_NEAR, answered && hitSurface ? 1u : 0u, 1u, answered ? 0u : 1u);
     if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps -= evaluations; }
-    return sdfIndirectNearResult(answered, incoming, fallback);
+    if (!answered) { incoming = (SdfIndirectSources)0; }
+    return incoming;
 }
 #endif

@@ -1,6 +1,6 @@
 // Exercise the unchanged production admission loop against one small counter allocation. Rebasing its address
 // deliberately excludes the cache layout from this witness; no field, proof, launch or shading routine executes.
-#define SDF_VIEWS_PASS
+#define SDF_RECEIVER_PASS
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-indirect-layout.hlsli"
 #define sdfIndirectReceiverProofWordOffset(tier) 0u

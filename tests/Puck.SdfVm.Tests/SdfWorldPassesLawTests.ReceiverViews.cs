@@ -105,11 +105,12 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(4, clears.Count(predicate: item => ((item.Buffer == sources[Earlier]) && (item.Bytes == (2 * sizeof(uint))))));
         Assert.Equal(4, clears.Count(predicate: item => ((item.Buffer == sources[Captured]) && (item.Bytes == (2 * sizeof(uint))))));
         Assert.DoesNotContain(collection: clears, filter: item => (item.Buffer == cache.Buffer.BufferHandle));
-        // Both Views ports share this allocation. Its combined read/write access follows the reset,
-        // and the readback copy follows the atomic write on the same buffer.
+        // Both receiver ports share this allocation. Its combined read/write access follows the reset, views reads the
+        // counts it copies, and the readback copy follows that read of the atomic writes on the same buffer.
         var expected = new[] {
             (GpuAccess.TransferWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.Transfer, GpuStage.ComputeShader),
-            (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.TransferRead, GpuStage.ComputeShader, GpuStage.Transfer),
+            (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+            (GpuAccess.ShaderRead, GpuAccess.TransferRead, GpuStage.ComputeShader, GpuStage.Transfer),
         };
 
         foreach (var (owner, buffer) in sources) {

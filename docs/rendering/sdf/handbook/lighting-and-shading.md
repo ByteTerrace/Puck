@@ -521,8 +521,8 @@ keeps the admitted uncached fallback, so hash collisions cannot starve it.
 Failed support, missing clearance or denied admission releases the transient
 claim. Failure does not become a shared negative proof; another receiver may
 try again within the unchanged admission allowance. Each view's
-deferred counter has an explicit transfer reset before Views, whose preserving
-compute-written version supplies that view's fenced readback. A different camera's
+deferred counter has an explicit transfer reset before its receiver pass, whose preserving
+compute-written version views reads and supplies that view's fenced readback. A different camera's
 deferred work never delays this view's completion. Each receiver retains
 its exact launch and completed result in the visibility record, independently
 of shared proof-hash collisions. The complete allocation identity and transport

@@ -89,6 +89,7 @@ public sealed class SdfKernelSet {
         SdfKernel.Surface => "sdf-world-surface",
         SdfKernel.Ambient => "sdf-world-ambient",
         SdfKernel.Shadow => "sdf-world-shadow",
+        SdfKernel.Receiver => "sdf-world-receiver",
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsCore => "sdf-world-views-core",
         SdfKernel.ViewsFolds => "sdf-world-views-folds",
