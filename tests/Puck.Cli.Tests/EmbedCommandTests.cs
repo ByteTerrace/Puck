@@ -7,7 +7,7 @@ namespace Puck.Cli.Tests;
 public sealed class EmbedCommandTests {
     [Fact]
     public async Task EmbedGeneratesLockAndEnablesCleanCompilationAsync() {
-        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var puckPath = Path.Combine(path1: dir.RootPath, path2: "world.puck");
         var lockPath = Path.Combine(path1: dir.RootPath, path2: "world.embeddings.json");
 
@@ -95,7 +95,7 @@ public sealed class EmbedCommandTests {
     }
     [Fact]
     public async Task EmbedPrunesUnusedEntriesAndSpacesAsync() {
-        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var puckPath = Path.Combine(path1: dir.RootPath, path2: "prune_test.puck");
         var lockPath = Path.Combine(path1: dir.RootPath, path2: "prune_test.embeddings.json");
 
@@ -198,7 +198,7 @@ public sealed class EmbedCommandTests {
     }
     [Fact]
     public async Task ProbeSubcommandRanksVectorsAsync() {
-        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var puckPath = Path.Combine(path1: dir.RootPath, path2: "probe_test.puck");
 
         var source = """
@@ -245,7 +245,7 @@ public sealed class EmbedCommandTests {
     }
     [Fact]
     public async Task DecompileWithLockResolvesEmbedAndWithoutLockResolvesVectorAsync() {
-        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var puckPath = Path.Combine(path1: dir.RootPath, path2: "world.puck");
         var worldJsonPath = Path.Combine(path1: dir.RootPath, path2: "world.world.json");
         var lockPath = Path.Combine(path1: dir.RootPath, path2: "world.embeddings.json");
@@ -296,7 +296,7 @@ public sealed class EmbedCommandTests {
         Assert.Contains(actualString: textWithLock, comparisonType: StringComparison.Ordinal, expectedSubstring: "embed(\"magic sword\")");
 
         // 3. Decompile without lock in an isolated directory
-        using var noLockDir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var noLockDir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var isolatedJson = Path.Combine(path1: noLockDir.RootPath, path2: "isolated.world.json");
         var isolatedOut = Path.Combine(path1: noLockDir.RootPath, path2: "isolated.puck");
 
@@ -330,7 +330,7 @@ public sealed class EmbedCommandTests {
     }
     [Fact]
     public async Task DecompileEmbedsPairReconstructsTableSugarAsync() {
-        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck embed tests ");
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
         var worldJsonPath = Path.Combine(path1: dir.RootPath, path2: "pair.world.json");
         var lockPath = Path.Combine(path1: dir.RootPath, path2: "pair.embeddings.json");
         var outPuckPath = Path.Combine(path1: dir.RootPath, path2: "pair_decompiled.puck");

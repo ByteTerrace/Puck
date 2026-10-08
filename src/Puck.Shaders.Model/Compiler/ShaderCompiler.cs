@@ -360,11 +360,12 @@ public sealed partial class ShaderCompiler {
         var diagnostics = new List<ShaderDiagnostic>();
         // In the temporary directory, not the cache, and short: every path below it reaches DXC, which refuses paths past
         // the Windows 260-character limit, and a cache may lie anywhere. The per-key gate already serializes builds of one
-        // key, so 48 random bits never collide in practice.
+        // key, so 48 random bits never collide in practice. The name is a run directory's (build/RunDirectory.cs), owned by
+        // this process, so a killed compile's leftover is swept once the process has finished.
         var buildId = Guid.NewGuid().ToString(format: "N")[..12];
         var buildRoot = Path.Combine(
             path1: Path.GetTempPath(),
-            path2: ("puck-dxc-" + buildId)
+            path2: $"puck-dxc-{Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}-{buildId}"
         );
 
         Directory.CreateDirectory(path: buildRoot);
@@ -476,6 +477,7 @@ public sealed partial class ShaderCompiler {
                     bytes: bytes,
                     path: entry
                 );
+                Retain(published: entry);
                 RecordDuration(
                     elapsed: elapsed,
                     target: target,

@@ -158,9 +158,12 @@ public sealed class PuckCompileDirect3D11Kernels : Task {
 
             var temporary = (output + ".tmp");
 
+            // The bytecode ships as content, so every output that ships it is a hard link to this file: deleting it and
+            // moving the new bytes in replaces it, where a copy over it would rewrite every linked output in place. The
+            // task compiles against a framework whose File.Move cannot overwrite.
             File.WriteAllBytes(path: temporary, bytes: Read(blob: code));
-            File.Copy(destFileName: output, overwrite: true, sourceFileName: temporary);
-            File.Delete(path: temporary);
+            File.Delete(path: output);
+            File.Move(destFileName: output, sourceFileName: temporary);
 
             return true;
         } finally {

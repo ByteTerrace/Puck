@@ -997,7 +997,12 @@ public static class WorldProjectionContent {
     private static ContentAddressedStore? ConfiguredStore;
 
     private static readonly Lazy<ContentAddressedStore> SharedStore = new(valueFactory: () => new ContentAddressedStore(
+        retention: Retention,
         root: PuckUserDirectory.Resolve(name: "projections")));
+
+    /// <summary>The bound the shared recipient cache is held to, least recently used out; an evicted body is fetched
+    /// again through the authorized door.</summary>
+    public static readonly CacheBound Retention = new(MaxBytes: (256L << 20), MaxEntries: 4096);
 
     /// <summary>Gets the recipient cache shared across worlds and observation lifetimes.</summary>
     public static ContentAddressedStore Shared {

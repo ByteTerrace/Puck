@@ -592,7 +592,7 @@
         },
         "OfficialManifest.CurrentSchema": {
             "open": [
-                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String)",
+                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String,System.Nullable{Puck.Abstractions.CacheBound})",
                 "M:Puck.Assets.Documents.DocumentCanonicalizer.SchemaViolationMessage(System.String,System.String)",
                 "M:Puck.Assets.Documents.DocumentCanonicalizer.ValidateExtensions(System.Collections.Generic.IDictionary{System.String,System.Text.Json.JsonElement},System.Collections.Generic.IReadOnlySet{System.String},System.Action{System.String,System.String})",
                 "M:Puck.Cli.CliExit.Refuse(System.String,System.String,System.String)",
@@ -767,7 +767,7 @@
         },
         "ReleaseManifest.CurrentSchema": {
             "open": [
-                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String)",
+                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String,System.Nullable{Puck.Abstractions.CacheBound})",
                 "M:Puck.Assets.ContentAddressedStore.Put(System.ReadOnlySpan{System.Byte})",
                 "M:Puck.Assets.ContentPin.ToString",
                 "M:Puck.Assets.ContentPin.TryParse(System.String,Puck.Assets.ContentPin@)",
@@ -777,7 +777,7 @@
                 "M:Puck.Assets.Documents.DocumentCanonicalizer.ValidateExtensions(System.Collections.Generic.IDictionary{System.String,System.Text.Json.JsonElement},System.Collections.Generic.IReadOnlySet{System.String},System.Action{System.String,System.String})",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "998bfb681cb448ff",
+            "shape": "97d1ac4900f09d50",
             "source": "src/Puck.Launcher/Release/ReleaseManifest.cs",
             "token": "puck.release.manifest.v1"
         },
@@ -921,7 +921,7 @@
                 "M:Puck.Shaders.ShaderToolchain.Resolve(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "685f64313c69ba9f",
+            "shape": "c33e5e6d5fa9291f",
             "source": "src/Puck.Shaders.Model/Compiler/ShaderCompiler.cs",
             "token": "puck-shader-compiler-1"
         },
@@ -1230,7 +1230,7 @@
                 "P:System.IO.Stream.Length",
                 "P:System.IO.Stream.Position"
             ],
-            "shape": "234a178527f77267",
+            "shape": "e6a2b67a41e8c0a4",
             "source": "src/Puck.World.Transpiler/Composition/WorldCompileCache.cs",
             "token": "PUCKWCC1"
         },
@@ -1613,7 +1613,7 @@
                 "M:Puck.Abstractions.Counting.WorkCounterSet.#ctor(System.String,System.ReadOnlySpan{Puck.Abstractions.Counting.WorkKind})",
                 "M:Puck.Abstractions.Counting.WorkKind.#ctor(System.String,System.String,Puck.Abstractions.Counting.WorkClass)",
                 "M:Puck.Abstractions.PuckUserDirectory.Resolve(System.String)",
-                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String)",
+                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String,System.Nullable{Puck.Abstractions.CacheBound})",
                 "M:Puck.Assets.ContentAddressedStore.TryGet(Puck.Assets.ContentPin,System.Byte[]@)",
                 "M:Puck.Assets.ContentPin.ToString",
                 "M:Puck.Assets.ContentPin.TryParse(System.String,Puck.Assets.ContentPin@)",
@@ -1710,7 +1710,7 @@
                 "P:Puck.World.WorldDefinition.StateCatalog",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "16821813bfcfbfc5",
+            "shape": "8713b218ad1ead5e",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED1"
         },
@@ -1722,7 +1722,7 @@
                 "M:Puck.Abstractions.Documents.CanonicalJsonDocument.SerializeCompact``1(``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0})",
                 "M:Puck.Abstractions.Documents.CanonicalJsonDocument.Serialize``1(``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0})",
                 "M:Puck.Abstractions.PuckUserDirectory.Resolve(System.String)",
-                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String)",
+                "M:Puck.Assets.ContentAddressedStore.#ctor(System.String,System.Nullable{Puck.Abstractions.CacheBound})",
                 "M:Puck.Assets.ContentAddressedStore.Put(System.ReadOnlySpan{System.Byte})",
                 "M:Puck.Assets.ContentAddressedStore.TryGet(Puck.Assets.ContentPin,System.Byte[]@)",
                 "M:Puck.Assets.ContentPin.Compute(System.ReadOnlySpan{System.Byte})",
@@ -1777,7 +1777,7 @@
                 "P:Puck.World.WorldJsonContext.WorldPrototypeContent",
                 "P:Puck.World.WorldStateSection.World"
             ],
-            "shape": "19de5d9a245ea435",
+            "shape": "ce7f392f0690479b",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },

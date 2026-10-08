@@ -62,13 +62,16 @@ whose command no longer breaks its rule, until the row is deleted.
     for one run (canary legs and packages, parity, counters, test, qualify,
     docs citations, affected `--record`, firmware, `compile --check`, the
     formatter's closure evaluation, the NuGet smoke install) creates a uniquely
-    named `puck-<verb>-…` directory under the temporary directory through one
-    policy, `RunDirectory` (`build/RunDirectory.cs`). A run that passes deletes
-    it. A run that fails, or stops before it reaches a verdict, keeps it and
-    prints `run directory kept: <absolute path>` on standard error, so the
-    evidence survives. The first directory a process creates under a prefix
-    deletes that prefix's directories older than six hours, which is how a
-    killed run's leftovers and old kept evidence go away. A directory that holds
+    named `puck-<verb>-…-<process id>-<token>` directory under the temporary
+    directory through one policy, `RunDirectory` (`build/RunDirectory.cs`). A
+    run that passes deletes it. A run that fails, or stops before it reaches a
+    verdict, keeps it and prints `run directory kept: <absolute path>` on
+    standard error, so the evidence survives, and then keeps only the newest
+    four directories of its kind whose processes have finished. The first
+    directory a process creates sweeps every kind the same way and removes any
+    finished process's directory older than six hours, which is how a killed
+    run's leftovers and old kept evidence go away; a directory whose process
+    still runs is never removed. A directory that holds
     no evidence or holds credentials (release staging, the bench state root) is
     deleted however the run ends. A directory the caller names (`--keep`,
     `--output`, `--out-dir`) is the caller's and is never deleted.
@@ -1158,7 +1161,10 @@ named by the SHA-256 of the repository's common Git directory
 (`git rev-parse --git-common-dir`, case folded on Windows), so every worktree
 of one repository shares one clone. The clone is made from that common Git
 directory and shares its objects through alternates; it is never a worktree
-and never registers in the caller's worktree list.
+and never registers in the caller's worktree list. Leasing a clone stamps its lease
+and keeps it and the most recently leased other clone, removing the rest once
+their own leases can be taken, so a clone another proof holds stays and the clone
+of a repository that is gone ages out.
 
 Each proof fetches the caller's `HEAD` by object id, checks it out detached,
 removes untracked files Git does not ignore, and mirrors the caller's
@@ -1641,7 +1647,8 @@ run building the same key waits for that build and uses it. The progress line
 `<verb>: reusing the Puck.World build of source state <key>.`) goes to standard
 error, so standard output carries only results. Each build is several hundred
 megabytes. The store keeps the four most recently used builds, plus any build a
-run still holds, and prunes the rest. A build directory left by a killed run is
+run still holds, and prunes the rest, under the per-user caches' one
+[retention policy](../development/contributing.md#per-user-directory). A build directory left by a killed run is
 deleted after six hours.
 
 Every build restores first. NuGet's no-op check compares each closure
@@ -3162,8 +3169,11 @@ creation baked once. A run whose compiled worlds name no bake writes no pack.
 (`WorldBakeStore`): the run reads each outcome whose key the cache holds and
 keeps there every outcome it bakes, so a run over unchanged prototypes bakes
 nothing and one after an edit bakes the edited prototypes alone. The pack's
-bytes are the same with or without the cache. The game's build passes
-`obj/bakes`; `--check` refuses the option, since it compares with a fresh run
+bytes are the same with or without the cache. The game's build passes the
+per-user `bakes` cache, which `puck parity` and the World share, so every
+checkout reuses every other's bakes; a bake's key carries the bake code's
+fingerprint, so checkouts whose bake code differs never share a key. `--check`
+refuses the option, since it compares with a fresh run
 (`TreeBakeCacheLawTests`).
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
