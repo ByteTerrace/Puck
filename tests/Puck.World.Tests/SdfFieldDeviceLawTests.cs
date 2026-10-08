@@ -205,8 +205,10 @@ public sealed partial class SdfFieldDeviceLawTests {
         );
         using var dynamicTable = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
             name: default, sizeBytes: (((ulong)transforms.Length) * 16), usage: GpuBufferUsage.Storage));
+        // One whole visibility record per case, as the kernels lay it out; a shorter buffer leaves the later cases'
+        // records out of range, which Direct3D 12 drops on store and reads back as zero.
         using var visibility = ((transforms is null) ? null : services.BufferFactory.CreateDeviceLocal(
-            name: default, sizeBytes: (((ulong)caseCount) * 64), usage: GpuBufferUsage.Storage));
+            name: default, sizeBytes: (((ulong)caseCount) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage));
         using var tapes = ((tapeWordsPerCase == 0) ? null : services.BufferFactory.CreateDeviceLocal(
             name: default, sizeBytes: checked(((((ulong)tapeWordsPerCase) * ((ulong)caseCount)) * sizeof(uint))), usage: GpuBufferUsage.Storage));
         using var masks = ((instanceMasks is null) ? null : services.BufferFactory.CreateHostVisible(
