@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The silo and extension surface this project exercises is read directly (public members only; see
+             AGENTS.md's InternalsVisibleTo ruling), never through reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Retirement must close the real silo routing session, including work awaiting a row's clock; the extension
+             model composes the World's and the silo's installations identically, the MCP and agent-harness extensions
+             among them. No graphics backend or composition root. -->
+        <ProjectReference Include="../../src/Puck.World.Silo/Puck.World.Silo.csproj" />
+        <ProjectReference Include="../../src/Puck.World.AgentHarness.Azure/Puck.World.AgentHarness.Azure.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
+        <ProjectReference Include="../../src/Puck.Mcp.Azure/Puck.Mcp.Azure.csproj" />
+        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/DeferredVerbFixtures.cs" Link="World/DeferredVerbFixtures.cs" />
+        <Compile Include="../Shared/World/FakeObjectBlobStore.cs" Link="World/FakeObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
+        <Compile Include="../Shared/World/PuckStorageTestComposition.cs" Link="World/PuckStorageTestComposition.cs" />
+        <Compile Include="../Shared/World/StallingObjectBlobStore.cs" Link="World/StallingObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/TestExtension.cs" Link="World/TestExtension.cs" />
+        <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
+    </ItemGroup>
+</Project>

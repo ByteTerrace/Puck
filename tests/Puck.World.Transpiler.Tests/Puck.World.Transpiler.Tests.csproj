@@ -16,6 +16,17 @@
         <Compile Include="../Shared/SpellingLaws.cs" Link="SpellingLaws.cs" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/RuleArenaFixture.cs" Link="World/RuleArenaFixture.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="../../src/Puck.Transpiler/Puck.Transpiler.csproj" />
         <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
         <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />

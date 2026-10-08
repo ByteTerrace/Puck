@@ -2908,7 +2908,7 @@ one-off shader is stored under the name it plans with, so another name misses.
 A damaged stored package is refused by its pin and nothing compiles in its
 place. In `tests/Puck.Cli.Tests`, `NoDeviceShaderCompileLawTests` hold every
 Puck assembly in the World's Release output to importing nothing from the
-Direct3D HLSL compiler. In `tests/Puck.World.Tests`, `PipelineOverrideLawTests`
+Direct3D HLSL compiler. In `tests/Puck.World.Presentation.Tests`, `PipelineOverrideLawTests`
 also check that a
 `world.load` and a boot refuse an unbound override by name, and that a recorded
 commit re-drives through `replay.verify` to a match while a shadow server

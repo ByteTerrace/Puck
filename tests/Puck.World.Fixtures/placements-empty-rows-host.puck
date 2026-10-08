@@ -1,0 +1,8 @@
+schema: "puck.world.definition.v1"
+basis: "../../src/Puck.World/Assets/worlds/standard"
+
+import "placements-section-module" as module
+
+placements {
+  rows []
+}

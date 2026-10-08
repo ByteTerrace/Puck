@@ -562,7 +562,9 @@ Run the focused laws after changing frames, handoff continuity, hysteresis,
 contact sweeping, or crossing durability:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*FederationTransferLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests" --filter-class "*WorldSiloCrossingRecoveryLawTests"
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests"
+dotnet test tests/Puck.World.Presentation.Tests/Puck.World.Presentation.Tests.csproj -c Release --no-restore --filter-class "*FederationTransferLawTests"
+dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --no-restore --filter-class "*WorldSiloCrossingRecoveryLawTests"
 dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 

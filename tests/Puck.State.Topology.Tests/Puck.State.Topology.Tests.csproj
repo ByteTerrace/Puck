@@ -13,6 +13,12 @@
         <Compile Include="../Shared/TopologyArenaFixture.cs" Link="TopologyArenaFixture.cs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- WorldPatternDifferentialLawTests holds the pattern machine to the Re# derivative engine, which runs on
+             FSharp.Core. -->
+        <PackageReference Include="FSharp.Core" Version="[11.*, )" />
+        <PackageReference Include="Resharp" Version="[1.*, )" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="../../src/Puck.State/Puck.State.csproj" />
         <ProjectReference Include="../../src/Puck.State.Topology/Puck.State.Topology.csproj" />
     </ItemGroup>

@@ -11,7 +11,7 @@ instantiates it.
 world outputs, reciprocal borders and doors, geometric module arguments, shared
 expansion budgets, source origins, and malformed-input refusals. CLI publication
 and lock refresh behavior are checked in `Puck.Cli.Tests`; host crossing behavior
-is checked in `Puck.World.Tests`.
+is checked in `Puck.World.Server.Tests`.
 
 `AssetLockTests` covers `asset "path"` parsing and compilation, deterministic
 full-SHA-256 locks, explicit refresh without compile-time writes, stale and

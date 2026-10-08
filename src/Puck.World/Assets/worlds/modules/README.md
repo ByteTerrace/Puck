@@ -533,7 +533,7 @@ number (`Puck.World.WorldPlacementEffectCost.Of`)—the handheld carries neither
 (`WorldPlacementEffectCost.DocumentCost`), well inside
 `Puck.State.RuleCapacity.MaxWorkUnitsPerTick`'s headroom
 (`world.budget.rules` prints the composed total against the ceiling).
-`tests/Puck.World.Tests/HandheldAttachLawTests.cs` proves the mechanism
+`tests/Puck.World.Games.Tests/HandheldAttachLawTests.cs` proves the mechanism
 against an isolated document; `RealArcadeModuleLawTests` in the same file
 proves the shipped pair against the composed island. What still keeps this a
 fixed-index attach: `upsertPlacement`'s embedded placement is a literal,

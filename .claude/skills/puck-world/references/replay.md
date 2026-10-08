@@ -661,7 +661,7 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   `replay.fork t1 30 t2`, `body.press strafe 1 1 0`, `world.wait 60`,
   `replay.stop` (MATCH), `replay.verify t2` (MATCH), `replay.inspect t2`
   (the `forked from` line). The in-process laws are
-  `tests/Puck.World.Tests/ReplayForkLawTests.cs` (header round-trip, doctored
+  `tests/Puck.World.Server.Tests/ReplayForkLawTests.cs` (header round-trip, doctored
   provenance refused, prefix copied verbatim, the boot-image reset
   reproducing the parent's hashes on the live server, the mask with its
   unmasked control, cancel abandoning a fork).

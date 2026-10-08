@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The document, server and transpiler surface this project exercises is read directly (public members only;
+             see AGENTS.md's InternalsVisibleTo ruling), never through reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Authored .puck worlds, compiled and composed through the same PuckDocumentComposer path as the executable
+             host, run on the authoritative server: no client, renderer or backend. -->
+        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
+        <!-- The shipped worlds carry Gaming Brick screens (the island's arcade, the hgb tools), so they validate against
+             both cores. -->
+        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Server.cs" Link="World/AuthoredGameFixtures.Server.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
+        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+        <Compile Include="../Shared/World/RuleArenaFixture.cs" Link="World/RuleArenaFixture.cs" />
+        <Compile Include="../Shared/World/SolitaireFixtures.cs" Link="World/SolitaireFixtures.cs" />
+        <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Server.cs" Link="World/VocabularyHooks.Server.cs" />
+        <Compile Include="../Shared/World/WorldDocumentCorpus.cs" Link="World/WorldDocumentCorpus.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
+             the game ships Assets/worlds (WorldAssetRowLoader); the shipped worlds these laws boot author them, so the
+             suite carries the same files at the same relative paths. -->
+        <None Include="../../src/Puck.World/Assets/worlds/music/**" LinkBase="Assets/worlds/music" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

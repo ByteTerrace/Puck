@@ -1,0 +1,537 @@
+using Puck.Testing;
+using Puck.Commands;
+using Xunit;
+
+using Puck.Hosting;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server.Tests;
+
+/// <summary>
+/// F7's law: <c>rateHz</c> 0 is legitimate <c>.puckreplay</c> tape metadata — a static/stopped world's recording has
+/// ZERO steps, and deriving a step width for one must reach an honest answer rather than throw
+/// <see cref="ArgumentOutOfRangeException"/> out of <c>EngineTicks.PerRate(ratePerSecond: 0)</c>, which
+/// <see cref="WorldReplaySnapshot.Drive"/> did unconditionally before this fix.
+/// </summary>
+/// <remarks>
+/// Driven against <see cref="WorldReplaySnapshot.ResolveStepWidth"/> — the guard extracted FROM <c>Drive</c> as its
+/// own testable primitive — rather than through a full record/stop/verify cycle over a loaded world document.
+/// <see cref="Puck.World.WorldDefinitionValidator"/> still refuses an authored <c>simulation.rateHz</c> &lt;= 0 as of
+/// this change (confirmed live in this tree: a hand-built rate-0 <see cref="WorldDefinition"/> handed straight to
+/// <see cref="WorldServer"/>'s constructor — which never calls <c>Validate</c> itself — still fails inside
+/// <see cref="WorldReplayTape.StopRecording"/>'s post-persist re-drive, because <c>Drive</c>'s own FIRST act is to
+/// re-deserialize its embedded document, which DOES call <c>Validate</c> and refuses rate 0 there, before ever
+/// reaching the step-width logic this fix touches) — a separate, in-flight partner-session landing is what makes
+/// rate 0 legitimate AUTHORED input, and until it lands NO path (app-level OR the full tape layer) can drive a
+/// rate-0 recording through an actual <see cref="WorldReplaySnapshot.Drive"/> call end to end. What CAN be proven
+/// today, and what these laws prove, is the extracted primitive itself: it needs nothing but the two raw numbers a
+/// hand-built tape can supply directly, with no document in the loop at all.
+/// </remarks>
+public sealed class ReplayRateZeroLawTests {
+    [Fact]
+    public void NonZeroRate_IsUnaffectedAndStillDerivesTheOrdinaryStepWidth() {
+        // The control: an ordinary authored rate must resolve EXACTLY as EngineTicks.PerRate always has, ticks
+        // present or not — the rate-0 guard must never shadow the ordinary path.
+        Assert.Equal(
+            expected: EngineTicks.PerRate(ratePerSecond: 240U),
+            actual: WorldReplaySnapshot.ResolveStepWidth(
+                recordedTickCount: 0,
+                simulationRate: 240U
+            )
+        );
+        Assert.Equal(
+            expected: EngineTicks.PerRate(ratePerSecond: 240U),
+            actual: WorldReplaySnapshot.ResolveStepWidth(
+                recordedTickCount: 5,
+                simulationRate: 240U
+            )
+        );
+    }
+    [Fact]
+    public void RateZeroWithARecordedTick_RefusesByNameRatherThanThrowingUnnamed() {
+        // THE DISCRIMINATOR against the pre-fix behavior: a rate-0 tape that somehow recorded a tick is the ONE
+        // shape that is genuinely inconsistent (Drive's own step loop would have nothing to derive a width FOR).
+        // Before this fix that inconsistency was indistinguishable from the legitimate zero-tick case — both threw
+        // the SAME unnamed ArgumentOutOfRangeException. After it, only this shape throws, and it throws NAMED.
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.ResolveStepWidth(
+            recordedTickCount: 3,
+            simulationRate: 0U
+        ));
+
+        Assert.Contains(
+            expectedSubstring: "RateZeroCarriesTicks",
+            actualString: exception.Message
+        );
+    }
+    [Fact]
+    public void RateZeroWithNoRecordedTicks_ResolvesToZeroWithoutThrowing() {
+        // Before this fix: WorldReplaySnapshot.Drive called EngineTicks.PerRate(ratePerSecond: 0) unconditionally,
+        // which throws ArgumentOutOfRangeException — this exact legitimate case (a static world's empty recording)
+        // would have thrown instead of reaching a step width at all.
+        var stepWidth = WorldReplaySnapshot.ResolveStepWidth(
+            recordedTickCount: 0,
+            simulationRate: 0U
+        );
+
+        Assert.Equal(
+            actual: stepWidth,
+            expected: 0UL
+        );
+    }
+}
+/// <summary>
+/// F8's law: a <c>.puckreplay</c> tape's header stamps the RECORD-START rate, never the live rate as it happens to
+/// stand when <c>replay.stop</c> is typed — and a mid-capture rebuild that changes the rate stops the recording
+/// loudly rather than let the header and a later span of ticks silently disagree about what rate produced them.
+/// </summary>
+public sealed class ReplayRateStampLawTests {
+    // Serializes a definition to a fresh file under the law's directory and returns its path plus content hash — the
+    // shape a live world.load needs (WorldReplayEntry.Rebuild carries no embedded document for Load/Reload, only a path
+    // hint the tape and its own re-drive both re-read fresh).
+    private static (string Path, string ContentHash) WriteTempWorldFile(TemporaryDirectory directory, WorldDefinition definition) {
+        var bytes = WorldDefinitionSerialization.Serialize(definition: definition);
+        var path = directory.WriteBytes(
+            bytes: bytes,
+            name: $"rebuild-{Guid.NewGuid():N}.json"
+        );
+
+        return (path, WorldDefinitionFileSource.ComputeContentHash(content: bytes));
+    }
+
+    [Fact]
+    public void MidCaptureRebuildChangingRate_StopsTheRecordingAndKeepsTheRecordStartHeaderRate() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"f8-rate-change-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        // One ordinary tick at the record-start rate this law authors by name.
+        fixture.Step();
+        tape.NoteTick();
+
+        Assert.Equal(
+            expected: WorldReplayMode.Recording,
+            actual: tape.Mode
+        );
+
+        // A LIVE rebuild swapping in an otherwise-identical, fully valid document at a DIFFERENT (but still legal)
+        // rate — 120 Hz divides 50400 exactly, same as 240 Hz does, so this never touches the rate-0 validator gate
+        // at all; it only needs to disagree with the record-start rate. A real on-disk path is required: a live
+        // world.load is CAS-pinned against a re-readable file (WorldReplayEntry.Rebuild carries no document, only a
+        // path hint + content hash, on both the live tape write and the replay re-drive).
+        var (path, contentHash) = WriteTempWorldFile(directory: stateDirectory, definition: (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 120) }));
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: null,
+                Force: false,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: path)
+            ),
+            principal: Principal.Console
+        );
+
+        // Drains the rebuild (WorldServer.Step -> DrainPendingOps -> ApplyRebuild swaps the live definition to
+        // 120 Hz) and closes the tick it landed on.
+        fixture.Step();
+        tape.NoteTick();
+
+        // NoteTick's own mid-capture rate-change check fires the instant the live rate (120) disagrees with the
+        // rate snapshotted at record-start (240) — auto-stopping rather than leaving the recording open to
+        // silently mix rates under one header.
+        Assert.Equal(
+            expected: WorldReplayMode.Idle,
+            actual: tape.Mode
+        );
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
+
+        // THE DISCRIMINATOR: before this fix the header stamped the LIVE rate at stop time (120, the
+        // post-rebuild rate) even though the recorded span actually ran at 240 — an internally inconsistent
+        // tape that would then report RateMismatch against its OWN embedded (still-240) definition the moment
+        // it was driven. After this fix the header keeps the RECORD-START rate.
+        Assert.Equal(
+            expected: 240U,
+            actual: persisted.SimulationRate
+        );
+        // Both ticks closed before the auto-stop — the rebuild's own tick is still captured, just as the LAST one.
+        Assert.Equal(
+            expected: 2,
+            actual: persisted.Ticks.Count
+        );
+    }
+    [Fact]
+    public void MidCaptureRebuildKeepingTheSameRate_KeepsRecording() {
+        // THE CONTROL: a rebuild that does NOT change the rate must never trip the auto-stop — only a genuine rate
+        // disagreement does.
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"f8-rate-same-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        fixture.Step();
+        tape.NoteTick();
+
+        // A same-rate rebuild — same 240 Hz, otherwise identical document.
+        var (path, contentHash) = WriteTempWorldFile(directory: stateDirectory, definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: null,
+                Force: false,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: path)
+            ),
+            principal: Principal.Console
+        );
+
+        fixture.Step();
+        tape.NoteTick();
+
+        Assert.Equal(
+            expected: WorldReplayMode.Recording,
+            actual: tape.Mode
+        );
+
+        var result = tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+
+        Assert.Equal(
+            expected: 240U,
+            actual: WorldReplaySnapshot.Read(stream: stream).SimulationRate
+        );
+    }
+}
+/// <summary>
+/// F9's law: <c>replay.stop</c> while paused must not drop the pause lever it just armed — the tape's last recorded
+/// fact must be the pause that was live when the recording stopped, never silently discarded because it never
+/// closed a tick of its own.
+/// </summary>
+public sealed class ReplayPendingLeverFlushLawTests {
+    [Fact]
+    public void StopWhilePaused_FlushesThePendingPauseLeverOntoTheLastClosedTick() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer();
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"f9-pause-stop-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        // One ordinary CLOSED tick, so there is a tick group to fold the pending lever onto.
+        fixture.Step();
+        tape.NoteTick();
+
+        // The live pause lever landing — mirrors WorldRateCommandModule.Pause calling this on a real world.rate
+        // pause. NOTHING closes another tick after this: a paused boot world never steps again (out of reach from
+        // this project's own composition-root gate), so NoteTick never fires again and the pause event would be
+        // stranded in the still-open bucket at stop time without this fix.
+        tape.NoteRateLever(paused: true);
+
+        var result = tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
+
+        // THE DISCRIMINATOR: before this fix StopRecording persisted only the CLOSED tick groups — the pending
+        // pause event, never rotated into one, was silently dropped, and this assertion would find no RateLever
+        // entry anywhere in the tape at all.
+        Assert.Single(collection: persisted.Ticks);
+        Assert.Contains(
+            collection: persisted.Ticks[0].Authority,
+            filter: entry => (entry.GetType().Name == "RateLever")
+        );
+    }
+    // G5 — THE LEVER FLUSH REORDERS ARBITRARY AUTHORITY. StopRecording used to fold the WHOLE pending bucket — every
+    // authority kind and every pending intent, not just the rate lever — onto the last CLOSED tick: a command
+    // submitted while paused would replay BEFORE the tick it actually followed, and recording it there would claim
+    // it ran on a tick it did not. Only RateLever is provably harmless to fold this way (Drive's own re-drive treats
+    // it as a documented no-op); everything else must be DISCARDED instead.
+    [Fact]
+    public void StopWithAPendingNonLeverGrant_DiscardsItRatherThanFoldingItOntoTheLastClosedTick() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer();
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"g5-discard-non-lever-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        // One ordinary CLOSED tick — a tick group the OLD behavior would have folded the pending grant onto.
+        fixture.Step();
+        tape.NoteTick();
+
+        // A pending GRANT, submitted straight through the loopback (GrantTap fires synchronously, inline — see
+        // LoopbackTransport.SubmitGrant's own remarks) with NO fixture.Step()/tape.NoteTick() afterward, so it never
+        // closes onto a tick of its own — the identical "stranded in the open bucket" shape NoteRateLever's own
+        // pause event used to strand in, but for a kind that is NOT provably harmless to relocate.
+        transport.SubmitGrant(
+            grant: new WorldGrant(
+                Grantee: Principal.Seat(slot: 1),
+                Capability: WorldCapability.Drive,
+                Subject: GrantSubject.Body(index: 0),
+                Exclusive: false
+            ),
+            actor: Principal.Console
+        );
+
+        var result = tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
+
+        // THE DISCRIMINATOR: before this fix, this Grant would appear in tick 0's own authority list (folded onto
+        // the last closed tick, exactly like a RateLever) — a command that never actually ran on tick 0 would
+        // replay as if it had. After this fix it is discarded outright.
+        Assert.Single(collection: persisted.Ticks);
+        Assert.DoesNotContain(
+            collection: persisted.Ticks[0].Authority,
+            filter: entry => (entry.GetType().Name == "Grant")
+        );
+    }
+    [Fact]
+    public void StopWithNoPendingLever_CarriesNoRateLeverEntry() {
+        // THE CONTROL: an ordinary stop with nothing pending must not manufacture a lever entry out of nowhere.
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer();
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"f9-no-pause-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        fixture.Step();
+        tape.NoteTick();
+
+        var result = tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
+
+        Assert.Single(collection: persisted.Ticks);
+        Assert.DoesNotContain(
+            collection: persisted.Ticks[0].Authority,
+            filter: entry => (entry.GetType().Name == "RateLever")
+        );
+    }
+    // G5's OTHER edge: a recording stopped before its very first step has NO closed tick to fold a pending lever
+    // onto at all — the tape's own wire shape (WorldReplaySnapshot) carries no header/trailer slot outside the
+    // per-tick Ticks list a lever fact could attach to without one, so this case drops the lever BY DESIGN rather
+    // than minting a phantom tick Drive never actually ran.
+    [Fact]
+    public void StopWithZeroClosedTicksAndAPendingLever_RecordsZeroTicksRatherThanMintingAPhantomOne() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        using var fixture = Fixtures.FreshServer();
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var name = $"g5-zero-tick-lever-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        // A pending pause lever with NO fixture.Step() ever having run — recording stops before its first tick.
+        tape.NoteRateLever(paused: true);
+
+        var result = tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
+
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
+
+        Assert.Empty(collection: persisted.Ticks);
+    }
+}
+/// <summary>
+/// CONTRACT UNDER TEST: <see cref="WorldReplayTape.StopRecording"/> leaves the tape Idle, its taps detached and a fresh
+/// recording armable, whichever step of persisting the tape fails: resolving the <c>Replays</c> directory under an
+/// unwritable state root (<see cref="WorldReplayTape.PathFor"/>), or writing the tape file itself.
+/// </summary>
+public sealed class ReplayStopFailureLawTests {
+    // The state root is a file, so creating its Replays directory fails inside PathFor.
+    [Fact]
+    public void StopUnderAnUnwritableStateRoot_LeavesTheTapeIdleWithTapsDetached() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        AssertStopFailureLeavesTheTapeIdle(
+            obstruct: static _ => { },
+            stateRoot: new WorldStateRoot(path: stateDirectory.WriteText(
+                name: "not-a-directory",
+                text: string.Empty
+            ))
+        );
+    }
+    // A directory occupies the exact path the tape would write its file to.
+    [Fact]
+    public void StopWhenTheTapeFileCannotBeWritten_LeavesTheTapeIdleWithTapsDetached() {
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
+
+        AssertStopFailureLeavesTheTapeIdle(
+            obstruct: static path => Directory.CreateDirectory(path: path),
+            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath)
+        );
+    }
+
+    private static void AssertStopFailureLeavesTheTapeIdle(Action<string> obstruct, WorldStateRoot stateRoot) {
+        using var fixture = Fixtures.FreshServer();
+        var transport = new LoopbackTransport(server: fixture.Server);
+        var tape = new WorldReplayTape(
+            addonHostFactory: static (_, _) => new NullAddonHost(),
+            engines: [],
+            liveServer: fixture.Server,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            profiles: fixture.Server.Profiles,
+            stateRoot: stateRoot,
+            transport: transport
+        );
+        var name = $"stop-failure-{Guid.NewGuid():N}";
+
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: name,
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
+
+        fixture.Step();
+        tape.NoteTick();
+        obstruct(obj: Path.Combine(
+            path1: stateRoot.FullPath,
+            path2: "Replays",
+            path3: $"{name}.puckreplay"
+        ));
+
+        var thrown = Record.Exception(testCode: () => tape.StopRecording());
+
+        Assert.True(
+            condition: (thrown is IOException or UnauthorizedAccessException),
+            userMessage: $"expected a write failure (IOException/UnauthorizedAccessException), got: {thrown}"
+        );
+        // Idle alone could be a flipped flag; the server's taps and the catalog's recording mark show it detached.
+        Assert.Equal(
+            expected: WorldReplayMode.Idle,
+            actual: tape.Mode
+        );
+        Assert.Null(@object: fixture.Server.MutationTap);
+        Assert.Null(@object: fixture.Server.MutationOutcomeTap);
+        Assert.Null(@object: fixture.Server.RebuildTap);
+        Assert.Null(@object: fixture.Server.ArrivalTap);
+        Assert.Null(@object: fixture.Server.DepartureTap);
+        Assert.False(condition: fixture.Server.Profiles.Recording);
+        // A re-arm records again, from a checkpoint of the stepped world, never "already recording".
+        Assert.True(condition: tape.TryBeginRecording(name: $"{name}-retry", refusal: out var retryRefusal), userMessage: retryRefusal);
+        Assert.NotNull(@object: fixture.Server.MutationTap);
+        Assert.Equal(expected: $"{name}-retry", actual: tape.CancelRecording());
+    }
+}

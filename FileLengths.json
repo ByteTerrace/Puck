@@ -33,7 +33,7 @@
         "tests/Puck.Maths.Tests/Subjects.PresentedPhase4ZetaAndKnots.cs": 2369,
         "tests/Puck.Maths.Tests/Subjects.PresentedStructuralClaims.cs": 2019,
         "tests/Puck.Maths.Tests/Subjects.PrimeAndExtensionFields.cs": 2184,
-        "tests/Puck.World.Tests/FederationTransferLawTests.cs": 2342,
-        "tests/Puck.World.Tests/HoldLawTests.cs": 2024
+        "tests/Puck.World.Presentation.Tests/FederationTransferLawTests.cs": 2342,
+        "tests/Puck.World.Server.Tests/HoldLawTests.cs": 2024
     }
 }

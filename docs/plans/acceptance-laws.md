@@ -18,14 +18,14 @@ are fixed with laws of their own.
 
 ## Implementation status
 
-Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
+Law 1 is implemented, in `tests/Puck.World.Presentation.Tests/ProjectionAnchorLawTests.Seek.cs`;
 law 2's local walked crossing in
-`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs` and its identity
+`tests/Puck.World.Server.Tests/CrossingReplayTravellerLawTests.cs` and its identity
 sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
-`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
+`tests/Puck.World.Server.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
 legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
-`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
+`tests/Puck.World.Presentation.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
 `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
 classified so far. The design was read against the integration branch, and a
 review checked that no law can pass while its claim is false. Designing the laws
@@ -158,7 +158,7 @@ variants, the eased value and the authoritative hash against the live run,
 disclosure after the jump, and the structural projection equal to a fresh
 sink's.
 
-**Lives in** `tests/Puck.World.Tests`, as a partial of the projection anchor laws
+**Lives in** `tests/Puck.World.Presentation.Tests`, as a partial of the projection anchor laws
 so it reuses their document and anchor helpers, driven by `WorldHistoryHarness`.
 **GPU:** none.
 
@@ -217,7 +217,7 @@ grants and census across an arrival and a rollback. No law asserts the mobility
 credential or the velocity after replay. This law adds them, on a walked, mapped
 crossing with a profiled traveller, through both tapes.
 
-**Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
+**Lives in** `tests/Puck.World.Server.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
 **As implemented.** The recording starts at the rows' first tick, so each tape
@@ -313,7 +313,7 @@ uninterrupted run does, and the checkpoint carries the memo in binding order.
 This law adds the Read leg, the collision leg over shared names and ordinals,
 and the comparison of the journal and the document bytes.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Server.Tests`. **GPU:** none.
 
 **As implemented.** One theory runs the write and read legs, and both carry the
 collision: two machines, `left` and `right`, each bind `value` and `other` at the
@@ -466,7 +466,7 @@ bytes (`WorldFederationCodec.EncodeCommit`). This law adds the one end-to-end
 case the milestone names: a commit that crosses, federated and colocated, read
 at the bytes on the wire and at the seat it lands in.
 
-**Lives in** `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The
+**Lives in** `tests/Puck.World.Presentation.Tests/FederatedCommitPrivacyLawTests.cs`. The
 federated leg skips itself on a host without QUIC; the federation harness has no
 such skip, so the harness's own laws fail there instead. **GPU:** none.
 

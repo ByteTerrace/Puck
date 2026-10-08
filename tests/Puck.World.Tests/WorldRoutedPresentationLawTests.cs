@@ -93,7 +93,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     );
     // The destination runs a document of its own, and stands a door the home world has not.
     private static WorldDefinition AwayDocument() => (Fixtures.BuildDocument() with {
-        CreationsRaw = [PortalArrivalValidationLawTests.BuildDoorCreation()],
+        CreationsRaw = [PortalFixtures.BuildDoorCreation()],
         DocumentId = "away",
         PlacementRowsRaw = [new WorldPlacement(
             Id: "door",
