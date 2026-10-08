@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
+using Puck.DirectX.Messages;
 using Puck.Testing;
 using Xunit;
 
@@ -14,7 +15,9 @@ namespace Puck.DirectX.Tests;
 /// attempting the creation, so teardown after a failed bring-up neither retries it nor masks it. The device's identity is read only
 /// from a created device, so it is absent before and after a failed bring-up. A bring-up that fails after its device is
 /// created releases that device and leaves the context retryable: the next use creates a device again rather than
-/// finding one with no queue. The device API is a fake whose creation fails, touching no adapter, or one that creates a
+/// finding one with no queue. The default adapter (LUID zero) is created through the device API like any other, and
+/// selects the first hardware adapter, never a software renderer DXGI enumerates ahead of it, so a process Windows no
+/// longer lets use the GPU refuses rather than renders on the CPU. The device API is a fake whose creation fails, touching no adapter, or one that creates a
 /// software (WARP) device and then fails to read it.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXDeviceBringUpLawTests {
@@ -35,6 +38,35 @@ public sealed class DirectXDeviceBringUpLawTests {
         );
         Assert.IsType<DirectXException>(@object: unavailable.InnerException);
         Assert.False(condition: context.IsInitialized);
+    }
+    [Fact]
+    public void TheDefaultAdapterIsCreatedThroughTheDeviceApiAndAnUnsatisfiedOneIsUnavailable() {
+        var api = new FailingDeviceApi();
+        var context = new DirectXDeviceContext(
+            adapterLuid: 0L,
+            deviceApi: api,
+            minimumFeatureLevel: DirectXFeatureLevel.Level120
+        );
+
+        _ = Assert.Throws<GpuDeviceUnavailableException>(testCode: () => context.Device);
+        Assert.Equal(
+            expected: [0L],
+            actual: api.RequestedLuids
+        );
+    }
+    [Fact]
+    public void TheDefaultAdapterIsTheFirstHardwareAdapterNeverASoftwareRendererEnumeratedAheadOfIt() {
+        DirectXAdapterDescription[] adapters = [Adapter(luid: 5L, software: true), Adapter(luid: 9L, software: false), Adapter(luid: 12L, software: false)];
+
+        Assert.Equal(
+            expected: [9L, 12L],
+            actual: adapters.Where(predicate: static adapter => adapter.IsSelectedBy(adapterLuid: 0L)).Select(selector: static adapter => adapter.AdapterLuid)
+        );
+        Assert.Equal(
+            expected: [5L],
+            actual: adapters.Where(predicate: static adapter => adapter.IsSelectedBy(adapterLuid: 5L)).Select(selector: static adapter => adapter.AdapterLuid)
+        );
+        Assert.DoesNotContain(collection: adapters, filter: static adapter => adapter.IsSelectedBy(adapterLuid: 7L));
     }
     [Fact]
     public void DrainingADeviceThatWasNeverCreatedDoesNotCreateIt() {
@@ -120,12 +152,17 @@ public sealed class DirectXDeviceBringUpLawTests {
         Assert.False(condition: context.IsInitialized);
     }
 
+    private static DirectXAdapterDescription Adapter(long luid, bool software) => new(
+        AdapterLuid: luid, DedicatedSystemMemory: 0, DedicatedVideoMemory: 0, Description: (software ? "Microsoft Basic Render Driver" : "hardware"),
+        DeviceId: 0, IsSoftware: software, Revision: 0, SharedSystemMemory: 0, SubSystemId: 0, VendorId: 0);
+
     private sealed class FailingDeviceApi : IDirectXDeviceApi {
-        public int CreateDeviceCalls { get; private set; }
+        public int CreateDeviceCalls => RequestedLuids.Count;
         public int GetDeviceIdentityCalls { get; private set; }
+        public List<long> RequestedLuids { get; } = [];
 
         public DirectXDevice CreateDevice(long adapterLuid, DirectXFeatureLevel minimumFeatureLevel) {
-            CreateDeviceCalls++;
+            RequestedLuids.Add(item: adapterLuid);
 
             throw new DirectXException(
                 operation: "D3D12CreateDevice",
