@@ -345,8 +345,8 @@ resolves its candidate exactly as a live rebuild does (Reset: its own
 carries no embedded document, deliberately, so a moved file is caught rather
 than silently reproduced from a stored copy) and refuses BY NAME,
 `ReplayRefusal.RebuildContentMismatch`/`RebuildSourceUnavailable`, naming
-found vs expected, before installing anything, on any disagreement. No
-armed-recording refusal remains for any of the three verbs.
+found vs expected, before installing anything, on any disagreement. None of
+the three verbs refuses while a recording is armed.
 
 ## The hash boundaries — what a MATCH proves
 
@@ -380,7 +380,7 @@ tracked pose derives from every tick), so a follower divergence still surfaces
 as a hash MISMATCH on the very next tick it moves the pose — but the follower
 raws themselves are not independently hashed; they cross only through
 `WorldBodyTransferState`/`WorldAuthorityCheckpointCodec` (see
-[mutations.md](mutations.md)'s body-motion notes), never the replay tape.
+[documents-motion.md](documents-motion.md)'s `shaping` section), never the replay tape.
 Checkpoint continuation also carries the follower seed latches, arbitrary-up
 frame/reseat/turn fractions, and same-world tether state through
 `WorldBodyIntegrationResidue`; none is independently covered by this population

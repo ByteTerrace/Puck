@@ -337,14 +337,26 @@ public sealed partial class ShaderBuild {
         } finally {
             // A request still outstanding is abandoned: cancelled, it ends at once, and a grant it already won goes back
             // with the rest. A broker answering it later gives that grant back itself.
-            await stopping.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
-            if (request is not null) {
+            try {
+                await stopping.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+            } finally {
                 try {
-                    held += await request.ConfigureAwait(continueOnCapturedContext: false);
-                } catch (Exception exception) when ((exception is OperationCanceledException or IOException)) { }
-            }
-            if (held > 0) {
-                cores.Release(count: held);
+                    // A fault can bypass the admission loop while peers are still unwinding their child processes.
+                    // Their cores belong to them until every child and publication has finished.
+                    await Task.WhenAll(tasks: running).ConfigureAwait(continueOnCapturedContext: false);
+                } finally {
+                    try {
+                        if (request is not null) {
+                            try {
+                                held += await request.ConfigureAwait(continueOnCapturedContext: false);
+                            } catch (Exception exception) when ((exception is OperationCanceledException or IOException)) { }
+                        }
+                    } finally {
+                        if (held > 0) {
+                            cores.Release(count: held);
+                        }
+                    }
+                }
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

@@ -531,11 +531,11 @@ must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
 describes. The build compiles through the runtime's `ShaderCompiler` into the
 per-user shader cache, keyed by each source's include closure, its options and
-the DXC, not by the checkout. A cold machine compiles every kernel once, many at
-a time on the cores MSBuild grants, the longest first. After that, a fresh
-worktree on any commit compiles only the outputs whose closure it changed, and
-editing one `.hlsli` recompiles only the outputs that include it, so no special
-build flags are needed. The [shader reference](../reference/shaders.md#freshness)
+the DXC, not by the checkout. A cold machine compiles missing outputs on the
+cores MSBuild grants, the longest first. A fresh worktree reuses valid entries
+with matching closures, options, and toolchain; editing one `.hlsli`
+invalidates only the outputs that include it. No special build flags are
+needed. The [shader reference](../reference/shaders.md#freshness)
 owns the cache, its `PuckShaderCacheDirectory` override and the publication rules.
 The `Puck.World` build also packages every pipeline source a shipped
 world names into the [package store](../reference/shaders.md#the-builds-package-store)

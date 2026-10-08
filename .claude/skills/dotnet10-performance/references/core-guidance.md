@@ -40,7 +40,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **UTF-8 and spans are the first-class shape.** `Guid`/`Version`/`Char`/`Rune` now implement `IUtf8SpanParsable`, and `IPAddress`/`IPNetwork` gained UTF-8 span parse overloads; new APIs (PQC crypto, hex, PEM, JSON marshal) are span-first with arrays as the convenience layer. Data born as bytes should stay bytes end-to-end — transcoding to UTF-16 first is now slower *and* unidiomatic.
 - **The framework absorbs degenerate cases and hand-optimizations.** Single-task `WhenAll`, channel-cancellation buildup, local-queue starvation, `ValueStopwatch`, shuffle helpers, single-`Contains` LINQ pipelines — delete defensive special-casing. Delegating to primitives (`SearchValues`, `TensorPrimitives`, `MemoryExtensions`) means inheriting every future SIMD/algorithm improvement; a manual loop inherits none.
 - **Optimization is work elimination, not faster work.** Regex auto-atomicity, LINQ cross-operator algebra (`OrderBy().Contains()` skips the sort), double-lookup elimination, one-fewer-delegate-layer. In your own hot paths, hunt single layers of indirection and redundant lookups.
-- **Upgrading the TFM is itself a strategy.** The release is hundreds of compounding small wins; net8→net10 compounds two releases. Benchmark folklore ages fast — re-measure (BenchmarkDotNet, `--runtimes net9.0 net10.0`) before keeping any workaround.
+- **The TFM is fixed at net10.0.** The release is hundreds of compounding small wins, and benchmark folklore ages fast: check an old workaround against current codegen (disassembly through `puck bench kernels`) before keeping it.
 
 ## Free wins (just target net10.0)
 

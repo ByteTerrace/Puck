@@ -5,9 +5,10 @@ description: Applies .NET 10 performance behavior when writing, reviewing, refac
 
 # .NET 10 performance
 
-This skill is factual, not an architecture or style mandate. Measure before
-changing clear code, benchmark the actual target, and distinguish runtime
-improvements from workload-specific evidence.
+This skill is factual, not an architecture or style mandate. Judge a change by
+code, disassembly and load-independent counts (allocations, operation counts);
+a wall-clock benchmark runs only when the owner asks for one, through
+`puck bench`. Distinguish runtime improvements from workload-specific evidence.
 
 ## Route to the relevant evidence
 
@@ -32,8 +33,7 @@ affected project file before changing code.
 - **`net10.0` is the repository default.** `Puck.Analyzers` deliberately targets
   `netstandard2.0`; inspect the affected project rather than assuming every
   project inherits the default. A reference that compares net9.0 with net10.0
-  describes an upgrade decision this tree has already made. Benchmark before
-  and after on the actual target.
+  describes an upgrade decision this tree has already made.
 - **`InvariantGlobalization` is on.** Culture-sensitive comparison and formatting
   guidance collapses to the invariant case, and there is no ICU behavior to tune.
 - **`PlatformTarget` is x64 and `OptimizationPreference` is Speed.** Arm-specific
@@ -116,8 +116,9 @@ outside this contract and takes the references as written.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;
   performance evidence does not silently authorize changing them.
-- Record the runtime, build configuration, workload, and before/after result
-  for any performance claim.
+- Record the runtime, build configuration, workload, and the counts or
+  disassembly behind any performance claim, plus the `puck bench` result when
+  the owner asked for a timing.
 
 ## Route adjacent work
 

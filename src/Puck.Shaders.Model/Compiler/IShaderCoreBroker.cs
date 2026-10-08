@@ -52,6 +52,7 @@ public sealed class FixedShaderCoreBroker : IShaderCoreBroker {
     /// <inheritdoc/>
     public async Task<int> RequestAsync(int count, CancellationToken cancellationToken) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: count, other: 1);
+        cancellationToken.ThrowIfCancellationRequested();
 
         while (true) {
             Task released;

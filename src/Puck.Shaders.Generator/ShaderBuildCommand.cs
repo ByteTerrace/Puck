@@ -13,7 +13,9 @@ namespace Puck.Shaders.Generator;
 /// <see cref="ShaderCompiler.DefaultCacheDirectory"/>), <c>--dxc &lt;command&gt;</c> (default <c>dxc</c>) and
 /// <c>--jobs &lt;n&gt;</c>. Without <c>--jobs</c> a compile asks its host for every core over its standard streams
 /// (<see cref="StreamShaderCoreBroker"/>); the build host answers from MSBuild's own core budget. Every message is one
-/// line on standard output, and an error is a line in MSBuild's canonical format.
+/// line on standard output, and an error is a line in MSBuild's canonical format. A host's <c>cancel</c> line, or the end
+/// of its answers, cancels the build: every compile it started ends first, then the generator prints one line saying so
+/// and exits 1.
 /// </remarks>
 internal static class ShaderBuildCommand {
     public static async Task<int> RunAsync(string[] arguments) {
@@ -58,15 +60,26 @@ internal static class ShaderBuildCommand {
                 return (build.Check(outputs: outputs) ? 0 : 1);
             }
 
+            using var stopping = new CancellationTokenSource();
+
             return (await build.CompileAsync(
-                cancellationToken: CancellationToken.None,
-                cores: ((jobs > 0) ? new FixedShaderCoreBroker(cores: jobs) : new StreamShaderCoreBroker(answers: new StreamReader(stream: Console.OpenStandardInput()), requests: Console.Out)),
+                cancellationToken: stopping.Token,
+                cores: ((jobs > 0) ? new FixedShaderCoreBroker(cores: jobs) : new StreamShaderCoreBroker(answers: new StreamReader(stream: Console.OpenStandardInput()), requests: Console.Out, cancel: stopping.Cancel)),
                 outputs: outputs
             ).ConfigureAwait(continueOnCapturedContext: false) ? 0 : 1);
+        } catch (OperationCanceledException) {
+            // The build joins every compile it started before it reports cancellation, so its host can tell a graceful
+            // stop from the process-tree kill it falls back to.
+            Console.Out.WriteLine(value: CancelledLine);
+
+            return 1;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or FormatException)) {
             return Refuse(reason: exception.Message);
         }
     }
+
+    /// <summary>The line the generator prints when its build was cancelled and every compile it started has ended.</summary>
+    private const string CancelledLine = "Shader build cancelled: every compile it started has ended.";
 
     private static int Refuse(string reason) {
         Console.Out.WriteLine(value: $"Puck.Shaders.Generator: error PUCKSHADER: {reason.ReplaceLineEndings(replacementText: " ")}");

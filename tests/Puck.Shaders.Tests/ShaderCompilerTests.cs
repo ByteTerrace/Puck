@@ -252,7 +252,11 @@ public sealed partial class ShaderCompilerTests {
                 while (!reading.IsCancellationRequested) {
                     foreach (var bytecode in Entries(directory: fixture.Path)) {
                         try {
-                            if (AtomicFile.ReadAllBytes(path: bytecode).Length != 4) { incomplete.Add(item: bytecode); }
+                            var entry = AtomicFile.ReadAllBytes(path: bytecode);
+
+                            if ((entry.Length != 68) || !entry.AsSpan(length: 32, start: 32).SequenceEqual(other: System.Security.Cryptography.SHA256.HashData(source: entry.AsSpan(start: 64)))) {
+                                incomplete.Add(item: bytecode);
+                            }
                         } catch (FileNotFoundException) {
                             // Entries are never removed once published, so a vanished one is incomplete too.
                             incomplete.Add(item: bytecode);

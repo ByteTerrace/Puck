@@ -97,7 +97,7 @@ a delivered neighbour refresh before the world calls the link dropped. `0` (the
 default) disables sensing for the row entirely — no event, and `$link:` reads 0
 — so a world authoring none is unchanged. Compiled per document through
 `WorldDefinition.AdjacencyLivenessGraceTicks`, the
-`population.reconnectGraceSeconds` idiom; validated `0..600`. This is what the
+`bodies.reconnectGraceSeconds` idiom; validated `0..600`. This is what the
 `linkEstablished`/`linkDropped` world event family and the `$link:<name>` rule
 channel threshold against, and `world.links` is its read-back — one line per
 authored row naming the destination, the neighbour authority, the tick-derived

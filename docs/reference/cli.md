@@ -1170,10 +1170,11 @@ Each proof fetches the caller's `HEAD` by object id, checks it out detached,
 removes untracked files Git does not ignore, and mirrors the caller's
 uncommitted and untracked files. Ignored managed build outputs stay in the clone at
 the paths where MSBuild produced them. Nothing copies or links the caller's
-`obj` or `bin`. The clone's shader build compiles into the per-user shader
-cache every checkout shares, keyed by each source's include closure, so its
-shaders are published from that cache and only a shader the proof withholds or
-changes compiles ([freshness](shaders.md#freshness)). Git rewrites changed
+`obj` or `bin`. The clone's ordinary shader build reaches the same default
+per-user shader cache as the caller. Valid entries with matching closures,
+options, and toolchain publish without DXC; missing or invalid entries compile
+([freshness](shaders.md#freshness)). A cache override passed only to the caller's
+build is not forwarded to the proof. Git rewrites changed
 tracked files; unchanged files retain their timestamps, so MSBuild's ordinary
 incremental checks apply.
 Each native proof build uses one MSBuild node (`-m:1`), disables build servers

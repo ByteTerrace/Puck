@@ -169,6 +169,31 @@ public sealed partial class ShaderBuildTargetsLawTests {
         Assert.Equal(expected: 1, actual: fixture.Compiles());
     }
     [Fact]
+    public async Task PublishersWithDifferentIntermediateDirectoriesShareTheSourceTreesLock() {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
+        fixture.Write(path: "obj/shader-publish.lock", text: "");
+        fixture.ShaderProject(body: Sources);
+        using var firstWaiting = new ManualResetEventSlim();
+        using var secondWaiting = new ManualResetEventSlim();
+        Task<CliProcessResult> first;
+        Task<CliProcessResult> second;
+
+        using (new FileStream(path: fixture.PathOf(path: "obj/shader-publish.lock"), mode: FileMode.Open, access: FileAccess.ReadWrite, share: FileShare.None)) {
+            first = Task.Run(function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/first/"], target: "Build", waiting: firstWaiting), cancellationToken: TestContext.Current.CancellationToken);
+            second = Task.Run(function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/second/"], target: "Build", waiting: secondWaiting), cancellationToken: TestContext.Current.CancellationToken);
+            RequireWaiting(process: first, waiting: firstWaiting);
+            RequireWaiting(process: second, waiting: secondWaiting);
+            Assert.False(condition: (first.IsCompleted || second.IsCompleted));
+            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
+        }
+
+        fixture.RequireSuccess(run: await first);
+        fixture.RequireSuccess(run: await second);
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+    }
+    [Fact]
     public void ABuildRemovesTheBytecodeItWroteForADeletedSourceAndRefusesBytecodeItDidNotWrite() {
         using var fixture = new Fixture();
 
@@ -191,6 +216,50 @@ public sealed partial class ShaderBuildTargetsLawTests {
         Assert.NotEqual(expected: 0, actual: refused.ExitCode);
         Assert.Contains(expectedSubstring: "Shader bytecode 'Assets/Shaders/foreign.comp.spv' has no matching HLSL source", actualString: refused.Stdout);
         Assert.True(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/foreign.comp.spv")));
+    }
+    [Fact]
+    public void AnIncludeRestoredByAReferenceIsHashedAfterReferencesAndInvalidatesOnlyItsReaders() {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"generated.hlsli\"\nsource a");
+        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "source b");
+        fixture.Write(path: "declaration.txt", text: "generated declaration");
+        fixture.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences">
+              <ReadLinesFromFile File="declaration.txt"><Output TaskParameter="Lines" ItemName="Declaration" /></ReadLinesFromFile>
+              <WriteLinesToFile File="Assets/Shaders/generated.hlsli" Lines="@(Declaration)" WriteOnlyWhenDifferent="true" Overwrite="true" />
+            </Target>
+            """);
+
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
+        var committed = File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"));
+
+        File.Delete(path: fixture.PathOf(path: "Assets/Shaders/generated.hlsli"));
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
+        Assert.Equal(expected: committed, actual: File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+
+        fixture.Write(path: "declaration.txt", text: "changed generated declaration");
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: ["a.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 2));
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+    }
+    [Fact]
+    public void DeletingTheLastStageSourceStillSweepsItsPublishedBytecode() {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "only source");
+        fixture.ShaderProject(body: Sources);
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        File.Delete(path: fixture.PathOf(path: "Assets/Shaders/a.comp.hlsl"));
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+
+        Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")), userMessage: "Deleting the final stage source skipped the orphan sweep.");
+        Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+        Assert.Equal(expected: 1, actual: fixture.Compiles());
     }
     [Fact]
     public void ANoBuildPackRefusesAMissingDirect3D11EntryAndCollectsExistingEntriesOnce() {
@@ -256,7 +325,11 @@ public sealed partial class ShaderBuildTargetsLawTests {
             Root = (root ?? m_directory!.RootPath);
             _ = Directory.CreateDirectory(path: Root);
             _ = Directory.CreateDirectory(path: PathOf(path: "started"));
-            CliScratchDirectories.PinSdk(directory: Root);
+            // A fixture over a tree that already carries the SDK pin (a law proof's clone of a pinned checkout) keeps it,
+            // so the fixture leaves that tree as it found it.
+            if (!File.Exists(path: PathOf(path: "global.json"))) {
+                CliScratchDirectories.PinSdk(directory: Root);
+            }
         }
 
         public string Root { get; }

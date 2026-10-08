@@ -54,12 +54,6 @@ public sealed partial class ShaderCompiler {
     );
     // Records that a compile used a cache file now, so a prune keeps it. Losing a stamp costs at most a later compile
     // of that output, never a wrong result, so a file that cannot be stamped is left as it is.
-    private static void Stamp(string path) {
-        try {
-            File.SetLastWriteTimeUtc(
-                lastWriteTimeUtc: DateTime.UtcNow,
-                path: path
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
-    }
+    private static void Stamp(string path) => CacheRetention.Stamp(path: path);
+
 }

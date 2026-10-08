@@ -71,7 +71,7 @@ stale and is corrected in the same change.
   app-server broker for that working directory before removing the worktree;
   the broker can outlive the job and hold the worktree open.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
-  second review and the verifier can reuse it.
+  verifier can reuse it.
 - Name a scratch directory outside the tree in the brief for any CLI copy or
   temporary files; otherwise the pass can write them inside the worktree.
 
@@ -135,7 +135,7 @@ Write the parts in this order. Each is short; the hunt list is the longest.
 8. **Instructions block,** verbatim:
 
    ```text
-   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear, adding a law (test) that fails without the fix; otherwise describe it. Compile every project you changed (dotnet build <project> -c Release) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Report every existing law you find that cannot fail. Don't commit. End with a list, one line per finding: <id> file:line - fixed (files; law) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
+   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear, adding a law (test) that fails without the fix; otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Report every existing law you find that cannot fail. Don't commit. End with a list, one line per finding: <id> file:line - fixed (files; law) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
    ```
 
    For a documentation-only pass, append: "Edit only Markdown, evals JSON,

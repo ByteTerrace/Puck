@@ -20,9 +20,10 @@ per-user cache, and publishes the bytecode beside the source.
 vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
 All three default to true. Each output's cache key hashes its stage source's
 include closure (paths relative to each other, and contents), its `StepsOf`
-options and the DXC identity, so an edit recompiles exactly the outputs whose
-closure holds the edited file, and an output any checkout compiled is published
-from the cache with no DXC run. The `.spv`, `.dxil`, and `.hash` outputs are
+options and the DXC identity, so an edit invalidates only the outputs whose
+closure holds the edited file. A valid matching cache entry can be published
+in any checkout with no DXC run; key and digest checks refuse damaged entries.
+The `.spv`, `.dxil`, and `.hash` outputs are
 gitignored build products; never commit them. The build removes bytecode
 without a same-stem `.hlsl` when its sidecar records its bytes (the build wrote
 it), printing one line per file, and fails on any other sourceless bytecode,
@@ -85,9 +86,12 @@ under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels
 `fillers`, the fillers' first transitions and clears on the first upload;
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
 when that work is pending; `upload`, the region copies; and `environment`, the
-sky's environment map and its coefficients, rendered only on an upload whose sky
-lighting-visible irradiance differs by at least 1/255 while ambient, reflections, sky-coloured fog or haze reads it (`SdfWorldTables.SkyEnvironment.cs`;
-`sdf-sky-environment.comp` then `sdf-sky-environment-reduce.comp`). An upload
+CPU candidate projection that decides whether the sky's environment map and
+coefficients owe a device refresh: they do when lighting-visible irradiance
+differs by at least 1/255 while ambient, reflections, sky-coloured fog or haze
+reads it (`SdfWorldTables.SkyEnvironment.cs`). The residency's `sdf.environment`
+graph producer records the map and its reduction (`sdf-sky-environment.comp`,
+then `sdf-sky-environment-reduce.comp`) in passes of its own. An upload
 skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
 volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
@@ -180,23 +184,25 @@ leave settled lit history and its ring standing. `world.cadence off` disables
 both gates for measurement. Retained inputs use their last queued writes, and
 standing passes use the existing tracker without recording their planned accesses.
 
-The visibility record is 64 bytes per pixel of the view's render ceiling
+The visibility record is 96 bytes per pixel of the view's render ceiling
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
 `visibility` buffer, allocated as the render extent times one viewport and forwarded
-through primary's, surface's, ambient's and shadow's versions;
+through primary's, surface's, ambient's, shadow's and the receiver's versions;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
-sixteen words in six rows: V (t, identity, material, march flags), exact; C
+twenty-four words in seven rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
 packed with its other material plus one); L (the exact winning dynamic frame slot
-in its first word, -1 for static, or a mesh hit's triangle; words 9 and 10 hold
-replaceable AO and shadow query tallies, generated from `SdfVisibility`); N (a 16-bit octahedral geometric normal and the gradient magnitude);
-and S (curvature and raw AO as halves, then the surface flags packed with the
-saturated surface query count); and K (four stable visibilities
-packed as 8-bit lanes, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
+in its first word, -1 for static, or a mesh hit's triangle; then the indirect
+approach's two halves; words 9 and 10 hold replaceable AO and shadow query
+tallies, generated from `SdfVisibility`); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+S (curvature and raw AO as halves, then the surface flags packed with the
+saturated surface query count); K (four stable visibilities
+packed as 8-bit lanes, current only on a frame the shadow pass runs); and I (the
+indirect receiver's eight-word certificate). The packing moves presentation pixels by at
 most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
 surface writes N and S; ambient updates S and its own tally, shadow K and its
-own tally. Views sums the enabled stages' tallies. A repeated shadow write
+own tally, and the receiver I. Views sums the enabled stages' tallies. A repeated shadow write
 does not accumulate queries in retained surface data. Each forwarding version
 declares predecessor preservation. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
@@ -270,7 +276,7 @@ by walking Full → Folds → CoreOps:
   and simple shapes, strips the `SDF_STRIP_HEAVY` family.
 - `sdf-world-views-core.comp` — also strips the `SDF_STRIP_ALL_EXOTIC` family.
 
-Primary, surface, and ambient always keep the full ISA. Membership of the strip
+Every hit kernel but views (primary, surface, ambient, shadow and both receivers) keeps the full ISA. Membership of the strip
 families is defined by the `#if` gates in the field modules (`field/`) and mirrored by
 `SdfViewsKernelVariants`; read both rather than trusting a list, and change them
 together. `SdfViewsKernelVariantLawTests` pins the host half.
@@ -310,7 +316,7 @@ including grazing rays and separated bands.
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion`
+`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion|sky-cost|indirect-probes|indirect-cells|indirect-light|indirect`
 selects a diagnostic image (`DebugViewModes.Names` is the list); `depth` isolates the march. To see what a shadow
 ray sees, place a camera at the shaded point looking along the sun direction
 under `material-id`.

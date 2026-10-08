@@ -23,8 +23,8 @@
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
 name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
-The former palette `bounce` spelling is also unmapped; use `fill` for the
-artistic tint. A light's `bounce` is a separate transport gain.
+A palette slot has no `bounce` member either; it is refused as unmapped, and
+`fill` is the artistic tint. A light's `bounce` is a separate transport gain.
 
 Indirect transport uses the signed field gradient toward positive, free space.
 The CPU reference, cache model and GPU march preserve that orientation at grazing

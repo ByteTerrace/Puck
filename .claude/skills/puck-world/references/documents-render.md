@@ -42,8 +42,8 @@ so `world.row.set render {…}` lands on the next frame with no rebuild:
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40
-(`SdfFrame.DefaultFarDistance`) so an unauthored world marches exactly as
-before the field existed; an authored value must lie in
+(`SdfFrame.DefaultFarDistance`) so an unauthored world marches to 40;
+an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
 within [1, 8192].` Geometry past it is never marched, so an infinite plane

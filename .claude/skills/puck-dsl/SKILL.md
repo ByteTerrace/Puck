@@ -22,16 +22,15 @@ change you were asked to make is stale; correct it in the same change.
 
 A document's own `schema:` field selects its vocabulary — never the filename.
 Every tracked `.puck` file is spelled as a bare `*.puck`; the shipped
-cartridges additionally carry `.cgb.` in their name as an author convention,
-not a parser rule. `.puck` authors every shipped CGB cartridge
-(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, each gated byte-for-byte against
+cartridges additionally carry `.cgb.` or `.agb.` in their name as an author
+convention, not a parser rule. `.puck` authors every shipped cartridge
+(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, `pip.agb.puck`, each gated byte-for-byte against
 its committed `.cartridge.json` twin — see below), the worlds under
 `src/Puck.World/Assets/worlds/` (avatars, games, tools, `moth-courtyard.puck`),
 the asset packages under `worlds/`, and the `Puck.World.Transpiler` test
 fixtures; `git ls-files '*.puck'` is the current list. **The live game's own document,
-`Assets/worlds/puck.world.json`, and the one AGB cartridge,
-`Assets/cartridges/pip.agb.cartridge.json`, have no `.puck` source at all** —
-they are authored and shipped as raw JSON. Say so plainly rather than treating
+`Assets/worlds/puck.world.json`, has no `.puck` source at all** — it is
+authored and shipped as raw JSON. Say so plainly rather than treating
 "DSL is the primary authoring surface" as already true everywhere.
 
 **Cartridge sources are regeneration-gated; world sources are not paired.**

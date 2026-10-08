@@ -1,9 +1,9 @@
 # Views — authored cameras and seat control
 
 The `views` section owns camera structure. `playerDefaults.seatLook` owns only
-portable human input preference. The split is strict: old
-`seatLook.minPitch`, `seatLook.maxPitch`, and `seatLook.worldAxes` members are
-unmapped and refuse at parse time.
+portable human input preference. The split is strict: pitch
+limits and axis framing belong to `views.seatControl` and the rig, and `seatLook`
+carries neither (strict parse refuses any unmapped member).
 
 Primary code:
 
@@ -32,7 +32,7 @@ Primary code:
 ## Document shape
 
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
-census implies a body (`population.capacity > 0`), the same derived refusal
+census implies a body (`bodies.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The standard chase
 framing below is AUTHORED — `puck.world.json` states its own (JSON, its wire
 form, since that is the shipped flagship world's own committed source today):
@@ -521,8 +521,8 @@ right-stick Y must change pitch without tilting the body. Then move left-stick X
 and prove lateral translation without a facing change; while holding left-stick
 forward, move right-stick X and prove the trajectory turns with heading. Repeat across
 a traveler crossing to prove the same seat state and destination structure are
-used. Refusal controls: omit `views.seatControl`, submit the old mixed
-`seatLook` members, invert the pitch interval, or name an unknown yaw reference.
+used. Refusal controls: omit `views.seatControl`, author
+`minPitch`/`maxPitch`/`worldAxes` under `seatLook`, invert the pitch interval, or name an unknown yaw reference.
 
 For a camera program: author an unknown op `$type`, put `anchor` anywhere but
 first, put `clampPitch` after its `orbit`, omit `fieldOfView`, name an

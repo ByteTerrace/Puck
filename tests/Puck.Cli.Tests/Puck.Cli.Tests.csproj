@@ -10,6 +10,12 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <!-- The shader host lifetime laws compile the inline task and exercise it through MSBuild's task interfaces. The
+             package keeps Microsoft.Build.Framework and Microsoft.Build.Utilities.Core at one version; the SDK's own
+             Utilities.Core is newer than the Framework the Roslyn workspace packages bring and fails to load against it. -->
+        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="[17.*, )" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
         <ProjectReference Include="../../src/Puck.Cli/Puck.Cli.csproj" />
         <!-- TestCommandLawTests boots the real Puck.World executable out of its own Release output, so that

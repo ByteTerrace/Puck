@@ -371,8 +371,8 @@ its full radius applies there) still reaches roughly 0.4 m from its own center, 
 the pieces) without risking contact; a proof keeps the body at a safe standoff beside the
 table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having the body touch
 one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
-`world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
-board rendering are this lane's; painting `plan` is deliberately left to a future addon.
+`world.tabletop` echoes them back, but no client code paints a highlight from it; a
+highlight is an addon's to draw.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name. The loader is
 `src/Puck.World.Schema/WorldDefinitionLoader.cs`.
 
@@ -489,7 +489,7 @@ absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
 property non-null between parse and validation which the validator refuses for
-any document whose `population.capacity` is nonzero — the same derived refusal
+any document whose `bodies.capacity` is nonzero — the same derived refusal
 `kits` carries, so a seatless document may still author neither. A world takes
 the standard set by naming `standard` as its `basis`; a world that
 wants only its own `layouts` and other prototype-specific sections over that
@@ -509,7 +509,7 @@ refusal: an absent required section resolves through its accessor to the
 section's own `Absent`/empty placeholder (`Hud`, `Views`, `Kits`, …), and the
 validator refuses it BY NAME from whatever derived rule that placeholder
 violates — `views` and `kits` refuse for any document whose
-`population.capacity` is nonzero, so a seatless document may author neither.
+`bodies.capacity` is nonzero, so a seatless document may author neither.
 
 Notable validator constants:
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are

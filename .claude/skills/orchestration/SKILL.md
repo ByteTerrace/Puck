@@ -83,8 +83,8 @@ when the owner has not supplied that combined scope.
 ## Land each lane on its own
 
 A lane lands as soon as its own head passes: the lead merges the integration
-head into it, runs `puck gate --merge-base <lane base> --gpu` scoped by
-`puck affected`, and fast-forwards the integration branch. Qualification is
+head into it, runs `puck gate --merge-base <integration-branch> --gpu` on that
+head, and fast-forwards the integration branch. Qualification is
 measured in minutes. Never hold a finished lane for others to make a batch, and
 never assemble a multi-lane qualification branch; a lane that cannot land alone
 is a dependency to name in the brief, not a reason to wait.
@@ -106,8 +106,9 @@ Before calling a counted-work change a regression, read the history: a commit ma
 have deliberately changed what is counted and owed a re-record. An owed line in a
 commit body is a debt. Track each one when merging, and settle it on the lane's
 merged head, under a GPU grant when it needs the GPU, before it lands, with the
-reason in the commit that records it. A counters ceiling recorded only on the
-2060 is re-recorded there right after the landing that moved it.
+reason in the commit that records it. A counters ceiling the lane moves is
+re-recorded on every device the ledger holds, each on its own machine
+([`verification`](../verification/SKILL.md#gpu-legs)).
 
 Partners cannot see unpushed lanes. When a partner designs against code that
 exists only on the lead's machine, send it those lanes' contracts and answer its

@@ -732,7 +732,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "6cda4643c8b85a8c",
+            "shape": "7e9f0a7bf149e52c",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -909,6 +909,7 @@
                 "M:Puck.Abstractions.Presentation.QualityTiers.DefineValue(Puck.Abstractions.Presentation.QualityTier)",
                 "M:Puck.Abstractions.Presentation.QualityTiers.Name(Puck.Abstractions.Presentation.QualityTier)",
                 "M:Puck.Assets.AtomicFile.ReadAllBytes(System.String)",
+                "M:Puck.Assets.AtomicFile.WriteAllBytes(System.String,System.ReadOnlySpan{System.Byte},System.Nullable{System.IO.UnixFileMode})",
                 "M:Puck.Assets.AtomicFile.WriteAllText(System.String,System.String)",
                 "M:Puck.Shaders.CompiledShader.#ctor(System.String,System.String,System.String,System.Collections.Generic.IReadOnlyDictionary{Puck.Shaders.ShaderStage,System.ReadOnlyMemory{System.Byte}},System.Collections.Generic.IReadOnlyDictionary{Puck.Shaders.ShaderStage,System.ReadOnlyMemory{System.Byte}},System.Collections.Generic.IReadOnlyList{Puck.Shaders.ShaderDiagnostic},Puck.Shaders.ShaderCompileIdentity)",
                 "M:Puck.Shaders.IShaderProcessRunner.RunAsync(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.Threading.CancellationToken)",
@@ -920,7 +921,7 @@
                 "M:Puck.Shaders.ShaderToolchain.Resolve(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "980d2999f9a1f561",
+            "shape": "c33e5e6d5fa9291f",
             "source": "src/Puck.Shaders.Model/Compiler/ShaderCompiler.cs",
             "token": "puck-shader-compiler-1"
         },
