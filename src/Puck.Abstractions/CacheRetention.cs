@@ -40,6 +40,7 @@ public readonly record struct CacheRetentionResult(int Removed, long RemovedByte
 /// cache answers: an evicted entry costs its next reader a derivation, never a different result.
 /// </para>
 /// </summary>
+[FormatSeam(reason: "its behaviour sets no byte because it only stamps and deletes whole cache entries, which every owner names by content")]
 public static class CacheRetention {
     /// <summary>How long after one enforcement of a directory a process skips the next: a writer that publishes many
     /// entries in a row lists the directory once, not once per entry.</summary>
