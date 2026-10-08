@@ -48,18 +48,26 @@ public static class SdfIndirectWork {
         return ShadeProbeBudget(directionalChannels: SdfIndirectCost.DirectionalChannels(lights: lights), layout: layout);
     }
     /// <summary>Prices the pinned frame's possible visibility work. Disabled direct light performs no shadow
-    /// queries; enabled direct light retains the full directional fallback bound regardless of map availability.</summary>
+    /// queries; enabled direct light retains the full directional fallback bound regardless of map availability.
+    /// A probe whose shading exceeds one submission is a batch of its own, which the cache splits into ray chunks.</summary>
     /// <param name="layout">The cache tier.</param>
     /// <param name="frame">The immutable lighting source.</param>
     /// <returns>The probe count admitted per batch.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="SdfIndirectCostRefusedException">One field query or one shaded ray exceeds a submission.</exception>
     public static int ShadeProbeBudget(SdfIndirectLayout layout, SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         var count = ((((frame.IndirectSources & SdfIndirectSources.Direct) == 0) || (frame.IndirectGains.Lights == 0f))
             ? ShadeProbeBudget(directionalChannels: 0, layout: layout)
             : ShadeProbeBudget(layout: layout, lights: frame.Lights));
+        var units = SdfIndirectCost.ShadeUnits(frame: frame, layout: layout);
+        var whole = SdfIndirectCost.WholeItems(count: count, instructionCount: frame.Program.InstructionCount, units: units);
 
-        return SdfIndirectCost.Admit(count, SdfIndirectCost.ShadeQueries(frame: frame, layout: layout), frame.Program.InstructionCount, SdfIndirectCost.ShadeCacheCost(layout: layout));
+        if ((whole > 0) || (count == 0)) { return whole; }
+        if (units.RefusalOf(instructionCount: frame.Program.InstructionCount) is { } refusal) {
+            throw new SdfIndirectCostRefusedException(message: $"Indirect admission refused: {SdfWorldPackage.IndirectShade}: {refusal}.");
+        }
+        return 1;
     }
 
     private static WorkKind Kind(string name, string unit) => new(name: name, unit: unit, workClass: WorkClass.Deterministic);

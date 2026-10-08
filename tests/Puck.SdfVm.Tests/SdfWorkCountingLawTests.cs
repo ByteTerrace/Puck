@@ -91,7 +91,8 @@ public sealed partial class SdfWorkCountingLawTests {
                     Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(0u, 1u)", "puckCountWork(sdfWorkSteps, sdfWorkTexels)"]);
                     break;
                 case "indirect/sdf-indirect-shade.hlsli":
-                    Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(sdfWorkSteps, passGroup.workCounterRowDetail == 0u ? 1u : 0u)"]);
+                    // A split probe's earlier chunk writes no irradiance texel; its last chunk and a whole probe write one per lane.
+                    Assert.Equal(actualArray: calls, expectedSpan: ["puckCountWork(sdfWorkSteps, 0u)", "puckCountWork(sdfWorkSteps, passGroup.workCounterRowDetail == 0u ? 1u : 0u)"]);
                     break;
                 default:
                     Assert.All(calls, static call => Assert.Equal(actual: call, expected: "puckCountWork(sdfWorkSteps, sdfWorkTexels)"));

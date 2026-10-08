@@ -402,6 +402,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var tables = m_tables!;
 
+        RefuseIndirect(frame: frame);
         if (frame.IndirectTier != IndirectTier) { frame = frame with { IndirectTier = IndirectTier }; }
         PrepareIndirect(frame: frame, tables: tables);
 

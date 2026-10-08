@@ -3,8 +3,8 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfIndirectLayoutLawTests {
-    [InlineData(SdfIndirectTier.Medium, 256, 128, 4, 128, 100_728_836UL)]
-    [InlineData(SdfIndirectTier.High, 512, 256, 8, 512, 562_167_812UL)]
+    [InlineData(SdfIndirectTier.Medium, 256, 128, 4, 128, 100_731_396UL)]
+    [InlineData(SdfIndirectTier.High, 512, 256, 8, 512, 562_172_932UL)]
     [Theory]
     public void TierPoolsAndUpdateCeilingsFitTheirAllocation(SdfIndirectTier tier, int bricks, int rays, int classifications, int traces, ulong bytes) {
         var layout = new SdfIndirectLayout(tier: tier);
@@ -36,7 +36,9 @@ public sealed class SdfIndirectLayoutLawTests {
         Assert.Equal((layout.RadianceWordOffset + (2 * layout.RadianceGenerationWords)), layout.IrradianceWordOffset);
         Assert.Equal((layout.IrradianceWordOffset + (2 * layout.IrradianceGenerationWords)), layout.PublicationWordOffset);
         Assert.Equal((layout.PublicationWordOffset + (2 * layout.ProbeCapacity)), layout.ReceiverProofWordOffset);
-        Assert.Equal((layout.ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1)), layout.WordCount);
+        Assert.Equal((layout.ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1)), layout.ShadeScratchWordOffset);
+        // One split probe's rays, five source words each, follow the receiver admission word.
+        Assert.Equal((layout.ShadeScratchWordOffset + (layout.RaysPerProbe * SdfIndirectLayout.RadianceWords)), layout.WordCount);
         Assert.Equal((layout.ProbeCapacity - layout.RadianceProbeOffset), layout.RadianceProbeCapacity);
         Assert.Equal(actual: SdfIndirectLayout.SourceCount, expected: 5);
         Assert.Equal(((layout.RadianceProbeCapacity * layout.RaysPerProbe) * 5), layout.RadianceGenerationWords);

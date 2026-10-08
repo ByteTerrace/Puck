@@ -110,7 +110,8 @@ public sealed class SdfIndirectLayout {
         IrradianceGenerationWords = ((ProbeCapacity * IrradianceTexels) * RadianceWords);
         PublicationWordOffset = (IrradianceWordOffset + (LightingGenerations * IrradianceGenerationWords));
         ReceiverProofWordOffset = (PublicationWordOffset + (LightingGenerations * ProbeCapacity));
-        WordCount = (ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1));
+        ShadeScratchWordOffset = (ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1));
+        WordCount = (ShadeScratchWordOffset + (RaysPerProbe * RadianceWords));
     }
 
     /// <summary>Gets the selected tier.</summary>
@@ -162,6 +163,9 @@ public sealed class SdfIndirectLayout {
     public int PublicationWordOffset { get; }
     /// <summary>Gets the shared receiver-proof admission counter, reset before admitted views. Deferred counts belong to each view.</summary>
     public int ReceiverProofWordOffset { get; }
+    /// <summary>Gets the first word of one probe's stored ray radiance: a probe whose shading exceeds one submission is
+    /// shaded in ray chunks, each storing its rays' sources here until the probe's last chunk reduces them all.</summary>
+    public int ShadeScratchWordOffset { get; }
     /// <summary>Gets the total storage words.</summary>
     public int WordCount { get; }
     /// <summary>Gets the cache allocation's bytes, excluding host regions and descriptor storage.</summary>
