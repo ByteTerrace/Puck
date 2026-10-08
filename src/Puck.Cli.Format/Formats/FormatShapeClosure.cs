@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -91,6 +92,11 @@ public sealed class FormatShapeClosure {
 
         public SortedSet<string> Refusals { get; } = new(comparer: StringComparer.Ordinal);
     }
+    // Drops every token's trivia in one walk of the tree. ReplaceTokens over every token is quadratic in the file: it tests
+    // each node's span against the span of every token it replaces.
+    private sealed class TriviaStripper : CSharpSyntaxRewriter {
+        public override SyntaxToken VisitToken(SyntaxToken token) => token.WithoutTrivia();
+    }
     private sealed class FileIndex {
         public Dictionary<(string Key, UnitKind Kind), SyntaxNode> Nodes { get; } = [];
     }
@@ -106,30 +112,50 @@ public sealed class FormatShapeClosure {
     private readonly IReadOnlyDictionary<string, string> m_files;
     private readonly Dictionary<string, SyntaxTree> m_current;
 
-    private readonly Dictionary<string, FileIndex> m_index = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<SyntaxTree, SemanticModel> m_models = [];
+    private readonly ConcurrentDictionary<string, FileIndex> m_index = new(comparer: StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<SyntaxTree, SemanticModel> m_models = new();
     private readonly Dictionary<string, CanonicalFile> m_canonical = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, Dictionary<string, HashSet<Unit>>> m_namers = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<Unit, Reached> m_reach = [];
+    private readonly ConcurrentDictionary<string, Dictionary<string, HashSet<Unit>>> m_namers = new(comparer: StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<Unit, Reached> m_reach = new();
 
     private readonly Dictionary<string, SyntaxTree> m_trees;
 
     private CSharpCompilation m_canonicalCompilation;
     private Dictionary<string, List<ISymbol>>? m_implementers;
 
+    // The assemblies every closure compiles against, read once per process: a reference holds its metadata, so every
+    // compilation after the first reuses what the first one read. They are the host's trusted assemblies: the shared
+    // framework and the host's own application assemblies, so a shape depends on the process that computes it. The puck
+    // tool records the ledger, and the laws that judge the shipped ledger run in Puck.Cli.Tests, whose host loads the
+    // tool's assemblies.
+    private static readonly Lazy<MetadataReference[]> PlatformReferences = new(valueFactory: static () => [.. ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
+        .Split(separator: Path.PathSeparator)
+        .Select(selector: static path => MetadataReference.CreateFromFile(path: path))]);
+
+    /// <summary>Parses every file once, on every core.</summary>
+    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <returns>Each file's syntax tree, by its path.</returns>
+    public static Dictionary<string, SyntaxTree> Parse(IReadOnlyDictionary<string, string> files) => files.AsParallel().ToDictionary(
+        comparer: StringComparer.Ordinal,
+        elementSelector: static pair => CSharpSyntaxTree.ParseText(
+            options: ParseOptions,
+            path: pair.Key,
+            text: pair.Value
+        ),
+        keySelector: static pair => pair.Key
+    );
+
     /// <summary>Parses every file once.</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
-    public FormatShapeClosure(IReadOnlyDictionary<string, string> files) {
+    public FormatShapeClosure(IReadOnlyDictionary<string, string> files) : this(files: files, trees: Parse(files: files)) { }
+    /// <summary>Closes formats over trees already parsed (<see cref="Parse"/>).</summary>
+    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <param name="trees">Each file's syntax tree, by its path.</param>
+    public FormatShapeClosure(IReadOnlyDictionary<string, string> files, IReadOnlyDictionary<string, SyntaxTree> trees) {
         m_files = files;
-        m_trees = files.ToDictionary(
-            comparer: StringComparer.Ordinal,
-            elementSelector: pair => CSharpSyntaxTree.ParseText(
-                options: ParseOptions,
-                path: pair.Key,
-                text: pair.Value
-            ),
-            keySelector: pair => pair.Key
-        );
+        // The compilation holds the trees in the files' own order, whatever order they were parsed in, so symbols declared
+        // across partial files enumerate as they always have.
+        m_trees = files.Keys.ToDictionary(comparer: StringComparer.Ordinal, elementSelector: path => trees[path], keySelector: static path => path);
         m_current = new Dictionary<string, SyntaxTree>(collection: m_trees, comparer: StringComparer.Ordinal);
         m_compilation = CSharpCompilation.Create(
             assemblyName: "FormatShapes",
@@ -137,8 +163,7 @@ public sealed class FormatShapeClosure {
                 allowUnsafe: true,
                 outputKind: OutputKind.DynamicallyLinkedLibrary
             ),
-            references: ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!).Split(separator: Path.PathSeparator)
-                .Select(selector: path => MetadataReference.CreateFromFile(path: path)),
+            references: PlatformReferences.Value,
             syntaxTrees: m_trees.Values.Append(element: CSharpSyntaxTree.ParseText(
                 options: ParseOptions,
                 text: "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;"
@@ -160,7 +185,9 @@ public sealed class FormatShapeClosure {
 
         if (misnamed.Length != 0) { throw new FormatBoundaryException(problems: misnamed); }
 
-        var analyses = formats.Select(selector: format => Analyze(format: format)).ToArray();
+        // Each format's analysis reads only caches whose entries are whole functions of their keys, so the formats are
+        // analyzed side by side and joined in their own order.
+        var analyses = formats.AsParallel().AsOrdered().Select(selector: format => Analyze(format: format)).ToArray();
         var refusals = analyses.SelectMany(selector: static analysis => analysis.Refusals).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
 
         if (refusals.Length != 0) { throw new FormatBoundaryException(problems: refusals); }
@@ -418,7 +445,7 @@ public sealed class FormatShapeClosure {
             }
         }
 
-        m_namers[$"{owner}.{member}"] = named;
+        named = m_namers.GetOrAdd(key: $"{owner}.{member}", value: named);
 
         return named;
     }
@@ -437,7 +464,7 @@ public sealed class FormatShapeClosure {
         return null;
     }
     private SemanticModel Model(SyntaxTree tree) {
-        if (!m_models.TryGetValue(key: tree, value: out var model)) { m_models[tree] = model = m_compilation.GetSemanticModel(syntaxTree: tree); }
+        if (!m_models.TryGetValue(key: tree, value: out var model)) { model = m_models.GetOrAdd(key: tree, value: m_compilation.GetSemanticModel(syntaxTree: tree)); }
 
         return model;
     }
@@ -505,7 +532,7 @@ public sealed class FormatShapeClosure {
 
         foreach (var (key, kind, node) in Units(node: tree.GetRoot(), model: Model(tree: tree))) { index.Nodes.TryAdd(key: (key, kind), value: node); }
 
-        m_index[path] = index;
+        index = m_index.GetOrAdd(key: path, value: index);
 
         return index;
     }
@@ -514,7 +541,6 @@ public sealed class FormatShapeClosure {
         if (m_reach.TryGetValue(key: unit, value: out var reach)) { return reach; }
 
         reach = new Reached();
-        m_reach[unit] = reach;
 
         var model = Model(tree: m_trees[unit.Path]);
         var root = Index(path: unit.Path).Nodes[(unit.Key, unit.Kind)];
@@ -603,7 +629,7 @@ public sealed class FormatShapeClosure {
         reach.Deep = false;
         reach.Calls.RemoveAll(match: call => (Array.IndexOf(array: call.Targets, value: unit) >= 0));
 
-        return reach;
+        return m_reach.GetOrAdd(key: unit, value: reach);
     }
     // The nodes whose operation tree carries a body or an initializer: a member's block or expression body and each
     // initializer, which Roslyn binds as one unit.
@@ -759,7 +785,7 @@ public sealed class FormatShapeClosure {
     }
     // Each virtual or interface member's overrides and implementations the repository declares, by the member's key.
     private Dictionary<string, List<ISymbol>> Implementers() {
-        if (m_implementers is not null) { return m_implementers; }
+        if (Volatile.Read(location: ref m_implementers) is { } built) { return built; }
 
         var index = new Dictionary<string, List<ISymbol>>(comparer: StringComparer.Ordinal);
         var types = new Stack<INamespaceOrTypeSymbol>();
@@ -789,9 +815,8 @@ public sealed class FormatShapeClosure {
             }
         }
 
-        m_implementers = index;
-
-        return index;
+        // Formats analyzed side by side may each build the index; every build is the same, and the first one published stands.
+        return (Interlocked.CompareExchange(comparand: null, location1: ref m_implementers, value: index) ?? index);
 
         void Add(string key, ISymbol implementer) {
             if (!index.TryGetValue(key: key, value: out var list)) { index[key] = list = []; }
@@ -814,7 +839,7 @@ public sealed class FormatShapeClosure {
         var replacements = new Dictionary<string, SyntaxTree>(comparer: StringComparer.Ordinal);
 
         var models = fresh.ToDictionary(comparer: StringComparer.Ordinal, elementSelector: path => Model(tree: m_trees[path]), keySelector: static path => path);
-        var texts = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(comparer: StringComparer.Ordinal);
+        var texts = new ConcurrentDictionary<string, string>(comparer: StringComparer.Ordinal);
 
         Parallel.ForEach(source: fresh, body: path => texts[path] = CanonicalText(model: models[path], tree: m_trees[path]));
 
@@ -845,7 +870,7 @@ public sealed class FormatShapeClosure {
 
         // Run the existing syntactic normalizers on a trivia-free copy. A comment cannot decide whether a
         // declaration or initializer is sorted in the fingerprint.
-        root = root.ReplaceTokens(root.DescendantTokens(), static (token, _) => token.WithoutTrivia()).NormalizeWhitespace();
+        root = new TriviaStripper().Visit(node: root)!.NormalizeWhitespace();
         foreach (var pass in FormatPasses.All.Where(predicate: pass => (pass.Default && pass.Syntactic))) {
             root = pass.Apply(node: root);
             root = CSharpSyntaxTree.ParseText(root.ToFullString(), ParseOptions).GetRoot();

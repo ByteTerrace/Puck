@@ -158,7 +158,6 @@ public static partial class FormatVersionsLedger {
     /// <returns>The formats in ordinal id order. A declaring type and member that two files share are told apart by
     /// appending <c>@</c> and the path to both ids.</returns>
     public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) => Close(files: files, only: null).Select(selector: static pair => pair.Entry).ToArray();
-
     /// <summary>Closes one format over its boundary, to show what its shape covers and what it leaves open.</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
     /// <param name="id">The format's ledger id.</param>
@@ -166,39 +165,41 @@ public static partial class FormatVersionsLedger {
     /// <exception cref="FormatBoundaryException">A seam gives no reason.</exception>
     public static (FormatEntry Entry, FormatClosure Closure)? Explain(IReadOnlyDictionary<string, string> files, string id) => Close(files: files, only: id).Select(selector: static pair => (((FormatEntry, FormatClosure)?)pair)).FirstOrDefault();
 
-    private static IReadOnlyList<(FormatEntry Entry, FormatClosure Closure)> Close(IReadOnlyDictionary<string, string> files, string? only) {
+    // Every token one file declares, in member order.
+    private static List<(string Id, string Source, string Token, string Owner, string Member)> Tokens(string path, SyntaxTree tree) {
         var found = new List<(string Id, string Source, string Token, string Owner, string Member)>();
 
-        foreach (var (path, text) in files.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
-            // A Post stage's magic numbers frame its test ROMs and probes, not a format the engine reads back.
-            if (path.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: ".Post/"
-            )) {
+        foreach (var member in tree.GetRoot().DescendantNodes().OfType<MemberDeclarationSyntax>().Where(predicate: static member => IsTokenField(member: member))) {
+            if (member.Parent is not BaseTypeDeclarationSyntax owner) {
                 continue;
             }
 
-            var root = CSharpSyntaxTree.ParseText(
-                options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview),
-                text: text
-            ).GetRoot();
-
-            foreach (var member in root.DescendantNodes().OfType<MemberDeclarationSyntax>().Where(predicate: static member => IsTokenField(member: member))) {
-                if (member.Parent is not BaseTypeDeclarationSyntax owner) {
-                    continue;
-                }
-
-                foreach (var (name, value) in Initializers(member: member)) {
-                    if (TryTokenOf(
-                        memberName: name,
-                        token: out var token,
-                        value: value
-                    )) {
-                        found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token, owner.Identifier.Text, name));
-                    }
+            foreach (var (name, value) in Initializers(member: member)) {
+                if (TryTokenOf(
+                    memberName: name,
+                    token: out var token,
+                    value: value
+                )) {
+                    found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token, owner.Identifier.Text, name));
                 }
             }
         }
+
+        return found;
+    }
+    // Every file is parsed once, on every core, and the token scan and the shape closure both read those trees; the
+    // tokens are gathered per file and joined in ordinal path order, so the result never depends on the schedule.
+    private static IReadOnlyList<(FormatEntry Entry, FormatClosure Closure)> Close(IReadOnlyDictionary<string, string> files, string? only) {
+        var trees = FormatShapeClosure.Parse(files: files);
+        // A Post stage's magic numbers frame its test ROMs and probes, not a format the engine reads back.
+        var found = trees.Where(predicate: static pair => !pair.Key.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: ".Post/"
+        )).AsParallel().Select(selector: static pair => (Path: pair.Key, Tokens: Tokens(path: pair.Key, tree: pair.Value)))
+            .ToArray()
+            .OrderBy(keySelector: static file => file.Path, comparer: StringComparer.Ordinal)
+            .SelectMany(selector: static file => file.Tokens)
+            .ToList();
 
         var shared = found.GroupBy(
             keySelector: static item => item.Id,
@@ -211,7 +212,7 @@ public static partial class FormatVersionsLedger {
             comparer: StringComparer.Ordinal,
             keySelector: static pair => pair.Id
         ).ToArray();
-        var closures = new FormatShapeClosure(files: files).Of(formats: [.. named.Select(selector: static pair => new FormatRef(Id: pair.Id, Member: pair.Item.Member, Owner: pair.Item.Owner, Source: pair.Item.Source))], allIds: [.. found.Select(selector: item => (shared.Contains(item: item.Id) ? $"{item.Id}@{item.Source}" : item.Id))]);
+        var closures = new FormatShapeClosure(files: files, trees: trees).Of(formats: [.. named.Select(selector: static pair => new FormatRef(Id: pair.Id, Member: pair.Item.Member, Owner: pair.Item.Owner, Source: pair.Item.Source))], allIds: [.. found.Select(selector: item => (shared.Contains(item: item.Id) ? $"{item.Id}@{item.Source}" : item.Id))]);
 
         return [.. named.Select(selector: (pair, index) => (new FormatEntry(
             Id: pair.Id,
