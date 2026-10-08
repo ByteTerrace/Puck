@@ -10,91 +10,59 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Reachable shadow capacities acquire only their own variants, before handoffs, through residency readiness.</summary>
+/// <summary>One shadow kernel and one kernel per views variant serve every fade capacity: no capacity leases a pipeline of
+/// its own, and a policy change or a handoff crossing creates none and waits for none.</summary>
 public sealed class SdfShadowFadePipelinesLawTests {
-    // The F=0 residency owns sixteen base kernels (including environment and screen reduction) plus three shared passes.
-    [InlineData(SdfShadowFadeVariants.None, 0, 0)]
-    [InlineData(SdfShadowFadeVariants.One, 0, 1)]
-    [InlineData(SdfShadowFadeVariants.Two, 0, 2)]
-    [InlineData(SdfShadowFadeVariants.One | SdfShadowFadeVariants.Two, 0, 3)]
-    [InlineData(SdfShadowFadeVariants.None, 1, 1)]
+    // The residency owns seventeen kernels (the receiver and the environment and screen reductions among them) plus three shared passes.
+    private const long Pipelines = 20;
+
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
     [Theory]
-    public void OnlyAuthoredOrCurrentlyDemandedCapacitiesCreatePipelines(SdfShadowFadeVariants authored, int current, int expectedMask) {
+    public void EveryCapacityLeasesTheSamePipelines(int capacity) {
         var created = new ConcurrentBag<string>();
         var gpu = new FakeGpuDevice { BeforeComputePipeline = description => created.Add(item: description.Name) };
         var catalog = SdfTestPipelines.Cache();
-        var source = new Source { Frame = Frame() with { ShadowFadeVariants = authored, Lights = Lights(capacity: current) } };
+        var source = new Source { Frame = Frame() with { Lights = Lights(capacity: capacity) } };
         using var residency = Residency(catalog: catalog, source: source);
         var context = Context(gpu: gpu);
 
         residency.ProduceFirstFrame(context: in context);
         _ = residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
-        var expected = new List<string>();
-
-        foreach (var capacity in new[] { 1, 2 }) {
-            if ((expectedMask & capacity) != 0) {
-                expected.AddRange(collection: [$"sdf-world-shadow-fade{capacity}", $"sdf-world-views-fade{capacity}",
-                    $"sdf-world-views-core-fade{capacity}", $"sdf-world-views-folds-fade{capacity}"]);
-            }
-        }
-        Assert.Equal(expected: expected.Order(), actual: created.Where(predicate: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: "-fade")).Order());
-        Assert.Equal(expected: (19 + expected.Count), actual: catalog.Pipelines.SharedPipelines);
+        Assert.DoesNotContain(collection: created, filter: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: "-fade"));
+        Assert.Equal(expected: Pipelines, actual: catalog.Pipelines.SharedPipelines);
         Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var pipelines));
-        Assert.Equal(expected: (19L + expected.Count), actual: pipelines);
+        Assert.Equal(actual: pipelines, expected: Pipelines);
     }
     [Fact]
-    public async Task NewPolicyCapacityWaitsForItsPipelinesBeforeAnyHandoffAndCrossingsCreateNothing() {
-        using var allowFadeBuilds = new ManualResetEventSlim(initialState: false);
-        var gpu = new FakeGpuDevice {
-            BeforeComputePipeline = description => {
-                if (description.Name.Contains(comparisonType: StringComparison.Ordinal, value: "-fade")) { allowFadeBuilds.Wait(cancellationToken: TestContext.Current.CancellationToken); }
-            },
-        };
+    public void APolicyChangeAndItsCrossingsCreateNoPipelineAndWaitForNone() {
+        var gpu = new FakeGpuDevice();
         var catalog = SdfTestPipelines.Cache();
         var source = new Source { Frame = Frame() };
-        var residency = Residency(catalog: catalog, source: source);
+        using var residency = Residency(catalog: catalog, source: source);
         var context = Context(gpu: gpu);
 
-        try {
-            residency.ProduceFirstFrame(context: in context);
-            foreach (var capacity in new[] { 1, 2 }) {
-                allowFadeBuilds.Reset();
-                var recycled = source.Frame.Lights;
+        residency.ProduceFirstFrame(context: in context);
+        _ = residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var initial));
+        Assert.Equal(actual: initial, expected: Pipelines);
+        foreach (var capacity in new[] { 1, 2, 0 }) {
+            source.Frame = source.Frame with { Lights = Lights(capacity: capacity) };
+            Assert.True(condition: residency.Produce(context: in context));
+            Assert.True(condition: residency.IsReady, userMessage: residency.NotReadyReason);
+            Assert.Equal(expected: capacity, actual: residency.Frame!.Lights.ShadowSlots.FadeCapacity);
 
-                source.Frame = source.Frame with { Lights = Lights(capacity: capacity) };
-                _ = residency.Produce(context: in context);
-                Assert.False(condition: residency.IsReady);
-                Assert.Equal(expected: (capacity - 1), actual: residency.Frame!.Lights.ShadowSlots.FadeCapacity);
-                var ready = residency.WaitReadyAsync(cancellationToken: TestContext.Current.CancellationToken);
+            foreach (var active in new[] { true, false, true }) {
+                var lights = Lights(capacity: capacity);
 
-                Assert.False(condition: ready.IsCompleted);
-                // World presentation alternates two mutable light tables. A subsequent capture may reuse the old one.
-                recycled.ShadowSlots.Configure(fadeCapacity: capacity, slots: 1);
-                Assert.Equal(expected: (capacity - 1), actual: residency.Frame!.Lights.ShadowSlots.FadeCapacity);
-                allowFadeBuilds.Set();
-                _ = residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
-                _ = residency.Produce(context: in context);
-                Assert.True(condition: residency.IsReady, userMessage: residency.NotReadyReason);
-                await ready;
-                Assert.Equal(expected: capacity, actual: residency.Frame!.Lights.ShadowSlots.FadeCapacity);
-                Assert.Equal(expected: 0, actual: source.Frame.Lights.ShadowSlots.FadeCount);
-                Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var beforeCrossing));
-                Assert.Equal(actual: beforeCrossing, expected: (19L + (4L * capacity)));
-
-                foreach (var active in new[] { true, false, true }) {
-                    var lights = Lights(capacity: capacity);
-
-                    if (active) { lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 1, Outgoing: 0, Slot: 0, Weight: 0.5f)]); }
-                    source.Frame = source.Frame with { Lights = lights };
-                    Assert.True(condition: residency.Produce(context: in context));
-                    Assert.True(condition: residency.IsReady);
-                    Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var afterCrossing));
-                    Assert.Equal(actual: afterCrossing, expected: beforeCrossing);
-                }
+                if (active && (capacity > 0)) { lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 1, Outgoing: 0, Slot: 0, Weight: 0.5f)]); }
+                source.Frame = source.Frame with { Lights = lights };
+                Assert.True(condition: residency.Produce(context: in context));
+                Assert.True(condition: residency.IsReady);
             }
-        } finally {
-            allowFadeBuilds.Set();
-            residency.Dispose();
+            Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var after));
+            Assert.Equal(actual: after, expected: initial);
         }
     }
 

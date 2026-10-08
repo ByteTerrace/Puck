@@ -1,10 +1,10 @@
-#define SDF_VIEWS_PASS
+#define SDF_RECEIVER_PASS
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-policy.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-incoming.hlsli"
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> nearCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> nearResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> nearCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> nearResults : register(u127, space3);
 struct NearProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<NearProbeIndex> nearProbeIndex : register(b0, space4);
 

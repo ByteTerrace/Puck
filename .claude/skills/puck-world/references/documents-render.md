@@ -206,7 +206,7 @@ rank order.
 `MarchSlots` is stable count plus active handoff count, bounded by K + F.
 `SdfLights.ShadowSlots` carries that full selection to the counted GPU march.
 The K word holds four 8-bit stable visibilities. Active incoming marches use
-policy-sized transient storage, R8 at F = 1 and R8G8 at F = 2, absent at F = 0.
+retained R8G8 storage at every nonzero F, absent at F = 0.
 Each light's own occlusion deficit fades out or in with progress, leaving its
 radiance unchanged; a light outside the slots shades unshadowed. The per-slot
 march counters and counted 16-byte handoff uploads follow the

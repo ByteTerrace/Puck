@@ -7,7 +7,7 @@ namespace Puck.World.Client.Tests;
 /// CONTRACT UNDER TEST: a set leases its pipelines longest bytecode first (<see cref="SdfWorldPipelines.BuildOrder"/>),
 /// so with at most <c>GpuPassPipelineCache.BuildConcurrency</c> creations at once the kernel whose cold translation
 /// decides when the set is ready takes a turn first instead of waiting behind every other build. Every kernel but the
-/// on-demand resolve, indirect and light-camera kernels is leased exactly once when all fade capacities are reachable; equal lengths keep
+/// on-demand resolve, comparison receiver, indirect and light-camera kernels is leased exactly once when all fade capacities are reachable; equal lengths keep
 /// <see cref="SdfKernel"/> order. Over the build's
 /// own SPIR-V and DXIL every kernel starts in descending bytecode length, the longest of them first.
 /// </summary>
@@ -36,6 +36,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
                 SdfKernel.Surface,
                 SdfKernel.Ambient,
                 SdfKernel.Shadow,
+                SdfKernel.Receiver,
                 SdfKernel.Views,
                 SdfKernel.ViewsCore,
                 SdfKernel.ViewsFolds,
@@ -51,11 +52,11 @@ public sealed class SdfPipelineBuildOrderLawTests {
     [Theory]
     public void TheBuildsOwnKernelsStartLongestFirst(string bytecodeExtension) {
         var kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
-        var order = SdfWorldPipelines.BuildOrder(kernels: kernels, shadowFadeVariants: SdfShadowFadeVariants.One | SdfShadowFadeVariants.Two);
+        var order = SdfWorldPipelines.BuildOrder(kernels: kernels);
 
         Assert.Equal(
             actual: kernels[order[0]].Length,
-            expected: SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth))).Max(selector: kernel => kernels[kernel].Length)
+            expected: SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.ReceiverComparison or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth))).Max(selector: kernel => kernels[kernel].Length)
         );
         Assert.Equal(
             actual: order.Select(selector: kernel => kernels[kernel].Length),

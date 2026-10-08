@@ -125,7 +125,8 @@ of its passes. The upload and the view's passes, in order:
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
-| `shadow` | `sdf-world-shadow.comp` | One gather and march for each occupied stable slot and active incoming slot, bounded by K + F. Four 8-bit stable visibilities pack into the K row; incoming visibilities use the policy-sized transient image. Skips when soft shadows are off or the slot table contains no marched light (`Skips`). |
+| `shadow` | `sdf-world-shadow.comp` | One gather and march for each occupied stable slot and active incoming slot, bounded by K + F. Four 8-bit stable visibilities pack into the K row; incoming visibilities use the policy's retained R8G8 image. Skips when soft shadows are off or the slot table contains no marched light (`Skips`). |
+| `receiver` | `sdf-world-receiver.comp` | Only with the residency's cache (`SdfWorldPackage.WithIndirect`), after the `indirectReceiverReset` transfer clear of the deferred census: each shaded pixel's indirect receiver, proved against the cache with every field query of indirect light, its certificate in the record's I row (the `indirectVisibility` version), and its four-word answer (`indirectAnswer`) that views reads. Executes exactly when views does. A view selecting a comparison method (`world.indirect-method` `screen` or `cone`) records the comparison receiver, `sdf-world-receiver-comparison.comp` (`SDF_INDIRECT_COMPARISON`), in its place: the same pass, layout and bindings, with the comparison methods instead of the near-field sample, leased only once a view selects one. |
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the stack's lowest field run's offset, then each upper field run's scale and offset, the base's alpha marking an evaluated texel. Each layer counts `gpu.sky.evaluations` in its own detail row (`SdfSkyDetails`). Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
@@ -152,13 +153,13 @@ scheduled extent equals the rect's pixels. No output-sized surface is written
 until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
 module supplies both kernels' filter and has no SDF-layer dependency.
 
-Primary, surface, ambient, shadow, and views share `sdf-world-views.comp.hlsl`'s
+Primary, surface, ambient, shadow, the receiver and views share `sdf-world-views.comp.hlsl`'s
 entry point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
-`SDF_SHADOW_PASS`, and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
+`SDF_SHADOW_PASS`, `SDF_RECEIVER_PASS` (with `SDF_INDIRECT_COMPARISON` for the comparison receiver) and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
 wrapper defines `SDF_PRIMARY_READ` for every pass except primary, and
 `SDF_VIEWS_PASS` for the views kernels, and each kernel compiles only its own
 stage over the pixel the entry point gathers (`sdfPixelAt`): `sdfPrimaryStage`,
-`sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage` or `sdfViewsStage`. Only
+`sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage`, `sdfReceiverStage` or `sdfViewsStage`. Only
 the ambient and shadow kernels define `SDF_GROUP_SHADOW_GATHER` and hold a
 groupshared candidate mask. Before primary, the
 `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
@@ -221,15 +222,18 @@ uneven viewport rectangles, reduced render scale, layout changes, and the
 diagnostic counters on both backends, and check buffer memory as well as the
 per-pass work `world.counters gpu` counts.
 
-Shadow and views have F = 0, 1 and 2 kernel variants in addition to the views
-ISA tiers. Their `SDF_SHADOW_FADE_SLOTS` value selects the generated interface:
-F = 0 has no incoming image binding; F = 1 uses R8, and F = 2 R8G8. The graph
-fragment allocates `incomingVisibility` as retained storage at the render
-ceiling whenever policy permits fades, including frames without an active
-handoff. Only active incoming slots march and write it, and only active
-handoffs read it. The host uploads each active 16-byte `SdfShadowHandoff`
-through its counted region. Keep variants, region layout, graph ports,
-resource accounting and the generated declarations synchronized.
+One shadow kernel and one kernel per views ISA tier serve every fade capacity:
+the wrapper compiles both with `SDF_SHADOW_FADE_SLOTS 2`, and they read the
+active fade count from the pass block. The one world interface always declares
+the R8G8 incoming image. The graph fragment allocates `incomingVisibility` as
+retained R8G8 storage at the render ceiling whenever policy permits fades,
+including frames without an active handoff; at F = 0 it allocates none, the
+passes bind the tables' 1×1 fillers, and the recorder writes a zero fade count,
+also while a graph planned at F = 0 renders a frame whose policy has moved on.
+Only active incoming slots march and write the image, and only active handoffs
+read it. The host uploads each active 16-byte `SdfShadowHandoff` through its
+counted region. Keep the region layout, graph ports, resource accounting and
+the generated declarations synchronized.
 
 ## Buffer hazards
 
@@ -248,8 +252,8 @@ per frame slot. A dispatch that only reads a buffer binds it read-only: a
 read-write binding would keep the buffer in `UNORDERED_ACCESS` on Direct3D 12
 and cost a transition before every reader. The beam alone writes the cull
 buffer (`SDF_TILES_READ_WRITE` compiles its writer); the interface binds the
-visibility records twice, read-write for primary, surface and ambient and
-read-only for views. A new pass, a new scratch resource, or a binding-kind
+visibility records twice, read-write for primary, surface, ambient, shadow and the
+receiver, and read-only for views. A new pass, a new scratch resource, or a binding-kind
 change edits the fragment, and `SdfPassPlanLawTests` holds the planned order,
 the between-pass buffer transitions, each buffer's size at every capacity and
 the mesh pass's attachments to its own tables, so the law moves in the same

@@ -7,8 +7,8 @@
 
 // The host binds a program for each group. Rows carry origin/reach and direction/far distance; each output column
 // holds masked/full marches, interval failures, shape-query differences and the fixtures' mutation witnesses.
-[[vk::binding(60, 3)]] StructuredBuffer<float4> gatherCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> gatherResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> gatherCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> gatherResults : register(u127, space3);
 struct GatherProbeIndex {
     [[vk::offset(0)]] uint index;
 };

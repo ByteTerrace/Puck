@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a set leases one pass-pipeline cache entry
-/// per base or reachable fade kernel (the brick baker only when asked for and present), which the cache creates and counts once and
+/// per up-front kernel (the brick baker only when asked for and present), which the cache creates and counts once and
 /// persists the device's cache once for; a reload leases only the pipelines whose bytecode changed; the cache holds at
 /// most <see cref="GpuPassPipelineCache.BuildConcurrency"/> creations in the driver however many entries build; a set
 /// disposed while creations are in the driver waits for those alone and creates no more; and creations failing together
@@ -26,7 +26,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: (16L, 16), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (17L, 17), actual: (Created(cache: cache), device.Persisted));
 
         using var reflector = SdfTestPipelines.Reflector();
 
@@ -49,7 +49,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: (17L, 17), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (18L, 18), actual: (Created(cache: cache), device.Persisted));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
@@ -58,7 +58,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: 17L, actual: Created(cache: cache));
+        Assert.Equal(expected: 18L, actual: Created(cache: cache));
     }
     // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
     // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
@@ -145,7 +145,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 17L, actual: Created(cache: cache));
+        Assert.Equal(expected: 18L, actual: Created(cache: cache));
     }
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
@@ -167,7 +167,7 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 16) {
+        while (started.Count < 17) {
             driver.Step();
             started.Add(item: driver.Next());
         }
@@ -177,7 +177,7 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
-            expected: (GpuPassPipelineCache.BuildConcurrency, 16, 16L)
+            expected: (GpuPassPipelineCache.BuildConcurrency, 17, 17L)
         );
     }
     [Fact]

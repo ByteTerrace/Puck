@@ -2023,7 +2023,8 @@ counted once, including while a retiring graph's readers still hold it.
 `world.indirect-method [cache|screen|cone]` reads or selects the live indirect
 comparison method for every consuming view. It starts at `cache`; `screen` and
 `cone` select the engine's comparison paths with the residency cache as their
-fallback. This operator presentation override changes no cache tier, saved
+fallback. The first selection builds the comparison receiver kernel, and the view
+waits for it. This operator presentation override changes no cache tier, saved
 document or authoritative session state. Camera and session views keep the
 method while applying their quality restrictions, and infinity views retain
 each consuming camera's method alongside the layer's own shading levers.

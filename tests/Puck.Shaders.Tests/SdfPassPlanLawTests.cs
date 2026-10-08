@@ -44,8 +44,8 @@ public sealed partial class SdfPassPlanLawTests {
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Composite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        // Views and the composite only read the records after shadow, the last stage that writes them.
+        (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
     ];
     // A view's graph: the one pass running the package, publishing its color.
     private static RenderGraphPlan Plan { get; } = new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).Compile(definition: new RenderGraphDefinition(
@@ -125,7 +125,7 @@ public sealed partial class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.SurfaceVisibility),
                 (SdfWorldPackage.Parts.Ambient, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.AmbientVisibility),
                 (SdfWorldPackage.Parts.Shadow, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.ShadowVisibility),
-                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), $"{SdfWorldPackage.Parts.Lit},{SdfWorldPackage.IndirectVisibility}"),
+                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, $"{SdfWorldPackage.Parts.Lit},{SdfWorldPackage.Parts.CullBounds}", string.Join(separator: ",", values: runs)),
                 (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.ShadowVisibility, .. runs]), SdfWorldPackage.Color),
             ]

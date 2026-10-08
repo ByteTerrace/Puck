@@ -20,17 +20,25 @@ public static partial class SdfWorldPackage {
     public const string IncomingVisibility = "incomingVisibility";
     /// <summary>The incoming handoff visibilities, written by the shadow stage.</summary>
     public const string IncomingVisibilityWritten = "incomingVisibilityRW";
+    /// <summary>The incoming visibility image's format: one channel per fade slot, both slots at every nonzero
+    /// capacity, since one shadow and one shading kernel serve every capacity.</summary>
+    public const GpuPixelFormat IncomingVisibilityFormat = GpuPixelFormat.R8G8Unorm;
 
-    /// <summary>Returns the world members for the configured fade capacity. Zero has no incoming image binding.</summary>
-    /// <param name="fadeCapacity">The configured number of concurrent fades, from zero to two.</param>
-    /// <returns>The pass members, with unchanged common binding and block offsets.</returns>
-    public static IReadOnlyList<ShaderInterfaceMember> MembersForShadows(int fadeCapacity) => fadeCapacity switch {
-        0 => Members,
-        1 => ShadowDeclarations.One,
-        2 => ShadowDeclarations.Two,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(fadeCapacity)),
-    };
-    /// <summary>Returns a cached fragment whose incoming image allocation follows policy, independent of active fades.</summary>
+    /// <summary>Gets the incoming visibility members every per-view interface declares, whatever the fade capacity. A
+    /// graph without the image binds the tables' fillers there, and its passes read a zero fade count.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> IncomingMembers => IncomingDeclarations.Members;
+
+    // A nested holder, so Members can read it whatever order the partial files' static initializers run in.
+    private static class IncomingDeclarations {
+        internal static readonly IReadOnlyList<ShaderInterfaceMember> Members = [
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: IncomingVisibility, type: ShaderValueType.Float2),
+            ShaderInterfaceMember.StorageImage(format: IncomingVisibilityFormat, group: ShaderInterfaceGroup.Pass, name: IncomingVisibilityWritten, type: ShaderValueType.Float2),
+        ];
+    }
+
+    /// <summary>Returns a cached fragment whose incoming image allocation follows policy, independent of active fades:
+    /// at a nonzero fade capacity the shadow pass writes, and views reads, a retained image of
+    /// <see cref="IncomingVisibilityFormat"/>; at zero the fragment has none, and its passes bind 1x1 fillers.</summary>
     /// <param name="reconstructs">Whether the view reconstructs its render grid.</param>
     /// <param name="temporal">Whether the view reconstructs over time.</param>
     /// <param name="fadeCapacity">The configured number of concurrent fades, from zero to two.</param>
@@ -38,36 +46,26 @@ public static partial class SdfWorldPackage {
     public static RenderGraphPackageFragment FragmentFor(bool reconstructs, bool temporal, int fadeCapacity) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: fadeCapacity);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: fadeCapacity, other: 2);
-        return ShadowDeclarations.Fragments[(temporal ? 2 : (reconstructs ? 1 : 0)), fadeCapacity];
+        return ShadowDeclarations.Fragments[(temporal ? 2 : (reconstructs ? 1 : 0)), ((fadeCapacity > 0) ? 1 : 0)];
     }
 
     private static class ShadowDeclarations {
-        internal static readonly IReadOnlyList<ShaderInterfaceMember> One = CreateMembers(capacity: 1);
-        internal static readonly IReadOnlyList<ShaderInterfaceMember> Two = CreateMembers(capacity: 2);
         internal static readonly RenderGraphPackageFragment[,] Fragments = {
-            { NativeFragment, CreateFragment(source: NativeFragment, capacity: 1, renderExtent: false), CreateFragment(source: NativeFragment, capacity: 2, renderExtent: false) },
-            { Fragment, CreateFragment(source: Fragment, capacity: 1, renderExtent: true), CreateFragment(source: Fragment, capacity: 2, renderExtent: true) },
-            { TemporalFragment, CreateFragment(source: TemporalFragment, capacity: 1, renderExtent: true), CreateFragment(source: TemporalFragment, capacity: 2, renderExtent: true) },
+            { NativeFragment, CreateFragment(source: NativeFragment, renderExtent: false) },
+            { Fragment, CreateFragment(source: Fragment, renderExtent: true) },
+            { TemporalFragment, CreateFragment(source: TemporalFragment, renderExtent: true) },
         };
 
-        private static IReadOnlyList<ShaderInterfaceMember> CreateMembers(int capacity) => [
-            .. Members,
-            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: IncomingVisibility, type: ((capacity == 1) ? ShaderValueType.Float : ShaderValueType.Float2)),
-            ShaderInterfaceMember.StorageImage(format: Format(capacity: capacity), group: ShaderInterfaceGroup.Pass, name: IncomingVisibilityWritten, type: ((capacity == 1) ? ShaderValueType.Float : ShaderValueType.Float2)),
-        ];
-        private static GpuPixelFormat Format(int capacity) => ((capacity == 1) ? GpuPixelFormat.R8Unorm : GpuPixelFormat.R8G8Unorm);
-        private static RenderGraphPackageFragment CreateFragment(RenderGraphPackageFragment source, int capacity, bool renderExtent) => source with {
-            Resources = [.. source.Resources, Image(format: Format(capacity: capacity), from: null, name: IncomingVisibility, retained: true) with {
+        private static RenderGraphPackageFragment CreateFragment(RenderGraphPackageFragment source, bool renderExtent) => source with {
+            Resources = [.. source.Resources, Image(format: IncomingVisibilityFormat, from: null, name: IncomingVisibility, retained: true) with {
                 Dimensions = (renderExtent ? ShaderPipelineDimensions.Render() : ShaderPipelineDimensions.Relative()),
             }],
             Passes = [.. source.Passes.Select(selector: pass => pass.Name switch {
                 Parts.Shadow => pass with {
-                    Members = MembersForShadows(fadeCapacity: capacity),
                     Outputs = [.. pass.Outputs, new ResourceReference(Name: IncomingVisibility)],
                     OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
                 },
                 Parts.Views => pass with {
-                    Members = MembersForShadows(fadeCapacity: capacity),
                     Inputs = [.. pass.Inputs, new ResourceReference(Name: IncomingVisibility)],
                     InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
                 },

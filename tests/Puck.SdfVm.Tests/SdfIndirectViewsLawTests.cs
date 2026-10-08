@@ -57,6 +57,19 @@ public sealed partial class SdfIndirectViewsLawTests {
 
         Assert.Empty(collection: violations);
     }
+    [Fact]
+    public void ViewsAppliesIndirectLightWithoutEvaluatingTheField() {
+        var functions = Functions(paths: SourcesIn(directory: "indirect"));
+        var evaluators = Evaluators(functions: functions);
+        // The receiver pass owns every field query of indirect light; views reads its answer and the bank.
+        var apply = CodeOf(path: "indirect/sdf-indirect-apply.hlsli");
+        var violations = evaluators.Where(predicate: evaluator => Calls(body: apply, name: evaluator)).Order(comparer: StringComparer.Ordinal);
+
+        Assert.Empty(collection: violations);
+        Assert.Contains(expectedSubstring: "sdfIndirectReceive(", actualString: CodeOf(path: "indirect/sdf-indirect-receiver.hlsli"));
+        Assert.Contains(collection: evaluators, expected: "sdfIndirectReceive");
+        Assert.DoesNotContain(actualString: apply, expectedSubstring: "#include \"sdf-indirect-near.hlsli\"");
+    }
 
     [GeneratedRegex(pattern: @"^[A-Za-z_][\w<>]*\s+(?<name>sdfIndirect\w+)\([^)]*\)\s*\{(?<body>.*?)^\}", options: RegexOptions.Multiline | RegexOptions.Singleline)]
     private static partial Regex FunctionPattern();
