@@ -3,13 +3,14 @@ using Xunit;
 
 namespace Puck.Cli.Gate.Tests;
 
-public sealed class AffectedNonExecutingEditsLawTests {
-    private const string Code = "class Value { int Read() => 1; }";
-    private const string Json = """{"id":"example","title":"old","binding":"old","bootShape":"headless","requirements":[],"timeoutSeconds":10,"positive":{"expect":[{"name":"old","text":"old"}]},"discriminating":{}}""";
-    private const string Manifest = "tests/Puck.World.Canaries/example/canary.json";
-    private const string Source = "src/World/Value.cs";
+/// <summary>One scratch source and canary manifest, and the affected selection over an edit to them.</summary>
+public abstract class AffectedEditLaws {
+    private protected const string Code = "class Value { int Read() => 1; }";
+    private protected const string Json = """{"id":"example","title":"old","binding":"old","bootShape":"headless","requirements":[],"timeoutSeconds":10,"positive":{"expect":[{"name":"old","text":"old"}]},"discriminating":{}}""";
+    private protected const string Manifest = "tests/Puck.World.Canaries/example/canary.json";
+    private protected const string Source = "src/World/Value.cs";
 
-    private static AffectedPlan Select(GitScratchCheckout checkout, string since, params string[] changed) {
+    private protected static AffectedPlan Select(GitScratchCheckout checkout, string since, params string[] changed) {
         using var before = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, root: checkout.Root, revision: since);
         var after = new AffectedWorkingTree(root: checkout.Root);
 
@@ -23,6 +24,9 @@ public sealed class AffectedNonExecutingEditsLawTests {
             triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: after, before: before, path: path),
             proseOnly: path => AffectedManifestProse.IsUnchanged(after: after, before: before, path: path));
     }
+}
+/// <summary>A C# edit that changes only trivia selects no execution, while a token change, a parse error, a changed directive or a missing file stays unjudged.</summary>
+public sealed class AffectedNonExecutingEditsLawTests : AffectedEditLaws {
     [InlineData("// corrected comment\nclass Value { int Read() => 1; }")]
     [InlineData("/// <summary>Corrected documentation.</summary>\nclass Value { int Read() => 1; }")]
     [InlineData("class  Value\n{\n    int Read() => 1;\n}\n")]
@@ -102,6 +106,9 @@ public sealed class AffectedNonExecutingEditsLawTests {
         Assert.Equal(expected: ["World.Tests"], actual: plan.Suites);
         Assert.Equal(expected: ["example"], actual: plan.Canaries);
     }
+}
+/// <summary>A canary manifest edit that changes only its root prose selects only its strict manifest check, while every execution and verdict field, and every added, deleted or malformed manifest, still selects the run.</summary>
+public sealed class AffectedManifestEditsLawTests : AffectedEditLaws {
     [InlineData("title")]
     [InlineData("binding")]
     [Theory]

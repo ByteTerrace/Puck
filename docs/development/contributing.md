@@ -654,6 +654,13 @@ meant to establish.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
+- xUnit runs the laws of one class one after another and runs classes side by
+  side, so a suite takes at least as long as its slowest class. When a class's
+  laws each start processes, builds or scratch repositories, put its fixtures
+  and helpers in an abstract base and its laws in sealed classes over it
+  (`GateRunLaws`, `ShaderBuildTargetsLaws`). A law that proves a real process
+  boundary keeps the process; share its cost instead, for example by planning a
+  gate's change once and executing it under each runner.
 
 ## Code and documentation conventions
 

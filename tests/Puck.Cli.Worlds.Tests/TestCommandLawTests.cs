@@ -14,45 +14,48 @@ namespace Puck.Cli.Worlds.Tests;
 /// <remarks>These facts boot the real host unpaced. They pass <c>--world-artifact</c> at the repository's own
 /// Release output rather than letting the verb build <c>Puck.World</c> again: the test project already depends on
 /// that build.</remarks>
-public sealed class TestCommandLawTests {
-    private static string Artifact() => Path.Combine(
+public abstract class TestCommandLaws {
+    private protected static string Artifact() => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "src",
         path3: "Puck.World",
         path4: "bin/Release/net10.0/Puck.World.dll"
     );
     // The checkout root, found the way every repository tool finds it.
-    private static (int ExitCode, string Output) RunTest(params string[] arguments) =>
+    private protected static (int ExitCode, string Output) RunTest(params string[] arguments) =>
         ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: [
             "test",
             .. arguments,
             "--world-artifact",
             Artifact(),
         ]));
-    private static string Composition(string name) => Path.Combine(
+    private protected static string Composition(string name) => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "tests",
         path3: "Puck.World.Verdicts/composition",
         path4: name
     );
-    private static string Proof(string name) => Path.Combine(
+    private protected static string Proof(string name) => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "tests",
         path3: "Puck.World.Verdicts/proofs",
         path4: name
     );
-    private static string Source(string name) => Path.Combine(
+    private protected static string Source(string name) => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "tests",
         path3: "Puck.World.Verdicts/sources",
         path4: name
     );
-    private static string World(string name) => Path.Combine(
+    private protected static string World(string name) => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "tests",
         path3: "Puck.World.Verdicts",
         path4: name
     );
+}
+/// <summary><c>puck test</c> over the verdict worlds and sources: refusals by name, authored test blocks, module tests and scheduled rows.</summary>
+public sealed class TestCommandLawTests : TestCommandLaws {
     // Two sources of one sweep sharing a file name generate the same world name. Writing the second would replace
     // the first source's world and run only the second one, so the sweep refuses by name before anything boots.
     [Fact]
@@ -437,6 +440,11 @@ public sealed class TestCommandLawTests {
             expectedSubstring: "PASS: every verdict in 1 test world(s) passed"
         );
     }
+}
+/// <summary><c>puck test</c> over composed runs: worlds sharing a file name keep their own evidence, a composed run
+/// arms, exports and judges every world, a body crossing the border is judged by the far world's rule, and
+/// <c>--keep</c> writes every document a composed test generates.</summary>
+public sealed class TestCommandCompositionLawTests : TestCommandLaws {
     // A green world and a red world with the same basename must retain their own evidence on every leg.
     [Theory]
     [InlineData(false)]
@@ -611,6 +619,9 @@ public sealed class TestCommandLawTests {
         // Two worlds, two runs apiece, is still two worlds this verb boots.
         Assert.Equal(expected: 2, actual: Directory.GetDirectories(path: Path.Combine(path1: kept, path2: "worlds")).Length);
     }
+}
+/// <summary>Every parlor entry point passes its authored tests through the real <c>Puck.World</c>.</summary>
+public sealed class TestCommandParlorLawTests : TestCommandLaws {
     // Package entry points must keep their authored real-host scenarios in the normal test gate after graduation
     // out of the engine's built-in assets. The manifest owns the list, so adding a game also adds its test run.
     [Fact]

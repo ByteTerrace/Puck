@@ -8,14 +8,14 @@ namespace Puck.Cli.Worktrees.Tests;
 
 /// <summary>CONTRACT UNDER TEST: the worktree report recognizes landed histories, retains every unreadable tree,
 /// blocks unsafe removals, and leaves Git's recorded state unchanged.</summary>
-public sealed class WorktreeReportCommandLawTests {
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider {
+public abstract class WorktreeReportLaws {
+    private protected sealed class FixedClock(DateTimeOffset now) : TimeProvider {
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private static readonly TimeProvider Clock = new FixedClock(now: new DateTimeOffset(day: 1, hour: 0, minute: 0, month: 1, offset: TimeSpan.Zero, second: 0, year: 2030));
+    private protected static readonly TimeProvider Clock = new FixedClock(now: new DateTimeOffset(day: 1, hour: 0, minute: 0, month: 1, offset: TimeSpan.Zero, second: 0, year: 2030));
 
-    private static GitScratchCheckout Checkout() {
+    private protected static GitScratchCheckout Checkout() {
         var checkout = new GitScratchCheckout();
 
         _ = checkout.Git("config", "core.longpaths", "true");
@@ -26,7 +26,7 @@ public sealed class WorktreeReportCommandLawTests {
         _ = checkout.Commit(message: "base");
         return checkout;
     }
-    private static JsonDocument Report(GitScratchCheckout checkout, TimeProvider? clock = null, string into = "main") {
+    private protected static JsonDocument Report(GitScratchCheckout checkout, TimeProvider? clock = null, string into = "main") {
         var result = ConsoleCapture.RunSplit(run: () => WorktreeReportCommand.Execute(repositoryRoot: checkout.Root, into: into, clock: (clock ?? Clock)));
 
         Assert.True(condition: (result.ExitCode == 0), userMessage: result.Error);
@@ -37,19 +37,22 @@ public sealed class WorktreeReportCommandLawTests {
         Assert.Empty(collection: report.RootElement.GetProperty(propertyName: "errors").EnumerateArray());
         return report;
     }
-    private static JsonElement Entry(JsonDocument report, string branch) => Assert.Single(collection: report.RootElement.GetProperty(propertyName: "entries").EnumerateArray(), predicate: entry => (entry.GetProperty(propertyName: "branch").GetString() == branch));
-    private static string[] Blockers(JsonElement entry) => entry.GetProperty(propertyName: "blockers").EnumerateArray().Select(selector: static value => value.GetString()!).ToArray();
-    private static void Landed(JsonElement entry, string landed, bool removable) {
+    private protected static JsonElement Entry(JsonDocument report, string branch) => Assert.Single(collection: report.RootElement.GetProperty(propertyName: "entries").EnumerateArray(), predicate: entry => (entry.GetProperty(propertyName: "branch").GetString() == branch));
+    private protected static string[] Blockers(JsonElement entry) => entry.GetProperty(propertyName: "blockers").EnumerateArray().Select(selector: static value => value.GetString()!).ToArray();
+    private protected static void Landed(JsonElement entry, string landed, bool removable) {
         Assert.Equal(expected: landed, actual: entry.GetProperty(propertyName: "landed").GetString());
         Assert.Equal(expected: removable, actual: entry.GetProperty(propertyName: "removable").GetBoolean());
     }
-    private static string CommitChange(GitScratchCheckout checkout, string name, string text) {
+    private protected static string CommitChange(GitScratchCheckout checkout, string name, string text) {
         checkout.Write(name: name, text: text);
         return checkout.Commit(message: name);
     }
-    private static string GitAsAuthor(GitScratchCheckout checkout, params string[] arguments) => checkout.Git(["-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", .. arguments]);
-    private static Dictionary<string, (string Bytes, long Written)> Snapshot(string gitDirectory) => Directory.EnumerateFiles(path: gitDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+    private protected static string GitAsAuthor(GitScratchCheckout checkout, params string[] arguments) => checkout.Git(["-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", .. arguments]);
+    private protected static Dictionary<string, (string Bytes, long Written)> Snapshot(string gitDirectory) => Directory.EnumerateFiles(path: gitDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")
         .ToDictionary(keySelector: file => Path.GetRelativePath(path: file, relativeTo: gitDirectory), elementSelector: static file => (Convert.ToBase64String(inArray: File.ReadAllBytes(path: file)), File.GetLastWriteTimeUtc(path: file).Ticks), comparer: StringComparer.Ordinal);
+}
+/// <summary>The report recognizes landed histories: squash-equivalent, patch-equivalent and ancestor landings, partial landings, unlanded merge resolutions and staged renames.</summary>
+public sealed class WorktreeReportLandingLawTests : WorktreeReportLaws {
     [Fact]
     public void TwoCommitSquashIsRemovableOnlyAfterLanding() {
         using var checkout = Checkout();
@@ -160,6 +163,9 @@ public sealed class WorktreeReportCommandLawTests {
         Assert.Equal(expected: new[] { "unreadable" }, actual: Blockers(entry: unreadable));
         Assert.False(condition: unreadable.GetProperty(propertyName: "removable").GetBoolean());
     }
+}
+/// <summary>The report blocks unsafe removals and leaves Git's recorded state unchanged: dirty, detached and missing worktrees, ages on the supplied clock, and every git file preserved.</summary>
+public sealed class WorktreeReportBlockerLawTests : WorktreeReportLaws {
     [Fact]
     public void ModifiedAndUntrackedFilesBlockALandedWorktree() {
         using var checkout = Checkout();
@@ -267,6 +273,9 @@ public sealed class WorktreeReportCommandLawTests {
         Assert.Equal(expected: "origin/landed", actual: upstream.GetProperty(propertyName: "name").GetString());
         Assert.Equal(expected: string.Empty, actual: upstream.GetProperty(propertyName: "track").GetString());
     }
+}
+/// <summary>The report protects locked worktrees, the main worktree and the integration branch, and its local counterpart over remote trackers.</summary>
+public sealed class WorktreeReportProtectionLawTests : WorktreeReportLaws {
     [Fact]
     public void LocksMainWorktreeAndIntegrationBranchAreProtectedAndNamesSortOrdinally() {
         using var checkout = Checkout();
@@ -354,6 +363,9 @@ public sealed class WorktreeReportCommandLawTests {
             Assert.Contains(expected: "unreadable", collection: Blockers(entry: entry));
         });
     }
+}
+/// <summary>The report's --into names an exact branch, never a revision expression or a tag.</summary>
+public sealed class WorktreeReportIntoLawTests : WorktreeReportLaws {
     [InlineData("main^")]
     [InlineData("main~1")]
     [InlineData("main@{0}")]
@@ -375,6 +387,9 @@ public sealed class WorktreeReportCommandLawTests {
         Assert.Empty(collection: result.Output);
         Assert.Contains(actualString: result.Error, expectedSubstring: "names no local or remote-tracking branch");
     }
+}
+/// <summary>The report reads remote counterparts through the fetch mapping and refuses a partial clone only where Git cannot forbid a lazy fetch.</summary>
+public sealed class WorktreeReportRemoteLawTests : WorktreeReportLaws {
     // A report never lazily fetches: git that can forbid it is told to, and git that cannot reads only a repository
     // with no promisor remote to fetch from.
     [InlineData(true, false, false)]

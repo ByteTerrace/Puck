@@ -13,7 +13,7 @@ member publishes none of them, and that `--output` names their directory. It als
 the semantic-validation gate on an update, stale-byte refusal without output replacement, and a document written away
 from its source naming its asset and graph files from where it lands.
 
-`TestCommandLawTests`, the schedule laws and `CompositionBootLawTests` boot the real `Puck.World` executable out
+`TestCommandLawTests`, `TestCommandCompositionLawTests`, `TestCommandParlorLawTests`, the schedule laws and `CompositionBootLawTests` boot the real `Puck.World` executable out
 of its own Release output, so the suite builds that project first; nothing here links against it.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.

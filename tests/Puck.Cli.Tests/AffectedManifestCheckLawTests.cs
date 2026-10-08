@@ -6,7 +6,7 @@ namespace Puck.Cli.Tests;
 
 /// <summary>CONTRACT UNDER TEST: the <c>puck canary --list</c> line <c>puck affected</c> prints for a prose-only manifest edit
 /// is exactly the argument vector its run dispatches through the composed tool's canary verb, whose refusal it
-/// propagates (<c>AffectedNonExecutingEditsLawTests</c> holds the selection itself).</summary>
+/// propagates (<c>AffectedManifestEditsLawTests</c> holds the selection itself).</summary>
 public sealed class AffectedManifestCheckLawTests {
     private const string Code = "class Value { int Read() => 1; }";
     private const string Json = """{"id":"example","title":"old","binding":"old","bootShape":"headless","requirements":[],"timeoutSeconds":10,"positive":{"expect":[{"name":"old","text":"old"}]},"discriminating":{}}""";

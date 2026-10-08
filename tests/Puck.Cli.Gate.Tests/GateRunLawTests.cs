@@ -247,12 +247,14 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         using var branches = new Branches();
 
         branches.Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n\n");
+        // The change is the same with and without the GPU, so it is read once and executed both ways.
+        var change = Plan(branches: branches);
 
         foreach (var gpu in ((bool[])[false, true])) {
             using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
             var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
 
-            _ = Gate(branches: branches, directory: directory, gpu: gpu, runner: runner);
+            _ = Execute(branches: branches, change: change, directory: directory, gpu: gpu, runner: runner);
 
             Assert.DoesNotContain(collection: runner.Steps[0], expected: "--gpu");
             Assert.Equal(actual: runner.Steps.Count(predicate: static step => (step[0] == "canary")), expected: (gpu ? 1 : 0));

@@ -165,11 +165,12 @@ public sealed class DebugLayerOutputLawTests {
     public void TheDesignedMissIsLeftOutInOnePlaceAndTheRuleKeepsNoAllowlist() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
-        var naming = Directory.EnumerateFiles(path: Path.Combine(path1: repositoryRoot, path2: "src"), searchOption: SearchOption.AllDirectories, searchPattern: "*.cs")
-            .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: repositoryRoot).Replace(newChar: '/', oldChar: '\\'))
-            .Where(predicate: static path => (!path.Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") && !path.Contains(comparisonType: StringComparison.Ordinal, value: "/bin/")))
-            .Where(predicate: path => File.ReadAllText(path: Path.Combine(path1: repositoryRoot, path2: path)).Contains(comparisonType: StringComparison.Ordinal, value: "LOADPIPELINE_NAMENOTFOUND"))
-            .ToArray();
+        // Every source under src, tracked or not, but never the build output git ignores: git reads them without
+        // walking bin and obj.
+        var search = CliGit.Run(repository: repositoryRoot, "grep", "--files-with-matches", "--untracked", "--fixed-strings", "LOADPIPELINE_NAMENOTFOUND", "--", "src/*.cs");
+
+        Assert.True(condition: (search.ExitCode == 0), userMessage: search.Stderr);
+        var naming = search.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
 
         Assert.Equal(actual: naming, expected: ["src/Puck.DirectX/Interop/DirectXDeviceContext.cs"]);
         Assert.False(condition: Verdict("[d3d12-debug] D3D12_MESSAGE_SEVERITY_WARNING: LoadPipeline: the name was not found in the library").Passed);

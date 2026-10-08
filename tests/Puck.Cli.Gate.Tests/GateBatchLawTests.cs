@@ -15,12 +15,16 @@ internal sealed class GateClock : TimeProvider {
     public void Advance(TimeSpan duration) => m_ticks += duration.Ticks;
 }
 
-public sealed class GateBatchLawTests : GateRunLaws {
-    private static void Workload(Branches branches, string name, bool ceilings = true, bool script = false) {
+/// <summary>The counters workloads the batch laws write into their scratch checkouts.</summary>
+public abstract class GateBatchLaws : GateRunLaws {
+    private protected static void Workload(Branches branches, string name, bool ceilings = true, bool script = false) {
         branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.world.json", text: "{}");
         if (ceilings) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.ceilings.json", text: $$"""{"workload":"tests/Puck.Counters/{{name}}.world.json"}"""); }
         if (script) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.script.txt", text: "world.counters --json"); }
     }
+}
+/// <summary><see cref="GateRun"/> runs the device suites, every recorded workload and the citations after affected only with the GPU, launches no build that leaves an MSBuild node behind, and flushes its step summary as it goes.</summary>
+public sealed class GateBatchLawTests : GateBatchLaws {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -109,6 +113,9 @@ public sealed class GateBatchLawTests : GateRunLaws {
             Assert.Equal($"{start.AddMilliseconds(milliseconds: 2700):O} exit {names[index]} exit={(failedBuild ? 1 : 0)} elapsed=2s", lines[((2 * index) + 1)]);
         }
     }
+}
+/// <summary><see cref="GateRun"/> records only with the GPU and only once every earlier qualification step passed.</summary>
+public sealed class GateRecordLawTests : GateBatchLaws {
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -149,6 +156,9 @@ public sealed class GateBatchLawTests : GateRunLaws {
             Assert.DoesNotContain(collection: runner.Steps, filter: args => args.Contains(value: "--record"));
         }
     }
+}
+/// <summary><see cref="GateRun"/> consults admission immediately before each heavy step, waits for the GPU only on device steps, and refuses before starting a step whose admission timed out.</summary>
+public sealed class GateAdmissionLawTests : GateBatchLaws {
     [Fact]
     public void EveryHeavyStepAndNoLightStepConsultsAdmissionImmediatelyBeforeRunning() {
         using var branches = new Branches();
