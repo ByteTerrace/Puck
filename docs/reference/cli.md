@@ -1717,6 +1717,16 @@ step loop advances exactly one simulation tick per iteration without sleeping
 for wall time; command ingress, authority, physics and rules stay on their usual
 paths.
 
+A run is bounded by its progress, not by how long its ticks take on a loaded
+machine. The verb waits past the export tick one simulated second at a time,
+and the World answers each `world.wait` as it starts it, so every answer is a
+tick the run reached. The first answer must arrive within three minutes of
+launch, which covers start-up, loading and composing the world; each later one
+must arrive within a minute of the one before it. A run that stops answering is
+stopped and reported with its last answer, as a usage refusal (exit 2). The
+World is given the longest run that bound allows as its own
+`--exit-after-seconds`, so a host whose runner has gone stops too.
+
 A path may name a `.puck` source instead of a document, which is how behaviour
 is normally written: the source is compiled and the worlds its
 [`test` blocks](../authoring/testing-a-world.md) generate are what run, one per
