@@ -188,7 +188,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             primary["host"]!["authority"]!.GetValue<string>()
         );
         Assert.Equal(
-            "0.0.0.0:4433",
+            $"{AzureCommand.DeploymentListenAddress}:4433",
             primary["host"]!["listen"]!.GetValue<string>()
         );
         Assert.Equal(

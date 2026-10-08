@@ -11,7 +11,7 @@ namespace Puck.Abstractions.Gpu;
 /// one that could never hit.
 /// </para>
 /// <para>
-/// Each backend keeps at most <see cref="RetainedFiles"/> files, least recently used first out. Opening a file, and every
+/// Each backend keeps at most <see cref="RetainedFiles"/> files, least recently used first out (<see cref="CacheRetention"/>). Opening a file, and every
 /// creation it answers, moves its last-write time to now. Opening a file then keeps the backend's most recently written
 /// files across all its device directories, the opened file always among them, deletes the rest, counting each as
 /// <see cref="GpuWork.PipelineCachePruned"/>, and removes every device directory left empty; equal times fall to the
@@ -71,7 +71,8 @@ public sealed class GpuPipelineCacheFile {
 
         // The entries each device directory still holds; one that could not be listed is marked -1 and never removed.
         var remaining = new int[devices.Length];
-        var candidates = new List<(FileInfo File, string Name, int Device)>();
+        var candidates = new List<CacheEntry>();
+        var deviceOf = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var device = 0; (device < devices.Length); device++) {
             FileSystemInfo[] entries;
@@ -100,30 +101,27 @@ public sealed class GpuPipelineCacheFile {
                     b: opened,
                     comparisonType: StringComparison.Ordinal
                 )) {
-                    candidates.Add(item: (file, Slashed(path: file.FullName), device));
+                    var name = Slashed(path: file.FullName);
+
+                    candidates.Add(item: new CacheEntry(Bytes: 0, LastUsedUtc: file.LastWriteTimeUtc, Path: name));
+                    deviceOf[name] = device;
                 }
             }
         }
 
-        candidates.Sort(comparison: static (left, right) => {
-            var order = right.File.LastWriteTimeUtc.CompareTo(value: left.File.LastWriteTimeUtc);
+        // The opened file holds one of the places whether or not it exists yet: it is the one in use, and a miss writes it.
+        var inUse = Slashed(path: opened);
 
-            return ((order != 0) ? order : string.CompareOrdinal(
-                strA: left.Name,
-                strB: right.Name
-            ));
-        });
-
-        // The opened file holds one of the places: it is the one in use, and a miss writes it.
-        for (var index = (RetainedFiles - 1); (index < candidates.Count); index++) {
-            var (file, name, device) = candidates[index];
+        candidates.Add(item: new CacheEntry(Bytes: 0, LastUsedUtc: DateTime.MaxValue, Path: inUse));
+        foreach (var eviction in CacheRetention.SelectEvictions(bound: CacheBound.Entries(maxEntries: RetainedFiles), entries: candidates, inUse: inUse)) {
+            var device = deviceOf[eviction.Path];
 
             try {
-                file.Delete();
+                File.Delete(path: eviction.Path);
                 remaining[device]--;
                 work.CountPruned();
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {name}: {exception.Message}");
+                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {eviction.Path}: {exception.Message}");
             }
         }
 

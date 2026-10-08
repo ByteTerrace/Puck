@@ -10,6 +10,6 @@ namespace Puck.Launcher.Release {
         /// <summary>The shape fingerprint of <c>OfficialManifest.CurrentSchema</c>, declared in <c>src/Puck.Launcher/Release/OfficialManifest.cs</c>.</summary>
         public const string OfficialManifestCurrentSchema = "07ecfcdfa12659e6";
         /// <summary>The shape fingerprint of <c>ReleaseManifest.CurrentSchema</c>, declared in <c>src/Puck.Launcher/Release/ReleaseManifest.cs</c>.</summary>
-        public const string ReleaseManifestCurrentSchema = "998bfb681cb448ff";
+        public const string ReleaseManifestCurrentSchema = "97d1ac4900f09d50";
     }
 }

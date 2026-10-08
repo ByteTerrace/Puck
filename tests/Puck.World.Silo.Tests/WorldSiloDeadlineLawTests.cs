@@ -40,7 +40,8 @@ public sealed class WorldSiloDeadlineLawTests {
 
         return context;
     }
-    private static WorldSiloHost Silo(string directory, VirtualClock clock, IObjectBlobStore store, BufferedConsoleOutput output, WorldSiloReleaseManagement? release = null) {
+
+    internal static WorldSiloHost Silo(string directory, VirtualClock clock, IObjectBlobStore store, BufferedConsoleOutput output, WorldSiloReleaseManagement? release = null, WorldSiloLifecycle? lifecycle = null) {
         var source = new TextCommandSource(new CommandRegistry(modules: []));
 
         return new(
@@ -62,10 +63,10 @@ public sealed class WorldSiloDeadlineLawTests {
                 ),
                 StateDir: directory,
                 Clustering: new(Kind: "Localhost"),
-                Lifecycle: new(
+                Lifecycle: (lifecycle ?? new(
                     HealthPort: 0,
                     ShutdownSeconds: ShutdownSeconds
-                ),
+                )),
                 Release: release
             ),
             routing: new(
@@ -310,7 +311,7 @@ public sealed class WorldSiloDeadlineLawTests {
         }
     }
 
-    private sealed class Lifetime : IHostApplicationLifetime {
+    internal sealed class Lifetime : IHostApplicationLifetime {
         public int Stops;
 
         public CancellationToken ApplicationStarted => CancellationToken.None;

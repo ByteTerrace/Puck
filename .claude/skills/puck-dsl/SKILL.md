@@ -157,7 +157,8 @@ for a run that succeeded; `build/WorldAssets.targets` ships exactly that report
 (`TreeCompileReportLawTests`), since the run is what wrote them.
 `--bake-cache <directory>` reads and keeps the run's creation bakes in that
 content-addressed cache, so only keys the cache lacks are baked and the pack's
-bytes do not change; the build passes `obj/bakes`, and `--check` refuses it
+bytes do not change; the build passes the per-user `bakes` cache every checkout
+shares, and `--check` refuses it
 (`TreeBakeCacheLawTests`). `asset "path"` references use one `<stem>.assets.json` lock
 beside the root source; ordinary compilation verifies its full SHA-256 pins,
 while `--update-assets` is the only compile mode that replaces them. Every

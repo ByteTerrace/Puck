@@ -4,9 +4,12 @@ These laws hold `puck affected`, `puck gate`, `puck host` and `puck baselines`: 
 scratch checkouts, non-executing edits, recording, revision export, suite scheduling, the gate's batch and step order,
 host admission and load lines. `RunDirectoryLawTests` holds the one run-directory policy: a passing run leaves no
 directory, a failing or unfinished run keeps its own and names its absolute path, a directory that holds no evidence is
-deleted whatever the verdict, and the age sweep removes only stale directories of its own prefix. It also checks that a
-recording keeps its inner canary transcript when that run fails, and that a law's `TemporaryDirectory` outlives its
-disposal until the law's verdict.
+deleted whatever the verdict, the age sweep of a kind removes only stale directories of that kind, and the sweep of
+every kind removes stale directories of any kind. It also checks that a recording keeps its inner canary transcript
+when that run fails, and that a law's `TemporaryDirectory` outlives its disposal until the law's verdict.
+`RunDirectoryRetentionLawTests` holds what the policy leaves behind: a directory is named for its kind and the process
+that owns it, a kept failure trims its kind to the newest four directories of finished runs, and nothing removes a
+directory whose process still runs.
 
 The suite composes its verbs over a `GateComposition` that names no other verb (`SuiteRoot`). The laws that need
 the verbs composed beside the gate (the commands it prints for other verbs, the GPU-work grammars, the schema stand-ins)

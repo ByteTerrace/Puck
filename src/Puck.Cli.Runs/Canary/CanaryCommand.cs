@@ -375,10 +375,6 @@ public static partial class CanaryCommand {
     );
 
     private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, CanaryCapacity capacity, bool keepTranscripts, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
-        RunDirectory.Sweep(
-            age: RunDirectory.StaleAge,
-            prefix: ScratchPrefix
-        );
 
         var buildClock = Stopwatch.StartNew();
         IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
@@ -1593,9 +1589,10 @@ public static partial class CanaryCommand {
 
     /// <summary>Names a build run directory without creating it, so a reused or named artifact leaves no directory.</summary>
     /// <param name="id">The build's name.</param>
-    /// <returns>A unique path under the canary scratch prefix, created when the build writes its output or log.</returns>
+    /// <returns>A unique path under the canary scratch prefix, named as a run directory of this process (so a sweep can
+    /// tell when its run has finished) and created when the build writes its output or log.</returns>
     public static string BuildRunDirectory(string id) =>
-        Path.Combine(path1: Path.GetTempPath(), path2: $"{ScratchPrefix}{id}-build-{Guid.NewGuid():N}");
+        Path.Combine(path1: Path.GetTempPath(), path2: $"{ScratchPrefix}{id}-build-{Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}-{Guid.NewGuid():N}");
     // The run directory names its canary and leg after the prefix RunSelected sweeps. Each call creates a directory of
     // its own, however many legs of one proof run at once: a leg's state directory, captures and keys live under it.
     public static string CreateRunDirectory(string id, string leg) =>

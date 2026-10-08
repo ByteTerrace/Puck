@@ -8,7 +8,7 @@ namespace Puck.Cli.Worlds.Tests;
 public sealed class CompileBatchTests {
     [Fact]
     public async Task BatchPreservesOrderAndPerSourceLoweringAsync() {
-        using var directory = new TemporaryDirectory(prefix: "puck compile batch ");
+        using var directory = new TemporaryDirectory(prefix: "puck-compile batch ");
 
         var first = Path.Combine(path1: directory.RootPath, path2: "first.puck");
         var second = Path.Combine(path1: directory.RootPath, path2: "second.puck");
@@ -30,7 +30,7 @@ public sealed class CompileBatchTests {
     }
     [Fact]
     public async Task BatchStopsBeforeWritingSourcesAfterTheFirstFailureAsync() {
-        using var directory = new TemporaryDirectory(prefix: "puck compile failure ");
+        using var directory = new TemporaryDirectory(prefix: "puck-compile failure ");
 
         var first = Path.Combine(path1: directory.RootPath, path2: "first.puck");
         var missing = Path.Combine(path1: directory.RootPath, path2: "missing.puck");

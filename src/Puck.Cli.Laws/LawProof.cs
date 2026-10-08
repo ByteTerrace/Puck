@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -466,7 +467,7 @@ public static partial class LawProof {
 
         var scratch = Directory.CreateDirectory(path: Path.Combine(
             path1: scratchRoot,
-            path2: $"puck-laws-{Path.GetFileNameWithoutExtension(path: Path.GetRandomFileName())}"
+            path2: $"puck-laws-{Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}-{Path.GetFileNameWithoutExtension(path: Path.GetRandomFileName())}"
         )).FullName;
         var tree = Path.Combine(
             path1: scratch,

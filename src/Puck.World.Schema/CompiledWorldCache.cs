@@ -9,12 +9,17 @@ namespace Puck.World;
 /// (<see cref="CompiledWorld.Beside"/>, where <c>puck compile</c> and the build write one) and then in this cache's
 /// directory, takes the first whose header is the boot's own, keeps each chunk that still holds, and derives the rest.
 /// When anything was derived, the whole compiled world is written into the cache's directory, never beside the
-/// document; a file there is named for the document's path, so each document has at most one. A chunk that does not
+/// document; a file there is named for the document's path, so each document has at most one. A boot that takes the
+/// cache's file stamps it as used, and a write keeps the directory within <see cref="Retention"/>, least recently used
+/// out (<see cref="CacheRetention"/>). A chunk that does not
 /// derive on boot (<see cref="ICompiledWorldChunk.DerivesOnBoot"/>) is kept when it holds and otherwise left out of the
 /// boot and of what it writes. A compiled world that cannot be read or written costs the boot a derivation and nothing
 /// else.
 /// </summary>
 public sealed class CompiledWorldCache {
+    /// <summary>The bound the directory is held to whenever a boot writes into it.</summary>
+    public static readonly CacheBound Retention = new(MaxBytes: (256L << 20), MaxEntries: 1024);
+
     /// <summary>Initializes a new instance of the <see cref="CompiledWorldCache"/> class.</summary>
     /// <param name="directory">The directory compiled worlds are written into; created on the first write.</param>
     /// <param name="chunks">The derivations a compiled world stores, or <see langword="null"/> for
@@ -170,6 +175,9 @@ public sealed class CompiledWorldRequest {
             ) {
                 container = decoded;
                 loadedFrom = candidate;
+                if (string.Equals(a: candidate, b: cached, comparisonType: StringComparison.Ordinal)) {
+                    CacheRetention.Stamp(path: cached);
+                }
                 break;
             }
         }
@@ -245,6 +253,12 @@ public sealed class CompiledWorldRequest {
                     path: cached
                 );
                 writtenTo = cached;
+                _ = CacheRetention.EnforceOnWrite(
+                    bound: CompiledWorldCache.Retention,
+                    directory: m_cache.Directory,
+                    inUse: cached,
+                    isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: CompiledWorld.Extension)
+                );
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 writeFailure = exception.Message.ReplaceLineEndings(replacementText: " ");
             }

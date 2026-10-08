@@ -9,7 +9,7 @@ namespace Puck.Cli.Content.Tests;
 public sealed class FirmwareCommandTests {
     [Fact]
     public async Task AgbMissingSourceRefusesBeforeTouchingOutputAsync() {
-        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
+        using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
         var image = Path.Combine(
             path1: directory.RootPath,
             path2: "existing.bin"
@@ -42,7 +42,7 @@ public sealed class FirmwareCommandTests {
     }
     [Fact]
     public void HgbGenerationAndVerificationCoverEveryRevision() {
-        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
+        using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
 
         Assert.Equal(
             expected: 0,
@@ -92,7 +92,7 @@ public sealed class FirmwareCommandTests {
     }
     [Fact]
     public void VerificationDoesNotCreateMissingArtifactsOrRepairDrift() {
-        using var directory = new TemporaryDirectory(prefix: "puck firmware tests ");
+        using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
         var missingDirectory = Path.Combine(
             path1: directory.RootPath,
             path2: "not created"

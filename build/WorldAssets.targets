@@ -13,6 +13,14 @@
          it from the sources' names. The CLI is a build-time tool here, never a runtime dependency. -->
     <PropertyGroup>
         <PuckWorldSourceDirectory>$(MSBuildProjectDirectory)/Assets/worlds</PuckWorldSourceDirectory>
+        <!-- The bake cache is the per-user one (PuckUserDirectory.Resolve("bakes"): Puck under the local application data
+             folder, or under the temporary directory where the platform names none), which `puck parity` and the World
+             read and fill too, so every checkout and configuration on the machine bakes a creation once. That is safe
+             because a bake's key carries the bake code's full fingerprint (DerivationFingerprint.Bake), so checkouts whose
+             bake code differs never share a key. -p:PuckWorldBakeCache=<dir> names another. -->
+        <PuckUserLocalData>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))</PuckUserLocalData>
+        <PuckUserLocalData Condition="'$(PuckUserLocalData)' == ''">$([System.IO.Path]::GetTempPath())</PuckUserLocalData>
+        <PuckWorldBakeCache Condition="'$(PuckWorldBakeCache)' == ''">$([System.IO.Path]::TrimEndingDirectorySeparator('$(PuckUserLocalData)'))/Puck/bakes</PuckWorldBakeCache>
     </PropertyGroup>
     <ItemGroup>
         <PuckWorldSource Include="$(PuckWorldSourceDirectory)/**/*.puck;$(PuckWorldSourceDirectory)/**/*.world.json" />
@@ -40,13 +48,11 @@
     <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
          A run is repeated when a file the last run reported is gone: the report is removed, and it is the run's one
          output. The report alone is the output because a run keeps a stored package it finds already built, so the
-         package's time says nothing about when the run last succeeded; the report is written last, by every run.
-         The bake cache sits beside the configuration directories, so every configuration shares it. -->
+         package's time says nothing about when the run last succeeded; the report is written last, by every run. -->
     <Target Name="PuckNameWorldReport">
         <PropertyGroup>
             <PuckWorldDocumentDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)worlds'))</PuckWorldDocumentDirectory>
             <PuckWorldReport>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)worlds.written'))</PuckWorldReport>
-            <PuckWorldBakeCache>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)bakes'))</PuckWorldBakeCache>
         </PropertyGroup>
         <ReadLinesFromFile File="$(PuckWorldReport)" Condition="Exists('$(PuckWorldReport)')">
             <Output TaskParameter="Lines" ItemName="PuckWorldReportedLine" />

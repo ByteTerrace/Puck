@@ -56,10 +56,11 @@ public static class WasmBuildCommand {
             "puck-addon-default.wasm"
         ));
 
-        File.Copy(
-            destFileName: targetPath,
-            overwrite: true,
-            sourceFileName: defaultModule
+        // The module ships as the World's content, so built outputs hold hard links to it: replace it, never write
+        // through it.
+        Puck.Assets.AtomicFile.WriteAllBytes(
+            bytes: File.ReadAllBytes(path: defaultModule),
+            path: targetPath
         );
         // Use the host's hash implementation: its pin reads the leading 64 SHA-256 bits little-endian.
         var contentHash = WorldDefinitionFileSource.ComputeContentHash(content: File.ReadAllBytes(path: targetPath));

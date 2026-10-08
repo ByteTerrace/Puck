@@ -162,6 +162,11 @@
           "description": "HTTP health port; retirement requests are accepted only from loopback.",
           "type": "integer"
         },
+        "healthAddress": {
+          "description": "The IP address literal the health listener binds. Loopback by default, so a local silo listens on no network interface; a deployment whose load balancer probes the port names its interface, or 0.0.0.0 for every one, here.",
+          "type": "string",
+          "default": "127.0.0.1"
+        },
         "observer": {
           "description": "Optional installed extension supplying host retirement deadlines; absent means no external observation.",
           "type": [

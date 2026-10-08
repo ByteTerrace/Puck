@@ -543,7 +543,7 @@ public static partial class AzureCommand {
                 var name = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: source));
                 var world = CliFiles.ReadJson(path: source);
 
-                if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"0.0.0.0:{Port}"; }
+                if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"{DeploymentListenAddress}:{Port}"; }
                 var published = await authority.PublishDefinitionBytesAsync(
                     cancellationToken: CancellationToken.None,
                     definition: Encoding.UTF8.GetBytes(s: world.ToJsonString()),
@@ -566,6 +566,7 @@ public static partial class AzureCommand {
         silo["stateDir"] = "/fixture/state";
         silo["lifecycle"] = new JsonObject {
             ["healthPort"] = 8081,
+            ["healthAddress"] = DeploymentListenAddress,
             ["shutdownSeconds"] = 120,
             ["progressTimeoutSeconds"] = 30,
             ["checkpointTimeoutSeconds"] = 180,

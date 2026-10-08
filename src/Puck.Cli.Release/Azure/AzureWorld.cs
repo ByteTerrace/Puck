@@ -8,6 +8,12 @@ using Puck.World.Server;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
+    /// <summary>The address a deployed world container binds its QUIC door and its health listener to: every interface.
+    /// The load balancer probes the health port and forwards QUIC to the VM's own address, and Docker forwards a
+    /// published port to the container's interface, so neither reaches a loopback bind. Only these deployment documents
+    /// name it; a local World or silo listens on loopback.</summary>
+    public const string DeploymentListenAddress = "0.0.0.0";
+
     private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null) {
         var result = new JsonObject {
             ["schema"] = "puck.silo.configuration.v1",
@@ -121,6 +127,7 @@ public static partial class AzureCommand {
             var siloLifecycle = (configuration["lifecycle"] ?? throw new InvalidDataException(message: "Missing world lifecycle configuration."));
             var lifecycle = new JsonObject {
                 ["healthPort"] = siloLifecycle["healthPort"]!.DeepClone(),
+                ["healthAddress"] = DeploymentListenAddress,
                 ["shutdownSeconds"] = siloLifecycle["shutdownSeconds"]!.DeepClone(),
                 ["progressTimeoutSeconds"] = siloLifecycle["progressTimeoutSeconds"]!.DeepClone(),
                 ["checkpointTimeoutSeconds"] = siloLifecycle["checkpointTimeoutSeconds"]!.DeepClone(),

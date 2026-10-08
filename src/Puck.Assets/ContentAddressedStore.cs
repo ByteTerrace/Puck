@@ -1,3 +1,5 @@
+using Puck.Abstractions;
+
 namespace Puck.Assets;
 
 /// <summary>
@@ -20,6 +22,10 @@ namespace Puck.Assets;
 /// already present is a no-op past the hash computation: the temp file is discarded rather than replacing the
 /// existing (byte-identical) object. A promotion that fails discards its temp file too, so <c>tmp/</c> never
 /// accumulates an entry a failed write left behind.
+/// <para>A store opened with a <see cref="Retention"/> is a cache: a read that finds an object or a ref stamps it as
+/// used, and a write keeps the objects within the bound and the refs within its entry count, least recently used out
+/// (<see cref="CacheRetention"/>). A ref whose object was evicted resolves to a pin <see cref="TryGet"/> no longer finds,
+/// which a cache's owner treats as a miss. A store opened without one keeps everything, as a release store must.</para>
 /// </remarks>
 public sealed class ContentAddressedStore {
     private readonly string m_refsDirectory;
@@ -27,14 +33,20 @@ public sealed class ContentAddressedStore {
 
     /// <summary>Gets the store's root directory.</summary>
     public string Root { get; }
+    /// <summary>Gets the bound the store is held to as a cache, or <see langword="null"/> for a store that keeps
+    /// everything.</summary>
+    public CacheBound? Retention { get; }
 
     /// <summary>Initializes a store rooted at <paramref name="root"/>, creating its <c>objects/</c>, <c>refs/</c>,
     /// and <c>tmp/</c> subdirectories if they do not already exist.</summary>
     /// <param name="root">The store's root directory (created if missing).</param>
+    /// <param name="retention">The bound that makes the store a cache, or <see langword="null"/> to keep
+    /// everything.</param>
     /// <exception cref="ArgumentException"><paramref name="root"/> is <see langword="null"/>, empty, or whitespace.</exception>
-    public ContentAddressedStore(string root) {
+    public ContentAddressedStore(string root, CacheBound? retention = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: root);
 
+        Retention = retention;
         Root = Path.GetFullPath(path: root);
         m_refsDirectory = Path.Combine(
             path1: Root,
@@ -65,6 +77,25 @@ public sealed class ContentAddressedStore {
             path2: category,
             path3: name
         );
+    // A cache stamps what a read or a write used, and a write holds the objects and the refs within the bound.
+    private void Used(string path) {
+        if (Retention is not null) {
+            CacheRetention.Stamp(path: path);
+        }
+    }
+    private void Retain(string written, bool isRef) {
+        if (Retention is not { } bound) {
+            return;
+        }
+
+        _ = CacheRetention.EnforceOnWrite(
+            bound: (isRef ? CacheBound.Entries(maxEntries: bound.MaxEntries) : bound),
+            directory: (isRef ? m_refsDirectory : Path.Combine(path1: Root, path2: "objects")),
+            inUse: written,
+            isEntry: static _ => true,
+            search: SearchOption.AllDirectories
+        );
+    }
 
     /// <summary>Returns the path of <paramref name="pin"/>'s object under a store rooted at <paramref name="root"/>:
     /// <c>&lt;root&gt;/objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c>.</summary>
@@ -158,6 +189,10 @@ public sealed class ContentAddressedStore {
 
                 throw;
             }
+
+            Retain(isRef: false, written: objectPath);
+        } else {
+            Used(path: objectPath);
         }
 
         return pin;
@@ -215,6 +250,8 @@ public sealed class ContentAddressedStore {
 
             throw;
         }
+
+        Retain(isRef: true, written: refPath);
     }
     /// <summary>Attempts to read the object bytes for <paramref name="pin"/>.</summary>
     /// <param name="pin">The object's pin.</param>
@@ -229,6 +266,7 @@ public sealed class ContentAddressedStore {
         }
 
         content = File.ReadAllBytes(path: objectPath);
+        Used(path: objectPath);
         return true;
     }
     /// <summary>Attempts to resolve a derived-cache entry: a ref under <c>derived/&lt;kind&gt;/&lt;inputHash&gt;</c>,
@@ -265,9 +303,14 @@ public sealed class ContentAddressedStore {
             return false;
         }
 
-        return ContentPin.TryParse(
+        if (!ContentPin.TryParse(
             pin: out hash,
             text: File.ReadAllText(path: refPath).Trim()
-        );
+        )) {
+            return false;
+        }
+
+        Used(path: refPath);
+        return true;
     }
 }

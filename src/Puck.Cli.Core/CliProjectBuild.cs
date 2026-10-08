@@ -114,7 +114,9 @@ public static partial class CliProjectBuild {
         build = null;
 
         var name = Path.GetFileNameWithoutExtension(path: project);
-        List<string> arguments = [.. Arguments(project: project), "--output", outputDirectory];
+        // A directory a build writes with --output can outlive the build (the World store keeps it), so its content items
+        // are copies: a link would let an editor saving a source in place rewrite the kept build.
+        List<string> arguments = [.. Arguments(project: project), "-p:CreateHardLinksForAdditionalFilesIfPossible=false", "--output", outputDirectory];
 
         try {
             build = CliReferenceAssemblyRecovery.Run(

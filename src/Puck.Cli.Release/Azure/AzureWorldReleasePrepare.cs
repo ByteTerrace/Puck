@@ -113,7 +113,7 @@ public static partial class AzureCommand {
 
                 if (name == primary) {
                     if (definition.HostRaw is null) { throw new InvalidDataException(message: "the official primary world must declare its host defaults before endpoint binding"); }
-                    definition = definition with { HostRaw = definition.Host with { Authority = $"{host}:{port}", Listen = $"0.0.0.0:{port}" } };
+                    definition = definition with { HostRaw = definition.Host with { Authority = $"{host}:{port}", Listen = $"{DeploymentListenAddress}:{port}" } };
                     if (outputs["worldMcpConfiguration"]?["value"]?["admission"] is JsonArray delegated) {
                         var world = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: definition))!.AsObject();
 

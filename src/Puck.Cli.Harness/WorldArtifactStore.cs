@@ -25,7 +25,8 @@ public sealed record WorldArtifact(string Path, string Key, bool Reused, FileStr
 /// of the layout. Every lock is an open file handle, so a killed run releases it with its process.
 /// </para>
 /// <para>
-/// When a run takes a build it prunes the store to the <see cref="KeepCount"/> most recently used entries. An entry a
+/// When a run takes a build it prunes the store to the <see cref="KeepCount"/> most recently used entries
+/// (<see cref="Puck.Abstractions.CacheRetention"/>). An entry a
 /// run still holds a lease on is kept whatever its age, since opening its lease exclusively fails. A build or pruning
 /// directory left behind by a killed run, and a lock or lease file whose build no longer exists, is deleted once it is
 /// older than six hours.
@@ -296,15 +297,11 @@ public sealed class WorldArtifactStore(string root) {
                 : DateTime.MinValue)));
         }
 
-        foreach (var (key, _) in entries
-            .Where(predicate: entry => !string.Equals(
-                a: entry.Key,
-                b: keep,
-                comparisonType: StringComparison.Ordinal
-            ))
-            .OrderByDescending(keySelector: static entry => entry.Used)
-            .ThenBy(keySelector: static entry => entry.Key, comparer: StringComparer.Ordinal)
-            .Skip(count: (KeepCount - 1))) {
+        foreach (var key in Puck.Abstractions.CacheRetention.SelectEvictions(
+            bound: Puck.Abstractions.CacheBound.Entries(maxEntries: KeepCount),
+            entries: entries.Select(selector: static entry => new Puck.Abstractions.CacheEntry(Bytes: 0, LastUsedUtc: entry.Used, Path: entry.Key)),
+            inUse: keep
+        ).Select(selector: static eviction => eviction.Path)) {
             var leasePath = Sibling(
                 key: key,
                 suffix: ".lease"

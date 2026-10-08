@@ -110,9 +110,11 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
 /// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to one compiler build:
 /// the identity of every non-framework assembly the compiler loads is part of the entry's name and is recorded inside
 /// it, so a rebuilt compiler never reads an older one's output, and builds that share a directory (an editor's
-/// <c>puck lsp</c>, a candidate CLI, the game) keep their own entries rather than overwriting each other's. The
-/// directory keeps at most <see cref="MaxPersistedEntries"/> entries, and a write also removes the temporary files an
-/// interrupted write left behind. A compile that fails is never held: its diagnostics come from compiling again.
+/// <c>puck lsp</c>, a candidate CLI, the game) keep their own entries rather than overwriting each other's. A read
+/// that serves an entry stamps it as used, and a write keeps the directory within <see cref="MaxPersistedEntries"/>
+/// entries and <see cref="MaxPersistedBytes"/> bytes, least recently used out
+/// (<see cref="Puck.Abstractions.CacheRetention"/>), and also removes the temporary files an interrupted write left
+/// behind. A compile that fails is never held: its diagnostics come from compiling again.
 /// </para>
 /// <para>
 /// Callers on several threads may compile at once. Concurrent misses on one source compile it once: the rest wait for
@@ -120,8 +122,10 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
 /// </para>
 /// </summary>
 public sealed partial class WorldCompileCache : IWorldCompositionStore {
-    /// <summary>The most entries the persistent directory keeps; writing one more removes the least recently written.</summary>
+    /// <summary>The most entries the persistent directory keeps; writing one more removes the least recently used.</summary>
     public const int MaxPersistedEntries = 1024;
+    /// <summary>The most bytes the persistent directory's entries hold between them.</summary>
+    public const long MaxPersistedBytes = (256L << 20);
 
     private const string EntryExtension = ".compiled";
     private const string TemporaryExtension = ".tmp";
@@ -466,9 +470,10 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
             writer.Write(buffer: world.Json);
         }
     }
-    // Keeps the newest MaxPersistedEntries entries and removes every temporary file an interrupted write abandoned,
-    // matched ignoring case as the file system does, so a temporary another writer named .TMP is reclaimed too.
-    private static void Trim(string directory) {
+    // Keeps the most recently used entries within MaxPersistedEntries and MaxPersistedBytes, the one just written among
+    // them, and removes every temporary file an interrupted write abandoned, matched ignoring case as the file system
+    // does, so a temporary another writer named .TMP is reclaimed too.
+    private static void Trim(string directory, string written) {
         var files = new DirectoryInfo(path: directory).GetFiles();
         var abandoned = (DateTime.UtcNow - AbandonedAfter);
         var entries = new List<FileInfo>(capacity: files.Length);
@@ -481,12 +486,12 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
             }
         }
 
-        if (entries.Count <= MaxPersistedEntries) {
-            return;
-        }
-
-        foreach (var stale in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc).ThenBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal).Take(count: (entries.Count - MaxPersistedEntries))) {
-            Remove(file: stale);
+        foreach (var stale in Puck.Abstractions.CacheRetention.SelectEvictions(
+            bound: new Puck.Abstractions.CacheBound(MaxBytes: MaxPersistedBytes, MaxEntries: MaxPersistedEntries),
+            entries: entries.Select(selector: static entry => new Puck.Abstractions.CacheEntry(Bytes: entry.Length, LastUsedUtc: entry.LastWriteTimeUtc, Path: entry.FullName)),
+            inUse: Path.GetFullPath(path: written)
+        )) {
+            Remove(file: new FileInfo(fileName: stale.Path));
         }
     }
     private static void Remove(FileInfo file) {
