@@ -2,7 +2,9 @@
 // sdfWords, with no instance mask and no beam-proven gap, and writes where it stopped, or evaluates the field at one
 // point. SdfLogSphereMarchDeviceLawTests packs each program with SdfProgram, binds it at the world interface's sdfWords
 // and dispatches the probe once per case, pushing its index. The probe's own two resources sit in the Pass group at
-// bindings the world interface leaves free; the pushed index is Direct3D 12's root constant at b0, space 4.
+// bindings the world interface leaves free; the pushed index is Direct3D 12's root constant at b0, space 4. Each mode
+// is a kernel of its own (SDF_MARCH_PROBE_MODE, set by its sdf-march-log-sphere-*.comp.hlsl), so each inlines the
+// interpreter once for the one march or field read it runs.
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-work.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-levers.hlsli"
@@ -31,24 +33,27 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 origin = marchCases[(3u * index)];
     float4 direction = marchCases[((3u * index) + 1u)];
     float4 inputs = marchCases[((3u * index) + 2u)];
-    int mode = (int)round(inputs.x);
     float4 result = float4(0.0, 0.0, 0.0, 0.0);
 
     sdfProgramLayout = sdfLoadProgramLayout();
 
-    if (mode == SDF_MARCH_PROBE_PRIMARY) {
+#if SDF_MARCH_PROBE_MODE == SDF_MARCH_PROBE_PRIMARY
+    {
         SdfPrimaryMarch march = sdfTracePrimaryField(origin.xyz, direction.xyz, inputs.y, origin.w, origin.w, origin.w, origin.w,
             SDF_INSTANCE_MASK_ALL, direction.w, uint4(0u, 0u, 0u, 0u), false, false);
 
         result = float4(march.traveled, (march.found ? 1.0 : 0.0), (float)march.steps, asfloat(march.material));
     }
-    else if (mode == SDF_MARCH_PROBE_SHADOW) {
+#elif SDF_MARCH_PROBE_MODE == SDF_MARCH_PROBE_SHADOW
+    {
         // The ray leaves the surface along its normal, toward a light along the same direction.
         result.x = softShadowVisibilityMarch(origin.xyz, direction.xyz, direction.xyz, SDF_INSTANCE_MASK_ALL, 1.0, inputs.y, false, inputs.z);
     }
-    else {
+#else
+    {
         result.x = map(origin.xyz).distance;
     }
+#endif
 
     marchResults[uint2(index, 0u)] = result;
 }

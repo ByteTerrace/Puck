@@ -41,23 +41,28 @@ bool sdfIndirectCellAt(float3 position, float spacing, out int3 cell) {
     cell = int3(scaled);
     return true;
 }
-SdfHit sdfIndirectSample(float3 position, uint mask) {
+// The fixture's field: every sample counts in word 101 and reads its scripted distance; every gradient is +y.
+#define SDF_INDIRECT_FIELD_HLSLI
+// The production proof and its segments run as procedures over the fixture's field, through one run.
+#define SDF_INDIRECT_PROC_PROVE
+#define SDF_INDIRECT_PROC_SEGMENT
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-run.hlsli"
+void sdfIndirectServe(uint kind, float3 position, uint mask, out SdfHit hit, out float3 normal) {
+    hit = (SdfHit)0;
+    normal = float3(0.0, 1.0, 0.0);
+    if (kind == SdfIndirectQueryGradient) { return; }
     sdfIndirectEvaluations++;
     uint ignored;
     InterlockedAdd(indirectCacheRW[101u], 1u, ignored);
-    SdfHit sample;
-    sample.distance = fixturePhase == 0u && fixtureMode == 7u ? 0.0
+    hit.distance = fixturePhase == 0u && fixtureMode == 7u ? 0.0
         : (fixturePhase == 0u && fixtureMode == 9u && sdfIndirectEvaluations == 2u ? asfloat(0x7fc00000u) : 10.0);
-    sample.material = 0;
-    return sample;
+    hit.material = 0;
 }
 float sdfMapBallClearance(float distance) { return distance; }
-float3 sdfIndirectGradient(float3 position) { return float3(0.0, 1.0, 0.0); }
 bool sdfIndirectMasked(float travelled, float reach, uint mask) { return false; }
 float sdfIndirectAdvance(float clearance, float travelled, float reach, float farDistance, uint mask) {
     return max(0.0, min(clearance, farDistance - travelled));
 }
-#define SDF_INDIRECT_FIELD_HLSLI
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
 int3 sdfIndirectCorner(uint corner) { return int3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u); }
 int sdfIndirectProbeIndex(int3 cell, uint level) { return cell.x | (cell.y << 1) | (cell.z << 2); }
@@ -84,6 +89,7 @@ uint fixtureProofOffset(uint tier) { return 16u; }
 #define sdfIndirectCellWordOffset fixtureCellOffset
 #define sdfIndirectProofWordOffset fixtureProofOffset
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-proof.hlsli"
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 groupshared uint proofMasks[64];
 groupshared uint proofDeferred[64];
 
