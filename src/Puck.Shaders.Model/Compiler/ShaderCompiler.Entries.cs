@@ -12,7 +12,8 @@ public sealed partial class ShaderCompiler {
     // compiler on another commit sharing the cache never reads it as bytecode: change this text with the layout.
     private const string CacheEntryLayout = "entry: key (32 bytes), bytecode SHA-256 (32 bytes), bytecode";
 
-    // An entry's bytecode, or null when it is absent, unreadable or fails its key or digest.
+    // An entry's bytecode, or null when it is absent, unreadable or fails its key or digest. A verified entry is stamped as
+    // used now, so a prune keeps it; every hit, and every publication a valid entry already holds, comes through here.
     private static byte[]? TryRead(string path) {
         try {
             var entry = AtomicFile.ReadAllBytes(path: path);
@@ -22,6 +23,8 @@ public sealed partial class ShaderCompiler {
                 !entry.AsSpan(length: 32, start: 32).SequenceEqual(other: SHA256.HashData(source: entry.AsSpan(start: CacheHeaderBytes)))) {
                 return null;
             }
+
+            Stamp(path: path);
 
             return entry[CacheHeaderBytes..];
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {

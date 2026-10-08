@@ -8,7 +8,7 @@ struct SdfIndirectSources { float3 values[SdfIndirectSourceCount]; };
 // Finite R11G11B10 packing cannot produce this NaN word. All five words carry it for an unresolved sample;
 // readers test the first word before decoding. Zero remains a known black sample with its full weight.
 static const uint SdfIndirectUnresolvedSample = 0xffffffffu;
-#ifdef SDF_VIEWS_PASS
+#if defined(SDF_VIEWS_PASS) || defined(SDF_RECEIVER_PASS)
 static bool sdfIndirectPickActive = false;
 static uint sdfIndirectPickStores = 0u;
 void sdfIndirectPickStore(uint word, uint value) {

@@ -24,4 +24,12 @@ public readonly record struct DirectXAdapterDescription(
     ulong SharedSystemMemory,
     uint SubSystemId,
     uint VendorId
-);
+) {
+    /// <summary>Gets whether a device created for <paramref name="adapterLuid"/> is created on this adapter: the adapter
+    /// carrying that LUID, or, for zero, any hardware adapter and never a software renderer. A process Windows no longer
+    /// lets use the GPU, after repeated device faults, enumerates only the Microsoft Basic Render Driver, so the first
+    /// adapter alone would move a device law or a World onto the CPU rather than refuse.</summary>
+    /// <param name="adapterLuid">The requested packed LUID, or zero for the first hardware adapter.</param>
+    /// <returns>Whether the request selects this adapter.</returns>
+    public bool IsSelectedBy(long adapterLuid) => ((0L == adapterLuid) ? !IsSoftware : (AdapterLuid == adapterLuid));
+}

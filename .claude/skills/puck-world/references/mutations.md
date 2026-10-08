@@ -171,7 +171,7 @@ table — a row added there grants nothing until relaunch.
   stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
   (an acceptance as `dropped <n>, <m> remaining`), so `world.undo` answers
   its own line like every registered verb. There is no per-mutation inverse. Proven
-  in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
+  in-process by `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
 - **Save** (`world.save`): writes the authored document and compacts the
@@ -186,8 +186,8 @@ table — a row added there grants nothing until relaunch.
   section, except that moved render ceilings, view quality and editor values
   create their valid section when absent. `world.status`'s drift hint names
   each section the snapshot replaced (`WorldSessionCapture.DescribeDrift`).
-  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Tests`) saves every
-  shipped, fixture (`tests/Puck.World.Tests/Fixtures`), and canary world and
+  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Presentation.Tests`) saves every
+  shipped, fixture (`tests/Puck.World.Fixtures`), and canary world and
   reloads it.
 
 Named machine rows use the same mutation and undo pipeline. UpsertMachine and

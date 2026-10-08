@@ -105,16 +105,16 @@ public sealed class UnsupportedOperationLawTests {
         new WorldGrant(Operator, WorldCapability.Control, GrantSubject.Machine(name: "cabinet"), false),
         Principal.Console
     );
-    private static MachineOperationResult OperateCabinet(Twin twin) => Assert.IsType<WorldSubmissionResult.MachineOperation>(@object: WorldMachineOperationServerLawTests.Submit(
+    private static MachineOperationResult OperateCabinet(Twin twin) => Assert.IsType<WorldSubmissionResult.MachineOperation>(@object: MachineOperationFixtures.Submit(
         twin.Server,
         Operator,
-        WorldMachineOperationServerLawTests.Operation(generation: twin.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation, instance: "cabinet", model: "next")
+        MachineOperationFixtures.Operation(generation: twin.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation, instance: "cabinet", model: "next")
     )).Result;
     private static string Cabinet(Twin twin) =>
         $"generation={twin.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation} configuration={twin.Server.Definition.Machines.Single(predicate: static row => (row.Name == "cabinet")).Configuration.GetRawText()}";
-    private static WorldMachineCatalog Operating() => new([new WorldMachineOperationServerLawTests.OperationEngine()]);
+    private static WorldMachineCatalog Operating() => new([new MachineOperationFixtures.OperationEngine()]);
     // The same device, from a provider that performs no operations.
-    private static WorldMachineCatalog Inert() => new([new InertEngine(inner: new WorldMachineOperationServerLawTests.OperationEngine())]);
+    private static WorldMachineCatalog Inert() => new([new InertEngine(inner: new MachineOperationFixtures.OperationEngine())]);
 
     private sealed class InertEngine(IMachineEngine inner) : IMachineEngine {
         public MachineEngineDescriptor Descriptor => inner.Descriptor;
@@ -214,7 +214,7 @@ public sealed class UnsupportedOperationLawTests {
         ["world.undo/PastHorizon"] = new(
             Arrange: FillJournal,
             ArrangeLegal: FillJournal,
-            Document: static () => JournalDepthLawTests.WithDepth(depth: UndoDepth),
+            Document: static () => JournalDepthFixtures.WithDepth(depth: UndoDepth),
             Legal: static twin => (Undo(count: 1, twin: twin).Length == 0),
             Operate: static twin => Undo(count: (UndoDepth + 1), twin: twin),
             OperationSteps: 1,
@@ -236,7 +236,7 @@ public sealed class UnsupportedOperationLawTests {
             },
             ArrangeLegal: GrantOperator,
             Catalog: Operating,
-            Document: WorldMachineOperationServerLawTests.Document,
+            Document: MachineOperationFixtures.Document,
             Legal: static twin => (OperateCabinet(twin: twin).Status != MachineOperationStatus.Refused),
             LegalCatalog: Operating,
             Operate: static twin => (OperateCabinet(twin: twin).Reason ?? string.Empty),
@@ -246,7 +246,7 @@ public sealed class UnsupportedOperationLawTests {
             Arrange: GrantOperator,
             ArrangeLegal: GrantOperator,
             Catalog: Inert,
-            Document: WorldMachineOperationServerLawTests.Document,
+            Document: MachineOperationFixtures.Document,
             Legal: static twin => (OperateCabinet(twin: twin).Status != MachineOperationStatus.Unsupported),
             LegalCatalog: Operating,
             Operate: static twin => (OperateCabinet(twin: twin).Reason ?? string.Empty),

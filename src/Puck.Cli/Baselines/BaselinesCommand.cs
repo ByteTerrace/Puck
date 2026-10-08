@@ -56,12 +56,12 @@ internal static class BaselinesCommand {
         // rather than pinning one outcome of a coin flip.
         new(
             CheckedFiles: null,
-            CommittedDirectory: "tests/Puck.World.Tests/ShippedWorldStateBaselines",
+            CommittedDirectory: "tests/Puck.World.Games.Tests/ShippedWorldStateBaselines",
             Description: "Each shipped world's canonical state export and tick-cost record after its scripted sequence.",
-            Inputs: ["src/Puck.World/Assets/worlds/**/*.puck", "src/Puck.World/Assets/worlds/**/*.world.json", "worlds/parlor/**/*.puck"],
+            Inputs: ["src/Puck.World/Assets/worlds/**/*.puck", "src/Puck.World/Assets/worlds/**/*.world.json", "tests/Puck.World.Fixtures/**/*.puck", "worlds/parlor/**/*.puck"],
             Name: "state",
-            Project: "Puck.World.Tests",
-            RunArguments: CliTestRun.Class(fullName: "Puck.World.Tests.ShippedWorldStateBaselineTests"),
+            Project: "Puck.World.Games.Tests",
+            RunArguments: CliTestRun.Class(fullName: "Puck.World.Games.Tests.ShippedWorldStateBaselineTests"),
             Runs: 2
         ),
     ];

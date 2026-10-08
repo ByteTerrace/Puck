@@ -102,10 +102,12 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     // What a pass binds at a member whose storage it does not touch: a tiny buffer, a 1x1 storage image resting General,
-    // and a 1x1 sampled image resting shader-readable, which also stands for an unset glyph atlas.
+    // and a 1x1 sampled image resting shader-readable, which also stands for an unset glyph atlas; and a 1x1 storage
+    // image of the incoming handoff format resting General, which a graph without the incoming image binds there.
     private readonly IGpuBuffer m_dummyBuffer;
     private readonly IGpuImage m_storageFiller;
     private readonly IGpuImage m_sampledFiller;
+    private readonly IGpuImage m_incomingStorageFiller;
     private readonly int m_dynamicTransformCapacity;
     private readonly GpuDeviceServices m_gpu;
 
@@ -296,6 +298,14 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_storageFiller = scope.Own(created: gpu.ImageFactory.Create(
             name: NameOf(part: "storage-filler"),
             format: Format,
+            height: 1,
+            usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
+            width: 1
+        ));
+        // A storage binding declares its format, so the incoming image's member needs a filler of its own format.
+        m_incomingStorageFiller = scope.Own(created: gpu.ImageFactory.Create(
+            name: NameOf(part: "incoming-storage-filler"),
+            format: SdfWorldPackage.IncomingVisibilityFormat,
             height: 1,
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
@@ -592,6 +602,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_bindings.DestroyPool(poolHandle: m_pool);
 
         m_dummyBuffer.Dispose();
+        m_incomingStorageFiller.Dispose();
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();

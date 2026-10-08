@@ -1,12 +1,24 @@
+# The shader compiler cache the build compiles through. CI passes the Linux cache it restores as this named build
+# context (docker build --build-context shader-cache=<directory>), which replaces this empty stage; without one, every
+# shader compiles.
+FROM scratch AS shader-cache
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 WORKDIR /source
+# The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
+# binaries' content, so a different DXC here would miss every entry CI restores.
 ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz /tmp/dxc.tar.gz
 RUN echo '96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1  /tmp/dxc.tar.gz' | sha256sum -c - \
     && tar -xzf /tmp/dxc.tar.gz -C /usr/local --strip-components=1 \
     && dxc --version
 COPY . .
 ENV CI=true
-RUN dotnet restore src/Puck.World.Silo --locked-mode \
+# Names the per-user Puck directory outright, so the build's default shader cache is the mount below.
+ENV XDG_DATA_HOME=/root/.local/share
+# The cache is mounted read-write at the build's default cache directory: what the build compiles beside the restored
+# entries is discarded with this step and reaches no layer.
+RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,rw \
+    dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app \
     && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
     && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds --output /app/worlds \

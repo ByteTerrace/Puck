@@ -104,7 +104,11 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.State.Vectors.Tests  Puck.Text.Tests
                          Puck.Vulkan.Tests  Puck.World.Agents.Tests
                          Puck.World.Azure.Tests  Puck.World.Browser.Tests
+                         Puck.World.Client.Tests  Puck.World.Games.Tests
+                         Puck.World.Machines.Tests
+                         Puck.World.Presentation.Tests
                          Puck.World.Protocol.Tests  Puck.World.Schema.Tests
+                         Puck.World.Server.Tests  Puck.World.Silo.Tests
                          Puck.World.Tests  Puck.World.Transpiler.Tests
 (Tool)                   Puck.Cli  Puck.Shaders.Generator
 (Analyzer)               Puck.Analyzers

@@ -18,8 +18,9 @@
         checkout lies, so a shader any checkout on this machine has compiled is published from the cache and runs no
         compiler, and editing one include recompiles only the outputs whose closure holds it. Missing outputs compile
         concurrently, the longest first, on cores MSBuild grants through its own core budget, which every project node
-        shares. Point $(PuckShaderCacheDirectory) at another directory to share a cache on purpose (a directory a CI job restores), or
-        at an empty one to compile everything afresh.
+        shares. Point $(PuckShaderCacheDirectory) at another directory to share a cache on purpose, or at an empty one to
+        compile everything afresh, as the cross-host shader comparison does. Every compile stamps the entries it uses,
+        which is what `puck shaders cache prune` evicts by.
     -->
     <UsingTask AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" TaskFactory="RoslynCodeTaskFactory" TaskName="PuckShaderBuild">
         <ParameterGroup>

@@ -2,8 +2,8 @@
 // query, lease and publication; this fixture supplies only their field, cell directory and bounded storage.
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-indirect-layout.hlsli"
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u5, space3);
-[[vk::binding(60, 3)]] StructuredBuffer<float4> proofCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> proofCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u127, space3);
 struct ProofProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ProofProbeIndex> proofIndex : register(b0, space4);
 struct ProofParameters { uint indirectTier; uint indirectFrame; uint indirectReceiverProofs; };
@@ -100,7 +100,7 @@ void CSMain(uint lane : SV_GroupIndex) {
     uint proof = 16u + entry * SdfIndirectProofWords;
     if (lane == 0u) {
         [loop] for (uint word = 0u; word < 128u; word++) { indirectCacheRW[word] = 0u; }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
         if (fixtureMode >= 1u && fixtureMode <= 6u) {
             indirectCacheRW[proof] = asuint(fixtureMode == 3u ? 0.09375 : (fixtureMode == 4u ? 0.35 : 0.25));
             indirectCacheRW[proof + 1u] = asuint(fixtureMode == 3u ? 0.46875 : 0.25);

@@ -426,7 +426,7 @@ re-grant and prove success. Remember body index vs. player index:
 `world.grant … control body:<n>`/`drive body:<n>` is 0-based; `player.*` verbs are
 1-based (`body:1` is "player 2").
 
-In-process laws: `tests/Puck.World.Tests/EngageAuthorityLawTests.cs` (the
+In-process laws: `tests/Puck.World.Server.Tests/EngageAuthorityLawTests.cs` (the
 compose and dissolve authority pairs) and `ControlApplicationLawTests.cs`
 (default set, capture-as-membership, mirror, dissolve-restores-default,
 revoke-driven dissolution, two-seat pad merge).

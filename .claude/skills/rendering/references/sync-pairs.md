@@ -177,13 +177,15 @@ the HLSL structure and `sdfShadowHandoffs` World-group buffer from that record;
 `SdfWorldTables.LightsAndSky.cs` writes active controls through the counted region.
 The pass group carries the active count separately from configured capacity.
 
-`SdfWorldPackage.MembersForShadows` and `FragmentFor` select the policy's
-incoming-visibility interface and transient allocation. F = 0 has neither
-`incomingVisibility` nor `incomingVisibilityRW`; F = 1 declares float/R8 and
-F = 2 float2/R8G8. The shadow and views wrappers select the matching generated
-`sdf-world-fade1.interface.hlsli` or `sdf-world-fade2.interface.hlsli`, so a
-zero-capacity shader reads no incoming image. Allocate at graph construction,
-not when a handoff begins, and keep the image's bytes in graph memory accounting.
+The one world interface declares `incomingVisibility` (float2) and
+`incomingVisibilityRW` (float2, `rg8`, `SdfWorldPackage.IncomingMembers`) at
+every fade capacity, and the shadow and views kernels compile both fade slots
+(`SDF_SHADOW_FADE_SLOTS 2`). `SdfWorldPackage.FragmentFor` allocates the R8G8
+image (`IncomingVisibilityFormat`) at every nonzero F and none at F = 0, where
+the recorder binds `SampledFiller` and `IncomingStorageFiller` and writes a
+zero fade count (`SdfFrameBlock.WriteWithoutFades`), so no kernel touches the
+fillers. Allocate at graph construction, not when a handoff begins, and keep
+the image's bytes in graph memory accounting.
 
 ## Retained pass cadence
 

@@ -1,6 +1,8 @@
+// The receiver pass owns the certificate store.
+#define SDF_RECEIVER_PASS
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> receiverRecords : register(u5, space3);
-[[vk::binding(60, 3)]] StructuredBuffer<float4> receiverCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> receiverResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> receiverCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> receiverResults : register(u127, space3);
 struct ReceiverProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ReceiverProbeIndex> receiverProbeIndex : register(b0, space4);
 struct ReceiverParameters { uint2 indirectAllocation; uint indirectCertificateRevision; };

@@ -93,7 +93,6 @@ public sealed class SdfKernelInterfaces {
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
-        WorldFadeParameters = [WorldParameters, ShadowParameters(capacity: 1), ShadowParameters(capacity: 2)];
         // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
         // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
@@ -144,20 +143,12 @@ public sealed class SdfKernelInterfaces {
         Includes = [
             (IncludePath(shaderInterface: IndirectParameters.Interface), IndirectParameters.Interface),
             (IncludePath(shaderInterface: World), World),
-            (IncludePath(shaderInterface: WorldFadeParameters[1].Interface), WorldFadeParameters[1].Interface),
-            (IncludePath(shaderInterface: WorldFadeParameters[2].Interface), WorldFadeParameters[2].Interface),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
             (IncludePath(shaderInterface: EnvironmentParameters.Interface), EnvironmentParameters.Interface),
         ];
-
-        ShaderPipelineParameterLayout ShadowParameters(int capacity) => ShaderPipelineParameterLayout.ForPackage(
-            config: null,
-            package: $"sdf-world-fade{capacity}",
-            members: [.. SdfWorldPackage.MembersForShadows(fadeCapacity: capacity), .. LightAndSkyTables]
-        ).Stamped(stamp: stamp);
     }
 
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
@@ -201,8 +192,6 @@ public sealed class SdfKernelInterfaces {
     public ShaderPipelineParameterLayout WorldParameters { get; }
     /// <summary>Gets the residency cache's classify and trace interface.</summary>
     public ShaderPipelineParameterLayout IndirectParameters { get; }
-    /// <summary>Gets each fade capacity's world interface, indexed by capacity from zero to two.</summary>
-    public IReadOnlyList<ShaderPipelineParameterLayout> WorldFadeParameters { get; }
     /// <summary>Gets the reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
     public ShaderPipelineParameterLayout ResolveParameters { get; }
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes

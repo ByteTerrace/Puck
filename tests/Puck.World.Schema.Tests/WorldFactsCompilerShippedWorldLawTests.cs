@@ -16,7 +16,7 @@ namespace Puck.World.Schema.Tests;
 public sealed class WorldFactsCompilerShippedWorldLawTests {
     private static IEnumerable<string> ShippedWorlds() => ShippedWorldDocuments.Files(directory: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory));
 
-    private const string FixtureDirectory = "tests/Puck.World.Tests/Fixtures";
+    private const string FixtureDirectory = "tests/Puck.World.Fixtures";
 
     // A fragment carries no schema of its own and never loads standalone, but a fixture host imports it and DOES
     // load; compiling the host is what proves the fragment's rules, so the law follows the import rather than

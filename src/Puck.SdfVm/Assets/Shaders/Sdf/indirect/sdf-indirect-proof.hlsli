@@ -64,11 +64,11 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
     uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + entry * SdfIndirectProofWords;
     if (!sdfIndirectRange(proof, SdfIndirectProofWords)) { return 0u; }
     sdfIndirectHashes++;
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
     uint cachedMask;
     if (sdfIndirectReuseProof(proof, key, passGroup.indirectFrame, position, certifiedClearance, spacing, cachedMask)) { return cachedMask; }
 #endif
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
     if (!sdfIndirectReceiverPermit && passGroup.indirectReceiverProofs == 0u) {
         sdfIndirectReceiverDeferred = true;
         return 0u;
@@ -121,8 +121,8 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
             break;
         }
     }
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
-    // Trace retains its single source-ray owner. Views claimed the empty slot before field work.
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
+    // Trace retains its single source-ray owner. The receiver claimed the empty slot before field work.
     // Every reader rejects this submission's stamp, including its pending marker and partially written payload.
     bool owns = false;
 #ifdef SDF_INDIRECT_PASS
@@ -155,12 +155,12 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
             sdfIndirectStore(proof + 5u, key);
             DeviceMemoryBarrier();
             sdfIndirectStore(proof + 6u, passGroup.indirectFrame);
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
             receiverOwner = false;
 #endif
         }
     }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
     // Failed support certifies no obstruction for neighboring receivers. Only this pixel may retain its unresolved
     // result. Release its transient claim instead of publishing a transferable negative proof.
     if (receiverOwner) { sdfIndirectStore(proof + 6u, 0u); }

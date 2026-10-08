@@ -118,6 +118,12 @@
         <Project Path="tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj" />
         <Project Path="tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj" />
         <Project Path="tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj" />
+        <Project Path="tests/Puck.World.Client.Tests/Puck.World.Client.Tests.csproj" />
+        <Project Path="tests/Puck.World.Games.Tests/Puck.World.Games.Tests.csproj" />
+        <Project Path="tests/Puck.World.Machines.Tests/Puck.World.Machines.Tests.csproj" />
+        <Project Path="tests/Puck.World.Presentation.Tests/Puck.World.Presentation.Tests.csproj" />
+        <Project Path="tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj" />
+        <Project Path="tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj" />
         <Project Path="tests/Puck.World.Tests/Puck.World.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Transpiler.Tests/Puck.GamingBricks.Transpiler.Tests.csproj" />
         <Project Path="tests/Puck.World.Transpiler.Tests/Puck.World.Transpiler.Tests.csproj" />

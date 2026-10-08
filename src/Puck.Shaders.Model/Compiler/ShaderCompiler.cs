@@ -22,7 +22,9 @@ namespace Puck.Shaders;
 /// holds the edited file. The key also names the entry layout, so compilers on different commits that lay entries out
 /// differently never read each other's entries from a shared cache. Each entry contains its key and the bytecode's SHA-256
 /// and is published whole by one rename and never replaced while valid; readers verify it before use, and a damaged entry
-/// is compiled again and replaced atomically.
+/// is compiled again and replaced atomically. An entry's last write time is when a compile last used it: publishing
+/// writes it, and every verified read stamps it, a publication a peer won included, so <see cref="Prune"/> removes
+/// exactly what no compile has used since a cutoff.
 /// </remarks>
 public sealed partial class ShaderCompiler {
     // A content-identified note, not a header: this name is hashed into every compile identity, so a package built by another
@@ -132,7 +134,8 @@ public sealed partial class ShaderCompiler {
             work: work
         );
     }
-    /// <summary>Indicates whether the cache holds a verified copy of a plan's output.</summary>
+    /// <summary>Indicates whether the cache holds a verified copy of a plan's output. An entry it verifies is stamped as
+    /// used now (<see cref="Prune"/>).</summary>
     /// <param name="plan">The plan.</param>
     /// <returns><see langword="true"/> when the entry's key and bytecode digest match.</returns>
     public bool IsCached(ShaderOutputPlan plan) {
@@ -140,7 +143,7 @@ public sealed partial class ShaderCompiler {
 
         return (ReadCached(plan: plan) is not null);
     }
-    /// <summary>Reads a plan's output from the cache.</summary>
+    /// <summary>Reads a plan's output from the cache, stamping the entry as used now (<see cref="Prune"/>).</summary>
     /// <param name="plan">The plan.</param>
     /// <returns>The verified bytecode, or <see langword="null"/> when the entry is absent or damaged.</returns>
     public byte[]? ReadCached(ShaderOutputPlan plan) {
@@ -598,12 +601,20 @@ public sealed partial class ShaderCompiler {
                 work: work
             );
 
-            return ((File.Exists(path: path) && long.TryParse(
+            if (!File.Exists(path: path)) {
+                return null;
+            }
+
+            var text = Encoding.UTF8.GetString(bytes: AtomicFile.ReadAllBytes(path: path)).Trim();
+
+            Stamp(path: path);
+
+            return (long.TryParse(
                 provider: CultureInfo.InvariantCulture,
                 result: out var milliseconds,
-                s: Encoding.UTF8.GetString(bytes: AtomicFile.ReadAllBytes(path: path)).Trim(),
+                s: text,
                 style: NumberStyles.None
-            )) ? TimeSpan.FromMilliseconds(milliseconds: milliseconds) : null);
+            ) ? TimeSpan.FromMilliseconds(milliseconds: milliseconds) : null);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
         }

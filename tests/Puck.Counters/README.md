@@ -124,7 +124,7 @@ the same hit samples; CPU document loading alone does not establish them.
 The CPU inventory and camera study run without a device:
 
 ```text
-dotnet test tests/Puck.World.Tests -c Release --no-build --no-restore --filter-class Puck.World.Tests.SdfTapeInventoryLawTests Puck.World.Tests.SdfTapePredictionLawTests --output Detailed
+dotnet test tests/Puck.World.Presentation.Tests -c Release --no-build --no-restore --filter-class Puck.World.Presentation.Tests.SdfTapeInventoryLawTests Puck.World.Presentation.Tests.SdfTapePredictionLawTests --output Detailed
 ```
 
 The study counts every tile and slab of the initial composed frame using the

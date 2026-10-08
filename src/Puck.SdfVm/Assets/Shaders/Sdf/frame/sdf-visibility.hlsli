@@ -41,7 +41,7 @@
 #include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
-#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else

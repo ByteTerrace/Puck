@@ -293,7 +293,7 @@ The table REFUSES AT CONSTRUCTION: its summed totals are checked against
 over-subscription throws `ArgumentOutOfRangeException` naming the resource,
 the total, and the backstop, on every boot. The cross-assembly proof that the
 Schema-derived capacity fits is
-`tests/Puck.World.Tests/OverlayLeaseTableFitsBackstopsLawTests.cs`.
+`tests/Puck.World.Client.Tests/OverlayLeaseTableFitsBackstopsLawTests.cs`.
 Runtime overflow is per-channel and attributed (a channel clips at
 its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.

@@ -189,11 +189,6 @@ public sealed record SdfFrame(
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights { get; init; } = SdfLights.Default();
-
-    /// <summary>Gets the fade capacities reachable through authored policy rows. A residency also requests the live
-    /// <see cref="SdfShadowSlots.FadeCapacity"/> on first demand, including capacities introduced by session levers.</summary>
-    public SdfShadowFadeVariants ShadowFadeVariants { get; init; }
-
     /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>

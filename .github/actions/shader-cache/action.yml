@@ -1,0 +1,69 @@
+description: Restore, look up, or save the content-addressed shader compiler cache of this runner's OS, keyed by every shader input and the pinned DXC.
+inputs:
+  key:
+    default: ""
+    description: The key to save under, the key output of this run's restore or lookup; required by save, ignored otherwise.
+  mode:
+    description: restore (the newest cache whose key shares this OS's prefix, then the directory exists), lookup (whether this exact key exists, restoring nothing), or save (under key).
+    required: true
+name: Shader compiler cache
+outputs:
+  cache-hit:
+    description: Whether a cache under exactly this run's key exists (restore and lookup).
+    value: ${{ steps.restore.outputs.cache-hit || steps.lookup.outputs.cache-hit }}
+  key:
+    description: This run's key, computed before any build writes into the checkout (restore and lookup).
+    value: ${{ steps.key.outputs.key }}
+runs:
+  steps:
+    # Every input a compile or the cross-host comparison reads: the stage sources and includes, the projects that declare
+    # them and their options, the shader build and compiler, the comparison verb, and both hosts' DXC pins. A cache entry is
+    # addressed by its own content, so this key only decides when a new cache is saved and, in verify.yml, whether these
+    # exact inputs have already been compared; it must therefore never leave an input out. Build output, the installed
+    # tools under .tmp and the published artifacts are excluded, so every job of a run names the same key wherever its
+    # steps stand. Save takes the key its restore or lookup named rather than naming it again.
+    - env:
+        KEY: shaders-${{ runner.os }}-${{ hashFiles('**/*.hlsl', '**/*.hlsli', '**/*.csproj', '**/Directory.Build.props', '**/Directory.Build.targets', 'build/Shaders.targets', 'build/PuckShaderBuild.cs', 'src/Puck.Shaders.Model/**/*.cs', 'src/Puck.Shaders.Generator/**/*.cs', 'src/Puck.Cli/Shaders/CompareCommand.cs', '.github/actions/setup-dxc/action.yml', '!experimental/**', '!**/bin/**', '!**/obj/**', '!.tmp/**', '!artifacts/**') }}
+      id: key
+      if: inputs.mode != 'save'
+      name: Name the shader cache key
+      run: |
+        echo "Shader cache key: $KEY"
+        echo "key=$KEY" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - id: restore
+      if: inputs.mode == 'restore'
+      name: Restore the newest shader cache with this OS's prefix
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/shaders' || '.tmp/shader-cache' }}
+        restore-keys: shaders-${{ runner.os }}-
+    # A miss leaves no directory; a consumer that hands the cache on, such as a container build context, needs one.
+    - env:
+        CACHE: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/shaders' || '.tmp/shader-cache' }}
+      if: inputs.mode == 'restore'
+      name: Create the shader cache directory
+      run: mkdir -p "${CACHE/#\~/$HOME}"
+      shell: bash
+    - id: lookup
+      if: inputs.mode == 'lookup'
+      name: Look up a shader cache under exactly this key
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ steps.key.outputs.key }}
+        lookup-only: true
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/shaders' || '.tmp/shader-cache' }}
+    - if: inputs.mode == 'save' && inputs.key == ''
+      name: Require the key to save under
+      run: |
+        echo "Save the shader cache under the key output of this run's restore or lookup." >&2
+        exit 1
+      shell: bash
+    - if: inputs.mode == 'save' && inputs.key != ''
+      name: Save the shader cache
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ inputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/shaders' || '.tmp/shader-cache' }}
+  using: composite

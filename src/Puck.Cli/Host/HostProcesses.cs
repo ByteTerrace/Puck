@@ -23,7 +23,7 @@ namespace Puck.Cli.Host;
 /// </summary>
 internal static class HostProcesses {
     private static readonly string[] DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
-    private static readonly string[] HeavyTestAssemblies = ["Puck.World.Tests"];
+    private static readonly string[] HeavyTestAssemblies = ["Puck.World.Presentation.Tests", "Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
 
@@ -162,7 +162,8 @@ internal static class HostProcesses {
     }
     /// <summary>Whether a test assembly's full run is heavy: the machine takes one at a time, whoever starts it.</summary>
     /// <param name="assembly">The test assembly's name, without extension.</param>
-    /// <returns><see langword="true"/> for <c>Puck.World.Tests</c>.</returns>
+    /// <returns><see langword="true"/> for <c>Puck.World.Tests</c> and <c>Puck.World.Presentation.Tests</c>, the suites that hold full
+    /// hosts and scene probes.</returns>
     public static bool IsHeavyTestAssembly(string assembly) => HeavyTestAssemblies.Contains(value: assembly, comparer: StringComparer.OrdinalIgnoreCase);
     /// <summary>Whether a process runs a heavy test assembly (<see cref="IsHeavyTestAssembly"/>), whatever its filter:
     /// its apphost, <c>dotnet exec</c> of its assembly, or a test host running it. A build, a <c>dotnet test</c> driver

@@ -1,9 +1,9 @@
-using System.Buffers.Binary;
 using System.Reflection;
 
 using Puck.Abstractions;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Testing.PerUserRootScan;
 
 namespace Puck.World.Tests;
 
@@ -22,19 +22,8 @@ namespace Puck.World.Tests;
 /// one site per name that exists.
 /// </summary>
 public sealed class WorldStateRootIsolationLawTests {
-    private const byte CallOpcode = 0x28;
-    private const byte LoadStringOpcode = 0x72;
     private const byte NewObjectOpcode = 0x73;
-    // The metadata table of a ldstr operand: the user-string heap.
-    private const int UserStringTable = 0x70;
 
-    // The per-user subdirectories only the desktop entry point may name: the state root and the three device caches.
-    private static readonly string[] PerUserNames = [
-        "bakes",
-        "compilations",
-        "compiled-worlds",
-        "world",
-    ];
     // The roots the boot builds from its command line and nothing else constructs.
     private static readonly Type[] BootBuiltRoots = [
         typeof(WorldCaptureRoot),
@@ -59,46 +48,6 @@ public sealed class WorldStateRootIsolationLawTests {
 
         return assemblies;
     }
-    // The top-level statements are asynchronous, so the entry point's own site sits in their state machine.
-    private static bool IsEntryPoint(string site) => site.StartsWith(comparisonType: StringComparison.Ordinal, value: "Program+<<Main>$>");
-    // Every method body in the assembly with its IL, as "<declaring type>.<method>". A type the runtime cannot load
-    // contributes the methods it can.
-    private static IEnumerable<(string Site, MethodBase Method, byte[] Il)> MethodBodies(Assembly assembly) {
-        Type[] types;
-
-        try {
-            types = assembly.GetTypes();
-        } catch (ReflectionTypeLoadException exception) {
-            types = [.. exception.Types.OfType<Type>()];
-        }
-
-        const BindingFlags Declared = BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
-
-        foreach (var type in types) {
-            foreach (var method in type.GetMethods(bindingAttr: Declared).Cast<MethodBase>().Concat(second: type.GetConstructors(bindingAttr: Declared))) {
-                byte[]? il;
-
-                try {
-                    il = method.GetMethodBody()?.GetILAsByteArray();
-                } catch (Exception exception) when ((exception is BadImageFormatException or FileNotFoundException or TypeLoadException)) {
-                    continue;
-                }
-
-                if (il is not null) {
-                    yield return ($"{type.FullName}.{method.Name}", method, il);
-                }
-            }
-        }
-    }
-    // The method a call or newobj operand at offset names, or null when the bytes matched inside some other
-    // instruction's operand and name no method.
-    private static MethodBase? OperandMethod(MethodBase method, byte[] il, int offset) {
-        try {
-            return method.Module.ResolveMethod(metadataToken: BinaryPrimitives.ReadInt32LittleEndian(source: il.AsSpan(start: offset)));
-        } catch (ArgumentException) {
-            return null;
-        }
-    }
     // Every method in the assembly that constructs one of the boot-built roots.
     private static IEnumerable<string> BootBuiltRootSites(Assembly assembly) {
         var roots = BootBuiltRoots.Select(selector: static type => type.FullName).ToHashSet(comparer: StringComparer.Ordinal);
@@ -111,56 +60,12 @@ public sealed class WorldStateRootIsolationLawTests {
             }
         }
     }
-    // Every method in the assembly that loads one of the per-user names and passes it straight to the per-user
-    // resolver, with the name it resolves.
-    private static IEnumerable<(string Site, string Name)> PerUserSites(Assembly assembly) {
-        foreach (var (site, method, il) in MethodBodies(assembly: assembly)) {
-            for (var offset = 0; ((offset + 10) <= il.Length); offset++) {
-                if ((il[offset] != LoadStringOpcode) || (il[(offset + 5)] != CallOpcode)) {
-                    continue;
-                }
-
-                var stringToken = BinaryPrimitives.ReadInt32LittleEndian(source: il.AsSpan(start: (offset + 1)));
-
-                if ((stringToken >>> 24) != UserStringTable) {
-                    continue;
-                }
-
-                string? resolved;
-
-                try {
-                    resolved = ((
-                        (method.Module.ResolveString(metadataToken: stringToken) is { } name) &&
-                        PerUserNames.Contains(value: name) &&
-                        (OperandMethod(il: il, method: method, offset: (offset + 6)) is { } target) &&
-                        (target.DeclaringType?.FullName == typeof(PuckUserDirectory).FullName) &&
-                        (target.Name == nameof(PuckUserDirectory.Resolve))
-                    )
-                        ? name
-                        : null);
-                } catch (ArgumentException) {
-                    resolved = null;
-                }
-
-                if (resolved is not null) {
-                    yield return (site, resolved);
-                }
-            }
-        }
-    }
 
     [Fact]
     public void NoAssemblyThisSuiteLinksResolvesAPerUserRootOutsideTheDesktopEntryPoint() {
-        var desktop = Path.GetFileName(path: typeof(WorldBootComposition).Assembly.Location);
-        var sites = OutputAssemblies().SelectMany(selector: path => PerUserSites(assembly: Assembly.LoadFrom(assemblyFile: path)).Select(selector: site => (Assembly: Path.GetFileName(path: path), site.Site, site.Name)))
-            .Where(predicate: site => !(string.Equals(a: site.Assembly, b: desktop, comparisonType: StringComparison.Ordinal) && IsEntryPoint(site: site.Site)))
-            .Select(selector: static site => $"{site.Assembly}: {site.Site} ({site.Name})")
-            .ToArray();
-
-        Assert.True(
-            condition: (sites.Length == 0),
-            userMessage: $"a per-user root is resolved outside the desktop entry point — take the WorldStateRoot or WorldCacheRoots the host hands you instead: {string.Join(separator: ", ", values: sites)}"
-        );
+        // The scan every World suite shares, here where the desktop assembly whose entry point it allows is present.
+        Assert.Equal(expected: DesktopAssembly, actual: Path.GetFileName(path: typeof(WorldBootComposition).Assembly.Location));
+        AssertNoPerUserRootOutsideTheEntryPoint(suite: typeof(WorldStateRootIsolationLawTests).Assembly);
     }
     [Fact]
     public void TheDesktopCompositionRootIsTheOneSiteThatResolvesEach() {

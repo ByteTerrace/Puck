@@ -148,7 +148,29 @@ the existing unresolved row without changing immutable transport or ray budgets.
 Keep `IrradianceCacheModel`'s nullable generation samples consistent with that
 policy; its unknown-lighting share must not consult transport kind alone.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
-owns this flow and its remaining receiver work. Views consume the complete bank
+owns this flow and its remaining receiver work. The receiver pass
+(`sdf-world-receiver.comp`, `indirect/sdf-indirect-receiver.hlsli`), between
+shadow and views and present only with the residency's cache, owns every field
+query of a shaded pixel's indirect light: participation, the retained
+certificate or the level loop's launch and proof, and the near-field sample. The
+comparison methods (`world.indirect-method screen|cone`) compile only into the
+comparison receiver (`sdf-world-receiver-comparison.comp`, `SDF_INDIRECT_COMPARISON`),
+which `SdfWorldResidency` leases on the first frame a view selects one with
+indirect light on (`SdfWorldTables.RequireComparison`); the frame waits for it
+then, and a refused comparison receiver leaves the default receiver's cache answer.
+The default receiver carries no comparison method and the comparison receiver no
+near-field sample. Each selects the level by the normal-independent support of
+the published bank (`sdfIndirectIrradianceSupported`) and writes a four-word
+answer per pixel (`indirect/sdf-indirect-answer.hlsli`: status, replacement,
+field evaluations, replacing source-masked total). Views reads the certificate
+and the answer, reads the bank at the certified launch with its shading normal
+(`sdfIndirectApply`), and performs no field query; a bank read that finds no
+resolved texel leaves the pixel unresolved, as a retained certificate's always
+did. The comparison methods fold over the bank read with the geometric normal.
+Both passes decide whether a pixel has an answer by `sdfIndirectAnswers`, and
+views takes a surface pick only once the receiver armed it
+(`SdfWorldPicker.Arm`), so the selected receiver record's two writers describe
+one pixel. Receivers consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its
 one admission word, requested only by pending view scopes. Each receiver
 claims an empty shared proof bucket before segment evaluation, through
@@ -158,16 +180,17 @@ Every unsuccessful owner releases its claim. Never transfer failed support as
 a shared mask-zero proof or make colliding keys wait forever. Successful same-key
 contenders share field work; failed attempts may reacquire within the unchanged
 allowance. Trace keeps its designated source-ray ownership. Each view separately
-owns an eight-byte deferred/reader census, explicitly transfer-cleared before Views and
-read back from its preserving compute-written version after the same fence.
-Views publishes its eight-word certificate through an explicit preserving
+owns an eight-byte deferred/reader census, explicitly transfer-cleared before the
+receiver, written by it, read by views and read back after views from that
+version after the same fence.
+The receiver publishes its eight-word certificate through an explicit preserving
 visibility version, qualified by the complete allocation identity and transport
 revision. Primary clears it on a new sample; repeating the exact submitted
 geometry, camera, jitter, grid and visibility allocation preserves it even with
 cadence off. Commit that identity only after successful submission. Completed
 brick writes are in the point-of-use geometry signature; unfinished bakes never
 preserve certificates. Completed unresolved results stand and deferred results retry.
-The fenced deferred count keeps Views active until
+The fenced deferred count keeps the receiver and views active until
 completion without making unchanged Primary read the cache. Capture also waits
 for its own view's current fenced receiver scope, not only the shared solve.
 An exact completed zero-reader census removes only indirect demand and the cache
@@ -216,7 +239,7 @@ Stable and incoming indirect light visibility share one rolled traversal in
 `sdfIndirectDiffuseVisibilities`. Select the light before its visibility call
 and the destination afterward: a second call inlines another full-field fallback
 interpreter in DXIL. Preserve stable-before-incoming order, counters and the
-zero-fade compile guard. All Views variants remain below the 3 MiB bytecode law.
+zero-fade compile guard. Every Views variant and the receiver remain below the 3 MiB bytecode law.
 Indirect march and segment samples reconstruct through `sdfIndirectPointAt`:
 precise multiply, then precise add, matching primary. Keep bracket witnesses and
 blocked-point reconstruction on that path; a contracted multiply-add can cross
@@ -345,19 +368,24 @@ register.
 
 The indirect comparison helper keeps its SPIR-V function boundary with
 `[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
-body into Views exceeds legalization capacity or crashes the compiler. DXIL
+body into the receiver exceeds legalization capacity or crashes the compiler. DXIL
 keeps ordinary inlining; retain identical arithmetic, policy restoration and
-work counts on both paths. The Views-only SPIR-V sample and gradient wrappers
-also retain their shared function bodies, preserving the tape/mask save and
-restore and the evaluation counters while reducing repeated VM expansion.
+work counts on both paths. The default receiver has no SPIR-V call at all: the
+field sample and gradient wrappers (`sdfIndirectSample`, `sdfIndirectGradient`)
+and the Near sample (`sdfIndirectNear`) carry no boundary. A real SPIR-V call on
+the Near path loses the device on NVIDIA's Vulkan driver at High
+(`instruction pointer invalid`), and with one call site per marcher the receiver
+legalizes fully inlined. Do not reintroduce `[noinline]` there.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
-  curvature), ambient (AO), shadow (the selected slots' soft shadows), and views
-  (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
+  curvature), ambient (AO), shadow (the selected slots' soft shadows), the
+  indirect receiver (every field query of indirect light, with the cache only)
+  and views (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
   pass macros, each compiling its own stage over one pixel context (`SdfPixel`):
   `sdfPrimaryStage` in `march/sdf-primary.hlsli`, `sdfSurfaceStage` and
   `sdfAmbientStage` in `surface/sdf-surface.hlsli`, `sdfShadowStage` in
-  `surface/sdf-shadow.hlsli`, and `sdfViewsStage`
+  `surface/sdf-shadow.hlsli`, `sdfReceiverStage` in
+  `indirect/sdf-indirect-receiver.hlsli` (`SDF_RECEIVER_PASS`), and `sdfViewsStage`
   (`passes/sdf-hit-stages.hlsli`), which reads the record once as a surface
   sample (`SdfSurfaceSample`) and runs `sdfLightStage`
   (`passes/sdf-light-stage.hlsli`) and the debug views
@@ -425,8 +453,13 @@ restore and the evaluation counters while reducing repeated VM expansion.
   `marchOvershootDepth`; the primary march's scene march, its exhaustion arm
   and the attribute resolve are passes of one `sdfTracePrimaryField` call
   (`sdfTracePrimary`), and the beam's entry, gap and far searches are phases of
-  one loop (`coneMarchTileBounds`). A new probe joins those, never a call of its
-  own.
+  one loop (`coneMarchTileBounds`). Each indirect marcher has one
+  `sdfIndirectSample` site: `sdfIndirectMarch`'s step, full-field resample and
+  sign witness, `sdfIndirectSegment`'s step and bracket and
+  `sdfIndirectConeBounce`'s step and witness are phases of one loop, as
+  `sdfIndirectLaunch`'s descent and ascent are, and the views stage calls
+  `sdfDebugView` once (`SdfIndirectMarcherCallSiteLawTests`). A new probe joins
+  those, never a call of its own.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.
@@ -985,7 +1018,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `GpuBuildLease.Release(IReadOnlyList)` releases several leases at once,
   canceling every build it leaves unheld before it waits for any.
   `SdfWorldTables`' constructor takes a ready `SdfWorldPipelines` and creates
-  none. That set is one lease per base or reachable fade kernel variant
+  none. That set is one lease per up-front kernel
   (`SdfWorldPipelines.Acquire`, the brick baker only with a brick pool); every residency, the world's and each
   routed scene's or session view's, leases it through the `SdfWorldPipelineCatalog` the
   composition hands each of them (its pass-pipeline cache, region copy, mesh
@@ -997,18 +1030,12 @@ These are one-line cautions; the owning pages hold the derivations.
   pipelines built and names the refused.
   A holder (`SdfWorldPipelineSource`) takes its leases on the frame thread when
   kernels are supplied, or on the pool when it must load them. Every pipeline
-  builds on the pool. `SdfFrame.ShadowFadeVariants` comes from the world's boot
-  shadow policy and every authored quality row (`WorldShadowSettings.FadeVariants`),
-  in host and session frames. The residency adds the live F. Each reachable
-  nonzero F requests four kernels: shadow and the full, core and folds views
-  variants. F = 0 alone requests none of them. Definition delivery, a quality
-  switch, a free-form `shadow-slots` session lever or following another world's
-  frame can add demand through `RequestShadowFadeVariants`; a handoff never does.
-  A policy change waits through `FrameWaiting` and `WaitReadyAsync` before its F
-  reaches graph planning, retaining the previous frame while the new shadow and
-  usable views pipelines build. The held light table survives the source recycling
-  its presentation buffers. Acquired variants stay leased until disposal or
-  device loss. The holder builds no tables until the set is ready, and keeps the
+  builds on the pool. One shadow kernel and one kernel per views variant serve
+  every shadow fade capacity, so no policy, quality switch, session lever or
+  handoff leases a pipeline, and a policy change waits for none
+  (`SdfShadowFadePipelinesLawTests`). A frame whose shadow or views kernel still
+  builds waits through `FrameWaiting`; a held light table survives the source
+  recycling its presentation buffers. The holder builds no tables until the set is ready, and keeps the
   leases until a device loss or the residency's last release gives them back.
   A residency builds its tables through `SdfWorldPipelineSource.TryBuild`, only
   when it has none: a failed build (the set's or the tables') is refused, never
@@ -1078,10 +1105,7 @@ These are one-line cautions; the owning pages hold the derivations.
   entries (`SdfWorldPipelines.PrepareReload`), awaits them off the frame
   thread, and swaps them into the residency's own set after the device is idle,
   releasing the replaced leases; another residency leasing the replaced entries
-  keeps them. Inactive fade bytecode is validated and installed without creating
-  its pipeline. If a changed fade variant is first requested after preparation,
-  installation refuses that stale reload by name; a fresh request includes the
-  newly active variant. Before it leases anything, a reload reflects each changed kernel
+  keeps them. Before it leases anything, a reload reflects each changed kernel
   (`ShaderBytecodeReflector`, SPIR-V managed and DXIL through the `dxcompiler`
   beside `dxc`) and holds it to the host's interface
   (`SdfKernelSet.InterfaceMismatch`, `ShaderInterfaceLayout.Mismatch`): the
@@ -1299,7 +1323,12 @@ These are one-line cautions; the owning pages hold the derivations.
   device factory reads it (with the pipeline-cache UUID) and hangs it on
   `VulkanLogicalDevice.Identity`. Its one use beyond display is naming the
   device's pipeline-cache file; no selection, fallback or workaround may read a
-  vendor or driver from it. `IGpuDeviceContext.Capabilities`
+  vendor or driver from it. Adapter selection reads only the DXGI software
+  flag: a Direct3D 12 LUID of zero selects the first hardware adapter
+  (`DirectXAdapterDescription.IsSelectedBy`) and refuses when none remains,
+  because a process Windows cuts off from the GPU after repeated device faults
+  sees only the Basic Render Driver, which would run every kernel on the CPU.
+  `IGpuDeviceContext.Capabilities`
   (`GpuDeviceCapabilities`) is filled beside it and is recorded the same way:
   Vulkan's `maxBoundDescriptorSets`, `maxPushConstantsSize` and per-stage
   limits from the physical device's limits, Direct3D 12's binding tier, root
@@ -1781,13 +1810,17 @@ Run `temporal-shadows` on both backends for image qualification. Qualify its
 receiver-only shader mutation separately, and record the counted-quarter
 comparison and floor-device ceilings before claiming savings verified.
 
-`incomingVisibility` is policy-sized retained graph storage: R8 at
-F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.
-Its allocation belongs to the graph's policy variant, never a handoff crossing.
-Recorders select the fade kernel and bind ports from the planned resource
-declarations in their context, including the incoming image's format, never
-from the live frame's fade capacity. The live policy can change during a build.
-`GpuWorkReport` includes its bytes. Each active 16-byte `SdfShadowHandoff`
+One shadow kernel and one kernel per views variant serve every fade capacity:
+they compile both fade slots and read the active fade count from the pass
+block. `incomingVisibility` is retained R8G8 graph storage at every nonzero F
+and absent at F = 0, where every pass binds the tables' 1×1 fillers
+(`SampledFiller`, `IncomingStorageFiller`). Its allocation belongs to the
+graph's policy plan, never a handoff crossing, and F = 1 and F = 2 plan the
+same graph. Recorders bind ports from the planned resource declarations in
+their context, never from the live frame's fade capacity: a recorder planned
+without the image writes a zero fade count (`SdfFrameBlock.WriteWithoutFades`),
+since the live policy can change during a build. `GpuWorkReport` includes its
+bytes, two a pixel at every nonzero F. Each active 16-byte `SdfShadowHandoff`
 record goes through the counted region upload: outgoing light index, incoming
 light index and stable slot as three integers, then the float weight. Generate
 its HLSL structure from that C# layout. Count every visibility write and keep
@@ -2683,11 +2716,12 @@ stations gate GPU kernel behavior by machine.
 ```bash
 dotnet build src/Puck.SdfVm -c Release                      # runs DXC; needs dxc on PATH
 dotnet test tests/Puck.SignedDistance.Tests -c Release      # ISA packing, Lipschitz, parts, rigid leaves, grid, SdfBakerLawTests
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests" --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests"
+dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
+dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends

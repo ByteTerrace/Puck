@@ -6,6 +6,7 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 
 using Xunit;
+using static Puck.World.Testing.EditorPlacementFixtures;
 
 namespace Puck.World.Tests;
 
@@ -30,28 +31,6 @@ public sealed class WorldEditorPlacementLawTests {
 
     internal const float Pitch = 0.5f;
 
-    private static WorldPrototype Crate { get; } = CreationFixtures.UnitSphere(id: "crate");
-
-    // One crate, standing a tenth off the half-unit lattice on x.
-    internal static HostRow Build() {
-        var document = Fixtures.BuildDocument();
-
-        return HostRow.Build(
-            definition: (document with {
-                CreationsRaw = [Crate],
-                PlacementsRaw = (document.PlacementsRaw! with {
-                    Rows = [new WorldPlacement(
-                        Id: "crate1",
-                        Position: new Vector3(x: 1.1f, y: 3f, z: -1f),
-                        PrototypeId: Crate.Id,
-                        Scale: 1f,
-                        YawDegrees: 0f
-                    )],
-                }),
-            }),
-            name: "boot"
-        );
-    }
     internal static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null, Func<WorldInstance>? console = null) => new(modules: [
         new WorldEditorCommandModule(
             authority: new FakeConsoleAuthority(instance: (console ?? (() => row.Instance))),

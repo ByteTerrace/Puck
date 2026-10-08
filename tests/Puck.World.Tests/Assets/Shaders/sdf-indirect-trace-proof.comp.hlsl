@@ -6,8 +6,8 @@
 
 // Each case binds its program and asks the production helpers for one ray, placement, cell, launch or finite proof.
 // Loops over field-evaluating helpers stay rolled: each unrolled call would inline another whole interpreter.
-[[vk::binding(60, 3)]] StructuredBuffer<float4> traceCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> traceResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> traceCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> traceResults : register(u127, space3);
 struct TraceProbeIndex {
     [[vk::offset(0)]] uint index;
 };

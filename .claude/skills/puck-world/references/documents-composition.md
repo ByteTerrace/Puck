@@ -472,9 +472,9 @@ site spelling a private name, quoting the JSON path and the export list that wou
 bindings are `bindings`; every other read position is `reads`). The member is stripped from the composed tree, a
 document loaded as a world with `exports` on it refuses at validation, and `world.imports` prints each layer's
 `exports[...]`. Law suites:
-`tests/Puck.World.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Tests/ModuleExportsLawTests.cs`,
+`tests/Puck.World.Games.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
 `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldExportsLawTests.cs`.
-Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
+Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **`standard.puck` — the standard library, not a world.** The engine ships

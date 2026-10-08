@@ -95,7 +95,7 @@ Three canaries boot the real `Puck.World` executable, the first two headless:
   boots Hedges offscreen on both backends, presses once, and reads the imp and
   the pushed boulder where the board pass drew them.
 
-[RulePushTurnLawTests](../../tests/Puck.World.Tests/RulePushTurnLawTests.cs)
+[RulePushTurnLawTests](../../tests/Puck.World.Games.Tests/RulePushTurnLawTests.cs)
 states the cost of a turn: one working pass and one confirming pass, one undo
 slot, and bounded allocation per turn and per idle tick. It also boots a 16x16
 test level and holds its per-tick rule work under the ceiling.

@@ -51,7 +51,7 @@ public static partial class SdfWorldPackage {
         Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectLightDepth,
             Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: Math.Max(val1: sizeof(float), val2: (((ulong)maps) * SdfIndirectLightLayout.MapBytes)),
             StrideBytes: sizeof(float), Initialization: ShaderPipelineInitialization.External)],
-        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is Parts.Views or IndirectShade) ? pass with {
+        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is Parts.Receiver or Parts.Views or IndirectShade) ? pass with {
             Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectLightDepth)],
             InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
         } : pass))],

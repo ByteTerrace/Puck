@@ -1,15 +1,16 @@
-// The hit passes' shared entry point: primary, surface, ambient, shadow and views each select their pass macro and compile
-// their own stage (sdf-hit-stages.hlsli) over the pixel the entry point gathers. All five use an 8x8 workgroup over the
-// one indirect tile box, and the same camera, masks and active-pixel test. Primary also reads the mesh pass's target
-// (sdf-mesh.hlsli). Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources,
-// and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface, ambient and shadow write
-// the visibility records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords and publishes
-// its receiver certificate through a declared preserving output (sdf-visibility.hlsli).
+// The hit passes' shared entry point: primary, surface, ambient, shadow, the indirect receiver and views each select
+// their pass macro and compile their own stage (sdf-hit-stages.hlsli) over the pixel the entry point gathers. All six use
+// an 8x8 workgroup over the one indirect tile box, and the same camera, masks and active-pixel test. Primary also reads
+// the mesh pass's target (sdf-mesh.hlsli). Every hit pass reads its resources through the sdf-world interface: dynamic
+// transforms, screen sources, and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary,
+// surface, ambient and shadow write the visibility records through sdfVisibilityRecordsRW; the receiver publishes its
+// certificate through a declared preserving output, and views reads the records through sdfVisibilityRecords
+// (sdf-visibility.hlsli).
 // Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #ifndef SDF_PRIMARY_PASS
 #define SDF_PRIMARY_READ
-#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS)
+#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS) && !defined(SDF_RECEIVER_PASS)
 #define SDF_VIEWS_PASS
 #endif
 #endif
@@ -30,6 +31,11 @@
 // return. Primary, surface and views gather nothing and hold no groupshared mask.
 #if defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
 #define SDF_GROUP_SHADOW_GATHER
+#endif
+// One shadow kernel, the receiver and one kernel per views variant serve every fade capacity: each compiles both fade
+// slots and reads the active fade count from the pass block, which a graph without the incoming image writes as zero.
+#if defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_VIEWS_PASS)
+#define SDF_SHADOW_FADE_SLOTS 2
 #endif
 #define SDF_PART_RAY_BOUNDS
 // Every hit pass reads the beam's tile planes and part bounds through tiles, and the surviving-tile box from the cull-args
@@ -66,6 +72,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfAmbientStage(p);
 #elif defined(SDF_SHADOW_PASS)
     sdfShadowStage(p);
+#elif defined(SDF_RECEIVER_PASS)
+    sdfReceiverStage(p);
 #else
     float coverage;
     float reactivity;

@@ -13,7 +13,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var reflector = SdfTestPipelines.Reflector();
 
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var nativePipelines));
-        Assert.Equal(actual: nativePipelines, expected: 16L);
+        Assert.Equal(actual: nativePipelines, expected: 17L);
         var initial = rig.Pipelines.Kernels;
         var bytes = SpirvEdits.WithGenerator(generator: 931, module: initial[SdfKernel.Resolve].Span);
         var changed = initial.With(bytecode: bytes, kernel: SdfKernel.Resolve);
@@ -34,7 +34,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         await ActivateAsync();
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var created));
         Assert.Equal(actual: created, expected: (nativePipelines + 2));
-        Assert.Equal(expected: 17, actual: rig.Cache.SharedPipelines);
+        Assert.Equal(expected: 18, actual: rig.Cache.SharedPipelines);
         // The replacement stays active on an unchanged request; neither an extra lease nor pipeline is added.
         Assert.Equal(expected: 0, actual: rig.Reload(kernels: changed));
         await ActivateAsync();

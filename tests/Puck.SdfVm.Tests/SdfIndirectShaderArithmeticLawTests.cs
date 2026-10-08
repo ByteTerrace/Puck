@@ -21,10 +21,13 @@ public sealed class SdfIndirectShaderArithmeticLawTests {
 
         Assert.Contains(actualString: source, expectedSubstring: "precise float3 advance = direction * distance;");
         Assert.Contains(actualString: source, expectedSubstring: "precise float3 position = origin + advance;");
-        Assert.Contains(actualString: source, expectedSubstring: "float3 position = sdfIndirectPointAt(origin, direction, result.distance);");
-        Assert.Contains(actualString: source, expectedSubstring: "sdfIndirectSample(sdfIndirectPointAt(position, normal, witnessOffset), SDF_INSTANCE_MASK_ALL)");
-        Assert.Contains(actualString: source, expectedSubstring: "float3 position = sdfIndirectPointAt(a, direction, travel);");
-        Assert.Contains(actualString: source, expectedSubstring: "sdfIndirectSample(sdfIndirectPointAt(a, direction, bracketEnd), SDF_INSTANCE_MASK_ALL)");
+        // Each marcher's one sample site reads a point every phase reconstructs through sdfIndirectPointAt.
+        Assert.Contains(actualString: source, expectedSubstring: "position = sdfIndirectPointAt(origin, direction, result.distance);");
+        Assert.Contains(actualString: source, expectedSubstring: "at = sdfIndirectPointAt(position, normal, witnessOffset);");
+        Assert.Contains(actualString: source, expectedSubstring: "SdfHit query = sdfIndirectSample(at, queryMask);");
+        Assert.Contains(actualString: source, expectedSubstring: "position = sdfIndirectPointAt(a, direction, travel);");
+        Assert.Contains(actualString: source, expectedSubstring: "position = sdfIndirectPointAt(a, direction, bracketEnd);");
+        Assert.Contains(actualString: source, expectedSubstring: "SdfHit query = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);");
         Assert.Contains(actualString: source, expectedSubstring: "blockedPoint = sdfIndirectPointAt(a, direction, lerp(travel, bracketEnd, saturate(weight)));");
     }
 }

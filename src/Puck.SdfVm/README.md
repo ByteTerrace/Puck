@@ -143,11 +143,16 @@ indirect receiver's certified camera-ray approach in L.y. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
 shadow four 8-bit stable visibilities in the one K word, each adding its queries
 to the combined count. Active handoffs add incoming marches, bounded by K + F,
-and write policy-sized retained visibility storage: R8 at F = 1, R8G8 at
-F = 2, absent at F = 0. Each light shades from its own visibility and each
+and write retained R8G8 visibility storage at every nonzero F, absent at F = 0,
+where the passes bind the tables' fillers; one shadow kernel and one kernel per
+views variant serve every F. Each light shades from its own visibility and each
 handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
-record writes before its consumer. Views reads those rows and, with indirect enabled,
-publishes a preserving version containing its eight-word receiver certificate.
+record writes before its consumer. With indirect enabled, the receiver pass between shadow and
+views makes every field query of indirect light and publishes a preserving version
+containing its eight-word receiver certificate, beside a four-word answer per pixel;
+views reads both and the lighting bank, and makes no field query.
+The comparison methods compile into a separate comparison receiver kernel, leased only
+once a view selects one, so the default receiver stays small.
 The certificate retains the launch, clearance, complete allocation identity,
 transport revision and resolved or unresolved outcome. Every hit pass binds the
 beam's tile planes read-only. These dispatches share indirect bounds and live view

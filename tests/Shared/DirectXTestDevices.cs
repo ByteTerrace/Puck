@@ -8,15 +8,15 @@ using Xunit;
 
 namespace Puck.Testing;
 
-/// <summary>The Direct3D 12 devices device laws run on: the software (WARP) device and the default adapter without the
-/// debug layer, and the default adapter with it; each skips the calling test off Windows, where Direct3D 12 does not
+/// <summary>The Direct3D 12 devices device laws run on: the software (WARP) device and the first hardware adapter without the
+/// debug layer, and the first hardware adapter with it, never a software renderer in its place; each skips the calling test off Windows, where Direct3D 12 does not
 /// exist. Turning the debug layer on removes every device the process already
 /// holds, so only a law that runs alone takes <see cref="Debug"/>. <see cref="Hardware"/> and <see cref="Debug"/> open
 /// the GPU and carry <c>[OpensGpuDevice]</c>, so a test class that takes either carries <c>[Trait("Category", "Gpu")]</c>
 /// (GPU001); <see cref="Warp"/> runs on the CPU.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal static class DirectXTestDevices {
-    /// <summary>Returns a context on the default adapter without the debug layer, its device created; skips the calling
+    /// <summary>Returns a context on the first hardware adapter without the debug layer, its device created; skips the calling
     /// test when the host has no hardware device that meets the floor.</summary>
     /// <returns>The context, owned by the caller.</returns>
     [OpensGpuDevice]
@@ -38,7 +38,7 @@ internal static class DirectXTestDevices {
 
         return context;
     }
-    /// <summary>Returns a context on the default adapter with the debug layer on, its device created; skips the calling
+    /// <summary>Returns a context on the first hardware adapter with the debug layer on, its device created; skips the calling
     /// test when the host has no device or the debug layer does not load.</summary>
     /// <param name="output">The writer the context drains debug messages into.</param>
     /// <returns>The context, owned by the caller.</returns>

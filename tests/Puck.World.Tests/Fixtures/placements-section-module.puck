@@ -1,9 +1,0 @@
-schema: "puck.world.definition.v1"
-basis: "../../../src/Puck.World/Assets/worlds/standard"
-
-placements {
-  placement "marker" {
-    prototype: "groundPlane"
-    position [4, -64, 0]
-  }
-}

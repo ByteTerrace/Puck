@@ -1020,7 +1020,7 @@ dotnet test tests/Puck.World.Transpiler.Tests -c Release
 ```
 
 ```bash
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
+dotnet test tests/Puck.World.Games.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
 ```
 
 ```bash
