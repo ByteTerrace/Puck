@@ -425,8 +425,13 @@ restore and the evaluation counters while reducing repeated VM expansion.
   `marchOvershootDepth`; the primary march's scene march, its exhaustion arm
   and the attribute resolve are passes of one `sdfTracePrimaryField` call
   (`sdfTracePrimary`), and the beam's entry, gap and far searches are phases of
-  one loop (`coneMarchTileBounds`). A new probe joins those, never a call of its
-  own.
+  one loop (`coneMarchTileBounds`). Each indirect marcher has one
+  `sdfIndirectSample` site: `sdfIndirectMarch`'s step, full-field resample and
+  sign witness, `sdfIndirectSegment`'s step and bracket and
+  `sdfIndirectConeBounce`'s step and witness are phases of one loop, as
+  `sdfIndirectLaunch`'s descent and ascent are, and the views stage calls
+  `sdfDebugView` once (`SdfIndirectMarcherCallSiteLawTests`). A new probe joins
+  those, never a call of its own.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.

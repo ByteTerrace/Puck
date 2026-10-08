@@ -47,13 +47,15 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         reactivity = max(reactivity, (float)shadowHistory[word + 4u]);
     }
 
+    // One call site: each sdfDebugView call inlines its field reads again.
+    float3 viewColor = sdfDebugView(p, s, color);
     if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {
         coverage = 1.0;
 
-        return sdfDebugView(p, s, color);
+        return viewColor;
     }
 
-    return (sdfDebugView(p, s, color) * (s.hit ? sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t) : 1.0));
+    return (viewColor * (s.hit ? sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t) : 1.0));
 }
 #endif
 

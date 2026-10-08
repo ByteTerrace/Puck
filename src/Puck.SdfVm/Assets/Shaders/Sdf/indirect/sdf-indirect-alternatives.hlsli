@@ -100,7 +100,8 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
 }
 
 // Cone clearance follows the existing full-field ball certificate. A hit still requires absolute acceptance and
-// a sign witness; a small conservative distance or an exhausted budget supplies no fabricated bounce.
+// a sign witness; a small conservative distance or an exhausted budget supplies no fabricated bounce. The cone's
+// sample and the hit's sign witness are two phases of one field call site, in the original order and allowance.
 bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndirectSources fallback,
     out SdfIndirectSources sources, out bool hitSurface, out bool screenTerminal, inout uint samples) {
     sources = fallback;
@@ -110,21 +111,39 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
     float reach = min(SdfIndirectAlternativeReach, p.farDistance);
     float visibility = 1.0;
     uint budget = SdfIndirectAlternativeConeSteps;
-    [loop] for (uint step = 0u; step < SdfIndirectAlternativeConeSteps && budget > 0u; step++) {
-        budget--;
-        float3 position = origin + direction * travel;
-        SdfHit hit = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
+    uint step = 0u;
+    bool witnessPhase = false;
+    float3 position = 0.0;
+    float3 normal = 0.0;
+    float offset = 0.0;
+    SdfHit hit = (SdfHit)0;
+    [loop] for (;;) {
+        float3 at;
+        if (!witnessPhase) {
+            if (!(step < SdfIndirectAlternativeConeSteps && budget > 0u)) { break; }
+            budget--;
+            position = origin + direction * travel;
+            at = position;
+        } else {
+            at = position + normal * offset;
+        }
+        SdfHit query = sdfIndirectSample(at, SDF_INSTANCE_MASK_ALL);
         samples++;
-        if (!isfinite(hit.distance) || (travel == 0.0 && hit.distance <= 0.0)) { return false; }
-        if (abs(hit.distance) <= SdfIndirectSurfaceEpsilon && budget >= 2u) {
-            budget--;
-            float3 normal = sdfIndirectGradient(position);
-            samples++;
-            if (dot(normal, normal) == 0.0 || dot(normal, -direction) <= 0.0) { return false; }
-            budget--;
-            float offset = hit.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
-            SdfHit witness = sdfIndirectSample(position + normal * offset, SDF_INSTANCE_MASK_ALL);
-            samples++;
+        if (!witnessPhase) {
+            hit = query;
+            if (!isfinite(hit.distance) || (travel == 0.0 && hit.distance <= 0.0)) { return false; }
+            if (abs(hit.distance) <= SdfIndirectSurfaceEpsilon && budget >= 2u) {
+                budget--;
+                normal = sdfIndirectGradient(position);
+                samples++;
+                if (dot(normal, normal) == 0.0 || dot(normal, -direction) <= 0.0) { return false; }
+                budget--;
+                offset = hit.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
+                witnessPhase = true;
+                continue;
+            }
+        } else {
+            SdfHit witness = query;
             bool bracket = isfinite(witness.distance) && (hit.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0);
             if (!bracket || hit.material < 0) { return false; }
             float3 screenEmission;
@@ -159,6 +178,7 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
         float advance = min(clearance, reach - travel);
         if (advance <= 0.0) { return false; }
         travel += advance;
+        step++;
     }
     return false;
 }
