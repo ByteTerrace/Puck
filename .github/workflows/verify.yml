@@ -276,9 +276,21 @@ jobs:
         with:
           artifact: nuget-packages
       # --cache compiles into the absent directory the shader-cache action saves, and keeps it.
-      - if: steps.compared.outputs.cache-hit != 'true'
+      - id: compare
+        if: steps.compared.outputs.cache-hit != 'true'
         name: Compile the shaders with Linux DXC and compare every output byte for byte
         run: puck shaders compare --build "$RUNNER_TEMP/shader-bytecode-windows" --cache .tmp/shader-cache
+      # A difference is read from both hosts' bytes: either host's dxc -dumpbin disassembles the other's DXIL.
+      - if: failure() && steps.compare.outcome == 'failure'
+        name: Collect the Linux build's shader bytecode a failed comparison read
+        run: puck shaders collect "$RUNNER_TEMP/shader-bytecode-linux"
+      - if: failure() && steps.compare.outcome == 'failure'
+        name: Upload the Linux build's shader bytecode
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: shader-bytecode-linux
+          path: ${{ runner.temp }}/shader-bytecode-linux
       - if: steps.compared.outputs.cache-hit != 'true'
         name: Save this comparison's Linux compiles as the Linux shader cache
         uses: ./.github/actions/shader-cache

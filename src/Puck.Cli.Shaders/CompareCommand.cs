@@ -1,11 +1,14 @@
 using System.CommandLine;
+using System.Globalization;
 using System.Xml.Linq;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Cli.Shaders;
 
 /// <summary>One bytecode file that differs between two trees.</summary>
 /// <param name="Path">The file, relative to both roots, with forward slashes.</param>
-/// <param name="Detail">How it differs: absent from one tree, or its first differing byte and both lengths.</param>
+/// <param name="Detail">How it differs: absent from one tree, or its first differing byte and both lengths and, for two
+/// DXBC containers, the chunks that differ.</param>
 internal sealed record ShaderBytecodeDifference(string Path, string Detail);
 
 /// <summary><c>puck shaders compare</c>: compares every compiled shader, SPIR-V and DXIL, in one tree with the same file in
@@ -77,13 +80,52 @@ public static class CompareCommand {
                 (left.Length != right.Length)
             ) {
                 differences.Add(item: new ShaderBytecodeDifference(
-                    Detail: $"differs from byte {common} ({left.Length} bytes expected, {right.Length} actual)",
+                    Detail: $"differs from byte {common} ({left.Length} bytes expected, {right.Length} actual){ContainerDetail(actual: right, expected: left)}",
                     Path: path
                 ));
             }
         }
 
         return differences;
+    }
+
+    // Which chunks of two DXBC containers differ, so a difference names what moved (the program, its reflection, its
+    // pipeline state) rather than only the container digest at byte 4, which differs whenever anything does. Empty
+    // unless both are well-formed containers.
+    private static string ContainerDetail(byte[] expected, byte[] actual) {
+        IReadOnlyList<(string Code, ReadOnlyMemory<byte> Payload)> left, right;
+
+        try {
+            left = ShaderBytecode.DxbcChunks(bytecode: expected);
+            right = ShaderBytecode.DxbcChunks(bytecode: actual);
+        } catch (ArgumentException) {
+            return string.Empty;
+        }
+
+        static string Size(ReadOnlyMemory<byte>? part) => ((part is { } data)
+            ? data.Length.ToString(provider: CultureInfo.InvariantCulture)
+            : "absent"
+        );
+        static ReadOnlyMemory<byte>? Find(IReadOnlyList<(string Code, ReadOnlyMemory<byte> Payload)> parts, string code) {
+            foreach (var part in parts) {
+                if (string.Equals(a: part.Code, b: code, comparisonType: StringComparison.Ordinal)) { return part.Payload; }
+            }
+            return null;
+        }
+        var differing = new List<string>();
+
+        foreach (var code in left.Select(selector: static part => part.Code).Union(second: right.Select(selector: static part => part.Code), comparer: StringComparer.Ordinal)) {
+            var expectedPart = Find(code: code, parts: left);
+            var actualPart = Find(code: code, parts: right);
+
+            if ((expectedPart is not { } l) || (actualPart is not { } r) || !l.Span.SequenceEqual(other: r.Span)) {
+                differing.Add(item: $"{code} ({Size(part: expectedPart)} expected, {Size(part: actualPart)} actual)");
+            }
+        }
+
+        return ((differing.Count == 0)
+            ? "; every container chunk matches, so only the header differs"
+            : $"; DXBC chunks that differ: {string.Join(separator: ", ", values: differing)}");
     }
 
     /// <summary>Lists the projects whose build compiles shaders with DXC: every tracked project outside
@@ -270,8 +312,9 @@ public static class CompareCommand {
 
             Walks both trees for .spv and .dxil files, skipping artifacts, bin, obj, .git, .tmp and
             node_modules, and matches them by relative path: a file in one tree only, or one whose bytes differ,
-            fails by name with its first differing byte. With --build it first builds the shader build's
-            host, then runs the build's own CompileShaders target (build/Shaders.targets) in every
+            fails by name with its first differing byte and, for DXIL, the container chunks that differ.
+            With --build it first builds the shader build's host, then runs the build's own
+            CompileShaders target (build/Shaders.targets) in every
             tracked project outside experimental/ that declares a vertex, fragment or compute shader
             item, with the dxc on the path and an empty shader cache, so a second host really compiles
             every output with exactly the arguments the first did. CI runs it on Linux against

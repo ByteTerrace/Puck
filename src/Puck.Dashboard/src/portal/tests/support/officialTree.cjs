@@ -55,7 +55,13 @@ function officialSchemaBundle() {
 /** A root that imports the tictactoe fragment over the standard basis, written as `.puck` beside the sources. */
 const TICTACTOE_ROOT = { path: 'test-root.puck', text: 'schema: "puck.world.definition.v1"\nbasis: "standard"\n\nimport "games/tictactoe"\n' };
 
+/** The standard basis's source. It imports what it builds on (`import "quality"`), so the host an in-memory
+ * composition (`ParseFragment`) or a standalone `Parse` takes is this source composed through its imports in the
+ * mounted sources, as the native tests compose it (`ShippedWorldDocuments.Composed`), never its compiled document
+ * (`officialDocument('standard')`), whose imports no in-memory call can resolve. */
+const STANDARD_SOURCE = 'standard.puck';
+
 module.exports = {
   root, manifestPath, treeDir, manifest, officialTreeMissing, officialDocument, officialSources, officialIslandRootSource,
-  officialSchemaBundle, TICTACTOE_ROOT,
+  officialSchemaBundle, TICTACTOE_ROOT, STANDARD_SOURCE,
 };

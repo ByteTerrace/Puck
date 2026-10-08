@@ -7,6 +7,13 @@ using Puck.World;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
+    // The hosted inventory of a directory 'puck world prepare' wrote: its composed documents, in ordinal order. The silo
+    // image keeps the authored worlds directory beside them (.puck sources, schemas, notes), which is never an inventory
+    // member.
+    private static string[] HostedWorldFiles(string directory) => [.. Directory.EnumerateFiles(
+        path: directory,
+        searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
+    ).Order(comparer: StringComparer.Ordinal)];
     private static void PrepareOfficialWorldRelease(string outputDirectory) =>
         PrepareOfficialWorldReleasePackage(
             Outputs(),
@@ -43,10 +50,7 @@ public static partial class AzureCommand {
         var primary = Text(value: configuration["worldName"]);
         var host = $"{configuration["dns"]!["recordName"]}.{configuration["dns"]!["zoneName"]}";
         var port = Text(value: configuration["port"]);
-        var files = Directory.EnumerateFiles(
-            path: sourceDirectory,
-            searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
-        ).Order(comparer: StringComparer.Ordinal).ToArray();
+        var files = HostedWorldFiles(directory: sourceDirectory);
 
         if (
             (files.Length == 0) ||

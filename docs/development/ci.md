@@ -137,7 +137,10 @@ artifact rather than a second build. The Windows build compiles the whole
 solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
-projects included, is in the compare.
+projects included, is in the compare. A DXIL difference names the container
+chunks that differ, and a failed comparison collects the Linux build's shaders
+into the `shader-bytecode-linux` artifact, so either host's `dxc -dumpbin` can
+disassemble both sides.
 The comparison compiles into `.tmp/shader-cache` (`--cache`), and once it passes
 the job saves that directory as the Linux shader cache under the shader inputs'
 key. A run whose key already has a Linux cache has nothing new to compare: the
