@@ -7,7 +7,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The host and followed worlds declare only the fade capacities of their current authored policy rows.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldShadowFadePolicyLawTests {
     [InlineData(0, 0, 0, 0, SdfShadowFadeVariants.None)]
     [InlineData(1, 0, 0, 0, SdfShadowFadeVariants.One)]

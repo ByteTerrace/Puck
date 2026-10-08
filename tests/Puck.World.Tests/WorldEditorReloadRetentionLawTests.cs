@@ -9,7 +9,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The real reload command retains the builder's seat state and drops only ids absent from its accepted document.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldEditorReloadRetentionLawTests {
     [Fact]
     public void WatchCommandSubmitsAndSettlesTheOrdinaryReload() {

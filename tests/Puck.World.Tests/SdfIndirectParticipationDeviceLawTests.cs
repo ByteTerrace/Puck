@@ -10,7 +10,6 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectParticipationDeviceLawTests {

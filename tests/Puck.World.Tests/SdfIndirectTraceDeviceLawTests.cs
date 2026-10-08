@@ -10,7 +10,6 @@ namespace Puck.World.Tests;
 
 /// <summary>The indirect kernel's ray certificates, probe classes, partitions, launches and segment proofs agree
 /// with the illumination CPU model on resolved fixtures and refuse the same sealed and unresolved paths.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed partial class SdfIndirectTraceDeviceLawTests {

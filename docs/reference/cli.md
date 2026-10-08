@@ -976,8 +976,10 @@ The device suites run `dotnet test --project <suite> -c Release --no-build` over
 solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
 MSBuild switches to the test application, which refuses them. Each selects its device laws
 with `--filter-trait Category=Gpu`, the trait GPU001 holds every class that opens a device to.
-They pass `--parallel none` to serialize device laws within each test application,
-and affected's CPU runs take the complement, `--filter-not-trait Category=Gpu`. One list
+Each test application already runs its device laws one at a time: every class carrying
+the trait joins one collection that disables parallelization
+([Contributing](../development/contributing.md#device-laws)). Affected's CPU runs
+take the complement, `--filter-not-trait Category=Gpu`. One list
 holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
 root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that

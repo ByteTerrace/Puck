@@ -8,7 +8,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Actual proof leases coalesce successful support, defer unreadable publications and preserve collision fallback.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectProofOwnershipDeviceLawTests {

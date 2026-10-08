@@ -9,7 +9,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The production view domain preserves probe diagnostics in empty sky and clips them against scene hits.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectDebugDeviceLawTests {

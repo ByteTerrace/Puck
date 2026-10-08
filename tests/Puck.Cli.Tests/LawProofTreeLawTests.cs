@@ -4,7 +4,9 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-public sealed partial class LawProofLawTests {
+/// <summary>The proof's persistent tree: its lease, its incremental reuse and its shader warming, over the shared
+/// fixtures of <see cref="LawProofLaws"/>.</summary>
+public sealed class LawProofTreeLawTests : LawProofLaws {
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]

@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-public sealed partial class GateRunLawTests {
+public sealed class GateNonExecutingEditsLawTests : GateRunLaws {
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

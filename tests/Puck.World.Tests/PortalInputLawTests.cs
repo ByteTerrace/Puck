@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// participant's channel, a press made between two steps included. A release clears the slot, and an ended session reads
 /// nothing and is refused.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class PortalInputLawTests {
     private const string OnRow = "portalOn";
     private const string PressRow = "portalPress";

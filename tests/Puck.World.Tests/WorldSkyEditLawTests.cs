@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldSkyEditLawTests {
     internal sealed class Session : IDisposable {
         private readonly TemporaryDirectory m_files = new();

@@ -9,7 +9,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Late presentation verdicts reach the script streams, administrative tape, and refusal count exactly once.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldCompareReportingLawTests {
     [InlineData(false, "world.compare")]
     [InlineData(true, "world.compare")]

@@ -12,7 +12,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The production brick lookup preserves exact pool identities with logarithmic counted reads.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectBrickDeviceLawTests {

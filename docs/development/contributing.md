@@ -278,6 +278,25 @@ Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
 test; one law of a tier is selected by its id, the case's display name
 (`--explicit on --filter-display-name <law-id>`).
 
+### Device laws
+
+A test class that opens a hardware GPU device carries
+`[Trait("Category", "Gpu")]`, which the build requires of it (`GPU001`, from
+`Puck.Analyzers`). The same trait schedules it. Every test project links
+`tests/Shared/GpuDeviceCollection.cs`, whose collection factory puts every
+class with the trait into one collection that disables parallelization. xUnit
+runs that collection after all the parallel ones have finished, one law at a
+time. A device law therefore never shares the GPU, the driver's shader
+compiler or the processors with another law, and a law that turns on the
+Direct3D 12 debug layer, which removes every device the process holds, runs
+with no other device alive. A plain `dotnet test` of a suite needs no option to
+keep its device laws apart. A class that names a collection of its own keeps
+it, and that collection must disable parallelization too.
+
+A run beside another GPU leg leaves the device laws out with
+`--filter-not-trait Category=Gpu`; `puck affected` runs its suites that way, and
+`puck gate --gpu` runs the device laws alone with `--filter-trait Category=Gpu`.
+
 ### Game changes
 
 Run the application to check composed game behavior, alongside relevant World tests:

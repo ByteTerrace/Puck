@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Exhaustive certified CPU pruning decisions over the counters cameras, without a GPU beam readback.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) {
     private const int Width = 1440;
     private const int Height = 810;

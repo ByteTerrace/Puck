@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldCostLawTests {
     [Fact]
     public void LiveScopedAndPerShapeCostsReconcileToThePackedProgram() {

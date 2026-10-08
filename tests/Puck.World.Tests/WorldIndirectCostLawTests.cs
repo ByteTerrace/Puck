@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The authored parity field admits finite indirect work without exceeding the instruction-cost cap.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldIndirectCostLawTests(ITestOutputHelper output) {
     [Fact]
     public void ParityFieldSplitsShadeAndAdmitsAtomicTransportWork() {

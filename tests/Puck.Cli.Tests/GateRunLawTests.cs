@@ -7,12 +7,11 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="GateRun"/> stops at a failed build, reads a branch's change against its
-/// merge base with the target rather than the target's tip, runs the repository checks only in their check forms, and
-/// adds GPU work only when asked. Each law runs over a small git checkout whose target advanced after the branch left it,
-/// and a runner that records each step in place of building, copying or running anything.</summary>
-public sealed partial class GateRunLawTests {
-    private sealed class FakeRunner(GateStepResult build) : IGateRunner {
+/// <summary>What every gate law runs over: a small git checkout whose target advanced after the branch left it
+/// (<see cref="Branches"/>), and a runner that records each step in place of building, copying or running anything.
+/// Each file of gate laws is its own test class over these, so xUnit runs the files side by side.</summary>
+public abstract class GateRunLaws {
+    private protected sealed class FakeRunner(GateStepResult build) : IGateRunner {
         public bool Copied { get; private set; }
 
         public Func<string[], int> ExitCode { get; init; } = static _ => 0;
@@ -78,7 +77,7 @@ public sealed partial class GateRunLawTests {
         }
     }
     // main: A; feature leaves at A and commits B (src/Branch.cs); main then commits C (src/Target.cs). HEAD is feature.
-    private sealed class Branches : IDisposable {
+    private protected sealed class Branches : IDisposable {
         public GitScratchCheckout Checkout { get; } = new();
         public string Base { get; }
 
@@ -125,7 +124,7 @@ public sealed partial class GateRunLawTests {
         public void Dispose() => Checkout.Dispose();
     }
 
-    private static (int ExitCode, string Output, string Error) Gate(Branches branches, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, string target = "main", bool record = false) => ConsoleCapture.RunSplit(run: () => GateRun.Run(
+    private protected static (int ExitCode, string Output, string Error) Gate(Branches branches, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, string target = "main", bool record = false) => ConsoleCapture.RunSplit(run: () => GateRun.Run(
         directory: directory.RootPath,
         gpu: gpu,
         record: record,
@@ -136,7 +135,11 @@ public sealed partial class GateRunLawTests {
         suiteJobs: 2,
         target: target
     ));
-
+}
+/// <summary>CONTRACT UNDER TEST: <see cref="GateRun"/> stops at a failed build, reads a branch's change against its
+/// merge base with the target rather than the target's tip, runs the repository checks only in their check forms, and
+/// adds GPU work only when asked.</summary>
+public sealed partial class GateRunLawTests : GateRunLaws {
     [Fact]
     public void AFailedBuildStopsTheGateAndShowsItsErrors() {
         using var branches = new Branches();

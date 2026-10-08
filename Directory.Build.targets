@@ -23,6 +23,9 @@
         <PackageReference Include="xunit.v3" Version="[4.*, )" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TemporaryDirectory.cs" Link="Properties/TemporaryDirectory.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TestLiveness.cs" Link="Properties/TestLiveness.cs" />
+        <!-- Every class carrying the Gpu trait runs in one serial collection, after the parallel ones, so a plain run of
+             a suite never puts two device laws, or a device law and the CPU laws, on the machine at once. -->
+        <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/GpuDeviceCollection.cs" Link="Properties/GpuDeviceCollection.cs" />
     </ItemGroup>
     <!-- Allocation laws and the emulator batteries' allocation stages read GC.GetAllocatedBytesForCurrentThread. A
          background collection retires every thread's allocation context without subtracting the unused remainder
@@ -31,6 +34,13 @@
          Declared here because PuckKind is set in each project's body, after Directory.Build.props. -->
     <PropertyGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation'">
         <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    </PropertyGroup>
+    <!-- A test host runs its classes side by side on every processor, and a suite's heap reaches gigabytes. A
+         workstation collection marks that heap on one thread while every test thread waits, so test hosts collect on
+         every processor (server GC, which sizes its heaps to the application's need). Collections stay blocking, so the
+         allocation counter above stays exact. -->
+    <PropertyGroup Condition="'$(PuckKind)' == 'Test'">
+        <ServerGarbageCollection>true</ServerGarbageCollection>
     </PropertyGroup>
     <PropertyGroup>
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's

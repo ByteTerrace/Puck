@@ -33,7 +33,9 @@ names what replaces one.
 
 GPU001 refuses a test class that reaches the host's GPU without
 `[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out
-with `--filter-not-trait Category=Gpu`. The ways onto the GPU carry
+with `--filter-not-trait Category=Gpu` and that runs the class in its suite's
+one serial collection of
+[device laws](../../docs/development/contributing.md#device-laws). The ways onto the GPU carry
 `[OpensGpuDevice]` (`build/OpensGpuDeviceAttribute.cs`, linked into every
 project): the native device APIs and the test helpers that bring a device up.
 Every member of a marked type is a way onto the GPU too. A helper that reaches
