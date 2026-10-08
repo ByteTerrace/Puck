@@ -249,7 +249,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (16, "building (0 of 16 pipelines created; waiting on sdf-beam, sdf-tape, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
+            expected: (17, "building (0 of 17 pipelines created; waiting on sdf-beam, sdf-tape, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-receiver, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
         );
 
         var release = new Thread(start: last.Dispose);
