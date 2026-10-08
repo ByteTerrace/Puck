@@ -370,9 +370,12 @@ The indirect comparison helper keeps its SPIR-V function boundary with
 `[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
 body into the receiver exceeds legalization capacity or crashes the compiler. DXIL
 keeps ordinary inlining; retain identical arithmetic, policy restoration and
-work counts on both paths. The receiver-only SPIR-V sample and gradient wrappers
-also retain their shared function bodies, preserving the tape/mask save and
-restore and the evaluation counters while reducing repeated VM expansion.
+work counts on both paths. The default receiver has no SPIR-V call at all: the
+field sample and gradient wrappers (`sdfIndirectSample`, `sdfIndirectGradient`)
+and the Near sample (`sdfIndirectNear`) carry no boundary. A real SPIR-V call on
+the Near path loses the device on NVIDIA's Vulkan driver at High
+(`instruction pointer invalid`), and with one call site per marcher the receiver
+legalizes fully inlined. Do not reintroduce `[noinline]` there.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), the

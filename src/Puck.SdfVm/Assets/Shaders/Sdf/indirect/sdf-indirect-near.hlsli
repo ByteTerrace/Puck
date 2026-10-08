@@ -10,9 +10,6 @@ static float3 sdfIndirectNearDirection = 0.0;
 
 // The receiver's near-field sample: its incoming sources when answered, which replace the cache answer
 // (sdfIndirectNearResult); zero, with answered false, when not admitted or unresolved, keeping every cache source.
-#ifdef __spirv__
-[noinline]
-#endif
 SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3 launched, out bool answered,
     out uint countedLoads) {
     countedLoads = 0u;
