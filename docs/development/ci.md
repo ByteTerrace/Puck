@@ -12,9 +12,10 @@ repository's Actions policy. Keep the adjacent version comments when updating
 the pins; a version tag by itself prevents the workflow from starting.
 The composite actions under `.github/actions/` are the only steps that run before
 a CLI exists: `setup-dotnet` installs the SDK, `setup-dxc` and `setup-quic` the
-pinned native dependencies, `setup-puck` the run's candidate CLI, and
-`azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, and
-the OIDC federation therefore each live in one place. Mapping keys in
+pinned native dependencies, `setup-puck` the run's candidate CLI,
+`shader-cache` restores, looks up and saves the shader compiler cache, and
+`azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, the
+shader cache key and the OIDC federation therefore each live in one place. Mapping keys in
 workflow and action files are alphabetized, as in the bicep, and steps carry no
 blank lines between them. Release logic runs as `puck` verbs; a workflow step
 holds a shell script only to glue a container or a step summary.
@@ -88,6 +89,25 @@ Already-compressed package and build-log uploads disable redundant compression.
 Superseded Azure PR validation is cancelled at the parent workflow; production
 deployment retains its separate serialization and is never cancelled by that rule.
 
+The [shader compiler cache](../reference/shaders.md#freshness) is restored and
+saved by the `shader-cache` composite action, the one place that names its key:
+`shaders-<OS>-` and a hash of every `.hlsl` and `.hlsli` source, every project
+file and `Directory.Build` file, the shader build (`build/Shaders.targets`,
+`build/PuckShaderBuild.cs`), the compiler and its build host
+(`Puck.Shaders.Model`, `Puck.Shaders.Generator`), the comparison verb, and the
+`setup-dxc` action that pins both hosts' DXC. Entries are addressed by their own
+content, so a restore falls back to the newest cache with the OS prefix and
+every entry it holds that this commit still compiles is a hit. The producer
+restores the Windows cache into the per-user directory every build there
+compiles through, compiles the solution, and on a miss of its exact key prunes
+what no build used within the job's 90-minute timeout (`puck shaders cache
+prune --unused-minutes 90`) before saving, so the saved cache holds what that
+commit compiled and does not grow with every commit before it. A restored cache
+that holds every output prints `0 compiled` on each project's shader build line.
+The formatting job restores the same cache and saves nothing. Both jobs' timeouts
+cover a cold run, which every output's key change forces (a DXC or compiler
+change): a run that timed out before saving would leave every later run cold.
+
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
@@ -118,6 +138,12 @@ solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
 projects included, is in the compare.
+The comparison compiles into `.tmp/shader-cache` (`--cache`), and once it passes
+the job saves that directory as the Linux shader cache under the shader inputs'
+key. A run whose key already has a Linux cache has nothing new to compare: the
+job looks the key up first, says in its log and summary that these inputs were
+already compared, and skips the rest. Only this job saves the Linux cache, so
+the cache's existence under a key is the record of a passing comparison.
 Its `determinism` job is the simulation's cross-host leg. The artifacts job
 records every scenario of
 [the determinism manifest](../../tests/Puck.Determinism/determinism.json) on
@@ -140,7 +166,13 @@ runs the automatic set alone and skips every GPU proof. See
 [the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
 
 The Azure graph builds its two Linux container images independently of the Windows
-producer. Container verification loads the saved image archives; deployment loads
+producer. The silo image's build restores the Linux shader cache and hands it to
+`docker build` as the `shader-cache` build context, which the Dockerfile mounts
+at its build's default cache directory; its DXC is the archive and checksum
+`setup-dxc` pins on Linux, so a restored entry is a hit inside the container and
+a cache under the commit's key compiles no shader. The two pins change together.
+A cache from the previous shader inputs still answers every unchanged output.
+Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
 the producer's Functions and browser payloads, builds the dashboard and API docs,
 then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
@@ -307,8 +339,15 @@ no consumer recompiles the CLI. `.config/dotnet-tools.json` carries docfx and
 whatever `puck nuget pin` has adopted; no job installs the CLI from it.
 
 The one job without an installed CLI is the artifact producer, which invokes the
-assembly it just built (`dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll`)
-for `nuget pack` and `artifacts capture`.
+assembly its solution build just compiled
+(`dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll`) for every verb it runs,
+`shaders generate --check` and `nuget pack` among them. A release run therefore
+compiles the CLI once, in that build, and packs it once, into `nuget-packages`;
+every other job that runs `puck` installs that package through `setup-puck`.
+Three builds stay outside that rule. The formatting workflow packs the pull
+request's own CLI, and formatting submission packs the default branch's, each
+in a workflow that has no producer. The silo image publishes its CLI inside its
+container build, which would otherwise wait on the Windows producer.
 
 **Verify package installation** (`pack.yml`) installs the exact candidate package on clean Windows and Linux
 runners and exercises command dispatch, native-backed search, declarations,

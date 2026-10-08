@@ -13,7 +13,7 @@ namespace Puck.DirectX.Apis;
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
 public sealed unsafe class DirectXNativeAdapterApi : IDirectXAdapterApi {
-    private static DirectXAdapterDescription Describe(in DXGI_ADAPTER_DESC1 description) {
+    internal static DirectXAdapterDescription Describe(in DXGI_ADAPTER_DESC1 description) {
         return new DirectXAdapterDescription(
             AdapterLuid: DxgiInterop.ToLuid(luid: in description.AdapterLuid),
             DedicatedSystemMemory: ((ulong)description.DedicatedSystemMemory),

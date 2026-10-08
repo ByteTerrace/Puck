@@ -96,17 +96,26 @@ internal static class CompareCommand {
     // The build-only host every shader project's CompileShaders target runs.
     private const string ShaderBuildTool = "src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj";
 
+    /// <summary>Refuses a directory <c>--build</c> would compile into unless it is absent or empty: a cache another run
+    /// filled (on this host or, restored, on another) would answer with bytes this host's DXC never produced, and the
+    /// comparison would prove nothing.</summary>
+    /// <param name="cache">The directory.</param>
+    /// <returns><see langword="null"/> when the directory may be compiled into, otherwise why not.</returns>
+    internal static string? RefuseCache(string cache) => ((Directory.Exists(path: cache) && Directory.EnumerateFileSystemEntries(path: cache).Any())
+        ? "it is not empty, so it would answer compiles with bytes this host's DXC may never have produced; name an absent or empty directory."
+        : (File.Exists(path: cache) ? "it is a file." : null));
+
     // Compiles the checkout's shaders through each shader project's own CompileShaders target, restoring first as
     // dotnet build does, since a fresh checkout on another host has restored nothing. Every output compiles into a cache
-    // directory that starts empty and is removed afterwards: a cache another run filled (on this host or, restored, on
-    // another) would answer with bytes this host's DXC never produced, and the comparison would prove nothing.
-    private static bool TryBuild(string repositoryRoot) {
+    // directory that starts empty (RefuseCache): a temporary one removed afterwards, or the caller's, kept so CI can save
+    // this host's compiles once the comparison passes.
+    private static bool TryBuild(string repositoryRoot, string? keptCache) {
         var listed = CliGit.Run(repositoryRoot, "ls-files", "--", "*.csproj");
         var projects = ShaderProjects(
             projects: listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)),
             repositoryRoot: repositoryRoot
         );
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-shaders-compare-").FullName;
+        var cache = (keptCache ?? Directory.CreateTempSubdirectory(prefix: "puck-shaders-compare-").FullName);
 
         try {
             foreach (var (project, target) in projects.Select(selector: static project => (project, "CompileShaders")).Prepend(element: (ShaderBuildTool, "Build"))) {
@@ -130,7 +139,9 @@ internal static class CompareCommand {
             return true;
         } finally {
             try {
-                Directory.Delete(path: cache, recursive: true);
+                if (keptCache is null) {
+                    Directory.Delete(path: cache, recursive: true);
+                }
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"{Verb}: could not remove the comparison's shader cache {cache}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
@@ -250,6 +261,7 @@ internal static class CompareCommand {
         var expected = new Argument<string>(name: "expected") { Description = "The reference tree, such as another host's build of the same commit." };
         var actual = new Argument<string?>(name: "actual") { Arity = ArgumentArity.ZeroOrOne, Description = "The tree held to it; the repository root when omitted." };
         var build = new Option<bool>("--build") { Description = "First compile the checkout's shaders through each shader project's CompileShaders target, into an empty shader cache." };
+        var cache = new Option<string?>("--cache") { Description = "With --build, compile into this absent or empty directory and keep it, rather than a temporary cache removed afterwards." };
         var command = new Command(
             description: """
             Compare every compiled shader, SPIR-V and DXIL, with another tree's byte for byte.
@@ -261,21 +273,37 @@ internal static class CompareCommand {
             tracked project outside experimental/ that declares a vertex, fragment or compute shader
             item, with the dxc on the path and an empty shader cache, so a second host really compiles
             every output with exactly the arguments the first did. CI runs it on Linux against
-            the Windows build's bytecode artifact, the P7 gate's cross-host leg.
+            the Windows build's bytecode artifact, the P7 gate's cross-host leg. --cache names that
+            cache, which must be absent or empty, and keeps it: CI saves it once the comparison
+            passes, as the Linux shader cache the container builds restore.
 
             Exit 0 every file matches, 1 any differs or is missing or the build fails, 2 a tree holds
-            no bytecode or cannot be read.
+            no bytecode or cannot be read, or --cache is not empty or is given without --build.
             """,
             name: "compare"
-        ) { expected, actual, build };
+        ) { expected, actual, build, cache };
 
         command.SetAction(action: result => {
             if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
                 return CliExit.Refused;
             }
+
+            var keptCache = ((result.GetValue(option: cache) is { } named) ? Path.GetFullPath(path: named) : null);
+
+            if (keptCache is not null) {
+                if (!result.GetValue(option: build)) {
+                    return CliExit.Refuse(verb: Verb, what: "--cache", why: "it names the cache --build compiles into; add --build.");
+                }
+                if (RefuseCache(cache: keptCache) is { } why) {
+                    return CliExit.Refuse(verb: Verb, what: keptCache, why: why);
+                }
+            }
             if (
                 result.GetValue(option: build) &&
-                !TryBuild(repositoryRoot: repositoryRoot)
+                !TryBuild(
+                    keptCache: keptCache,
+                    repositoryRoot: repositoryRoot
+                )
             ) {
                 return CliExit.Failed;
             }
