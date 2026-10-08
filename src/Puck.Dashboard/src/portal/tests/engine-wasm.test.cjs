@@ -23,7 +23,8 @@ const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Releas
 const mainMjs = path.join(appBundleDir, 'main.mjs');
 const {
   officialTreeMissing, officialDocument, officialSchemaBundle, officialSources, officialIslandRootSource, TICTACTOE_ROOT,
-} = require('./support/officialTree.cjs');
+  STANDARD_SOURCE,
+} =require('./support/officialTree.cjs');
 // A test that needs a compiled world skips itself by name when no official tree has been built.
 const needsTree = (t) => { const missing = officialTreeMissing(); if (missing) t.skip(missing); return !missing; };
 const parityFixturePath = path.join(root, 'tests', 'Puck.World.Browser.Tests', 'Fixtures', 'browser-parity', 'expected.json');
@@ -37,6 +38,18 @@ if (!fs.existsSync(mainMjs)) {
     const { createEngine } = await import(pathToFileURL(mainMjs).href);
     return createEngine();
   })();
+
+  const mount = (engine, files) => {
+    const mounted = JSON.parse(engine.MountSources(JSON.stringify(files)));
+    assert.equal(mounted.ok, true, mounted.error);
+  };
+  // The standard basis composed through its imports in the official sources: the host ParseFragment takes.
+  const composedStandard = (engine) => {
+    mount(engine, officialSources());
+    const composed = JSON.parse(engine.ComposeSource(STANDARD_SOURCE));
+    assert.equal(typeof composed.composed, 'string', JSON.stringify(composed.diagnostics));
+    return composed.composed;
+  };
 
   test('Version() reports this build\'s schema version', async (t) => {
     const engine = await engineReady;
@@ -78,9 +91,9 @@ if (!fs.existsSync(mainMjs)) {
   test('ParseFragment() composes the tictactoe fragment under the standard basis', async (t) => {
     if (!needsTree(t)) return;
     const engine = await engineReady;
-    const hostJson = officialDocument('standard');
+    const hostJson = composedStandard(engine);
     const fragmentJson = officialDocument('games/tictactoe');
-    const result = JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
+    const result =JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
 
     assert.equal(result.ok, true, JSON.stringify(result.errors));
     assert.ok(result.document);
@@ -96,9 +109,9 @@ if (!fs.existsSync(mainMjs)) {
 
     const expected = JSON.parse(fs.readFileSync(parityFixturePath, 'utf8'));
     const engine = await engineReady;
-    const hostJson = officialDocument('standard');
+    const hostJson = composedStandard(engine);
     const fragmentJson = officialDocument('games/tictactoe');
-    const composed = JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
+    const composed =JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
 
     assert.equal(composed.ok, true, JSON.stringify(composed.errors));
 
@@ -165,10 +178,6 @@ if (!fs.existsSync(mainMjs)) {
     }
     return engine;
   }
-  const mount = (engine, files) => {
-    const mounted = JSON.parse(engine.MountSources(JSON.stringify(files)));
-    assert.equal(mounted.ok, true, mounted.error);
-  };
   async function needsIsland(t) {
     const engine = await needsSources(t);
     if (engine) mount(engine, officialSources());

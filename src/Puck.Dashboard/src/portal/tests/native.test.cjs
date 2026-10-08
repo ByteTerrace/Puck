@@ -27,7 +27,7 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const { officialTreeMissing, officialDocument, officialSources, TICTACTOE_ROOT } = require('./support/officialTree.cjs');
+const { officialTreeMissing, officialSources, TICTACTOE_ROOT, STANDARD_SOURCE } =require('./support/officialTree.cjs');
 const { readWorkspaceFixture } = require('./support/studioFixture.cjs');
 const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
 const { sourceUri } = require('../src/document/sourcePaths.ts');
@@ -59,6 +59,15 @@ async function composeTicTacToeText(engine) {
   const result = await engine.composeSource(TICTACTOE_ROOT.path);
   assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
   assert.equal(typeof result.composed, 'string');
+  return result.composed;
+}
+
+// The standard basis composed through its imports in the official tree's mounted sources: a whole document `parse()`
+// accepts, which the compiled `standard` document is not while it imports what it builds on.
+async function composeStandardText(engine) {
+  await engine.mountSources(officialSources());
+  const result = await engine.composeSource(STANDARD_SOURCE);
+  assert.equal(typeof result.composed, 'string', JSON.stringify(result.diagnostics));
   return result.composed;
 }
 
@@ -150,8 +159,7 @@ if (!fs.existsSync(mainMjs)) {
       assert.ok(bad.errors.some((e) => e.message.includes('not.a.real.schema')));
       assert.ok(Array.isArray(bad.deferred));
 
-      const hostJson = officialDocument('standard');
-      const good = await engine.parse(hostJson);
+      const good = await engine.parse(await composeStandardText(engine));
       assert.equal(good.ok, true, JSON.stringify(good));
       assert.equal(typeof good.document, 'object');
     } finally {
