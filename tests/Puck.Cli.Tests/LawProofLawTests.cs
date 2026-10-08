@@ -9,8 +9,7 @@ namespace Puck.Cli.Tests;
 /// a clone of its own, leaving the caller's checkout, its worktree list and the scratch root as it found them. Each
 /// law runs over a small git checkout and a runner that stands in for <c>dotnet build</c> and <c>dotnet test</c>: the
 /// law passes only when the fix's file reads <c>fixed</c>, and the build fails on a file that reads
-/// <c>unbuildable</c>. Shader warming also exercises the normal MSBuild shader targets with fake DXC over real
-/// bytecode and hash sidecars, so copied artifacts must survive the destination's content admission.</summary>
+/// <c>unbuildable</c>.</summary>
 public sealed partial class LawProofLawTests {
     private const string FixPath = "src/Lib/Fix.cs";
     private const string Law = "FixLawTests.Holds";

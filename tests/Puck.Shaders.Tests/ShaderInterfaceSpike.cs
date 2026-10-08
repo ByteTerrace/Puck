@@ -173,7 +173,7 @@ internal static class ShaderInterfaceSpike {
     internal static string? Dxc => new ShaderToolchain().Locate(name: "dxc");
 
     /// <summary>Generates the pass's include into a fresh directory beside a copy of its variant source, then compiles it
-    /// to SPIR-V and DXIL with the flags the shared shader recipe (<c>build/Shaders.targets</c>) passes.</summary>
+    /// to SPIR-V and DXIL with the options the shared shader build (<c>build/Shaders.targets</c>) compiles with.</summary>
     internal static Task<Build> CompileAsync(Pass pass, string generatedInclude, CancellationToken cancellationToken) =>
         CompileInAsync(
             cancellationToken: cancellationToken,
@@ -217,7 +217,7 @@ internal static class ShaderInterfaceSpike {
         );
 
     // Stages the sources into a fresh directory, then compiles the named one with the one shader recipe
-    // (ShaderCompiler.StepsOf, which the build runs through build/ShaderRecipe.targets).
+    // (ShaderCompiler.StepsOf, which the build compiles every stage source with).
     private static async Task<Build> CompileInAsync(string sourceFileName, string profile, string entryPoint, Func<string, CancellationToken, Task> stage, CancellationToken cancellationToken) {
         var dxc = (Dxc ?? throw new ShaderToolMissingException(
             directory: null,

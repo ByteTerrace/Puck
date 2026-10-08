@@ -545,8 +545,6 @@ internal static partial class LawProof {
                 }
             }
 
-            if (!scratchWorktree) { persistent!.WarmShaders(cancellationToken: cancellationToken); }
-
             var original = withheld.ToDictionary(
                 comparer: StringComparer.Ordinal,
                 elementSelector: path => Read(path: path, root: tree),
@@ -623,8 +621,6 @@ internal static partial class LawProof {
                 Write(content: content, path: path, root: tree);
             }
             LawProofFiles.Touch(paths: withheld, tree: tree);
-            if (!scratchWorktree) { persistent!.WarmShaders(cancellationToken: cancellationToken); }
-
             if (!TryPhase(cancellationToken: cancellationToken, laws: laws, phase: "with the fix restored", project: lawProject, refusal: out refusal, results: Path.Combine(path1: scratch, path2: "restored"), runs: out var with, runner: runner, tree: tree)) {
                 return refusal;
             }

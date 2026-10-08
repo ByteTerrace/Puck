@@ -333,11 +333,12 @@ public sealed partial class ShaderSourceClosure {
     /// every other character kept, so no line moves.</summary>
     /// <param name="text">The source's text.</param>
     /// <param name="path">The source's path, which a relative include resolves against.</param>
-    /// <param name="map">Maps an include's full path to the path the directive names instead.</param>
+    /// <param name="map">Maps an include's full path and the path its directive names to the path the directive names
+    /// instead, which may be the same.</param>
     /// <returns>The text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="text"/>, <paramref name="path"/> or
     /// <paramref name="map"/> is <see langword="null"/>.</exception>
-    public static string WithIncludes(string text, string path, Func<string, string> map) {
+    public static string WithIncludes(string text, string path, Func<string, string, string> map) {
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: path);
         ArgumentNullException.ThrowIfNull(argument: map);
@@ -351,10 +352,13 @@ public sealed partial class ShaderSourceClosure {
 
                 return string.Concat(
                     str0: match.Value.AsSpan(length: start, start: 0),
-                    str1: map(arg: Path.GetFullPath(path: Path.Combine(
-                        path1: directory,
-                        path2: include.Value
-                    ))),
+                    str1: map(
+                        arg1: Path.GetFullPath(path: Path.Combine(
+                            path1: directory,
+                            path2: include.Value
+                        )),
+                        arg2: include.Value
+                    ),
                     str2: match.Value.AsSpan(start: (start + include.Length))
                 );
             },

@@ -20,7 +20,7 @@ public sealed class WorldArtifactClosureLawTests {
             <ItemGroup>
               <_PuckInput Include="$(MSBuildProjectFullPath)" Kind="Project" />
               <_PuckInput Include="@(Compile->'%(FullPath)');@(AdditionalFiles->'%(FullPath)');@(None->'%(FullPath)');@(Content->'%(FullPath)');@(EmbeddedResource->'%(FullPath)')" Kind="Item" />
-              <_PuckInput Include="@(ShaderBytecode->'%(FullPath)');@(ShaderInclude->'%(FullPath)');@(FragmentShaderSource->'%(FullPath)');@(VertexShaderSource->'%(FullPath)');@(ComputeShaderSource->'%(FullPath)')" Kind="Item" />
+              <_PuckInput Include="@(FragmentShaderSource->'%(FullPath)');@(VertexShaderSource->'%(FullPath)');@(ComputeShaderSource->'%(FullPath)')" Kind="Item" />
               <_PuckInput Include="@(PuckWorldSource->'%(FullPath)')" Kind="Item" />
               <_PuckInput Include="$(MSBuildProjectDirectory)\$(ApplicationIcon)" Condition="'$(ApplicationIcon)' != ''" Kind="Item" />
               <_PuckInput Include="@(_PuckChildInput)" />

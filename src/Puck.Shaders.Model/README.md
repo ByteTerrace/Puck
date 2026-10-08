@@ -3,8 +3,11 @@
 Puck.Shaders.Model provides the model Puck's shader declarations are generated
 from: pass interfaces and their generated HLSL, the frame block every pass
 reads, the config binder, the pipeline document's records, and the engine's
-render-graph package catalog. It compiles no shader, so a kernel's generated
-declarations can always be written before any kernel builds.
+render-graph package catalog. It also holds the one shader compiler
+(`ShaderCompiler`, with its include closure, compile identity and
+content-addressed cache) and the build's shader build (`ShaderBuild`). It
+compiles no shader itself, so a kernel's generated declarations can always be
+written, and the compiler built, before any kernel builds.
 
 ## Documentation
 

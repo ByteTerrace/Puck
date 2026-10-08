@@ -10,8 +10,8 @@ namespace Puck.Cli.Tests;
 /// Laws for <c>puck shaders generate</c>: it owns every generated shader interface, not only <c>sdf-isa.hlsli</c>.
 /// Over a tree whose includes match, the check passes; a drifted package include fails by name; an interface include
 /// no package or engine kernel owns fails by name; a package whose include is missing fails by name; a drifted or missing
-/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine interfaces,
-/// and the build's shader recipe, are among the files it checks.
+/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine interfaces
+/// are among the files it checks.
 /// </summary>
 public sealed class ShadersGenerateLawTests {
     private const string FilmGrainPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.interface.hlsli";
@@ -23,14 +23,13 @@ public sealed class ShadersGenerateLawTests {
     private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
     // The SDF engine kernels' includes, each with the text its interface generates, the instruction set's recorded
-    // fingerprint, the indirect cache's layout, the sky's kind declarations and table, and the build's shader recipe: owned whatever the tree holds.
+    // fingerprint, the indirect cache's layout, and the sky's kind declarations and table: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [
         .. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface))),
         (SdfIndirectHlsl.Path, SdfIndirectHlsl.Generate()),
         (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaFingerprint.Value)),
         (SkyKindsPath, SdfSkyKindsHlsl.Generate()),
         (SkyKindTablePath, SdfSkyKindsHlsl.GenerateTable()),
-        (ShaderCompiler.BuildRecipePath, ShaderCompiler.GenerateBuildRecipe()),
     ];
 
     // Each conversion package's interface include, beside its kernel.
@@ -237,12 +236,12 @@ public sealed class ShadersGenerateLawTests {
         );
 
         Assert.Empty(collection: problems);
-        // The checked set is the tracked interface includes plus the six generated files that are not named
+        // The checked set is the tracked interface includes plus the five generated files that are not named
         // *.interface.hlsli: the tree and the generator's own declaration are the two sources, so a new interface
         // needs no edit here, and one the generator skips or one nobody tracked fails.
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path).Order(comparer: StringComparer.Ordinal),
-            expected: tracked.Concat(second: [IsaPath, SdfIndirectHlsl.Path, SdfIsaHlsl.FingerprintSourcePath, SkyKindsPath, SkyKindTablePath, ShaderCompiler.BuildRecipePath]).Order(comparer: StringComparer.Ordinal)
+            expected: tracked.Concat(second: [IsaPath, SdfIndirectHlsl.Path, SdfIsaHlsl.FingerprintSourcePath, SkyKindsPath, SkyKindTablePath]).Order(comparer: StringComparer.Ordinal)
         );
     }
 }

@@ -662,10 +662,12 @@ skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
 matched by relative path; a file only one tree holds, or one whose bytes differ
 (named with its first differing byte), fails with exit 1, and a tree holding no
 bytecode is refused with exit 2. `<actual>` is the repository root when absent.
-`--build` first restores and runs the build's own `CompileShaders` target
+`--build` first builds `Puck.Shaders.Generator`, the shader build's host, then
+restores and runs the build's own `CompileShaders` target
 (`build/Shaders.targets`) in every tracked project outside `experimental/` that
-declares a vertex, fragment or compute shader item, with the `dxc` on the path,
-so a second host compiles with exactly the first host's arguments. `collect`
+declares a vertex, fragment or compute shader item, with the `dxc` on the path
+and a shader cache that starts empty (`PuckShaderCacheDirectory`), so a second
+host really compiles every output, with exactly the first host's arguments. `collect`
 copies the checkout's compiled shaders into one directory at their repository
 paths, the tree `compare` reads on the other host. CI collects the Windows
 build's shaders and compares a Linux DXC build of the same commit against them
@@ -677,8 +679,7 @@ leg.
 enums and packed-layout constants, generated from `Puck.SignedDistance` by
 `Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
 `src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
-(`<name>.interface.hlsli`); and the build's shader recipe,
-`build/ShaderRecipe.targets`. An engine package that declares pass-group members,
+(`<name>.interface.hlsli`). An engine package that declares pass-group members,
 such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by
 its interface, found by that file name; the SDF kernels' interfaces sit at fixed
 paths. A checked-in interface include that no package owns, and a package whose
@@ -1137,23 +1138,14 @@ Each proof fetches the caller's `HEAD` by object id, checks it out detached,
 removes untracked files Git does not ignore, and mirrors the caller's
 uncommitted and untracked files. Ignored managed build outputs stay in the clone at
 the paths where MSBuild produced them. Nothing copies or links the caller's
-`obj` or `bin`. Before withholding, the leased clone can warm its ignored shader
-outputs from complete `.spv`/`.dxil` and `.hash` pairs in the caller, then other
-registered worktrees sharing its common Git directory. This also serves a caller
-that has source but no built artifacts. Both project publication locks protect
-the copy; it rejects links, incomplete sidecars and
-bytecode whose actual hash differs. Whole files publish with the sidecar last,
-and an equal destination pair stays untouched. A busy publisher skips warming
-that project. The proof captures its initial complete sidecar identities. After
-restoring source, it warms again using only those exact sidecars and matching
-bytecode from the same donors. If an original pair is no longer available, the
-normal build recompiles it. The proof retains identities, not another bytecode
-cache. Warming does not certify freshness: the normal build still checks
-the destination source, ordered includes, effective recipe and bytecode, so a
-withheld shader change recompiles. Git rewrites changed tracked files; unchanged files retain
-their timestamps, so MSBuild's ordinary incremental checks apply.
+`obj` or `bin`. The clone's shader build compiles into the per-user shader
+cache every checkout shares, keyed by each source's include closure, so its
+shaders are published from that cache and only a shader the proof withholds or
+changes compiles ([freshness](shaders.md#freshness)). Git rewrites changed
+tracked files; unchanged files retain their timestamps, so MSBuild's ordinary
+incremental checks apply.
 Each native proof build uses one MSBuild node (`-m:1`), disables build servers
-and forbids node reuse. Shader worker counts still follow the project's recipe.
+and forbids node reuse. Shader compiles still run on the cores MSBuild grants.
 
 There the proof withholds the fix, builds the law's project in Release and
 runs the law, which must fail. It then restores the fix, builds and runs

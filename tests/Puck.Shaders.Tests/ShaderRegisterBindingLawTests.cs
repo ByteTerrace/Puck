@@ -6,21 +6,23 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>A resource's Direct3D 12 register number equals its Vulkan binding number, and its register space equals
 /// its descriptor set, so no backend remaps a register. These laws read every HLSL source and include the build
-/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c>, the graph's package-library kernels, and the
+/// compiles or packages: the shader items each <c>src</c> project declares for <c>build/Shaders.targets</c> with every include
+/// their closures reach, the graph's package-library kernels, and the
 /// pipeline sources <c>build/WorldAssets.targets</c> hands the tree run that fills the shipped package store, with
 /// every source a shipped <c>*.graph.json</c> names. They hold every declaration that carries both a
 /// <c>[[vk::binding(N, S)]]</c> and a <c>register(xN, spaceS)</c> to that rule.</summary>
 public sealed partial class ShaderRegisterBindingLawTests {
-    // The item types build/Shaders.targets compiles, or hashes as includes of what it compiles, the pipeline sources
+    // The item types build/Shaders.targets compiles, the pipeline sources
     // build/WorldAssets.targets packages into the store beside the shipped worlds, and the graph's package-library kernels.
     private static readonly string[] ShaderItemTypes = [
         "ComputeShaderSource",
         "Direct3D11KernelSource",
         "FragmentShaderSource",
         "PuckWorldPipelineSource",
-        "ShaderInclude",
         "VertexShaderSource",
     ];
+    // The item types build/Shaders.targets compiles as stage sources, whose include closures it compiles with them.
+    private static readonly string[] StageItemTypes = ["ComputeShaderSource", "FragmentShaderSource", "VertexShaderSource"];
 
     [GeneratedRegex(pattern: @"vk::binding\(\s*(?<binding>\d+)\s*(?:,\s*(?<set>\d+)\s*)?\)")]
     private static partial Regex BindingAttribute();
@@ -185,18 +187,25 @@ public sealed partial class ShaderRegisterBindingLawTests {
             }
         }
     }
-    // The build's shader sources and includes, grouped by the project that declares them, in ordinal path order. A
-    // graph document among them stands for the sources its passes name.
+    // The build's shader sources, with every include the closure of a stage source build/Shaders.targets compiles reaches
+    // (ShaderSourceClosure, as the compiler collects it), grouped by the project that declares the sources, in ordinal
+    // path order. A graph document among them stands for the sources its passes name; a pipeline source's interface
+    // include is generated when the pipeline compiles, so its closure is not on disk to read.
     private static IEnumerable<string[]> ShippedShaderProjects(string root) {
         foreach (var project in ShaderItems(root: root).GroupBy(keySelector: static item => item.Project)) {
             var files = project
-                .Select(selector: static item => item.File)
-                .SelectMany(selector: static file => (file.EndsWith(
+                .SelectMany(selector: static item => (item.File.EndsWith(
                     comparisonType: StringComparison.Ordinal,
                     value: ".graph.json"
                 )
-                    ? PipelineSources(pipeline: file)
-                    : [file]))
+                    ? PipelineSources(pipeline: item.File)
+                    : (StageItemTypes.Contains(value: item.ItemType)
+                        ? ShaderSourceClosure.Collect(
+                            generated: null,
+                            limits: ShaderSourceLimits.Default,
+                            sources: [(item.File, File.ReadAllText(path: item.File))]
+                        ).Includes.Select(selector: static include => include.Path).Prepend(element: item.File)
+                        : [item.File])))
                 .Distinct(comparer: StringComparer.Ordinal)
                 .Order(comparer: StringComparer.Ordinal)
                 .ToArray();

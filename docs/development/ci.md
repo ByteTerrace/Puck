@@ -108,7 +108,8 @@ The nightly frontier builds its own battery for that scheduled run. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
 Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader
-through the build's own `CompileShaders` target, and holds each SPIR-V and DXIL
+through the build's own `CompileShaders` target into an empty shader cache, so
+every output really compiles on Linux, and holds each SPIR-V and DXIL
 output byte for byte to the Windows build of the same commit
 (`puck shaders compare --build`); the artifacts job collects the Windows
 build's shaders with `puck shaders collect` into the `shader-bytecode-windows`

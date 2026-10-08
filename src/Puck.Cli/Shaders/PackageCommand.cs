@@ -7,12 +7,9 @@ namespace Puck.Cli.Shaders;
 /// <summary><c>puck shaders package</c>: compiles a graph document or one-off shader and writes its
 /// <c>puck.shader.package.v1</c> source-closure package, through the same loader and compiler as live pipelines.</summary>
 internal static class PackageCommand {
-    /// <summary>The shader cache a package build compiles through when none is named: a directory beneath the temporary
-    /// directory, shared by every run of this CLI.</summary>
-    public static string DefaultCacheDirectory => Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: "puck-shader-cache"
-    );
+    /// <summary>The shader cache a package build compiles through when none is named: the compiler's per-user cache,
+    /// which the build shares (<see cref="ShaderCompiler.DefaultCacheDirectory"/>).</summary>
+    public static string DefaultCacheDirectory => ShaderCompiler.DefaultCacheDirectory;
 
     /// <summary>Maps a package outcome onto the shared exit codes: compiled is success, a pass that did not compile is a
     /// failure, and a refusal, a missing tool, or a source edited mid-read is a refusal.</summary>
@@ -62,7 +59,7 @@ internal static class PackageCommand {
         );
         var root = new Option<string?>(name: "--root") { Description = "The directory every file of the closure must lie within and logical paths are relative to; defaults to the source's directory." };
         var toolchain = new Option<string?>(name: "--toolchain") { Description = "A directory holding DXC; defaults to the search path." };
-        var cache = new Option<string?>(name: "--cache") { Description = "The shader cache directory; defaults beneath the temporary directory." };
+        var cache = new Option<string?>(name: "--cache") { Description = "The shader cache directory; defaults to the per-user shader cache the build shares." };
         var json = CliOptions.Json();
         var command = new Command(
             description: "Compile a pipeline and write its source-closure package.",

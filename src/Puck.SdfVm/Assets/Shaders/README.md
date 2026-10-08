@@ -22,11 +22,9 @@ optimization flags:
 -fspv-target-env=vulkan1.3 -T <stage>_6_6 -O3 -enable-16bit-types
 ```
 
-These options have one statement, `ShaderCompiler.StepsOf` in `Puck.Shaders`,
-which the runtime shader compiler runs (a `world.shaders.reload` source among
-its compiles). `puck shaders generate` writes them into
-`build/ShaderRecipe.targets`, the properties the build's DXC invocations read,
-and `ShaderBuildRecipeLawTests` holds each build invocation to them.
+These options have one statement, `ShaderCompiler.StepsOf` in
+`Puck.Shaders.Model`, which the shader compiler runs for the build and at run
+time alike (a `world.shaders.reload` source among its compiles).
 
 These versions match the engine's supported GPU capability floor. Do not lower
 them to work around a build issue; doing so would split the shader and device
@@ -142,11 +140,11 @@ A generated `.spv` or `.dxil` file without a matching `.hlsl` source is stale by
 default. If a future shader is intentionally bytecode-only, add an explicit
 allowlist and explain why; otherwise remove the bytecode or restore the source.
 
-The build publishes each `.hash` sidecar by replacing it with a completed sibling
-file. Readers see a complete checksum, and a Windows reader holding an old memory
-mapping does not prevent publication when its file sharing allows replacement.
-Finish shader compilation before requesting a live reload; sidecar replacement
-does not make an entire multi-kernel build atomic.
+The build publishes each bytecode file and its `.hash` sidecar by moving
+completed files into place, the sidecar last. Readers see a complete file, and a
+Windows reader holding an old memory mapping delays publication only while its
+file sharing refuses replacement. Finish shader compilation before requesting a
+live reload; each pair is published whole, but a multi-kernel build is not.
 
 ## Documentation
 

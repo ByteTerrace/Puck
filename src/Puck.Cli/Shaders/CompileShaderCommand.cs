@@ -34,10 +34,7 @@ internal static class CompileShaderCommand {
                 Directory.CreateDirectory(path: directory);
                 var shaderName = (result.GetValue(option: name) ?? Path.GetFileNameWithoutExtension(path: path));
                 var compiler = new ShaderCompiler(
-                    cacheDirectory: Path.Combine(
-                        path1: directory,
-                        path2: ".puck-shader-cache"
-                    ),
+                    cacheDirectory: ShaderCompiler.DefaultCacheDirectory,
                     toolchainDirectory: result.GetValue(option: toolchain)
                 );
                 var text = await File.ReadAllTextAsync(

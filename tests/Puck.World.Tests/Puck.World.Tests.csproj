@@ -56,6 +56,8 @@
              collection through the public WorldBootComposition with no device created; MachineHostSeamLawTests
              also reads the assembly out of its own build output. -->
         <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" />
+        <!-- Build-only: it runs this project's shader build (build/Shaders.targets). -->
+        <ProjectReference Include="../../src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
         <ProjectReference Include="../../src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj" />
         <ProjectReference Include="../../src/Puck.World.AgentHarness.Azure/Puck.World.AgentHarness.Azure.csproj" />
     </ItemGroup>
@@ -63,15 +65,9 @@
         <Using Include="Puck.State" />
     </ItemGroup>
     <ItemGroup>
-        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader recipe like any shipped
+        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader build like any shipped
              kernel, and it samples the bake fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
-        <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
-        <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
-        <!-- The device-law kernels include the engine's SdfVm modules, so those modules key their bytecode's freshness:
-             without them an edited module leaves the laws running the bytecode of its old text. -->
-        <ShaderInclude Include="../../src/Puck.SdfVm/Assets/Shaders/**/*.hlsli" />
-        <ShaderInclude Include="../../src/Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli" />
         <Content Include="../Puck.SignedDistance.Tests/Fixtures/bake-sampling.json" Link="Fixtures/bake-sampling.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
