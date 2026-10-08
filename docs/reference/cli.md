@@ -664,7 +664,8 @@ reported as `puck shaders <verb>: <path>: <why>`.
 the same file in another, byte for byte. Both trees are walked for bytecode,
 skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
 matched by relative path; a file only one tree holds, or one whose bytes differ
-(named with its first differing byte), fails with exit 1, and a tree holding no
+(named with its first differing byte and, for a DXIL container, the chunks
+that differ, such as `DXIL`, `STAT` or `PSV0`), fails with exit 1, and a tree holding no
 bytecode is refused with exit 2. `<actual>` is the repository root when absent.
 `--build` first builds `Puck.Shaders.Generator`, the shader build's host, then
 restores and runs the build's own `CompileShaders` target
