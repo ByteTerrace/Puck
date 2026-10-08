@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -47,9 +48,26 @@ public sealed partial class SdfWorldTables {
         return ViewsKernelOf(variant: variant);
     }
     // A frame waits for the shadow pipeline as well as one usable shading variant; one shadow kernel serves every fade
-    // capacity, so a policy change waits for no pipeline.
-    internal SdfKernel? FrameWaiting(SdfProgram? program) =>
-        (m_pipelines.IsBuilt(kernel: SdfKernel.Shadow) ? ViewsWaiting(program: program) : SdfKernel.Shadow);
+    // capacity, so a policy change waits for no pipeline. While a view selects a comparison method it also waits for the
+    // comparison receiver, unless that pipeline was refused, when the default receiver renders the cache answer.
+    internal SdfKernel? FrameWaiting(SdfProgram? program) {
+        if (!m_pipelines.IsBuilt(kernel: SdfKernel.Shadow)) { return SdfKernel.Shadow; }
+        if (m_comparisonRequired && !m_pipelines.IsBuilt(kernel: SdfKernel.ReceiverComparison) &&
+            (m_pipelines.RefusalOf(kernel: SdfKernel.ReceiverComparison) is null)) { return SdfKernel.ReceiverComparison; }
+        return ViewsWaiting(program: program);
+    }
+    // Whether a view of the frame selects a comparison method, which the comparison receiver answers: it leases that
+    // pipeline on first demand and keeps it until the set is disposed.
+    internal void RequireComparison(bool required, GpuPassPipelineCache cache, IGpuDeviceContext device) {
+        m_comparisonRequired = required;
+        if (required) { m_pipelines.RequestComparison(cache: cache, device: device); }
+    }
+    // The receiver kernel a view records: the comparison receiver while its view selects a comparison method and the
+    // pipeline is built, otherwise the default receiver, which answers the cache method.
+    internal IGpuComputePipeline ReceiverPipeline(bool comparison) => m_pipelines.Pipeline(kernel: ((comparison && m_pipelines.IsBuilt(kernel: SdfKernel.ReceiverComparison))
+        ? SdfKernel.ReceiverComparison : SdfKernel.Receiver));
+
+    private bool m_comparisonRequired;
     // Why a frame's kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
     internal Exception? PipelineRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
 
@@ -167,7 +185,7 @@ public sealed partial class SdfWorldTables {
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // Resolve joins on demand through BuildResolve; BuildOrder filters the rest by reachable fade capacity.
-        internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth)))];
+        internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.ReceiverComparison or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth)))];
 
         private static PipelineSpec Spec(SdfKernel kernel) =>
             new(

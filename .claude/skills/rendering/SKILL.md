@@ -152,8 +152,14 @@ owns this flow and its remaining receiver work. The receiver pass
 (`sdf-world-receiver.comp`, `indirect/sdf-indirect-receiver.hlsli`), between
 shadow and views and present only with the residency's cache, owns every field
 query of a shaded pixel's indirect light: participation, the retained
-certificate or the level loop's launch and proof, the near-field sample and the
-comparison methods. It selects the level by the normal-independent support of
+certificate or the level loop's launch and proof, and the near-field sample. The
+comparison methods (`world.indirect-method screen|cone`) compile only into the
+comparison receiver (`sdf-world-receiver-comparison.comp`, `SDF_INDIRECT_COMPARISON`),
+which `SdfWorldResidency` leases on the first frame a view selects one with
+indirect light on (`SdfWorldTables.RequireComparison`); the frame waits for it
+then, and a refused comparison receiver leaves the default receiver's cache answer.
+The default receiver carries no comparison method and the comparison receiver no
+near-field sample. Each selects the level by the normal-independent support of
 the published bank (`sdfIndirectIrradianceSupported`) and writes a four-word
 answer per pixel (`indirect/sdf-indirect-answer.hlsli`: status, replacement,
 field evaluations, replacing source-masked total). Views reads the certificate

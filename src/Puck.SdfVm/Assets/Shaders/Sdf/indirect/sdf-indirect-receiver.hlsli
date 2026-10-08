@@ -145,22 +145,26 @@ void sdfReceiverStage(SdfPixel p) {
         precise float3 surfacePoint = p.rayOrigin + rayTravel;
         sdfIndirectReceive(p, s, surfacePoint);
         if (sdfIndirectReceiverStatus == 3u) {
+#ifdef SDF_INDIRECT_COMPARISON
+            // The comparison receiver: near-field samples are admitted only with the cache method, so it carries none.
             if (sdfIndirectAlternativeAdmitted(p)) {
                 SdfIndirectSources fallback;
                 sdfIndirectIrradianceAt(surfacePoint, sdfIndirectReceiverLaunch, s.normal, sdfIndirectReceiverLevel, sdfIndirectReceiverMask,
                     passGroup.indirectReadGeneration, passGroup.indirectReadPublication, fallback);
                 selected = sdfIndirectAlternative(p, s, sdfIndirectReceiverLaunch, fallback);
                 replaced = true;
-            } else {
-                bool answered;
-                uint nearLoads;
-                SdfIndirectSources incoming = sdfIndirectNear(p, s, sdfIndirectReceiverLaunch, answered, nearLoads);
-                beforeLoads += nearLoads;
-                if (answered) {
-                    selected = incoming;
-                    replaced = true;
-                }
             }
+#else
+            // The default receiver serves the cache method; a comparison method is the comparison receiver's.
+            bool answered;
+            uint nearLoads;
+            SdfIndirectSources incoming = sdfIndirectNear(p, s, sdfIndirectReceiverLaunch, answered, nearLoads);
+            beforeLoads += nearLoads;
+            if (answered) {
+                selected = incoming;
+                replaced = true;
+            }
+#endif
         }
         float3 total = 0.0;
         if (replaced) {

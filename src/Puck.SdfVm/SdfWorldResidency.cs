@@ -406,6 +406,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareIndirect(frame: frame, tables: tables);
 
         ApplyPendingShaderReload();
+        tables.RequireComparison(cache: m_pipelines.Catalog.Pipelines, device: device, required: SelectsComparison(frame: frame));
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -737,6 +738,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
             location: ref m_meshDrawCount,
             value: frame.MeshDraws.Count
         );
+    }
+    // Whether a view of the frame selects a comparison method, which only the comparison receiver answers.
+    private bool SelectsComparison(SdfFrame frame) {
+        if ((IndirectTierOverride ?? frame.IndirectTier) == SdfIndirectTier.Off) { return false; }
+        foreach (var view in frame.Views) {
+            if (view.Quality.IndirectMethod != SdfIndirectMethod.Cache) { return true; }
+        }
+        return false;
     }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until
     // it completes this returns false and no view renders, so a cold driver cache delays the first frame rather than

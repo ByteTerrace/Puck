@@ -67,6 +67,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the planned graph allocates the incoming handoff image (a policy allowing fades). Without it the passes
     // bind the tables' fillers and read a zero fade count, whatever the live frame's handoffs.
     private readonly bool m_incoming;
+    // Whether the receiver records the comparison receiver this frame: its view selects a comparison method.
+    private bool m_comparison;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
@@ -399,6 +401,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Receiver)) {
             var boundIndirect = BoundIndirect(recording: recording, tables: tables);
 
+            m_comparison = (frame.Views[view].Quality.IndirectMethod != SdfIndirectMethod.Cache);
             SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
             SdfFrameBlock.WriteIndirectNear(block: recording.PassBlock, cache: boundIndirect, frame: frame, ready: residency.IsIndirectReady);
             // The selected pixel's near ray and replacing sources are the receiver's part of its record; views takes
@@ -555,7 +558,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
             SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
-            SdfWorldPackage.Parts.Receiver => tables.Pipeline(kernel: SdfKernel.Receiver),
+            SdfWorldPackage.Parts.Receiver => tables.ReceiverPipeline(comparison: m_comparison),
             _ => tables.ViewsPipeline,
         };
 

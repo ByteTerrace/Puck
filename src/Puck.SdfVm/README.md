@@ -151,6 +151,8 @@ record writes before its consumer. With indirect enabled, the receiver pass betw
 views makes every field query of indirect light and publishes a preserving version
 containing its eight-word receiver certificate, beside a four-word answer per pixel;
 views reads both and the lighting bank, and makes no field query.
+The comparison methods compile into a separate comparison receiver kernel, leased only
+once a view selects one, so the default receiver stays small.
 The certificate retains the launch, clearance, complete allocation identity,
 transport revision and resolved or unresolved outcome. Every hit pass binds the
 beam's tile planes read-only. These dispatches share indirect bounds and live view

@@ -32,8 +32,11 @@ public enum SdfKernel {
     /// incoming visibility image; one kernel serves every capacity.</summary>
     Shadow,
     /// <summary>The indirect receiver: each shaded pixel's proof against the residency's cache, its certificate and the
-    /// near-field or comparison answer that replaces its cache sample, which views reads. Full instruction set.</summary>
+    /// near-field answer that replaces its cache sample, which views reads. Full instruction set.</summary>
     Receiver,
+    /// <summary>The indirect receiver with the screen-space and cone comparison methods instead of the near-field sample, whose
+    /// pipeline is acquired once a view first selects a comparison method.</summary>
+    ReceiverComparison,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
     /// <summary>Shading with the exotic ops and shapes compiled out.</summary>
