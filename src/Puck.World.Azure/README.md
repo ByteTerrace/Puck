@@ -319,7 +319,8 @@ after the request; the existing Function owns its accepted escrow and expiration
 
 ```text
 dotnet test tests/Puck.World.Azure.Tests/Puck.World.Azure.Tests.csproj -c Release
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter-class "*WorldExtensionLawTests" --filter-class "*ExtensionModelLawTests"
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --filter-class "*WorldExtensionLawTests"
+dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --filter-class "*ExtensionModelLawTests"
 ```
 
 The Azure suite exercises declarative provider setup and the real SDK authentication and HTTP pipeline against

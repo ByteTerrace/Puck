@@ -1,0 +1,351 @@
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.Testing;
+
+using Xunit;
+
+namespace Puck.World.Client.Tests;
+
+/// <summary>
+/// Laws for where <see cref="WorldViewGraphHost"/> places the world's views in the synthesized root, the placement
+/// <see cref="WorldFramePresenter.PrepareGraph"/> hands it each frame (<see cref="WorldViewGraphHost.PlaceViews"/>):
+/// the first view's footprint is always added, since it is the base the root draws over, and a later view's only while
+/// it is shown, at its rect at its render scale; a lone view covering the whole display at native scale with no tonemap
+/// is never shown, so the root stands for the world, and a tonemapped one is shown, since its place pass tonemaps it; a view the world has not rendered is not shown; and before the world's first frame
+/// the first view is placed, not shown, over the whole display so the world is still scheduled.
+/// </summary>
+public sealed class WorldViewPlacementLawTests : IDisposable {
+    private static readonly NormalizedRect Whole = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
+    private static readonly WorldViewDefaults Views = new();
+
+    // The runtime may still hold a file here as it is disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-world-view-placement-"
+    );
+    private readonly WorldViewGraphHost m_host;
+    private readonly FakeGraphInstances m_instances;
+    private readonly IReadOnlyList<string> m_viewPasses;
+
+    public WorldViewPlacementLawTests() {
+        m_host = new WorldViewGraphHost(
+            documentDirectory: m_directory.RootPath,
+            packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "cache"
+            )))
+        );
+        m_instances = FakeGraphInstances.Attach(
+            create: static name => new ShaderPipelineRenderNode(
+                pipelines: new GpuPassPipelineCache(),
+                deviceContext: new RefusingGpuDevice(),
+                height: 4,
+                hostsOnDirectX: false,
+                name: name,
+                width: 4
+            ),
+            host: m_host
+        );
+        m_viewPasses = WorldRootGraph.Compose(
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null,
+            views: WorldRootGraph.ViewsOf(views: Views)
+        ).ViewPasses;
+        m_host.BeginFrame(views: Views);
+        Assert.True(condition: (m_viewPasses.Count > 1));
+    }
+
+    private static SdfViewSnapshot View(NormalizedRect region, float renderScale = 1f) => new(
+        Camera: default,
+        Region: region
+    ) {
+        RenderScale = renderScale,
+    };
+    // The footprints the world's producers add this frame, by producer, as (width, height).
+    private Dictionary<string, (double Width, double Height)> WorldFootprints() => m_host.Footprints
+        .Where(predicate: static footprint => footprint.Producer.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldViewGraphs.WorldInstance
+        ))
+        .ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: static footprint => (footprint.Width, footprint.Height),
+            keySelector: static footprint => footprint.Producer
+        );
+    private RenderGraphPlacement PlacementOf(int view) {
+        Assert.True(condition: m_host.TryGet(
+            instance: WorldViewGraphs.MainInstance,
+            pass: m_viewPasses[view],
+            placement: out var placement
+        ));
+
+        return placement;
+    }
+
+    public void Dispose() {
+        m_host.Dispose();
+        m_instances.Dispose();
+        m_directory.Dispose();
+    }
+    [Fact]
+    public void EveryPlacedViewsFootprintIsAddedWhetherOrNotItIsShown() {
+        var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
+        var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
+
+        // A view not yet shown is still read at its rect's extent, so it renders before the root first shows it.
+        Assert.True(condition: m_host.PlaceView(outputRegion: left, region: left, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(outputRegion: right, region: right, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
+        Assert.Equal(
+            actual: WorldFootprints(),
+            expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
+                [WorldRootGraph.ProducerOf(view: 0)] = (0.5, 1.0),
+                [WorldRootGraph.ProducerOf(view: 1)] = (0.5, 1.0),
+            }
+        );
+        Assert.False(condition: PlacementOf(view: 1).Shown);
+
+        m_host.BeginFrame(views: Views);
+        Assert.True(condition: m_host.PlaceView(outputRegion: left, region: left, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(outputRegion: right, region: right, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
+        Assert.Equal(
+            actual: WorldFootprints(),
+            expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
+                [WorldRootGraph.ProducerOf(view: 0)] = (0.5, 1.0),
+                [WorldRootGraph.ProducerOf(view: 1)] = (0.5, 1.0),
+            }
+        );
+        Assert.Equal(
+            actual: PlacementOf(view: 1),
+            expected: new RenderGraphPlacement(Height: 1f, Left: 0.5f, Sharpness: 0.25f, Shown: true, Top: 0f, Width: 0.5f)
+        );
+
+        // A view the frame does not place is not shown, and one past the root's views is not placed at all.
+        Assert.False(condition: PlacementOf(view: 2).Shown);
+        Assert.False(condition: m_host.PlaceView(outputRegion: Whole, region: Whole, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
+    }
+    [Fact]
+    public void BeforeTheWorldsFirstFrameTheFirstViewIsPlacedHiddenOverTheWholeDisplay() {
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0.5f,
+            views: []
+        );
+
+        Assert.False(condition: PlacementOf(view: 0).Shown);
+        Assert.Equal(
+            actual: WorldFootprints(),
+            expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
+                [WorldRootGraph.ProducerOf(view: 0)] = (1.0, 1.0),
+            }
+        );
+    }
+    [Fact]
+    public void ALoneWholeDisplayViewAtAnyRenderScaleStandsForItsResolvedOutput() {
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+
+        Assert.False(condition: PlacementOf(view: 0).Shown);
+
+        // A reduced sample grid still publishes a full-size output, so only a smaller region needs placement.
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole, renderScale: 0.5f)]
+        );
+        Assert.False(condition: PlacementOf(view: 0).Shown);
+        Assert.Equal(
+            actual: WorldFootprints()[WorldRootGraph.ProducerOf(view: 0)],
+            expected: (1.0, 1.0)
+        );
+
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: new NormalizedRect(Height: 0.8f, Width: 0.8f, X: 0.1f, Y: 0.1f))]
+        );
+        Assert.True(condition: PlacementOf(view: 0).Shown);
+    }
+    // A filmic tonemap is the view's place pass, so a lone whole-display view is shown once rendered rather than stood in
+    // for, or the world would reach the display untonemapped. Until shown it owes the letterbox, so a source that
+    // completes later in the frame cannot reach the display through the untonemapped base.
+    [Fact]
+    public void ATonemappedLoneWholeDisplayViewIsShownSoItsPlacePassTonemapsIt() {
+        m_host.BeginFrame(
+            tonemap: WorldTonemap.Filmic,
+            views: Views
+        );
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => false,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, true)
+        );
+
+        m_host.BeginFrame(
+            tonemap: WorldTonemap.Filmic,
+            views: Views
+        );
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+
+        Assert.Equal(
+            actual: PlacementOf(view: 0),
+            expected: new RenderGraphPlacement(Height: 1f, Left: 0f, Sharpness: 0f, Shown: true, Top: 0f, Uncovered: false, Width: 1f)
+        );
+    }
+    // The first view's pass owes the letterbox wherever no rect the root shows covers the display, shown or not: a
+    // lone whole-display view, a shown whole-display view or a whole-display pane covers it, and anything else leaves
+    // part of it uncovered, including a split whose first view has not rendered yet and the frames before the first.
+    [Fact]
+    public void TheDisplayIsUncoveredUnlessOneShownRectCoversItWhole() {
+        var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
+        var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
+
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static view => (view == 1),
+            sharpness: 0f,
+            views: [View(region: left), View(region: right)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, true)
+        );
+
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, false)
+        );
+
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static _ => true,
+            sharpness: 0f,
+            views: [View(region: Whole, renderScale: 0.5f)]
+        );
+        Assert.Equal(
+            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
+            expected: (false, false)
+        );
+
+        foreach (var panesCover in ((ReadOnlySpan<bool>)[false, true])) {
+            m_host.BeginFrame(views: Views);
+            m_host.PlaceViews(
+                panesCover: panesCover,
+                rendered: static _ => true,
+                sharpness: 0f,
+                views: []
+            );
+            Assert.Equal(
+                actual: PlacementOf(view: 0).Uncovered,
+                expected: !panesCover
+            );
+        }
+    }
+    // Sampling scale belongs to the SDF fragment; the published output always fills its authored display region.
+    [Fact]
+    public void ALoneViewsOutputExtentIsIndependentOfItsRenderScaleTier() {
+        var set = m_instances.Instances;
+        var history = RenderGraphHistory.Empty(set: set);
+        var world = set.IndexOf(name: WorldViewGraphs.WorldInstance);
+
+        (int Width, int Height) Scheduled(long index, float renderScale) {
+            m_host.BeginFrame(views: Views);
+            m_host.PlaceViews(
+                panesCover: false,
+                rendered: static _ => true,
+                sharpness: 0f,
+                views: [View(region: Whole, renderScale: renderScale)]
+            );
+
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(
+                    DisplayHeight: 144,
+                    DisplayHertz: 60,
+                    DisplayWidth: 256,
+                    Footprints: m_host.Footprints,
+                    Index: index,
+                    Roots: [new RenderGraphRoot(Height: 1, Instance: m_instances.Root, Width: 1)]
+                ),
+                history: history,
+                schedule: schedule,
+                set: set
+            );
+            history = schedule.Next;
+
+            return (schedule.Instances[world].Width, schedule.Instances[world].Height);
+        }
+
+        WorldRenderScaleTier[] walk = [
+            WorldRenderScaleTier.Native, WorldRenderScaleTier.ThreeQuarter, WorldRenderScaleTier.Native, WorldRenderScaleTier.Half,
+            WorldRenderScaleTier.ThreeQuarter, WorldRenderScaleTier.Quarter, WorldRenderScaleTier.Eighth, WorldRenderScaleTier.Native,
+        ];
+
+        for (var index = 0; (index < walk.Length); index++) {
+            Assert.Equal(
+                actual: Scheduled(index: index, renderScale: WorldRenderScaleTiers.Scale(tier: walk[index])),
+                expected: (256, 144)
+            );
+        }
+    }
+    [Fact]
+    public void AViewTheWorldHasNotRenderedIsNotShownButIsRead() {
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: static view => (view == 0),
+            sharpness: 0f,
+            views: [
+                View(region: new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f)),
+                View(region: new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f)),
+            ]
+        );
+
+        Assert.True(condition: PlacementOf(view: 0).Shown);
+        Assert.False(condition: PlacementOf(view: 1).Shown);
+        Assert.Equal(
+            actual: WorldFootprints().Keys.Order(comparer: StringComparer.Ordinal),
+            expected: [WorldRootGraph.ProducerOf(view: 0), WorldRootGraph.ProducerOf(view: 1)]
+        );
+
+        // With no render root attached, no view has an output, so none is shown.
+        m_host.BeginFrame(views: Views);
+        m_host.PlaceViews(
+            panesCover: false,
+            rendered: null,
+            sharpness: 0f,
+            views: [View(region: new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f))]
+        );
+        Assert.False(condition: PlacementOf(view: 0).Shown);
+    }
+}

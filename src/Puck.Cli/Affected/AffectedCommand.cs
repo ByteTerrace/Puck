@@ -78,38 +78,6 @@ internal static class AffectedCommand {
         return true;
     }
 
-    // The projects whose own files name a path's containing directory, spelled by its first two segments (such as
-    // `tests/Puck.World.Verdicts` or `worlds/parlor`), or by its top-level name for a file one level down.
-    private static Func<string, IReadOnlyList<string>> ConsumerSearch(string repositoryRoot, IReadOnlyList<AffectedProject> projects) {
-        var cache = new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.Ordinal);
-
-        return path => {
-            var segments = path.Split(separator: '/');
-            var key = ((segments.Length > 2)
-                ? $"{segments[0]}/{segments[1]}"
-                : segments[0]
-            );
-
-            if (cache.TryGetValue(key: key, value: out var known)) {
-                return known;
-            }
-
-            var consumers = projects.Where(predicate: project => Directory.EnumerateFiles(
-                path: Path.Combine(path1: repositoryRoot, path2: project.Directory),
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*"
-            ).Where(predicate: static file => ((file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs") ||
-                file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".csproj") ||
-                file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".targets")) &&
-                !file.Contains(comparisonType: StringComparison.Ordinal, value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
-                !file.Contains(comparisonType: StringComparison.Ordinal, value: $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            ).Any(predicate: file => File.ReadAllText(path: file).Contains(comparisonType: StringComparison.Ordinal, value: key))).Select(selector: static project => project.Name).ToArray();
-
-            cache[key] = consumers;
-
-            return consumers;
-        };
-    }
     // The projects the seeds are built from, the seeds included.
     private static HashSet<string> Closure(ArchitectureModel model, IEnumerable<string> seeds) {
         var closure = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -242,7 +210,8 @@ internal static class AffectedCommand {
             plan = AffectedSelection.Select(
                 canaries: canaries,
                 changed: changed,
-                consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
+                consumersOf: AffectedConsumers.Search(projects: projects, repositoryRoot: repositoryRoot),
+                linkedBy: AffectedConsumers.Linking(projects: projects, repositoryRoot: repositoryRoot),
                 coverage: coverage,
                 catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
                     (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||

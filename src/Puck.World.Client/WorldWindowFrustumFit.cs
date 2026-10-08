@@ -11,7 +11,7 @@ namespace Puck.World.Client;
 /// <c>WorldWindowProjectionMathLawTests</c>) and fits an <see cref="SdfAsymmetricFrustum"/> against the destination
 /// aperture from that mapped position. Split into its own type, separate from the pure isometry math, because this
 /// half needs <see cref="SdfAsymmetricFrustum"/> and <see cref="CameraSnapshot"/> — <c>Puck.SdfVm</c> dependencies
-/// <c>Puck.World.Protocol</c> (where the isometry lives, reachable by <c>tests/Puck.World.Tests</c>) structurally may
+/// <c>Puck.World.Protocol</c> (where the isometry lives, reachable by <c>tests/Puck.World.Protocol.Tests</c>) structurally may
 /// not carry (see docs/project-map.md's layering rules).
 /// </summary>
 /// <remarks>

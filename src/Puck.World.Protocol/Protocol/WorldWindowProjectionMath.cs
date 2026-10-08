@@ -31,7 +31,7 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 /// destination side. It is the float mirror of <see cref="WorldFrameIsometry.MapPoint"/>, kept separate because
 /// nothing here ever reaches simulation state; <c>WorldWindowProjectionMathLawTests</c> pins the two against each
 /// other for a hand-picked pair. Public rather than internal because both
-/// <c>Puck.World.Client.WorldWindowFrustumFit</c> and <c>tests/Puck.World.Tests</c> call it.
+/// <c>Puck.World.Client.WorldWindowFrustumFit</c> and <c>tests/Puck.World.Protocol.Tests</c> call it.
 /// </summary>
 /// <remarks>
 /// <para><b>It IS the arrival isometry — the full 180° door-to-door flip.</b> A window shows "what an arrived

@@ -25,10 +25,12 @@ public sealed class DerivationLawTests {
         .Select(selector: static path => MetadataReference.CreateFromFile(path: path))
         .ToArray<MetadataReference>();
 
-    private static CSharpCompilation Compile(string assemblyName, string[] sources, params MetadataReference[] references) {
+    private static CSharpCompilation Compile(string assemblyName, string[] sources, params MetadataReference[] references) =>
+        Compile(allowUnsafe: false, assemblyName: assemblyName, references: references, sources: sources);
+    private static CSharpCompilation Compile(bool allowUnsafe, string assemblyName, string[] sources, params MetadataReference[] references) {
         var compilation = CSharpCompilation.Create(
             assemblyName: assemblyName,
-            options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary),
+            options: new CSharpCompilationOptions(allowUnsafe: allowUnsafe, outputKind: OutputKind.DynamicallyLinkedLibrary),
             references: References.Concat(second: references),
             syntaxTrees: sources.Prepend(element: Marker).Select(selector: static (source, index) => CSharpSyntaxTree.ParseText(
                 path: $"derivation-keys-fixture-{index}.cs",
@@ -801,6 +803,31 @@ public sealed class DerivationLawTests {
 
         Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
         Assert.Contains(collection: original.Symbols, filter: static symbol => (!symbol.External && (symbol.Id == "M:Fixture.Sample.Dispose")));
+    }
+    [Fact]
+    public void PointerArithmeticReachesItsOperandTypesAndTheBodyAroundIt() {
+        const string Source = """
+            namespace Fixture;
+            public static class Marks {
+                public static unsafe int Second(byte* marks) => *(marks + 1);
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static unsafe int Bake() {
+                    byte* marks = stackalloc byte[2];
+                    marks[1] = 7;
+                    return Marks.Second(marks);
+                }
+            }
+            """;
+
+        static DerivationResult DeriveUnsafe(string source) => Derive(compilations: [Compile(allowUnsafe: true, assemblyName: "Fixture.Bake", sources: [source])]);
+        var original = DeriveUnsafe(source: Source);
+        var edited = DeriveUnsafe(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "*(marks + 0)", oldValue: "*(marks + 1)"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (!symbol.External && (symbol.Id == "M:Fixture.Marks.Second(System.Byte*)")));
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.External && (symbol.Id == "T:System.Byte")));
     }
     [Fact]
     public void DeconstructionReachesItsDeconstructBody() {

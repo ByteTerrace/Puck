@@ -9,7 +9,7 @@ namespace Puck.World.Schema.Tests;
 /// envelope refusing the unevaluated code or declaring a ceiling a tick cannot fit, a value-over-time trait, a cell
 /// ceiling with no room for the stamp, a blank or over-long gate, and the row-count ceiling). The declaration-hash
 /// half of the contract — the trait folds only when authored — is in
-/// <c>tests/Puck.World.Tests</c>'s <c>WorldVerdictHashLawTests</c>, where the hash walk is reachable.</summary>
+/// <c>tests/Puck.World.Server.Tests</c>'s <c>WorldVerdictHashLawTests</c>, where the hash walk is reachable.</summary>
 public sealed class WorldVerdictLawTests {
     private static WorldDefinition BuildDefinition(params WorldStateRow[] rows) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),

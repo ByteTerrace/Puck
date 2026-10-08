@@ -529,7 +529,7 @@ denied. Each crosses through a static injection point every composition root
 wires with a module initializer before `Main` runs—one shared method,
 `Puck.World.Client.WorldSchemaVocabularyHooks.Install`, called by
 `WorldDataHookInstaller` (`Puck.World`), `WorldSiloDataHookInstaller`
-(`Puck.World.Silo`), and `TestHookInstaller` (`tests/Puck.World.Tests`), so a
+(`Puck.World.Silo`), and `TestHookInstaller` (`tests/Puck.World.Transpiler.Tests`), so a
 seam one process wires and another does not cannot exist:
 
 - `BindingVocabularyHook.cs` lints a composed binding overlay against the live
@@ -818,7 +818,7 @@ Every reserved channel is a row of the rewrite's channel table, which carries
 its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
 the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
-two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck`),
+two aliases (`tests/Puck.World.Fixtures/twin-tictactoe-host.puck`),
 and an entry with no `as` composes its names unchanged.
 
 **Exports: a module's names are private by default.** A module document may
@@ -909,7 +909,7 @@ levers) lands in a section the document authors, and a section the session
 left alone is written as authored. Moved render ceilings, per-view quality
 (`views.quality`) and editor values create their valid section when the document
 omits it; session pins never fold. `WorldSaveAuthoredDocumentLawTests` saves
-every shipped world, every world document under `tests/Puck.World.Tests/Fixtures`,
+every shipped world, every world document under `tests/Puck.World.Fixtures`,
 and every canary world that way and proves each one boots
 again to the definition it was loaded as. One value moves on an otherwise
 untouched world: an advancing `state` row/cell (`Advance`) settles to its live
@@ -1764,7 +1764,7 @@ flattens its egress—every reference answered from the composing authority's ow
 state and dropped (`WorldStateDocumentValues.TryFlatten`, run on a rehydrated copy
 so the live document keeps its authored reference)—and a peer whose projection
 still names a cell is refused by name at the decode door. Law suite:
-`tests/Puck.World.Tests/DeliveredDocumentIdentifierLawTests.cs`.
+`tests/Puck.World.Server.Tests/DeliveredDocumentIdentifierLawTests.cs`.
 
 The resolver caches traversal metadata by runtime type and omits branches whose
 sealed types cannot contain bound values. It still reads current document contents
@@ -2184,7 +2184,7 @@ such gate at all: the engine's own edge/per-pair latch already refuses a
 re-fire while the gate stays continuously true, which is exactly why
 witness-claim and hounds-meet-shaped rules never needed one—only a
 Level-mode re-evaluation does. See
-[`KeyedImpressionDedupLawTests`](../../tests/Puck.World.Tests/KeyedImpressionDedupLawTests.cs)
+[`KeyedImpressionDedupLawTests`](../../tests/Puck.World.Server.Tests/KeyedImpressionDedupLawTests.cs)
 for the worked proof, including a control row with no freshness gate that
 keeps re-blending every tick.
 
@@ -3156,7 +3156,7 @@ affected document over stdin (`world.status`, `world.save`, `world.load`;
 see [`Puck.World`'s README](../Puck.World/README.md) for the console). The
 strict-parse contract (an unmapped nested member refuses by name; a root
 reserved-prefix key survives) is proven in-process by
-`tests/Puck.World.Tests/StrictParseLawTests.cs`. No committed battery covers
+`tests/Puck.World.Schema.Tests/StrictParseLawTests.cs`. No committed battery covers
 the HUD document—validate HUD
 document changes by running the app; see
 [the puck-world skill's hud reference](../../.claude/skills/puck-world/references/hud.md)

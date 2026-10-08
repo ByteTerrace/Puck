@@ -83,7 +83,7 @@ generation's connection did not survive the restore, so its rows and exclusive
 reservations go before the first step. A local seat's park leaves its rows
 entirely alone (the one participant whose table survives intact to a resume).
 
-Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
+Proved by `tests/Puck.World.Server.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
 releases an exclusively-held subject to a rival immediately (positive grace,
 authored-zero grace, and rate 0 alike) while the body stays parked; a local
 seat's rows survive park and resume — and the same restore untouched; a

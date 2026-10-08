@@ -73,7 +73,7 @@ shape—the walk runs once, at the reference's first read, never again for
 that reference. The contact-solve share has no per-call shortcut: it is real
 per-body physics work against a program sized by every district's solid
 geometry. `puck bench world`'s "shipped world: idle tick (median)" row and
-`tests/Puck.World.Tests/HandleTickPathLawTests.cs` are the read-backs.
+`tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs` are the read-backs.
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit`—a single ordered domain, drained in submission order.
@@ -413,7 +413,7 @@ whole-row write, an edit to another section) drops it; a member whose row is
 in the set rehydrates (`WorldStateDocumentValues.TryRehydrate`) exactly where
 a one-by-one compose would. A batch installs the same document its members
 reach one by one, a member that reads a row an earlier member wrote included
-(`tests/Puck.World.Tests/BatchComposeLawTests.cs`), and one refused member
+(`tests/Puck.World.Server.Tests/BatchComposeLawTests.cs`), and one refused member
 refuses the whole batch.
 
 The refresh has a mirror for the other direction: a mutation that itself
@@ -425,7 +425,7 @@ mutation), so validation and the derived rebuilds read a resolved holder. The
 row against the current state before canonicalizing it
 (`TryResolveSubmittedRow`), because the canonicalizer reads bound values ahead
 of that rehydration; a reference naming no declared cell refuses there by
-name. `tests/Puck.World.Tests/WorldRowFieldEditLawTests.cs` owns the laws.
+name. `tests/Puck.World.Server.Tests/WorldRowFieldEditLawTests.cs` owns the laws.
 
 ## Local flock steering
 
@@ -1363,7 +1363,7 @@ the seat takes each onward turn once and an older route never overtakes a newer
 one. A claim published through a reused wrapper does not take the gate. The host
 constructor's optional `travelerRouteStarted` callback is told of each newly
 created wrapper before its claim is held and published, and every production
-composition passes none. The federated-hosts harness in `tests/Puck.World.Tests`
+composition passes none. The federated-hosts harness in `tests/Puck.World.Presentation.Tests`
 (`FederatedHosts`, `RoutedSeats`) passes it to observe an onward route before,
 during and after the claim, across two hosts joined over QUIC.
 
@@ -2473,7 +2473,7 @@ over stdin. The apply pipeline's all-or-nothing contract (a mutation that
 fails whole-document validation leaves the live definition byte-identical)—
 the same gate `WorldServer.ApplyUndo`'s journal-replay loop passes each kept
 entry through—is proven in-process by
-`tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`; that suite does not
+`tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`; that suite does not
 construct a genuine mid-replay validation failure, so the replay loop's own
 early-return is unproven beyond code inspection.
 
@@ -2485,7 +2485,7 @@ control.
 Principal/grant enforcement (denial/control pairs per player-facing verb) is
 proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `ControlApplicationLawTests` in
-`tests/Puck.World.Tests`.
+`tests/Puck.World.Server.Tests`.
 
 A change that moves simulation math is expected to change replay hashes;
 re-record any persisted tape it invalidates in the same change (`AGENTS.md`

@@ -145,7 +145,7 @@ body, provider, state, completed turns, and the last failure.
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter-class "*WorldSiloExtensionLawTests" --filter-class "*ExtensionModelLawTests"
+dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --filter-class "*WorldSiloExtensionLawTests" --filter-class "*ExtensionModelLawTests"
 ```
 
 The focused tests drive the harness and the participant with scripted
@@ -153,7 +153,7 @@ The focused tests drive the harness and the participant with scripted
 `ApprovalRequiredAIFunction` values by default, that the loop observes its body
 only when the host pumps it, that `allow` offers the actions and submits one and
 `refuse` offers none, that disposal stops the loop between turns, and that bad configuration is
-refused by name. The World tests show a local World and a silo composing the same
+refused by name. The World suites (`tests/Puck.World.Silo.Tests`, `tests/Puck.World.Tests`) show a local World and a silo composing the same
 participant from one configuration, and an installed harness selecting an
 installed provider across load contexts. No test reaches a live model.
 ## Documentation
