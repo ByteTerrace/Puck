@@ -29,7 +29,7 @@ public sealed class FederatedCommitPrivacyLawTests {
 
     // The privacy laws' owned identity, with a chat inbox line, a HUD text and a binding label beside its private rows.
     private static WorldIdentity Traveller() {
-        var owned = CrossingIdentityPrivacyLawTests.Owned();
+        var owned = CrossingIdentityFixtures.Owned();
         var document = owned.Document!;
 
         // Declared as chat.inbox declares it, on the owned document in place.
@@ -65,11 +65,11 @@ public sealed class FederatedCommitPrivacyLawTests {
     }
     private static WorldIdentity LandedAt(WorldServer server) {
         for (var slot = 0; (slot < server.Population.Capacity); slot++) {
-            if (server.Population.EntryBody(index: slot)?.Profile is { Id: CrossingIdentityPrivacyLawTests.OwnerId } profile) {
+            if (server.Population.EntryBody(index: slot)?.Profile is { Id: CrossingIdentityFixtures.OwnerId } profile) {
                 return profile;
             }
         }
-        throw new InvalidOperationException(message: $"'{server.AuthorityIdentity}' holds no body driven by '{CrossingIdentityPrivacyLawTests.OwnerId}'");
+        throw new InvalidOperationException(message: $"'{server.AuthorityIdentity}' holds no body driven by '{CrossingIdentityFixtures.OwnerId}'");
     }
     private static void AssertKeptAtHome(byte[] commit, WorldIdentity landed, WorldIdentity departed) {
         var text = Encoding.UTF8.GetString(bytes: commit);

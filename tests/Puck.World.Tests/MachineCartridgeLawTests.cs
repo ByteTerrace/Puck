@@ -46,7 +46,7 @@ public sealed class MachineCartridgeLawTests {
         path2: file
     );
     private static CartridgeCompilation CompileOutOfBand(string engine, string path) =>
-        ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
+        ((ICartridgeCompiler)TestMachines.Catalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
     // The compiled image's picture after SettleFrames frames from reset, on the forge's own verify driver, folded
     // FNV-1a over the pixel words; the distinct-pixel count rides along as the content gate (a blank frame never
     // reaches the pinned comparison).
@@ -208,7 +208,7 @@ public sealed class MachineCartridgeLawTests {
                 engine: engine,
                 options: options
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         var state = fixture.Server.Machines.InstanceState(name: "cabinet");
@@ -274,7 +274,7 @@ public sealed class MachineCartridgeLawTests {
             options: "cgb"
         );
 
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
@@ -316,7 +316,7 @@ public sealed class MachineCartridgeLawTests {
                 engine: CgbEngine,
                 options: "cgb"
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         ));
 
         // Declared at boot: the slot faults by name with the forge's message and never boots.
@@ -373,7 +373,7 @@ public sealed class MachineCartridgeLawTests {
             text: host.ToJsonString()
         );
 
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         Assert.True(
             condition: WorldDefinitionLoader.TryLoadFile(
@@ -446,7 +446,7 @@ public sealed class MachineCartridgeLawTests {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: TestHookInstaller.CreateMachineCatalog(),
+            catalog: TestMachines.Catalog(),
             documentPath: hostPath
         );
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-world-tests-");
@@ -498,7 +498,7 @@ public sealed class MachineCartridgeLawTests {
                 engine: CgbEngine,
                 options: "cgb"
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
         using var second = Fixtures.FreshServer(
             definition: WithMachineScreen(
@@ -506,7 +506,7 @@ public sealed class MachineCartridgeLawTests {
                 engine: CgbEngine,
                 options: "cgb"
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         Assert.Equal(
@@ -525,7 +525,7 @@ public sealed class MachineCartridgeLawTests {
             CartridgePath(file: file),
             "fast"
         );
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
         using var source = Fixtures.FreshServer(
             definition,
             machineCatalog: catalog

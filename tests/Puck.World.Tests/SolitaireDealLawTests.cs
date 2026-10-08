@@ -1,5 +1,5 @@
 using Xunit;
-using static Puck.World.Tests.SolitaireFixtures;
+using static Puck.World.Testing.SolitaireFixtures;
 
 namespace Puck.World.Tests;
 

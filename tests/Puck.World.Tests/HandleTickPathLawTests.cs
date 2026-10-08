@@ -17,7 +17,7 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldIdleTicksStaySteadyStateAllocation() {
         const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
         var definition = AuthoredGameFixtures.Load(catalog: catalog, relativePath: WorldPath);
         using var fixture = Fixtures.FreshServer(
             definition: definition,

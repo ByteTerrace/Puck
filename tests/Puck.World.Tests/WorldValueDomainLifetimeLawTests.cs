@@ -23,14 +23,14 @@ public sealed class WorldValueDomainLifetimeLawTests {
 
     private static BindableScalar Bound => new(binding: $"state.{WorldValueDomainLawTests.Row}");
 
-    private static WorldDefinition Clouds(bool scaleBound, double value) => WorldValueDomainLawTests.WithRow(
+    private static WorldDefinition Clouds(bool scaleBound, double value) => ValueDomainFixtures.WithRow(
         definition: WorldValueDomainLawTests.Layer(layer: new WorldRenderSkyLayer.Clouds(
             Coverage: Bound,
             Scale: (scaleBound ? Bound : null)
         )),
         value: value
     );
-    private static WorldDefinition FieldOfView(string program, double value) => WorldValueDomainLawTests.WithRow(
+    private static WorldDefinition FieldOfView(string program, double value) => ValueDomainFixtures.WithRow(
         definition: Fixtures.BuildDocument() with {
             CamerasRaw = [
                 new WorldCamera(
@@ -164,7 +164,7 @@ public sealed class WorldValueDomainLifetimeLawTests {
                 Version: WorldCameraProgram.CurrentVersion
             )
         );
-        static WorldDefinition Two(double value) => WorldValueDomainLawTests.WithRow(
+        static WorldDefinition Two(double value) => ValueDomainFixtures.WithRow(
             definition: Fixtures.BuildDocument() with { CamerasRaw = [Camera(name: "a"), Camera(name: "b")] },
             value: value
         );

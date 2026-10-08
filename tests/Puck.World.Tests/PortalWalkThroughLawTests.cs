@@ -57,7 +57,7 @@ public sealed class PortalWalkThroughLawTests {
     // One row: a document with room for peers and census bodies, the door creation, one door, and the other row as
     // its one destination.
     internal static WorldDefinition Row(string neighbourPath, WorldPlacement door) => (Fixtures.PeerPopulationDocument(networkPlayers: 2) with {
-        CreationsRaw = [PortalArrivalValidationLawTests.BuildDoorCreation()],
+        CreationsRaw = [PortalFixtures.BuildDoorCreation()],
         Destinations = [new WorldDestination(
             Durability: WorldDestinationDurability.Persisted,
             Name: SafeName.Parse(candidate: "neighbour"),

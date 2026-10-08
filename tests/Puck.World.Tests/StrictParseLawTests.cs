@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 /// <see cref="InvalidDataException"/> (its own documented contract), so the probe below unwraps to the
 /// originating <see cref="JsonException"/> rather than catching the wrapper by message text. This suite cannot
 /// prove the same strictness for a shipped world/scenario document that authors binding overlays against the
-/// real engine's default vocabulary — see <see cref="TestHookInstaller"/>'s remarks; that sweep needs the real
+/// real engine's default vocabulary — see <c>TestHookInstaller</c>'s remarks; that sweep needs the real
 /// composition root and is unproven here.
 /// </summary>
 public sealed class StrictParseLawTests {

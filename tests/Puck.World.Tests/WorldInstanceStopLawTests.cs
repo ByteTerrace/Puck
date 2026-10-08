@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 public sealed class WorldInstanceStopLawTests {
     [Fact]
     public void AStoppedInstanceAnswersAPendingRowSetWithTheStop() {
-        var row = WorldEditorPlacementLawTests.Build();
+        var row = EditorPlacementFixtures.Build();
         var echoes = new WorldDeferredVerbEchoes();
         var crate = (WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)! with { Position = new Vector3(x: 9f, y: 3f, z: -1f) });
         WorldSubmissionResult? pending = null;

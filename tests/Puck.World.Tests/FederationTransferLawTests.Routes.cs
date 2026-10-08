@@ -49,16 +49,16 @@ public sealed partial class FederationTransferLawTests {
     [Fact]
     public void ARouteHandedOnThroughATurnedSeamTurnsTheSeatThatFollowsIt() {
         using var fixture = Fixtures.FreshServer();
-        var source = WorldWindowCrossingLawTests.Face(
+        var source = WindowCrossingFixtures.Face(
             origin: new Vector3(x: 0f, y: 1.5f, z: -6f),
             yawDegrees: 37f
         );
-        var destination = WorldWindowCrossingLawTests.Face(
+        var destination = WindowCrossingFixtures.Face(
             origin: new Vector3(x: 3f, y: 1.5f, z: -10f),
             yawDegrees: 250f
         );
-        var sourceFrame = WorldWindowCrossingLawTests.Frame(face: source);
-        var destinationFrame = WorldWindowCrossingLawTests.Frame(face: destination);
+        var sourceFrame = WindowCrossingFixtures.Frame(face: source);
+        var destinationFrame = WindowCrossingFixtures.Frame(face: destination);
         var position = new Vector3(x: 0.4f, y: 0f, z: -5.8f);
         var yaw = FixedQ4816.FromDouble(value: 2.9);
         var arrival = WorldFrameIsometry.MapArrival(
@@ -176,10 +176,10 @@ public sealed partial class FederationTransferLawTests {
             views: definition.Views
         );
 
-        var (eye, target) = WorldWindowCrossingLawTests.Camera(
+        var (eye, target) = WindowCameraFixtures.Camera(
             definition: definition,
             mirror: mirror,
-            orientation: WorldWindowCrossingLawTests.Heading(yaw: yaw),
+            orientation: WindowCameraFixtures.Heading(yaw: yaw),
             position: position,
             view: view
         );
@@ -190,7 +190,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         Vector3 ArrivedDirection() {
-            var (arrivedEye, arrivedTarget) = WorldWindowCrossingLawTests.Camera(
+            var (arrivedEye, arrivedTarget) = WindowCameraFixtures.Camera(
                 definition: definition,
                 mirror: mirror,
                 orientation: route.Orientation.ToQuaternion(),
@@ -210,7 +210,7 @@ public sealed partial class FederationTransferLawTests {
             turn: WorldSeatViewState.ArrivalTurn(yawDelta: turn),
             yawReference: definition.Views.SeatControl.YawReference
         );
-        WorldWindowCrossingLawTests.Near(
+        WindowCameraFixtures.Near(
             actual: ArrivedDirection(),
             expected: windowDirection,
             what: "camera direction after the handoff"

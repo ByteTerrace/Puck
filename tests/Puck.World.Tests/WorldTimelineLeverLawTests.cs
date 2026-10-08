@@ -3,6 +3,7 @@ using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Testing.TimelineLeverFixtures;
 
 namespace Puck.World.Tests;
 
@@ -14,22 +15,6 @@ public sealed class WorldTimelineLeverLawTests {
             return true;
         }
     }
-
-    internal static WorldDefinition Definition() => (Fixtures.BuildDocument() with {
-        TimelineRaw = new WorldTimelineSection(Clocks: [
-            new WorldClock("day", PeriodSeconds: 1d),
-            new WorldClock("tide", State: "phase"),
-        ]),
-        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Noise() { Clock = "tide" }]), Atmosphere: new WorldRenderAtmosphere(
-            Fog: new WorldRenderFog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "tide", keys: [
-                new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
-                new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
-            ])))
-        )),
-    }).WithWorldState([new WorldStateRow(
-        Name: CellName.Parse(candidate: "phase"), Kind: CellKind.Fixed,
-        Advance: new StateAdvance(PerSecondDenominator: 1L, PerSecondNumerator: 1L),
-        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: 0L))])]);
 
     private static void Control(WorldStateMirror mirror, string name, WorldTimelineOperation operation, ulong tick = 0, double rate = 1d) =>
         Assert.True(condition: mirror.ControlClock(name: name, operation: operation, rate: rate, refusal: out var refusal, tick: tick), userMessage: refusal);

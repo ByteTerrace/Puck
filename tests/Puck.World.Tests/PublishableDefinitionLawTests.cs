@@ -1,6 +1,7 @@
 using System.Text;
 
 using Xunit;
+using static Puck.World.Testing.CensusFixtures;
 
 namespace Puck.World.Tests;
 
@@ -8,27 +9,6 @@ namespace Puck.World.Tests;
 /// crosses: the definition comes back undrawn, because draws are instance state, and it is refused unless a copy drawn
 /// for the boot instance admits.</summary>
 public sealed class PublishableDefinitionLawTests {
-    private const string CensusRow = "census";
-
-    // A world whose body census reads a state row, so a boot must fill that row before it can admit the document.
-    internal static WorldDefinition CensusDefinition(Draw? draw) {
-        var document = Fixtures.BuildDocument();
-
-        return (document with {
-            PopulationRaw = (document.Population with {
-                CapacityRaw = null,
-                CapacityRow = CensusRow,
-            }),
-        }).WithWorldState(rows: [
-            .. document.AuthoredState,
-            new WorldStateRow(
-                Name: CellName.Parse(candidate: CensusRow),
-                Kind: CellKind.Int,
-                Draw: draw
-            ),
-        ]);
-    }
-
     private static string CensusWorld(Draw? draw) => Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: CensusDefinition(draw: draw)));
 
     [Fact]

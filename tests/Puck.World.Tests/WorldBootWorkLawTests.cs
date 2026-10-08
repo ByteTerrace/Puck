@@ -158,7 +158,7 @@ public sealed class WorldBootWorkLawTests {
     }
     [Fact]
     public void TheLineupBootsWithinItsCountsAndItsSecondBootCompilesNothing() {
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
@@ -206,7 +206,7 @@ public sealed class WorldBootWorkLawTests {
     }
     [Fact]
     public void TheIslandBootsWithinItsCountsParsesEachNeighbourOnceAndItsSecondBootCompilesNothing() {
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         WorldDefinitionFileSource.ForgetComposedDocuments();
 

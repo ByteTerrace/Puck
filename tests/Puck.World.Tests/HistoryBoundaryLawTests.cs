@@ -289,7 +289,7 @@ public sealed class HistoryBoundaryLawTests {
         var history = new WorldHistory(
             server: harness.Fixture.Server,
             tape: harness.Tape,
-            engines: TestHookInstaller.CreateMachineCatalog().Engines.Values,
+            engines: TestMachines.Catalog().Engines.Values,
             machineHostFactory: (screens, engines, path, output) => {
                 machineDirectory = ((path is null) ? null : WorldDocumentPaths.DirectoryOf(documentPath: path));
                 return Fixtures.MachineHostFactory(screens, engines, path, output);

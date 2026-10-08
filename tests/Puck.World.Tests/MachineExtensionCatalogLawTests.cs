@@ -133,7 +133,7 @@ public sealed class MachineExtensionCatalogLawTests {
         );
         using var installed = new WorldMachineHost(
             [],
-            TestHookInstaller.CreateMachineCatalog()
+            TestMachines.Catalog()
         );
 
         Assert.False(condition: empty.TryPrepare(
@@ -279,7 +279,7 @@ public sealed class MachineExtensionCatalogLawTests {
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
                 definition: candidate,
-                machines: TestHookInstaller.CreateMachineCatalog(),
+                machines: TestMachines.Catalog(),
                 reason: out reason
             ),
             userMessage: reason

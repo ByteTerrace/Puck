@@ -107,7 +107,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             using var fixture = Fixtures.FreshServer(
                 definition: loaded,
                 documentPath: source,
-                machineCatalog: TestHookInstaller.CreateMachineCatalog()
+                machineCatalog: TestMachines.Catalog()
             );
             var server = fixture.Server;
             var snapshot = WorldSessionLevers.Fold(
@@ -129,7 +129,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
 
             _ = WorldDefinitionSerialization.SavePreservingBasis(
                 basisPath: out var basisPath,
-                catalog: TestHookInstaller.CreateMachineCatalog(),
+                catalog: TestMachines.Catalog(),
                 definition: snapshot,
                 imports: out var imports,
                 note: out var note,
@@ -138,7 +138,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
 
             Assert.True(
                 condition: WorldDefinitionLoader.TryResolve(
-                    catalog: TestHookInstaller.CreateMachineCatalog(),
+                    catalog: TestMachines.Catalog(),
                     explicitPath: target,
                     failure: out var failure,
                     source: out var reloaded

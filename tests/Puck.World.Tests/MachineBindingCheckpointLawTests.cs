@@ -193,7 +193,7 @@ public sealed partial class MachineBindingCheckpointLawTests {
         using var profiles = new TemporaryDirectory(prefix: "puck-binding-memo-profiles-");
         var rom = directory.WriteBytes(bytes: ProgramImage(), name: "program.gba");
         var definition = Document(rom, Binding(address: SendAddress, name: "send", row: "send", update: update));
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
         using var source = Fixtures.FreshServer(
             definition: definition,
             machineCatalog: catalog

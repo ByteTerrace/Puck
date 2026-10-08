@@ -39,7 +39,7 @@ public sealed partial class MachineBindingCheckpointLawTests {
                 Binding(address: (SendAddress + 4UL), name: "zeta", row: "zeta", update: "onChange"),
                 Binding(address: (SendAddress + 8UL), name: "alpha", row: "alpha", update: "onChange")
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         fixture.Step();

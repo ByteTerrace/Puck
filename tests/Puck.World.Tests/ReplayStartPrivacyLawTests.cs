@@ -25,8 +25,8 @@ public sealed class ReplayStartPrivacyLawTests {
         using var fixture = Fixtures.FreshServer();
         var catalog = fixture.Server.Profiles;
 
-        Assert.True(condition: catalog.ReplaceFromSync(document: CrossingIdentityPrivacyLawTests.OwnedDocument(), reason: out var reason), userMessage: reason);
-        var owned = CrossingIdentityPrivacyLawTests.Owned(identity: catalog.FindById(id: CrossingIdentityPrivacyLawTests.OwnerId));
+        Assert.True(condition: catalog.ReplaceFromSync(document: CrossingIdentityFixtures.OwnedDocument(), reason: out var reason), userMessage: reason);
+        var owned = CrossingIdentityFixtures.Owned(identity: catalog.FindById(id: CrossingIdentityFixtures.OwnerId));
 
         Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
         _ = fixture.JoinSeat(slot: 0);

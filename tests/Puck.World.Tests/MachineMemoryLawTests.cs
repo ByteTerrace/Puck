@@ -36,7 +36,7 @@ public sealed class MachineMemoryLawTests {
     // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
     private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));
     private static int VariableAddress(string name) {
-        var compilation = ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[CgbEngine]).Compile(document: Document());
+        var compilation = ((ICartridgeCompiler)TestMachines.Catalog().ContentProviders[CgbEngine]).Compile(document: Document());
 
         Assert.True(
             condition: compilation.Variables.TryGetValue(
@@ -165,7 +165,7 @@ public sealed class MachineMemoryLawTests {
         ]);
         using var fixture = Fixtures.FreshServer(
             definition: document,
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "cabinet"));
@@ -219,7 +219,7 @@ public sealed class MachineMemoryLawTests {
         ]);
         using var fixture = Fixtures.FreshServer(
             definition: document,
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "cabinet"));
@@ -323,7 +323,7 @@ public sealed class MachineMemoryLawTests {
 
         using var host = new WorldMachineHost(
             [],
-            TestHookInstaller.CreateMachineCatalog()
+            TestMachines.Catalog()
         );
 
         Assert.False(condition: host.TryPrepare(
@@ -389,7 +389,7 @@ public sealed class MachineMemoryLawTests {
     private static long MeasureWrite(WorldDefinition definition, bool changingEachTick) {
         using var fixture = Fixtures.FreshServer(
             definition: definition,
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         for (var tick = 0; (tick < SettleTicks); tick++) {

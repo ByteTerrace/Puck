@@ -63,6 +63,7 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
     </ItemGroup>
     <ItemGroup>
         <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader build like any shipped
@@ -92,6 +93,57 @@
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
         <Compile Include="../Shared/IrradianceLightFixture.cs" Link="IrradianceLightFixture.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AdmissionWireFixture.cs" Link="World/AdmissionWireFixture.cs" />
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AudioAssetFixtures.cs" Link="World/AudioAssetFixtures.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Server.cs" Link="World/AuthoredGameFixtures.Server.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
+        <Compile Include="../Shared/World/CensusFixtures.cs" Link="World/CensusFixtures.cs" />
+        <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
+        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
+        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
+        <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
+        <Compile Include="../Shared/World/DeferredVerbFixtures.cs" Link="World/DeferredVerbFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EditorPlacementFixtures.cs" Link="World/EditorPlacementFixtures.cs" />
+        <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
+        <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
+        <Compile Include="../Shared/World/FakeObjectBlobStore.cs" Link="World/FakeObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/FrustumFitFixtures.cs" Link="World/FrustumFitFixtures.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/JournalDepthFixtures.cs" Link="World/JournalDepthFixtures.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+        <Compile Include="../Shared/World/MachineOperationFixtures.cs" Link="World/MachineOperationFixtures.cs" />
+        <Compile Include="../Shared/World/MirrorBindings.cs" Link="World/MirrorBindings.cs" />
+        <Compile Include="../Shared/World/NarrationPaths.cs" Link="World/NarrationPaths.cs" />
+        <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
+        <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
+        <Compile Include="../Shared/World/PuckStorageTestComposition.cs" Link="World/PuckStorageTestComposition.cs" />
+        <Compile Include="../Shared/World/RecordingNarrationSink.cs" Link="World/RecordingNarrationSink.cs" />
+        <Compile Include="../Shared/World/RuleArenaFixture.cs" Link="World/RuleArenaFixture.cs" />
+        <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
+        <Compile Include="../Shared/World/SolitaireFixtures.cs" Link="World/SolitaireFixtures.cs" />
+        <Compile Include="../Shared/World/StallingObjectBlobStore.cs" Link="World/StallingObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/TestExtension.cs" Link="World/TestExtension.cs" />
+        <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
+        <Compile Include="../Shared/World/TimelineLeverFixtures.cs" Link="World/TimelineLeverFixtures.cs" />
+        <Compile Include="../Shared/World/ValueDomainFixtures.cs" Link="World/ValueDomainFixtures.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
+        <Compile Include="../Shared/World/WindowCameraFixtures.cs" Link="World/WindowCameraFixtures.cs" />
+        <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
+        <Compile Include="../Shared/World/WorldDocumentCorpus.cs" Link="World/WorldDocumentCorpus.cs" />
+        <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where

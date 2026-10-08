@@ -33,7 +33,7 @@ public sealed class RulePushTurnLawTests(RulePushTurnLawTests.StagedWorlds stage
             foreach (var world in compilation.Worlds) {
                 Assert.True(
                     condition: Puck.World.Transpiler.Composition.WorldStaging.TryWrite(
-                        catalog: TestHookInstaller.CreateMachineCatalog(),
+                        catalog: TestMachines.Catalog(),
                         directory: m_directory.RootPath,
                         name: world.Name,
                         path: out _,
@@ -60,7 +60,7 @@ public sealed class RulePushTurnLawTests(RulePushTurnLawTests.StagedWorlds stage
                 out var definition,
                 out var reason,
                 neighbours: new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: path)!),
-                catalog: TestHookInstaller.CreateMachineCatalog()
+                catalog: TestMachines.Catalog()
             ),
             userMessage: $"{path}: {reason}"
         );

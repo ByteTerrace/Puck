@@ -59,7 +59,7 @@ public sealed class WorldConsoleAddressLawTests {
 
     [Fact]
     public void ARowSetAppliesInTheAddressedInstanceAndNeverInBoot() {
-        using var boot = WorldEditorPlacementLawTests.Build();
+        using var boot = EditorPlacementFixtures.Build();
         using var north = HostRow.Build(definition: boot.Server.Definition, name: "north");
         var registry = new CommandRegistry(modules: [
             new WorldRowCommandModule(authority: new AddressedAuthority(instance: north.Instance), echoes: new WorldDeferredVerbEchoes()),
@@ -84,7 +84,7 @@ public sealed class WorldConsoleAddressLawTests {
     [InlineData("world.state.cell.remove score a", typeof(WorldSubmissionPayload.Mutation))]
     [Theory]
     public void EachSubmittingVerbReachesTheAddressedInstanceAndNeverBoot(string line, Type payload) {
-        using var bootRow = WorldEditorPlacementLawTests.Build();
+        using var bootRow = EditorPlacementFixtures.Build();
         using var northRow = HostRow.Build(definition: bootRow.Server.Definition, name: "north");
         var bootLink = new CountingLink(target: bootRow.Instance.Link);
         var northLink = new CountingLink(target: northRow.Instance.Link);

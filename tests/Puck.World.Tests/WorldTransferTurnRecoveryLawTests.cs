@@ -26,7 +26,7 @@ public sealed class WorldTransferTurnRecoveryLawTests {
             seats: WorldEmbodiedSeats.None,
             stateRoot: new WorldStateRoot(path: stateRoot.RootPath)
         );
-        var door = PortalArrivalValidationLawTests.BuildDoorCreation();
+        var door = PortalFixtures.BuildDoorCreation();
         var document = Fixtures.BuildDocument() with {
             CreationsRaw = [door],
             PlacementRowsRaw = [new WorldPlacement(
@@ -65,7 +65,7 @@ public sealed class WorldTransferTurnRecoveryLawTests {
             sourceSlot: 0,
             arrival: (mapped ? WorldPortalArrival.Mapped : WorldPortalArrival.Spawn),
             counterpart: (mapped ? "arrival/door" : null),
-            sourceFrame: WorldWindowCrossingLawTests.Frame(face: WorldWindowCrossingLawTests.Face(
+            sourceFrame: WindowCrossingFixtures.Frame(face: WindowCrossingFixtures.Face(
                 origin: Vector3.Zero,
                 yawDegrees: 0f
             ))

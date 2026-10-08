@@ -155,7 +155,7 @@ public sealed class WorldCameraOperandDomainLawTests {
                 ),
             ],
         };
-        var live = WorldValueDomainLawTests.WithRow(definition: bound, value: written);
+        var live = ValueDomainFixtures.WithRow(definition: bound, value: written);
 
         AssertBuildsACamera(
             context: $"field of view row written {written}",
@@ -190,7 +190,7 @@ public sealed class WorldCameraOperandDomainLawTests {
             CamerasRaw = [Framing(fieldOfView: Low, name: "low"), Framing(fieldOfView: High, name: "high")],
             ViewsRaw = views,
         };
-        var world = new WorldValueDomainLawTests.LiveWorld(definition: WorldValueDomainLawTests.WithRow(definition: document, value: 0.5d));
+        var world = new WorldValueDomainLawTests.LiveWorld(definition: ValueDomainFixtures.WithRow(definition: document, value: 0.5d));
         var domains = new WorldValueDomainGuard();
         var reports = new List<string>();
         var seat = new WorldSeatViewState();
@@ -212,7 +212,7 @@ public sealed class WorldCameraOperandDomainLawTests {
         Assert.Empty(collection: reports);
 
         // A live write moves the row to 2: the weight presents 1, the second framing, and the sink hears of it once.
-        world.Set(definition: WorldValueDomainLawTests.WithRow(definition: document, value: 2d));
+        world.Set(definition: ValueDomainFixtures.WithRow(definition: document, value: 2d));
 
         Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);
         Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);

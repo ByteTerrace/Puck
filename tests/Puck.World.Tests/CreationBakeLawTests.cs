@@ -35,11 +35,11 @@ public sealed class CreationBakeLawTests {
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
     private static string WriteWorld(TemporaryDirectory directory) {
-        CompiledWorldLawTests.WritePatchBeside(directory: directory);
+        CompiledWorldFixtures.WritePatchBeside(directory: directory);
 
         return directory.WriteBytes(
-            bytes: Encoding.UTF8.GetBytes(s: CompiledWorldLawTests.World
-                .Replace(newValue: CompiledWorldLawTests.PatchBeside, oldValue: "PATCH")
+            bytes: Encoding.UTF8.GetBytes(s: CompiledWorldFixtures.World
+                .Replace(newValue: CompiledWorldFixtures.PatchBeside, oldValue: "PATCH")
                 .Replace(newValue: (Prototypes + "\n  \"patches\": ["), oldValue: "\"patches\": [")),
             name: "bakes.world.json"
         );
@@ -65,7 +65,7 @@ public sealed class CreationBakeLawTests {
     // every key the compiled world names except those in `omit`. Returns the pack's bytes.
     private static byte[] CompileWithPack(string path, params string[] omit) {
         var store = new WorldBakeStore();
-        var compiled = CompiledWorldLawTests.Compile(chunks: Chunks(store: store), path: path);
+        var compiled = CompiledWorldFixtures.Compile(chunks: Chunks(store: store), path: path);
 
         var (reference, keys) = Named(compiled: compiled);
         var omitted = WorldBakeStore.RequestsOf(definition: Definition(), quality: WorldBakeChunk.Quality)
@@ -359,7 +359,7 @@ public sealed class CreationBakeLawTests {
         _ = CompileWithPack(path: path);
 
         var store = new WorldBakeStore();
-        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
 
         Assert.Equal(expected: ["DEFN", "ASST", "CURV", "BAKE"], actual: boot.Resolution.Kept.Select(selector: static code => code.ToString()));
         Assert.Equal(expected: 3, actual: store.HeldCount);
@@ -397,7 +397,7 @@ public sealed class CreationBakeLawTests {
         _ = CompileWithPack(path: path);
 
         var store = new WorldBakeStore();
-        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
         var creations = boot.Admission.Definition.Creations.Count;
 
         Assert.True(condition: (creations > 0));
@@ -493,7 +493,7 @@ public sealed class CreationBakeLawTests {
         _ = CompileWithPack(path: path);
 
         var store = new WorldBakeStore();
-        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
         using var schedule = new WorldBakeSchedule(store: store);
         var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
 
@@ -517,7 +517,7 @@ public sealed class CreationBakeLawTests {
         _ = CompileWithPack(omit: "block", path: path);
 
         var store = new WorldBakeStore();
-        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
 
         Assert.Contains(collection: boot.Resolution.Kept.Select(selector: static code => code.ToString()), expected: "BAKE");
         Assert.Equal(expected: 2, actual: store.HeldCount);
@@ -540,7 +540,7 @@ public sealed class CreationBakeLawTests {
         File.Delete(path: directory.PathOf(name: WorldBakePack.FileName));
 
         var store = new WorldBakeStore(directory: directory.PathOf(name: "bakes"));
-        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
 
         Assert.Contains(collection: boot.Resolution.Kept.Select(selector: static code => code.ToString()), expected: "BAKE");
         Assert.Equal(expected: 0, actual: store.HeldCount);
@@ -556,7 +556,7 @@ public sealed class CreationBakeLawTests {
         var path = WriteWorld(directory: directory);
         var store = new WorldBakeStore();
         var cache = new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled"));
-        var boot = CompiledWorldLawTests.Boot(cache: cache, path: path);
+        var boot = CompiledWorldFixtures.Boot(cache: cache, path: path);
 
         Assert.Equal(expected: ["DEFN", "ASST", "CURV"], actual: boot.Resolution.Derived.Select(selector: static code => code.ToString()));
         Assert.Equal(expected: ["BAKE"], actual: boot.Resolution.Deferred.Select(selector: static code => code.ToString()));
@@ -565,15 +565,15 @@ public sealed class CreationBakeLawTests {
         Assert.False(condition: written.TryFind(chunk: out _, code: ChunkCode.Parse(text: "BAKE")));
 
         // Bakes are presentation only: the world a boot admits, and the state it steps to, do not depend on them.
-        var compiled = CompiledWorldLawTests.Compile(chunks: Chunks(store: null), path: path);
+        var compiled = CompiledWorldFixtures.Compile(chunks: Chunks(store: null), path: path);
 
         File.WriteAllBytes(bytes: compiled, path: CompiledWorld.Beside(documentPath: path));
 
-        var baked = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: new WorldBakeStore()), directory: directory.PathOf(name: "state/other")), path: path);
+        var baked = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: new WorldBakeStore()), directory: directory.PathOf(name: "state/other")), path: path);
 
         Assert.Equal(
-            expected: CompiledWorldLawTests.HashAfter(definition: boot.Admission.Definition, ticks: 30),
-            actual: CompiledWorldLawTests.HashAfter(definition: baked.Admission.Definition, ticks: 30)
+            expected: CompiledWorldFixtures.HashAfter(definition: boot.Admission.Definition, ticks: 30),
+            actual: CompiledWorldFixtures.HashAfter(definition: baked.Admission.Definition, ticks: 30)
         );
     }
     [Fact]
@@ -600,7 +600,7 @@ public sealed class CreationBakeLawTests {
             expected: WorldBakeStore.RequestsOf(definition: Definition(), quality: WorldBakeChunk.Quality).Select(selector: static request => request.Key.Pin.Hex).Order(comparer: StringComparer.Ordinal),
             actual: keys.Select(selector: static key => key.Hex)
         );
-        Assert.True(condition: CompiledWorld.TryDecode(container: out var storeless, content: CompiledWorldLawTests.Compile(chunks: Chunks(store: null), path: path), header: out _, reason: out reason), userMessage: reason);
+        Assert.True(condition: CompiledWorld.TryDecode(container: out var storeless, content: CompiledWorldFixtures.Compile(chunks: Chunks(store: null), path: path), header: out _, reason: out reason), userMessage: reason);
         Assert.True(condition: storeless.TryFind(chunk: out var named, code: chunk.Code));
         Assert.Equal(expected: stored.Payload.ToArray(), actual: named.Payload.ToArray());
         Assert.True(condition: WorldBakePack.TryDecode(content: pack, pack: out var decoded, reason: out reason), userMessage: reason);

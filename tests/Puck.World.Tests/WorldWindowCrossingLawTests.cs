@@ -1,10 +1,11 @@
 using System.Numerics;
 using Puck.Maths;
-using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.World.Client;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Testing.WindowCameraFixtures;
+using static Puck.World.Testing.WindowCrossingFixtures;
 
 namespace Puck.World.Tests;
 
@@ -14,72 +15,6 @@ namespace Puck.World.Tests;
 /// (<see cref="WorldSeatViewState.Cross"/>). Both must agree for any authored pair, including one that turns the
 /// traveler.</summary>
 public sealed class WorldWindowCrossingLawTests {
-    internal const float Tolerance = 1e-3f;
-
-    // The (Right, Up, Normal) triad WorldFaceCatalog derives for an unrotated face at an authored yaw.
-    internal static WorldFaceGeometry Face(Vector3 origin, float yawDegrees) {
-        var yaw = (yawDegrees * (MathF.PI / 180f));
-
-        return new WorldFaceGeometry(
-            Origin: origin,
-            Right: new Vector3(
-                x: MathF.Cos(x: yaw),
-                y: 0f,
-                z: -MathF.Sin(x: yaw)
-            ),
-            Up: Vector3.UnitY,
-            Normal: new Vector3(
-                x: MathF.Sin(x: yaw),
-                y: 0f,
-                z: MathF.Cos(x: yaw)
-            ),
-            HalfWidth: 1.5f,
-            HalfHeight: 1.5f
-        );
-    }
-    internal static WorldFaceFrame Frame(WorldFaceGeometry face) => new(
-        Origin: FixedVector3.FromVector3(value: face.Origin),
-        Right: FixedVector3.FromVector3(value: face.Right),
-        Up: FixedVector3.FromVector3(value: face.Up),
-        Normal: FixedVector3.FromVector3(value: face.Normal),
-        HalfWidth: FixedQ4816.FromDouble(value: face.HalfWidth),
-        HalfHeight: FixedQ4816.FromDouble(value: face.HalfHeight),
-        HalfDepth: FixedQ4816.Zero
-    );
-    internal static Quaternion Heading(FixedQ4816 yaw) => Quaternion.CreateFromAxisAngle(
-        angle: ((float)((double)yaw)),
-        axis: Vector3.UnitY
-    );
-    internal static void Near(Vector3 expected, Vector3 actual, string what) => Assert.True(
-        condition: (Vector3.Distance(value1: expected, value2: actual) <= Tolerance),
-        userMessage: $"{what}: expected {expected}, actual {actual}"
-    );
-    // The seat camera the presenter frames a body with: the seat's compiled chase rig, posed at the body.
-    internal static (Vector3 Eye, Vector3 Target) Camera(WorldSeatViewState view, WorldDefinition definition, WorldStateMirror mirror, Vector3 position, Quaternion orientation) {
-        var rig = view.ResolveChase(
-            bodyOrientation: orientation,
-            definition: definition,
-            domains: new WorldValueDomainGuard(),
-            mirror: mirror,
-            views: definition.Views
-        );
-        var anchor = new SdfAnchor(
-            Orientation: orientation,
-            Position: position
-        );
-        var clock = new SdfCameraClock(
-            AuthoritativeTick: 0UL,
-            PresentationSeconds: 0f
-        );
-
-        var (eye, target, _) = rig.Resolve(
-            anchor: in anchor,
-            clock: in clock
-        );
-
-        return (eye, target);
-    }
-
     // THE LAW: a seat that walks through a door looks along what the door's window showed it. The window maps the
     // seat camera's eye and view direction through the pair's isometry; the crossing maps the body through it, and
     // the seat's view follows. A pair 180 degrees apart (the identity) agrees without any turn; a pair authored at one

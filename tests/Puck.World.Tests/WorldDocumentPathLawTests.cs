@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 public sealed class WorldDocumentPathLawTests {
     private const string Patch = "patches/stinger.synth.json";
 
-    private static string World(string patchSource) => CompiledWorldLawTests.World.Replace(
+    private static string World(string patchSource) => CompiledWorldFixtures.World.Replace(
         newValue: patchSource,
         oldValue: "PATCH"
     );

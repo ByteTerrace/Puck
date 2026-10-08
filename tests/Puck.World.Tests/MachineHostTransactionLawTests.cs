@@ -87,7 +87,7 @@ public sealed class MachineHostTransactionLawTests {
                 engine: CgbEngine,
                 options: "cgb fast"
             ),
-            machineCatalog: TestHookInstaller.CreateMachineCatalog()
+            machineCatalog: TestMachines.Catalog()
         );
 
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "cabinet"));
@@ -184,7 +184,7 @@ public sealed class MachineHostTransactionLawTests {
         );
         var host = new WorldMachineHost(
             screens: [],
-            catalog: TestHookInstaller.CreateMachineCatalog(),
+            catalog: TestMachines.Catalog(),
             documentPath: path
         );
 
@@ -230,7 +230,7 @@ public sealed class MachineHostTransactionLawTests {
         );
         var host = new WorldMachineHost(
             screens: [],
-            catalog: TestHookInstaller.CreateMachineCatalog(),
+            catalog: TestMachines.Catalog(),
             documentPath: path
         );
 
@@ -253,7 +253,7 @@ public sealed class MachineHostTransactionLawTests {
     }
     [Fact]
     public void WorldMachineCatalog_ExposesEnginesAndContentProviders() {
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         Assert.True(condition: catalog.IsRegistered(engineId: "gaming-brick"));
         Assert.True(condition: catalog.IsRegistered(engineId: "advanced-gaming-brick"));
@@ -264,9 +264,9 @@ public sealed class MachineHostTransactionLawTests {
         Assert.True(condition: catalog.ContentProviders.ContainsKey(key: "advanced-gaming-brick"));
         Assert.False(condition: catalog.ContentProviders.ContainsKey(key: "tune-instrument"));
 
-        Assert.True(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "gaming-brick"));
-        Assert.True(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "advanced-gaming-brick"));
-        Assert.False(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "tune-instrument"));
+        Assert.True(condition: TestMachines.Catalog().ContentProviders.ContainsKey(key: "gaming-brick"));
+        Assert.True(condition: TestMachines.Catalog().ContentProviders.ContainsKey(key: "advanced-gaming-brick"));
+        Assert.False(condition: TestMachines.Catalog().ContentProviders.ContainsKey(key: "tune-instrument"));
     }
 
 }

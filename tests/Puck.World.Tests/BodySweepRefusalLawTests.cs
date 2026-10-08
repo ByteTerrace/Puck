@@ -261,7 +261,7 @@ public sealed class BodySweepRefusalLawTests {
     // One tick of a carry whose ball is posed at the carrier's least x, with a second, resting ball posed beside it at
     // the given z.
     private static ((FixedVector3, FixedQuaternion) BallBefore, (FixedVector3, FixedQuaternion) BallAfter, (FixedVector3, FixedQuaternion) Carrier, ContactRefusal BallRefusal, bool OverlappedBefore, bool OverlappedAfter) CarriedPairTick(FixedQ4816 otherZ) {
-        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeOtherBody: true, includeWall: true));
+        using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(includeOtherBody: true, includeWall: true));
         var carrier = fixture.JoinSeat();
         var ball = fixture.Server.Body(index: WorldCarryTangibilityLawTests.BallIndex)!;
         var other = fixture.Server.Body(index: (WorldCarryTangibilityLawTests.BallIndex + 1))!;
@@ -350,7 +350,7 @@ public sealed class BodySweepRefusalLawTests {
         System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(length: length, reference: ref System.Runtime.CompilerServices.Unsafe.As<TArray, TElement>(source: ref value)).ToArray();
     // A carrier walking forward ten ticks beside the wall program, with the ball posed at the given x and carried or not.
     private static (FixedVector3 Carrier, ContactRefusal BallRefusal, FixedQ4816 BallX) CarrierWalk(FixedQ4816 ballX, bool carrying) {
-        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeWall: true));
+        using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(includeWall: true));
         var carrier = fixture.JoinSeat();
         var ball = fixture.Server.Body(index: WorldCarryTangibilityLawTests.BallIndex)!;
 

@@ -184,7 +184,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
     }
     private static (bool Composed, JsonObject? Document, string Reason) Compose(string path, JsonObject root) {
         var composed = PuckDocumentComposer.TryComposeWorldDocument(
-            catalog: TestHookInstaller.CreateMachineCatalog(),
+            catalog: TestMachines.Catalog(),
             composed: out var document,
             chainBytes: out _,
             reason: out var reason,

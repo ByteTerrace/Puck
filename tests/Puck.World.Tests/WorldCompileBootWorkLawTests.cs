@@ -15,7 +15,7 @@ public sealed class WorldCompileBootWorkLawTests {
         files.WriteText(name: "middle.world.json", text: """{"basis":"base"}""");
         var path = files.WriteText(name: "subject.puck", text: "basis: \"middle\"\ndocumentId: \"compile-counts\"");
         var cache = new WorldCompileCache(directory: files.PathOf(name: "s71-counters-compile-cache"));
-        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var catalog = TestMachines.Catalog();
 
         WorldBootWork Boot() {
             WorldDefinitionFileSource.ForgetComposedDocuments();

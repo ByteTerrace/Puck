@@ -10,6 +10,7 @@ using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
 using Xunit;
+using static Puck.World.Testing.ValueDomainFixtures;
 
 namespace Puck.World.Tests;
 
@@ -22,7 +23,7 @@ namespace Puck.World.Tests;
 /// and when it returns, never once per frame, and does no counted work while its input is unchanged.
 /// </summary>
 public sealed class WorldValueDomainLawTests {
-    internal const string Row = "bound";
+    internal const string Row = ValueDomainFixtures.Row;
 
     /// <summary>One world as a presentation sees it live: a document whose state rows change, and the one state mirror
     /// that follows it, so a binding keeps its identity across the writes a law makes.</summary>
@@ -270,17 +271,6 @@ public sealed class WorldValueDomainLawTests {
         Path: $"markers[0].style.{member}",
         Present: (definition, mirror, domains) => present(arg: WorldMarkerAlphas.Resolve(domains: domains, index: 0, marker: definition.Markers[0], mirror: mirror))
     );
-
-    // The document with the bound row holding a value: the state a load reads, or a live write leaves.
-    internal static WorldDefinition WithRow(WorldDefinition definition, double value, string row = Row) => definition.WithWorldState(rows: [
-        .. definition.State.Where(predicate: candidate => !string.Equals(a: candidate.Name.Value, b: row, comparisonType: StringComparison.Ordinal)),
-        new WorldStateRow(
-            Name: CellName.Parse(candidate: row),
-            Kind: CellKind.Fixed,
-            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value))]
-        ),
-    ]);
-
     // The number a presentation reads the bound row as.
     private static float Presented(double value) {
         Assert.True(condition: WorldStateReader.TryNumber(number: out var number, value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value)));

@@ -12,7 +12,7 @@ using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
-using static Puck.World.Tests.AdmissionWireFixture;
+using static Puck.World.Testing.AdmissionWireFixture;
 
 namespace Puck.World.Tests;
 

@@ -188,7 +188,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     // zero, which its field does not admit, holds the last value the view presented and is reported.
     [Fact]
     public void ARoutedViewsBoundCloudScaleThatGoesToZeroHoldsItsLastValueAndIsReported() {
-        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+        static WorldDefinition Scaled(double value) => ValueDomainFixtures.WithRow(
             definition: (AwayDocument() with {
                 RenderRaw = (WorldRenderDefaults.Absent with {
                     Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
@@ -218,7 +218,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     // bindings fresh: the new world's cloud scale, out of range at its first look, does not wear the old world's last value.
     [Fact]
     public void AReplacedDestinationStartsItsRoutedViewsBindingsFresh() {
-        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+        static WorldDefinition Scaled(double value) => ValueDomainFixtures.WithRow(
             definition: (AwayDocument() with {
                 RenderRaw = (WorldRenderDefaults.Absent with {
                     Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
@@ -264,7 +264,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             expected[activations[index]] = (index + 1);
         }
 
-        var worlds = activations.Select(selector: static (_, index) => WorldValueDomainLawTests.WithRow(
+        var worlds = activations.Select(selector: static (_, index) => ValueDomainFixtures.WithRow(
             definition: AwayDocument(),
             value: index
         )).ToArray();

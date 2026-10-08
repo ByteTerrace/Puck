@@ -112,7 +112,7 @@ internal static class ShippedWorldStateBaselines {
     // import naming a `.puck`-sourced document resolves to that source. A supplied catalog keeps the load uncached:
     // every replay boots its own definition.
     private static WorldDefinition LoadDocument(string relativePath) => AuthoredGameFixtures.Load(
-        catalog: TestHookInstaller.CreateMachineCatalog(),
+        catalog: TestMachines.Catalog(),
         relativePath: relativePath
     );
     private static JsonObject Measured(WorldRuleWorkBudget budget) => new() {

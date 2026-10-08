@@ -46,7 +46,7 @@ public sealed partial class PortalInputLawTests {
 
         Assert.True(condition: scene.Engage());
 
-        var row = WorldWindowFrustumFitLawTests.DoorRow();
+        var row = FrustumFitFixtures.DoorRow();
         var glass = WorldWindowFrustumFit.Glass(screen: row);
         // The glass point under the pointer, a third of the way across and two fifths down.
         const float X = 0.3f;

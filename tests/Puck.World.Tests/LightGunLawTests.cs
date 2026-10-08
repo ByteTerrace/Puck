@@ -106,7 +106,7 @@ public sealed class LightGunLawTests {
     }
     private static WorldFixture Boot(WorldDefinition definition) => Fixtures.FreshServer(
         definition: definition,
-        machineCatalog: TestHookInstaller.CreateMachineCatalog()
+        machineCatalog: TestMachines.Catalog()
     );
     private static Principal Join(WorldFixture fixture) {
         var seat = Principal.Seat(slot: 0);
@@ -298,7 +298,7 @@ public sealed class LightGunLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-light-gun-");
         var document = Document(cartridgePath: CartridgePath(directory: directory));
         var aims = new SourceRay?[] { Lit, Lit, Lit, Lit, Dark, Dark, Dark, Dark, Lit, Lit, Lit, Lit };
-        var machineCatalog = TestHookInstaller.CreateMachineCatalog();
+        var machineCatalog = TestMachines.Catalog();
 
         (WorldReplaySnapshot Tape, WorldReplayVerdict Verdict, byte[] Machine, long Sensed) Record(SourceRay?[] stream) {
             using var fixture = Fixtures.FreshServer(

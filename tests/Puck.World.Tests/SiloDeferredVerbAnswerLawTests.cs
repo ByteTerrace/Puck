@@ -7,7 +7,7 @@ using Puck.World.Silo;
 
 using Xunit;
 
-using static Puck.World.Tests.DeferredVerbEvictionAnswerLawTests;
+using static Puck.World.Testing.DeferredVerbFixtures;
 
 namespace Puck.World.Tests;
 

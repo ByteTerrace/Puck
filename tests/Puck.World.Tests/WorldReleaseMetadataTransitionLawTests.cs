@@ -363,14 +363,14 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
     public void BothPackageDefinitionsAreProvedThroughADrawnCopy() {
         using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument());
         var checkpoint = Capture(fixture: fixture);
-        var drawn = PublishableDefinitionLawTests.CensusDefinition(draw: new Draw(
+        var drawn = CensusFixtures.CensusDefinition(draw: new Draw(
             Generator: new StateGenerator(
                 Source: GeneratorSource.WeightedNumeric,
                 Weighted: [new GeneratorWeightedNumeric(Value: 8L, Weight: 1UL)]
             ),
             Timing: DrawTiming.Boot
         ));
-        var undrawable = PublishableDefinitionLawTests.CensusDefinition(draw: null);
+        var undrawable = CensusFixtures.CensusDefinition(draw: null);
 
         Assert.True(
             condition: WorldReleaseMetadataTransition.TryApply(

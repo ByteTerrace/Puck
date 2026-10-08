@@ -35,7 +35,7 @@ public sealed class GranaryContentLawTests {
         // server construction and later mutations that revalidate the imported text definitions.
         Assert.True(
             condition: WorldStaging.TryWrite(
-                catalog: TestHookInstaller.CreateMachineCatalog(),
+                catalog: TestMachines.Catalog(),
                 directory: files.PathOf(name: "staged"),
                 name: "granary",
                 path: out var path,

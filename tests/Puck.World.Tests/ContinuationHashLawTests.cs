@@ -57,7 +57,7 @@ public sealed class ContinuationHashLawTests {
 
     [Fact]
     public void ACarriedBodySweepingAgainstAWallFoldsTheBytesItsCheckpointEntryEncodes() {
-        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(
+        using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(
             includeOtherBody: true,
             includeWall: true
         ));
@@ -111,7 +111,7 @@ public sealed class ContinuationHashLawTests {
     }
     [Fact]
     public void ASteadyFoldAllocatesNothing() {
-        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(
+        using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(
             includeOtherBody: true,
             includeWall: true
         ));
@@ -154,7 +154,7 @@ public sealed class ContinuationHashLawTests {
     [Fact]
     public void AProfiledSeatFoldsTheBytesItsCheckpointEntryEncodes() {
         using var fixture = Fixtures.FreshServer();
-        var owned = CrossingIdentityPrivacyLawTests.Owned();
+        var owned = CrossingIdentityFixtures.Owned();
 
         _ = fixture.JoinSeat();
         fixture.Server.Population.SetSeatProfile(profile: owned, slot: 0);
@@ -196,7 +196,7 @@ public sealed class ContinuationHashLawTests {
         Assert.True(condition: catalog.TrySetFact(changed: out _, identity: boot, key: CellName.Parse(candidate: "score"), reason: out var reason, value: 4), userMessage: reason);
         Assert.Same(expected: boot, actual: server.Population.EntryBody(index: 0)!.Profile);
         _ = fixture.JoinSeat(slot: 1);
-        server.Population.SetSeatProfile(profile: CrossingIdentityPrivacyLawTests.Owned(), slot: 1);
+        server.Population.SetSeatProfile(profile: CrossingIdentityFixtures.Owned(), slot: 1);
         fixture.Step();
 
         var population = server.Population;

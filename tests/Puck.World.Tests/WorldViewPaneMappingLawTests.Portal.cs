@@ -18,7 +18,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // The door's window, seen by a seat whose eye is the window's eye, the view on the display's left half, and the
     // session's emitter dressed through the window it fits.
     private (WorldSessionSceneEmitter Session, string Name, Vector2 Marker) ShowPortal(bool dress) {
-        var row = WorldWindowFrustumFitLawTests.DoorRow();
+        var row = FrustumFitFixtures.DoorRow();
         var name = WorldViewNames.Session(screen: row.Index);
         var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var eye = WorldWindowFrustumFitLawTests.Eyes[0];
@@ -48,10 +48,10 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
         var session = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
-            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: WorldWindowFrustumFitLawTests.Destination))
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: FrustumFitFixtures.Destination))
         );
 
-        session.SetWindowFit(fit: () => WorldWindowFrustumFitLawTests.Fit(eye: eye));
+        session.SetWindowFit(fit: () => FrustumFitFixtures.Fit(eye: eye));
 
         if (dress) {
             _ = new SdfCompositionFrameSource(
