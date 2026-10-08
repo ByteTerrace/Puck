@@ -6,7 +6,10 @@ namespace Puck.Shaders;
 /// <summary>Resolves shader tools from a caller-selected directory, a caller-selected <c>dxc</c> executable, or the
 /// process search path.</summary>
 public sealed class ShaderToolchain {
+    private readonly Lock m_identityGate = new();
     private readonly string? m_dxc;
+
+    private IdentityReading? m_identity;
 
     /// <summary>Initializes a toolchain that finds its tools in <paramref name="directory"/>, or on the process search
     /// path when it is <see langword="null"/> or empty.</summary>
@@ -46,8 +49,16 @@ public sealed class ShaderToolchain {
     /// without running the tool. Nothing about where the toolchain is installed or when its files were written enters
     /// it, so a cache restored onto another machine or extracted afresh is a hit for the same toolchain. A <c>dxc</c>
     /// that cannot be found has an identity of its own, under which nothing is ever compiled.</summary>
-    /// <remarks>The library search covers colocated releases and Windows system/PATH locations. Native-loader
-    /// overrides such as <c>LD_LIBRARY_PATH</c> and <c>DXC_DXIL_DLL_PATH</c> are not resolved here.</remarks>
+    /// <remarks>
+    /// <para>The library search covers colocated releases and Windows system/PATH locations. Native-loader
+    /// overrides such as <c>LD_LIBRARY_PATH</c> and <c>DXC_DXIL_DLL_PATH</c> are not resolved here.</para>
+    /// <para>The files are hashed once per toolchain instance, which a compiler holds for its process's lifetime, so a
+    /// build keys every output under one reading of the toolchain. Every read locates the files again and compares each
+    /// one's path, length, last write time and creation time with that reading, hashing afresh when any differs, so a
+    /// tool or library replaced under a running compiler keys its next compile afresh and the compiler's check that the
+    /// toolchain did not change during a compile still holds. A replacement within one process that keeps all four is
+    /// not seen until a new toolchain instance, such as the next build's process, reads the bytes.</para>
+    /// </remarks>
     /// <exception cref="IOException">A toolchain file exists but cannot be read; the message names it.</exception>
     public string Identity {
         get {
@@ -58,16 +69,46 @@ public sealed class ShaderToolchain {
                 return ShaderSourceClosure.HashOf(text: "dxc|absent");
             }
 
-            var builder = new StringBuilder();
+            var files = FilesOf(dxc: dxc).Select(selector: StampOf).ToArray();
+            var memo = Volatile.Read(location: ref m_identity);
 
-            foreach (var file in FilesOf(dxc: dxc)) {
-                builder.Append(value: Path.GetFileName(path: file).ToLowerInvariant()).Append(value: '|').Append(value: HashOf(path: file)).Append(value: '\n');
+            if ((memo is not null) && memo.Files.AsSpan().SequenceEqual(other: files)) {
+                return memo.Identity;
             }
 
-            return ShaderSourceClosure.HashOf(text: builder.ToString());
+            lock (m_identityGate) {
+                memo = m_identity;
+                if ((memo is not null) && memo.Files.AsSpan().SequenceEqual(other: files)) {
+                    return memo.Identity;
+                }
+
+                var builder = new StringBuilder();
+
+                foreach (var file in files) {
+                    builder.Append(value: Path.GetFileName(path: file.Path).ToLowerInvariant()).Append(value: '|').Append(value: HashOf(path: file.Path)).Append(value: '\n');
+                }
+
+                memo = new IdentityReading(Files: files, Identity: ShaderSourceClosure.HashOf(text: builder.ToString()));
+                Volatile.Write(location: ref m_identity, value: memo);
+
+                return memo.Identity;
+            }
         }
     }
 
+    // One reading of the toolchain: the identity hashed from its files, and each file's metadata when it was read.
+    private sealed record IdentityReading(FileStamp[] Files, string Identity);
+    // What a stat of a toolchain file reports, which a replacement almost always moves: a stand-in for its content
+    // between two hashes in one process, never a substitute for them across processes.
+    private readonly record struct FileStamp(string Path, long Length, DateTime LastWriteUtc, DateTime CreationUtc);
+
+    private static FileStamp StampOf(string path) {
+        var info = new FileInfo(fileName: path);
+
+        return (info.Exists
+            ? new FileStamp(CreationUtc: info.CreationTimeUtc, LastWriteUtc: info.LastWriteTimeUtc, Length: info.Length, Path: path)
+            : new FileStamp(CreationUtc: default, LastWriteUtc: default, Length: -1, Path: path));
+    }
     // Standard release locations: the executable, then compiler and validator libraries beside it or in the sibling
     // lib directory, plus the Windows system directory and PATH. Other native-loader search rules are not modeled.
     private static IEnumerable<string> FilesOf(string dxc) {
@@ -97,7 +138,8 @@ public sealed class ShaderToolchain {
             yield return entry;
         }
     }
-    // Read the bytes again: replacing a tool or library can preserve both its length and its write time.
+    // The identity is the bytes: replacing a tool or library can preserve its length and its times, so a new reading
+    // hashes every file, and each file is stamped before it is hashed, so a replacement between the two reads again.
     private static string HashOf(string path) {
         try {
             using var stream = new FileStream(access: FileAccess.Read, bufferSize: 81920, mode: FileMode.Open, options: FileOptions.SequentialScan, path: path, share: FileShare.Read | FileShare.Delete);

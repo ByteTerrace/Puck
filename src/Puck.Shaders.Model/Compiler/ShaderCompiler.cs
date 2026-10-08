@@ -576,7 +576,8 @@ public sealed partial class ShaderCompiler {
 
         return ShaderSourceClosure.HashOf(text: builder.Append(value: work.Layout).ToString());
     }
-    // The toolchain is read on every key, so a dxc replaced under a long-lived compiler keys its next compile afresh. The
+    // Every key asks the toolchain for its identity, which hashes the files once and re-reads only their metadata after
+    // that (ShaderToolchain.Identity), so a dxc replaced under a long-lived compiler keys its next compile afresh. The
     // entry layout is keyed too, so compilers that lay entries out differently, on checkouts of different commits sharing
     // one cache, read and write different names and never take one another's entries for bytecode.
     private string KeyOf(string inputs) => ShaderSourceClosure.HashOf(text: ((((inputs + "|") + m_toolchain.Identity) + "|") + CacheEntryLayout));

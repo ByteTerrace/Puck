@@ -102,7 +102,7 @@ namespace Puck.Cli.Qualification {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
-        public const string QualificationReportSchemaVersion = "f8417604ee57efba";
+        public const string QualificationReportSchemaVersion = "7e9f0a7bf149e52c";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
         public const string ReleaseProfileSchemaVersion = "9bc74a0b9c1af36b";
     }

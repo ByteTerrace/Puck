@@ -103,7 +103,11 @@ those same inputs, options and toolchain. Editing one `.hlsli` invalidates only 
 includes it; a matching entry already in the cache needs no compiler run.
 
 The toolchain identity hashes file contents rather than installation paths or
-timestamps. Its library search covers ordinary DXC layouts, but does not yet
+timestamps. A compiler hashes them once (about 23 MB with the Vulkan SDK's
+`dxc`), not once per output; every later key re-reads only each file's path,
+length and times, and hashes again when one moves, so a toolchain replaced
+during a build still refuses that build's publications. A replacement that
+keeps all of them is read by the next process's compiler. Its library search covers ordinary DXC layouts, but does not yet
 resolve every native loader search rule or overrides such as `LD_LIBRARY_PATH`
 and `DXC_DXIL_DLL_PATH`. A library loaded through those routes can change output
 without changing the key; complete loader identity remains open. Closures

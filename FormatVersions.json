@@ -732,7 +732,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "f8417604ee57efba",
+            "shape": "7e9f0a7bf149e52c",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -921,7 +921,7 @@
                 "M:Puck.Shaders.ShaderToolchain.Resolve(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "9335615ca2cf8b1e",
+            "shape": "685f64313c69ba9f",
             "source": "src/Puck.Shaders.Model/Compiler/ShaderCompiler.cs",
             "token": "puck-shader-compiler-1"
         },
