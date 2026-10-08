@@ -11,6 +11,10 @@ namespace Puck.Cli.Laws;
 /// repository: it is keyed by, cloned from and fetched from the repository's common git directory, never a worktree
 /// root.</summary>
 internal sealed class LawProofTree(string tree, string source, FileStream lease) : IDisposable {
+    /// <summary>The most clones the store keeps: the one a proof leases and the most recently leased other. Leasing one
+    /// removes the rest (<see cref="CacheRetention"/>).</summary>
+    public const int KeptTrees = 2;
+
     public static string DefaultRoot => PuckUserDirectory.Resolve(name: "law-trees");
 
     /// <summary>The repository's common git directory this clone is keyed by and cloned from.</summary>
@@ -56,6 +60,9 @@ internal sealed class LawProofTree(string tree, string source, FileStream lease)
             LawProofFiles.RequireUnlinkedPath(path: path);
             var handle = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: path, share: FileShare.None);
 
+            // The lease's last write time is when a proof last used this clone.
+            File.SetLastWriteTimeUtc(fileHandle: handle.SafeFileHandle, lastWriteTimeUtc: DateTime.UtcNow);
+            Prune(keep: directory, root: root);
             reason = string.Empty;
             return new LawProofTree(lease: handle, source: source, tree: Path.Combine(path1: directory, path2: "tree"));
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -63,6 +70,44 @@ internal sealed class LawProofTree(string tree, string source, FileStream lease)
             return null;
         }
     }
+
+    // Keeps the KeptTrees most recently leased clones, the one just leased among them, and removes each other one once
+    // its own lease can be taken, so a clone another proof holds stays. A clone of a repository that no longer exists
+    // ages out the same way.
+    private static void Prune(string root, string keep) {
+        var entries = new List<CacheEntry>();
+
+        try {
+            foreach (var directory in Directory.EnumerateDirectories(path: root)) {
+                var lease = Path.Combine(path1: directory, path2: "proof.lock");
+
+                entries.Add(item: new CacheEntry(Bytes: 0, LastUsedUtc: (File.Exists(path: lease) ? File.GetLastWriteTimeUtc(path: lease) : Directory.GetLastWriteTimeUtc(path: directory)), Path: Path.GetFullPath(path: directory)));
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // A store that cannot be listed is pruned by a later lease; this proof still has its clone.
+            return;
+        }
+
+        foreach (var eviction in CacheRetention.SelectEvictions(bound: CacheBound.Entries(maxEntries: KeptTrees), entries: entries, inUse: Path.GetFullPath(path: keep))) {
+            var lease = Path.Combine(path1: eviction.Path, path2: "proof.lock");
+
+            try {
+                LawProofFiles.RequireUnlinkedPath(path: eviction.Path);
+                LawProofFiles.RequireUnlinkedPath(path: lease);
+                using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: lease, share: FileShare.None)) {
+                    // Removed under the lease, so no proof can lease the clone halfway through its removal.
+                    LawProofFiles.DeleteTree(path: Path.Combine(path1: eviction.Path, path2: "tree"));
+                }
+
+                // Only the lease and the then-empty directory remain; a proof that leased it since keeps both.
+                File.Delete(path: lease);
+                Directory.Delete(path: eviction.Path);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // Leased by another proof, or a file in it is still open: it stays for a later lease to remove.
+            }
+        }
+    }
+
     /// <summary>Refreshes only changed tracked files and removes unignored strays. A bad cache is replaced once;
     /// inability to repair it falls back to a fresh scratch tree.</summary>
     public bool TryPrepare(string head, Func<string, string[], ChildProcessResult> git, out string reason) {

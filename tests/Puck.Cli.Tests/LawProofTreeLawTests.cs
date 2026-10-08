@@ -4,9 +4,40 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-/// <summary>The proof's persistent tree: its lease and its incremental reuse, over the shared fixtures of
+/// <summary>The proof's persistent tree: its lease, its incremental reuse and the pruning of other clones, over the shared fixtures of
 /// <see cref="LawProofLaws"/>.</summary>
 public sealed class LawProofTreeLawTests : LawProofLaws {
+    [Fact]
+    public void LeasingAClonePrunesTheLeastRecentlyLeasedOthersButNeverAHeldOne() {
+        using var checkout = Checkout(initial: "broken");
+        var root = LawTreesRoot(checkout: checkout);
+        // Clones of other repositories, each with a tree and a lease dated by when a proof last leased it.
+        string Clone(string name, int hoursAgo) {
+            var directory = Path.Combine(path1: root, path2: name);
+            var lease = Path.Combine(path1: directory, path2: "proof.lock");
+
+            _ = Directory.CreateDirectory(path: Path.Combine(path1: directory, path2: "tree"));
+            File.WriteAllText(contents: name, path: Path.Combine(path1: directory, path2: "tree", path3: "file"));
+            File.WriteAllText(contents: string.Empty, path: lease);
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddHours(value: -hoursAgo), path: lease);
+            return directory;
+        }
+        var recent = Clone(hoursAgo: 1, name: "recent");
+        var older = Clone(hoursAgo: 2, name: "older");
+        var oldest = Clone(hoursAgo: 3, name: "oldest");
+        var held = Clone(hoursAgo: 4, name: "held");
+
+        using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: Path.Combine(path1: held, path2: "proof.lock"), share: FileShare.None)) {
+            using var lease = LawProofTree.TryAcquire(reason: out var reason, repository: checkout.Root, root: root);
+
+            Assert.True(condition: (lease is not null), userMessage: reason);
+            // The leased clone and the most recently leased other stay; another proof's lease keeps its clone too.
+            Assert.True(condition: Directory.Exists(path: recent));
+            Assert.False(condition: Directory.Exists(path: older));
+            Assert.False(condition: Directory.Exists(path: oldest));
+            Assert.True(condition: File.Exists(path: Path.Combine(path1: held, path2: "tree", path3: "file")));
+        }
+    }
     [Fact]
     public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
         using var checkout = Checkout(initial: "broken");
