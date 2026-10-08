@@ -777,7 +777,13 @@ base, so passing both is refused.
   build-order-only reference such as a test that launches `Puck.World`. A file
   no project owns, such as a test data directory under `tests/`, chooses the
   projects whose sources name that directory, spelled by its first two
-  segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`.
+  segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`. A file a
+  project links into its own build from outside its directory, such as a shared
+  fixture under `tests/Shared` or content copied from another project, chooses
+  the projects whose project files include it as their own changes would, each
+  include resolved from its project's directory and a glob matched below its
+  last literal directory; one the root `Directory.Build.targets` links into
+  every test project chooses every suite.
 - **Baselines** follow the same reached projects: a baseline is chosen when its
   owning test project is reached, or a changed or deleted path matches the
   repository-relative data globs declared beside its artifact. The plan lists
