@@ -500,8 +500,8 @@ Report ratios and the largest unexplained deviations rather than claiming a
 physical worst case from a finite benchmark run.
 
 Extend the existing suites in `tests/Puck.State.Tests`,
-`tests/Puck.World.Schema.Tests`, `tests/Puck.World.Tests`, and
-`tests/Puck.World.Browser.Tests`. Start with targeted tests, then run each
+`tests/Puck.World.Schema.Tests`, `tests/Puck.World.Server.Tests`,
+`tests/Puck.World.Tests`, and `tests/Puck.World.Browser.Tests`. Start with targeted tests, then run each
 affected project in Release. Run the real World for changed scheduling or
 mutation behavior using the `puck-world` skill's supported stdin/replay recipes.
 Use `puck bench world` for an independent integration check and focused

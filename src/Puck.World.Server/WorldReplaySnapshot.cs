@@ -288,7 +288,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
 /// (and <see cref="WorldReplaySeat"/>/<see cref="WorldIdentityProjection"/>/<see cref="WorldReplayTickInput"/>/the
 /// <see cref="WorldReplayEntry"/> base it composes with) had not caught up. Widened so
-/// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
+/// <c>tests/Puck.World.Server.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {

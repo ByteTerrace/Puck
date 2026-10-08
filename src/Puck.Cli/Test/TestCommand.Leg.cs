@@ -8,13 +8,47 @@ using Puck.World;
 namespace Puck.Cli.Test;
 
 internal static partial class TestCommand {
-    // The wall-clock net a stalled leg is allowed: the export tick's real-time duration at the document's rate,
-    // plus a fixed allowance for process start-up and shutdown. Healthy legs run unpaced and finish much sooner;
-    // retaining the real-time bound leaves complex worlds room to execute without making a hung host unbounded.
-    private static TimeSpan LegBudget(ulong exportTick, int rateHz) => TimeSpan.FromSeconds(value: (20.0 + ((rateHz > 0)
-        ? (exportTick / ((double)rateHz))
-        : 0.0
-    )));
+    // A leg is bounded by its progress, never by how long its ticks take: a host that keeps advancing is never cut
+    // short, however loaded the machine, and one that stops advancing is stopped. The script waits in steps of one
+    // simulated second, and the World answers each step as it starts it, once the step before it has released, so each
+    // answer is a tick the run reached. The first answer must come within StartupBudget of launch, which covers process
+    // start-up, the world's load and composition and the host's start; each later one within ProgressBudget of the one
+    // before it.
+    private static readonly TimeSpan StartupBudget = TimeSpan.FromMinutes(value: 3);
+    private static readonly TimeSpan ProgressBudget = TimeSpan.FromMinutes(value: 1);
+
+    private const string WaitAnswer = "[world.wait:";
+
+    // The ticks each step of the leg's script waits: one simulated second at the document's rate.
+    private static ulong StepTicks(int rateHz) => ((ulong)Math.Max(
+        val1: 1,
+        val2: rateHz
+    ));
+
+    // The script one leg sends: steps of one simulated second up to two ticks past the export tick, then the wire's
+    // refusals, then quit.
+    internal static string LegScript(ulong exportTick, int rateHz) {
+        var script = new StringBuilder();
+        var step = StepTicks(rateHz: rateHz);
+
+        for (var remaining = (exportTick + 2UL); (remaining > 0UL); remaining -= Math.Min(val1: remaining, val2: step)) {
+            _ = script.Append(value: "world.wait ").Append(value: Math.Min(val1: remaining, val2: step).ToString(provider: CultureInfo.InvariantCulture)).Append(value: Environment.NewLine);
+        }
+
+        _ = script.Append(value: "wire.errors").Append(value: Environment.NewLine);
+        _ = script.Append(value: "quit").Append(value: Environment.NewLine);
+
+        return script.ToString();
+    }
+    // The longest a leg's watchdog lets it run: its start-up, then every step and the quit at the progress bound. The
+    // World is handed it as its own exit, so a host whose runner has gone stops, and never sooner than the runner would
+    // have stopped it.
+    internal static TimeSpan LegCeiling(ulong exportTick, int rateHz) {
+        var steps = (((exportTick + 2UL) + (StepTicks(rateHz: rateHz) - 1UL)) / StepTicks(rateHz: rateHz));
+
+        return (StartupBudget + (ProgressBudget * (steps + 1UL)));
+    }
+
     // The last few lines of a failing leg's stderr: the boot or validation refusal sits at the end, and the whole
     // transcript would bury it.
     private static string Tail(string text, int lines = 12) {
@@ -49,23 +83,22 @@ internal static partial class TestCommand {
 
         return false;
     }
-    // One leg: boot the real executable headless against its own state and schedule directories, fence past the
-    // export tick, quit, then read what the world wrote.
-    private static bool TryRunLeg(string world, string artifact, string legDirectory, ulong exportTick, int rateHz, TextWriter error, out TestReading? reading) {
+
+    // One leg: boot the executable headless against its own state and schedule directories, step past the export tick
+    // one simulated second at a time, quit, then read what the world wrote. The watchdog, not the World's own exit,
+    // decides when a leg has stalled.
+    internal static bool TryRunLeg(string world, string artifact, string legDirectory, ulong exportTick, int rateHz, TextWriter error, out TestReading? reading) {
         reading = null;
 
         var scheduleDirectory = Path.Combine(
             path1: legDirectory,
             path2: "out"
         );
-        var script = new StringBuilder();
-
-        _ = script.Append(value: "world.wait ").Append(value: (exportTick + 2UL).ToString(provider: CultureInfo.InvariantCulture)).Append(value: Environment.NewLine);
-        _ = script.Append(value: "wire.errors").Append(value: Environment.NewLine);
-        _ = script.Append(value: "quit").Append(value: Environment.NewLine);
+        var lastAnswer = "nothing";
 
         _ = Directory.CreateDirectory(path: legDirectory);
 
+        using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         CliProcessResult process;
 
         try {
@@ -76,22 +109,33 @@ internal static partial class TestCommand {
                     "--world", world,
                     "--headless", "true",
                     "--unpaced", "true",
-                    "--exit-after-seconds", ((int)LegBudget(
+                    "--exit-after-seconds", ((int)Math.Ceiling(a: LegCeiling(
                         exportTick: exportTick,
                         rateHz: rateHz
-                    ).TotalSeconds).ToString(provider: CultureInfo.InvariantCulture),
+                    ).TotalSeconds)).ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", Path.Combine(
                         path1: legDirectory,
                         path2: "state"
                     ),
                     "--schedule-dir", scheduleDirectory,
                 ],
-                input: script.ToString(),
-                timeout: (LegBudget(
+                cancellationToken: watchdog.Token,
+                input: LegScript(
                     exportTick: exportTick,
                     rateHz: rateHz
-                ) + TimeSpan.FromSeconds(value: 30))
+                ),
+                onOutput: line => {
+                    if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: WaitAnswer)) {
+                        lastAnswer = line.Line;
+                        watchdog.CancelAfter(delay: ProgressBudget);
+                    }
+                },
+                timeout: Timeout.InfiniteTimeSpan
             );
+        } catch (OperationCanceledException) when (watchdog.IsCancellationRequested) {
+            error.WriteLine(value: $"ERROR: the leg for {world} stopped advancing: its last answer was {lastAnswer}, and none followed within {((lastAnswer == "nothing") ? StartupBudget : ProgressBudget).TotalSeconds.ToString(provider: CultureInfo.InvariantCulture)} seconds; transcripts under {legDirectory}.");
+
+            return false;
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             error.WriteLine(value: $"ERROR: could not start the leg for {world}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
@@ -115,13 +159,8 @@ internal static partial class TestCommand {
             )
         );
 
-        if (
-            process.TimedOut ||
-            (process.ExitCode != 0)
-        ) {
-            error.WriteLine(value: $"ERROR: the leg for {world} {(process.TimedOut
-                ? "timed out"
-                : $"exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}")}; transcripts under {legDirectory}.");
+        if (process.ExitCode != 0) {
+            error.WriteLine(value: $"ERROR: the leg for {world} exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}; transcripts under {legDirectory}.");
             // The transcripts are removed with the run directory unless --keep, so the one line that says WHY has to
             // travel now rather than living in a directory the finally block is about to delete.
             error.WriteLine(value: Tail(text: process.Stderr));
@@ -136,6 +175,7 @@ internal static partial class TestCommand {
             world: world
         );
     }
+
     private static bool TryRead(string world, string scheduleDirectory, TextWriter error, out TestReading? reading) {
         reading = null;
 

@@ -32,7 +32,7 @@ public sealed class WorldEditorEditQueueLawTests {
         public Rig() {
             var echoes = new WorldDeferredVerbEchoes();
 
-            m_row = WorldEditorPlacementLawTests.Build();
+            m_row = EditorPlacementFixtures.Build();
             Away = WorldEditorPlacementLawTests.AwayDocument(row: m_row);
             Link = new RecordingLink(definition: Away);
             Endpoint = EditorEndpoints.Of(definition: Away, identity: "away", link: Link, pose: WorldEditorPlacementLawTests.AwayCrate);
@@ -162,7 +162,7 @@ public sealed class WorldEditorEditQueueLawTests {
     [Fact]
     public void AnUndoneEditIsNeverRestoredByTheNextNudge() {
         // In the console's own world: nudge x, let it apply and deliver, undo it, let that apply, then nudge z.
-        using var row = WorldEditorPlacementLawTests.Build();
+        using var row = EditorPlacementFixtures.Build();
         var registry = WorldEditorPlacementLawTests.BuildRegistry(row: row, seats: new WorldEditorSeats());
         var before = ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position);
         var z = new Vector3(x: 0f, y: 0f, z: WorldEditorPlacementLawTests.Pitch);
@@ -222,7 +222,7 @@ public sealed class WorldEditorEditQueueLawTests {
     public void AStoppedWorldAnswersItsEditsAndItsSuccessorTakesEditsAtOnce() {
         var echoes = new WorldDeferredVerbEchoes();
         var lines = new List<string>();
-        var current = WorldEditorPlacementLawTests.Build();
+        var current = EditorPlacementFixtures.Build();
         var registry = WorldEditorPlacementLawTests.BuildRegistry(console: () => current.Instance, echoes: echoes, row: current, seats: new WorldEditorSeats());
 
         echoes.Completed += result => lines.Add(item: result.Output);
@@ -243,7 +243,7 @@ public sealed class WorldEditorEditQueueLawTests {
 
             // A new 'boot', at the very tick the stopped one had reached, takes the next edit at once, from its own document:
             // neither the queue nor the console's row guard carries anything over from the world it replaced.
-            current = WorldEditorPlacementLawTests.Build();
+            current = EditorPlacementFixtures.Build();
 
             var before = ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: current.Server.Definition.Placements)!.Position);
             var nudged = registry.Submit(line: Nudge);
@@ -303,7 +303,7 @@ public sealed class WorldEditorEditQueueLawTests {
     }
     [Fact]
     public void AnEditMadeOnOneWorldIsRefusedByAWorldItsLinkReachedInstead() {
-        using var console = WorldEditorPlacementLawTests.Build();
+        using var console = EditorPlacementFixtures.Build();
         var away = WorldEditorPlacementLawTests.AwayDocument(row: console);
         using var first = HostRow.Build(definition: away, name: "a");
         using var second = HostRow.Build(definition: away, name: "b");
@@ -345,7 +345,7 @@ public sealed class WorldEditorEditQueueLawTests {
         // One world reached through two endpoints on its one activation: a local one over the world's own link, whose
         // submissions wait on its authority and whose verdicts its tick answers inside that authority, and a federated one
         // whose verdicts the law answers from a thread of its own, as a traveler lane does.
-        var row = WorldEditorPlacementLawTests.Build();
+        var row = EditorPlacementFixtures.Build();
         var version = row.Server.DocumentVersion;
         var definition = row.Server.Definition;
         var local = new GatedLink(target: row.Instance.Link);

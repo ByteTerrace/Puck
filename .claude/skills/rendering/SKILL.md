@@ -2713,11 +2713,12 @@ stations gate GPU kernel behavior by machine.
 ```bash
 dotnet build src/Puck.SdfVm -c Release                      # runs DXC; needs dxc on PATH
 dotnet test tests/Puck.SignedDistance.Tests -c Release      # ISA packing, Lipschitz, parts, rigid leaves, grid, SdfBakerLawTests
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests" --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests"
+dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
+dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
+dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends

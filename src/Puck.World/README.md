@@ -1309,7 +1309,7 @@ rank; the top-k of a mask is
 highest-rank index, never mixed, so the plain integer comparison the showdown
 makes IS the poker comparison. No sort, no per-rank pattern row, no scratch
 copy of the hand, and a live rank on every street for the seat that may see
-it. `tests/Puck.World.Tests/PokerHandStrengthLawTests.cs` feeds authored
+it. `tests/Puck.World.Games.Tests/PokerHandStrengthLawTests.cs` feeds authored
 seven-card hands through the shipped rules on a real server and pins the
 exact word for every category, the near-miss controls, the ordering, a full
 hand to showdown (chip and card conservation, the reveal, the collection back
@@ -2407,7 +2407,8 @@ binding-narration) among them—see the
 for the `stream` override that lets a `world.grant` claim bind its
 stderr-narrated confirmation. Strict-parse and mutation-all-or-nothing are
 proved in-process by
-`tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
+`tests/Puck.World.Schema.Tests/StrictParseLawTests.cs` and
+`tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`,
 and cited repository paths are checked by `puck docs links`.
 `four-corners-sharded` is the stronger five-authority federation proof: four
 ground worlds plus the floating island, each its own real process on its own
@@ -2417,7 +2418,7 @@ now lives. Ordered-domain submission order, the headless boot, the HUD
 document, and engagement dissolution have no committed battery at all—validate
 them by running the app. Principal/grant enforcement and engage/disengage authority
 are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
-`ControlApplicationLawTests` in `tests/Puck.World.Tests`.
+`ControlApplicationLawTests` in `tests/Puck.World.Server.Tests`.
 
 The [discrete state contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 covers tabletop/card rules and turn-based tactics. `world.state.transform`

@@ -10,6 +10,16 @@
         <ProjectReference Include="../../src/Puck.World.Azure/Puck.World.Azure.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
     </ItemGroup>
 </Project>

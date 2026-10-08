@@ -701,12 +701,12 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
 ## Verification
 
 There is no dedicated `Puck.Scripting.Tests` project: the ABI is exercised through its consumers,
-`tests/Puck.World.Tests` in particular (addon attach/replay/admission law tests). The guest-side
+`tests/Puck.World.Server.Tests` in particular (addon attach/replay/admission law tests). The guest-side
 Rust workspace ([`wasm/README.md`](../../wasm/README.md)) carries its own build and test story for
 authored modules.
 
 ```powershell
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj
 ```
 
 ## Packaging

@@ -156,7 +156,7 @@ schemas.
 sculpting. It is real infrastructure — `CreationBuilder`'s topological
 invariants (parents declared before children, ids unique, `Mirror` always
 emitting `Left` before `Right`) are enforced and covered by
-`tests/Puck.World.Tests/CreationBuilderLawTests.cs`, and `puck creation
+`tests/Puck.World.Schema.Tests/CreationBuilderLawTests.cs`, and `puck creation
 sculpts`/`sculpt <name>` and the live `creation.sculpts`/`creation.sculpt`
 console twins are wired and working. But **no shipped creation is authored
 through it today**: `CreationSculptRegistry` ships with zero sculpts

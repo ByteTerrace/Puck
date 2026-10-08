@@ -11,8 +11,9 @@ namespace Puck.World;
 /// <see cref="System.Runtime.CompilerServices.ModuleInitializerAttribute"/> method, so they are installed the
 /// instant the process's entry assembly loads — before <c>Main</c>, before the DI container, before any offline
 /// replay rehydration or pre-container boot parse the validators run during. The one production consumer is
-/// Puck.World.exe; <c>tests/Puck.World.Tests</c> is the sole other caller that loads Puck.World.Schema without
-/// Puck.World, and wires a minimal stand-in of its own (<c>TestHookInstaller</c>) for exactly this reason.
+/// Puck.World.exe; the <c>tests/Puck.World*.Tests</c> suites are the only other callers that load Puck.World.Schema without
+/// Puck.World, and each wires a minimal stand-in of its own (<c>VocabularyHooks</c> in <c>tests/Shared/World</c>, and
+/// <c>TestHookInstaller</c> in <c>tests/Puck.World.Transpiler.Tests</c>) for exactly this reason.
 /// </summary>
 public static class BindingVocabularyHook {
     /// <summary>Gets the hook that lints a composed binding document against the command vocabulary and against a

@@ -346,6 +346,12 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
 ```bash
+dotnet test tests/Puck.World.Server.Tests -c Release
+dotnet test tests/Puck.World.Games.Tests -c Release
+dotnet test tests/Puck.World.Machines.Tests -c Release
+dotnet test tests/Puck.World.Client.Tests -c Release
+dotnet test tests/Puck.World.Presentation.Tests -c Release
+dotnet test tests/Puck.World.Silo.Tests -c Release
 dotnet test tests/Puck.World.Tests -c Release
 ```
 

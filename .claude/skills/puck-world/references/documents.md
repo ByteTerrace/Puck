@@ -318,7 +318,7 @@ this are [`puck-dsl`](../../puck-dsl/SKILL.md)'s.
 Release` — architecture lanes + XML-doc diagnostics) and RUN `Puck.World`,
 round-tripping the affected document over stdin (`world.status`, `world.save`,
 `world.load`). Proven in-process by
-`tests/Puck.World.Tests/StrictParseLawTests.cs`. Validate HUD document changes
+`tests/Puck.World.Schema.Tests/StrictParseLawTests.cs`. Validate HUD document changes
 by running the app — see [hud.md](hud.md)'s "Verifying" section for the
 recipe. A `.puck` source compiled through `--validate` still needs this step:
 `--validate` runs the same rules the boot path does, but only running the app

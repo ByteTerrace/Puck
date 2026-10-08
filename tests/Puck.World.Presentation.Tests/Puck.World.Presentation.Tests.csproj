@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The client and server surface this project exercises is read directly (public members only; see AGENTS.md's
+             InternalsVisibleTo ruling), never through reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- A client and its frame producers over a live server or a compiled world, without the composition root, the
+             graphics backends or the silo. -->
+        <ProjectReference Include="../../src/Puck.World.Client/Puck.World.Client.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
+        <!-- The flagship and canary worlds carry Gaming Brick screens and tune instruments, so they validate against both
+             cores. -->
+        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
+        <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AdmissionWireFixture.cs" Link="World/AdmissionWireFixture.cs" />
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Server.cs" Link="World/AuthoredGameFixtures.Server.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
+        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
+        <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
+        <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/FrustumFitFixtures.cs" Link="World/FrustumFitFixtures.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+        <Compile Include="../Shared/World/NarrationPaths.cs" Link="World/NarrationPaths.cs" />
+        <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
+        <Compile Include="../Shared/World/RecordingNarrationSink.cs" Link="World/RecordingNarrationSink.cs" />
+        <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
+        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
+        <Compile Include="../Shared/World/SolitaireFixtures.cs" Link="World/SolitaireFixtures.cs" />
+        <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
+        <Compile Include="../Shared/World/TimelineLeverFixtures.cs" Link="World/TimelineLeverFixtures.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
+        <Compile Include="../Shared/World/WindowCameraFixtures.cs" Link="World/WindowCameraFixtures.cs" />
+        <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
+        <Compile Include="../Shared/World/WorldDocumentCorpus.cs" Link="World/WorldDocumentCorpus.cs" />
+        <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
+             the game ships Assets/worlds (WorldAssetRowLoader). WorldSaveAuthoredDocumentLawTests boots the worlds that
+             author them, so the suite carries the same files at the same relative paths. -->
+        <None Include="../../src/Puck.World/Assets/worlds/music/**" LinkBase="Assets/worlds/music" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

@@ -5,7 +5,7 @@ using Puck.World.Server;
 namespace Puck.Cli.Bench;
 
 // Constructs a fresh, disposable, in-process WorldServer over a WorldDefinition the same way
-// tests/Puck.World.Tests/Fixtures.cs's FreshServer does, without referencing the test project (off limits to this
+// tests/Shared/World/Fixtures.Server.cs's FreshServer does, without referencing the test project (off limits to this
 // verb): a fresh WorldPopulation, an unconfigured WorldRenderEnvelope, a WorldMachineHost with no registered
 // engines, and a scratch-directory WorldOwnedWorlds catalog seeded from the same document.
 internal sealed class WorldBenchServer : IDisposable {

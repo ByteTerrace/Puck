@@ -180,5 +180,5 @@ generic ARM mutations and durable status polling. Its tests exercise the real
 Azure SDK pipeline against an in-memory HTTP service.
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter-class "*WorldExtensionLawTests"
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --filter-class "*WorldExtensionLawTests"
 ```

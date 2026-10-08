@@ -1,0 +1,377 @@
+using Puck.Commands;
+using Xunit;
+using Puck.Hosting;
+using Puck.Testing;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server.Tests;
+
+public sealed class WorldAuthorityCheckpointLawTests {
+    [Fact]
+    public void MalformedJournalBaseRefusesBeforeReplacingTheLiveDefinition() {
+        using var fixture = Fixtures.FreshServer();
+
+        fixture.Step();
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
+        Assert.NotNull(@object: checkpoint);
+        var before = fixture.Server.Definition;
+        var hash = WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL);
+        var malformed = checkpoint with { Server = checkpoint.Server with { BaseDefinitionJson = "{"u8.ToArray() } };
+
+        Assert.Throws<InvalidDataException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Same(expected: before, actual: fixture.Server.Definition);
+        Assert.Equal(expected: hash, actual: WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL));
+    }
+    // activation-roundtrip-identity (§3.5): a single-authority, no-adjacency, code-built scenario — a producer-driven
+    // census plus one scripted (untouched-live-input) seat. Runs 5000 ticks, captures, restores into a fresh server,
+    // then runs both the restored and the uninterrupted server 5000 more ticks with the identical (empty) input
+    // stream. PASS = (a) the pose hash agrees every tick and (b) the checkpoint captured from each at the final tick
+    // is structurally identical.
+    [Fact]
+    public void Activation_roundtrip_identity() {
+        using var fixture = Fixtures.FreshServer();
+
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+        _ = fixture.Server.Population.SetSimulatedCount(count: 3);
+
+        for (var tick = 0; (tick < 625); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var refusal
+            ),
+            userMessage: refusal
+        );
+        Assert.NotNull(@object: checkpoint);
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var restoredMachines = new WorldMachineHost(
+            engines: [],
+            screens: definition.Screens
+        );
+        using var restoredProfilesDirectory = new TemporaryDirectory(prefix: "puck-checkpoint-tests-");
+
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: new WorldOwnedWorlds(directory: restoredProfilesDirectory.RootPath, machineId: Guid.NewGuid(), template: definition)
+        );
+
+        var uninterruptedElapsed = 0UL;
+        var restoredElapsed = 0UL;
+        var uninterruptedTick = fixture.Server.NextInputTick;
+        var restoredTick = restoredServer.NextInputTick;
+
+        for (var step = 0; (step < 625); step++) {
+            uninterruptedElapsed = checked((uninterruptedElapsed + Fixtures.StepTicks));
+            restoredElapsed = checked((restoredElapsed + Fixtures.StepTicks));
+
+            fixture.Server.Step(context: new FixedStepContext(
+                ElapsedTicks: uninterruptedElapsed,
+                StepTicks: Fixtures.StepTicks,
+                Tick: uninterruptedTick
+            ));
+            restoredServer.Step(context: new FixedStepContext(
+                ElapsedTicks: restoredElapsed,
+                StepTicks: Fixtures.StepTicks,
+                Tick: restoredTick
+            ));
+            uninterruptedTick++;
+            restoredTick++;
+
+            Assert.Equal(
+                expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population),
+                actual: WorldReplaySnapshot.HashState(population: restoredServer.Population)
+            );
+        }
+
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var uninterruptedFinal,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var uninterruptedRefusal
+            ),
+            userMessage: uninterruptedRefusal
+        );
+        Assert.True(
+            condition: restoredServer.TryCaptureCheckpoint(
+                checkpoint: out var restoredFinal,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var restoredRefusal
+            ),
+            userMessage: restoredRefusal
+        );
+
+        Assert.True(condition: DeepEqual.Compare(
+            a: uninterruptedFinal,
+            b: restoredFinal
+        ));
+    }
+    // Discriminating control: an entry generation must agree with the full slot-generation image. Reject a
+    // corrupted entry before mutating the authority rather than silently accepting contradictory identities.
+    [Fact]
+    public void Activation_roundtrip_identity_control_corrupted_generation_reads_red() {
+        using var fixture = Fixtures.FreshServer();
+
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        for (var tick = 0; (tick < 12); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            reason: out _
+        ));
+
+        var entries = checkpoint!.Population.Entries;
+        var corruptedEntry = entries[0] with { Generation = (entries[0].Generation + 1000) };
+        var corrupted = checkpoint with {
+            Population = checkpoint.Population with {
+                Entries = [corruptedEntry, .. entries.Skip(count: 1)],
+            },
+        };
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        using var machines = new WorldMachineHost(
+            engines: [],
+            screens: definition.Screens
+        );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-checkpoint-tests-");
+
+        Assert.Throws<InvalidOperationException>(testCode: () => WorldServer.FromCheckpoint(
+            checkpoint: corrupted,
+            instanceIdentity: "boot",
+            machines: machines,
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: definition)
+        ));
+    }
+    [Fact]
+    public void AutonomousCadenceCheckpointRefusesBeforeMutatingAuthority() {
+        var source = Fixtures.BuildDocument();
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = 5,
+                NetworkPlayers = 1,
+                DefaultPeerSourceRaw = IntentSource.Producer(name: "roam"),
+            },
+            KitRowsRaw = [source.Kits[0] with {
+                AutonomyRaw = new WorldAutonomyCadence(
+                MotionSeconds: 0.1f,
+                SteeringSeconds: 0.1f
+            ),
+            }],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+
+        Assert.Equal(
+            1,
+            fixture.Server.Population.SetSimulatedCount(count: 1)
+        );
+        fixture.Step();
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                checkpoint: out var captured,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        var entries = captured!.Population.Entries.ToArray();
+        var peer = Array.FindIndex(
+            array: entries,
+            match: entry => (entry.Index == 4)
+        );
+
+        Assert.InRange(
+            peer,
+            0,
+            (entries.Length - 1)
+        );
+        entries[peer] = entries[peer] with {
+            Autonomy = new WorldPopulationAutonomyCheckpoint(
+            MotionElapsedTicks: 1UL,
+            MotionPeriodTicks: 1UL,
+            MotionRemainingTicks: 1UL,
+            SteeringElapsedTicks: 0UL,
+            SteeringIntent: default,
+            SteeringPeriodTicks: 0UL,
+            SteeringRemainingTicks: 0UL,
+            SteeringSeeded: false
+        ),
+        };
+        var malformed = captured with { Population = captured.Population with { Entries = entries } };
+        var beforeHash = WorldStateHashComposition.HashAuthoritative(
+            fixture.Server,
+            tick: 0UL
+        );
+        var beforeDefinition = fixture.DefinitionBytes();
+
+        Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Equal(
+            beforeHash,
+            WorldStateHashComposition.HashAuthoritative(
+                fixture.Server,
+                tick: 0UL
+            )
+        );
+        Assert.Equal(
+            beforeDefinition,
+            fixture.DefinitionBytes()
+        );
+
+        entries[peer] = entries[peer] with {
+            Autonomy = entries[peer].Autonomy with {
+                MotionPeriodTicks = 2UL,
+                MotionElapsedTicks = 0UL,
+                MotionRemainingTicks = 1UL,
+            },
+        };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Equal(
+            beforeHash,
+            WorldStateHashComposition.HashAuthoritative(
+                fixture.Server,
+                tick: 0UL
+            )
+        );
+
+        entries = captured.Population.Entries.ToArray();
+        entries[peer] = entries[peer] with { KitIndex = byte.MaxValue };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Equal(
+            beforeHash,
+            WorldStateHashComposition.HashAuthoritative(
+                fixture.Server,
+                tick: 0UL
+            )
+        );
+
+        malformed = captured with {
+            Population = captured.Population with { SimulatedCount = (fixture.Server.Population.PeerCapacity + 1) },
+        };
+        Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Equal(
+            beforeHash,
+            WorldStateHashComposition.HashAuthoritative(
+                fixture.Server,
+                tick: 0UL
+            )
+        );
+    }
+    [Fact]
+    public void ACheckpointCarriesTheCodecsVersionAndThePreviousVersionIsRefused() {
+        using var fixture = Fixtures.FreshServer();
+
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                reason: out var reason,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty
+            ),
+            userMessage: reason
+        );
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
+
+        Assert.Equal(
+            WorldAuthorityCheckpointCodec.SupportedVersion,
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: bytes.AsSpan(start: 4))
+        );
+        // The law never pins a token's literal: whatever the current key is, the Hello door accepts it and refuses any
+        // other, and the federation key stays a distinct identity.
+        Assert.True(condition: WorldHelloDoor.TryAccept(
+            offeredKey: WorldProtocol.WireProtocolKey,
+            offeredShape: WorldProtocol.WireShape,
+            refusal: out _
+        ));
+        Assert.False(condition: WorldHelloDoor.TryAccept(
+            offeredKey: WorldProtocol.WireProtocolKey ^ 1UL,
+            offeredShape: WorldProtocol.WireShape,
+            refusal: out var helloRefusal
+        ));
+        Assert.Equal(
+            actual: helloRefusal,
+            expected: WorldHelloRefusal.WireProtocolKeyMismatch
+        );
+        Assert.NotEqual(
+            actual: WorldFederationCodec.WireKey,
+            expected: WorldProtocol.WireProtocolKey
+        );
+        Assert.True(
+            condition: WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: bytes,
+                checkpoint: out _,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: bytes.AsSpan(start: 4),
+            value: ((ushort)(WorldAuthorityCheckpointCodec.SupportedVersion - 1))
+        );
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: bytes,
+            checkpoint: out _,
+            reason: out reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: $"version {(WorldAuthorityCheckpointCodec.SupportedVersion - 1)}"
+        );
+    }
+    [Fact]
+    public void EventFeedCheckpointRefusesBeforeMutatingAuthority() {
+        using var fixture = Fixtures.FreshServer();
+
+        fixture.Step();
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                checkpoint: out var captured,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        var beforeHash = WorldStateHashComposition.HashAuthoritative(
+            fixture.Server,
+            tick: 0UL
+        );
+        var beforeDefinition = fixture.DefinitionBytes();
+        var malformed = captured! with {
+            EventFeed = captured.EventFeed with { SeatOccupied = [false] },
+        };
+
+        Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
+        Assert.Equal(
+            beforeHash,
+            WorldStateHashComposition.HashAuthoritative(
+                fixture.Server,
+                tick: 0UL
+            )
+        );
+        Assert.Equal(
+            beforeDefinition,
+            fixture.DefinitionBytes()
+        );
+
+    }
+}
