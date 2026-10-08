@@ -51,7 +51,13 @@ public sealed partial class SdfWorldResidency {
     private void RefuseIndirect(SdfFrame frame) {
         if (ReferenceEquals(objA: frame, objB: m_packedFrame)) { return; }
         m_indirectRefusal = null;
+        var requested = IndirectTier;
+
+        if ((requested == SdfIndirectTier.Off) || (SdfIndirectCost.RefusalOf(frame: frame, layout: ((requested == SdfIndirectTier.High) ? HighLayout : MediumLayout)) is not { } refusal)) { return; }
+        m_indirectRefusal = refusal;
+        if (ReferenceEquals(objA: m_refusedIndirectProgram, objB: frame.Program)) { return; }
         m_refusedIndirectProgram = frame.Program;
+        Console.Error.WriteLine(value: $"[sdf-indirect] residency={Name} tier={requested.ToString().ToLowerInvariant()} refused, rendering without indirect lighting: {refusal}");
     }
     private void PrepareIndirect(SdfWorldTables tables, SdfFrame frame) {
         tables.SetIndirect(tier: IndirectTier, farDistance: frame.FarDistance, work: m_indirectWork);

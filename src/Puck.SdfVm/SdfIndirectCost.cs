@@ -62,6 +62,11 @@ public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPer
     /// <param name="instructionCount">The field program's instruction count.</param>
     /// <returns>The refusal, or null when every unit fits.</returns>
     public string? RefusalOf(int instructionCount) {
+        var query = SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: 1);
+
+        if ((QueriesPerUnit > 0) && (query > SdfIndirectCost.SubmissionCostLimit)) {
+            return $"one field query costs {query} instruction visits, exceeding the {SdfIndirectCost.SubmissionCostLimit} submission budget";
+        }
         var unit = checked(((UnitCost(instructionCount: instructionCount) + FixedItemCost) + ((UnitsPerItem > 1) ? SplitItemCost : 0)));
 
         return ((unit > SdfIndirectCost.SubmissionCostLimit)
@@ -142,7 +147,22 @@ public static class SdfIndirectCost {
             }
             return chunks;
         }
-        throw new SdfIndirectCostRefusedException(message: $"Indirect admission refused: one item costs {itemCost} instruction visits, exceeding the {SubmissionCostLimit} submission budget.");
+        if (units.RefusalOf(instructionCount: instructionCount) is { } refusal) { throw new SdfIndirectCostRefusedException(message: $"Indirect admission refused: {refusal}."); }
+        // An item over the cap never fits whole, so a run touches at most its own item and the start of the next.
+        while (position < total) {
+            var item = (position / size);
+            var local = (position % size);
+            var room = (size - local);
+            var leading = ((local != 0) ? units.SplitItemCost : 0);
+            var within = ((((SubmissionCostLimit - units.FixedItemCost) - units.SplitItemCost)) / unitCost);
+            var length = ((within < room) ? within
+                : Math.Max(val1: room, val2: Math.Min(val1: ((((SubmissionCostLimit - (2 * units.FixedItemCost)) - leading) - units.SplitItemCost) / unitCost), val2: ((room + size) - 1))));
+            var admitted = ((int)Math.Min(val1: length, val2: (total - position)));
+
+            chunks.Add(item: new SdfIndirectChunk(ItemFirst: item, UnitCount: admitted, UnitFirst: local));
+            position += admitted;
+        }
+        return chunks;
     }
     /// <summary>Gets the whole items one submission admits: the item count of <see cref="Admit"/>'s first chunk when
     /// items fit, without building the partition.</summary>
