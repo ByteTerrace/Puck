@@ -6,6 +6,20 @@ namespace Puck.Cli.Laws.Tests;
 /// <summary>The proof's persistent tree: its lease and its incremental reuse, over the shared fixtures of
 /// <see cref="LawProofLaws"/>.</summary>
 public sealed class LawProofTreeLawTests : LawProofLaws {
+    // The clone's own build writes paths deep under the repository's directory, past Windows' 260-character limit when
+    // the name is long; the name is a short key of the common git directory, the same for every spelling Windows folds.
+    [Fact]
+    public void ARepositorysProofTreeIsNamedByAShortKeyOfItsCommonGitDirectory() {
+        var root = Path.Combine(path1: Path.GetTempPath(), path2: "law-trees");
+        var directory = LawProofTree.DirectoryFor(root: root, source: Path.Combine(path1: Path.GetTempPath(), path2: "Repository", path3: ".git"));
+        var name = Path.GetFileName(path: directory);
+
+        Assert.Equal(expected: Path.GetFullPath(path: root), actual: Path.GetDirectoryName(path: Path.GetFullPath(path: directory)));
+        // Sixteen hexadecimal digits: 64 bits of the key, with room left for the clone's deepest build path.
+        Assert.Equal(expected: 16, actual: name.Length);
+        Assert.All(collection: name, action: static digit => Assert.True(condition: (char.IsAsciiDigit(c: digit) || ((digit >= 'a') && (digit <= 'f')))));
+        Assert.NotEqual(expected: directory, actual: LawProofTree.DirectoryFor(root: root, source: Path.Combine(path1: Path.GetTempPath(), path2: "Other", path3: ".git")));
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]

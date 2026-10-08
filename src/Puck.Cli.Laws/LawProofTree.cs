@@ -33,13 +33,19 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
         return (reason.Length == 0);
     }
 
+    /// <summary>The hexadecimal digits of the key that name a repository's directory: 64 bits of its common git
+    /// directory's SHA-256. The clone's own build writes paths deep under it (the Azure Functions worker extension's build
+    /// under <c>obj</c>), and Windows refuses a copy past 260 characters unless long paths are enabled, so the name is
+    /// short.</summary>
+    public const int KeyLength = 16;
+
     /// <summary>The stable directory for one repository, keyed by its common git directory, including its clone and
     /// exclusive lock.</summary>
     public static string DirectoryFor(string root, string source) {
         var path = PuckPaths.Normalize(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: source)));
 
         if (OperatingSystem.IsWindows()) { path = path.ToUpperInvariant(); }
-        return Path.Combine(path1: root, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: path))));
+        return Path.Combine(path1: root, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: path)))[..KeyLength]);
     }
     /// <summary>Attempts an exclusive lease without waiting. An unavailable cache takes the cold scratch path.</summary>
     public static LawProofTree? TryAcquire(string root, string repository, out string reason) {

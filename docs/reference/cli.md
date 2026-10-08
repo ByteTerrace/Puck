@@ -1156,9 +1156,12 @@ The fix is one of:
 The proof never touches the working tree. It keeps one persistent proof clone
 per repository under `law-trees` in the [per-user Puck
 directory](../development/contributing.md#per-user-directory), in a subdirectory
-named by the SHA-256 of the repository's common Git directory
-(`git rev-parse --git-common-dir`, case folded on Windows), so every worktree
-of one repository shares one clone. The clone is made from that common Git
+named by the first 16 hexadecimal digits of the SHA-256 of the repository's common
+Git directory (`git rev-parse --git-common-dir`, case folded on Windows), so every
+worktree of one repository shares one clone. The name is short because the
+clone's own build writes deep paths (the Azure Functions worker extension builds
+under `obj`), and Windows refuses a copy past 260 characters unless long paths
+are enabled. The clone is made from that common Git
 directory and shares its objects through alternates; it is never a worktree
 and never registers in the caller's worktree list.
 
