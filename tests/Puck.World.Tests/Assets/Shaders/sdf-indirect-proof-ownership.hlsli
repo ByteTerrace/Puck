@@ -2,8 +2,8 @@
 // query, lease and publication; this fixture supplies only their field, cell directory and bounded storage.
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-indirect-layout.hlsli"
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u5, space3);
-[[vk::binding(60, 3)]] StructuredBuffer<float4> proofCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> proofCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u127, space3);
 struct ProofProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ProofProbeIndex> proofIndex : register(b0, space4);
 struct ProofParameters { uint indirectTier; uint indirectFrame; uint indirectReceiverProofs; };

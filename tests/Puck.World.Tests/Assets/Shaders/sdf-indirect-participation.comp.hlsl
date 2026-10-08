@@ -4,8 +4,8 @@
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-field.hlsli"
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> cases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> results : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> cases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> results : register(u127, space3);
 struct ProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ProbeIndex> probeIndex : register(b0, space4);
 

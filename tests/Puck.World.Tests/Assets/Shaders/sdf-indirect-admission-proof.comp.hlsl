@@ -7,8 +7,8 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-cache.hlsli"
 #undef sdfIndirectReceiverProofWordOffset
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> admissionCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> admissionResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> admissionCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> admissionResults : register(u127, space3);
 struct AdmissionProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<AdmissionProbeIndex> admissionIndex : register(b0, space4);
 
