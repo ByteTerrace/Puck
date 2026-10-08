@@ -793,7 +793,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return true;
     }
-    private static string KernelRole(SdfKernel kernel) => (SdfWorldPipelines.IsViews(kernel: kernel) ? "views kernel its program selects" : "shadow kernel its policy selects");
+    private static string KernelRole(SdfKernel kernel) => kernel switch {
+        SdfKernel.ReceiverComparison => "comparison receiver its view's indirect method selects",
+        _ when SdfWorldPipelines.IsViews(kernel: kernel) => "views kernel its program selects",
+        _ => "shadow kernel its policy selects",
+    };
     private void ResetReady() {
         var ready = Volatile.Read(location: ref m_ready);
 
