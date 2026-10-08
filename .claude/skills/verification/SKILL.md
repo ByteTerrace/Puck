@@ -216,7 +216,9 @@ owed when your change relies on it.
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
-full `Puck.World.Tests` run: its `Gpu` classes open the GPU. `puck docs
+full `Puck.World.Tests` run: its `Gpu` classes open the GPU. A suite runs its
+own `Gpu` classes one law at a time, after its CPU laws
+(`tests/Shared/GpuDeviceCollection.cs`), so one run of a suite is one GPU leg. `puck docs
 citations` builds `Puck.World` and boots it headless and windowed to read its
 help vocabulary, so it waits for the GPU like any other GPU leg; given
 `--enumeration <file>`, a saved `help` listing, it boots nothing and may run

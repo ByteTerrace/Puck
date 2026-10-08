@@ -10,12 +10,12 @@ namespace Puck.Cli.Tests;
 /// law runs over a small git checkout and a runner that stands in for <c>dotnet build</c> and <c>dotnet test</c>: the
 /// law passes only when the fix's file reads <c>fixed</c>, and the build fails on a file that reads
 /// <c>unbuildable</c>.</summary>
-public sealed partial class LawProofLawTests {
-    private const string FixPath = "src/Lib/Fix.cs";
-    private const string Law = "FixLawTests.Holds";
-    private const string Project = "tests/Lib.Tests/Lib.Tests.csproj";
+public abstract class LawProofLaws {
+    private protected const string FixPath = "src/Lib/Fix.cs";
+    private protected const string Law = "FixLawTests.Holds";
+    private protected const string Project = "tests/Lib.Tests/Lib.Tests.csproj";
 
-    private sealed class FakeRunner : ILawRunner {
+    private protected sealed class FakeRunner : ILawRunner {
         public Action<string, CancellationToken>? BeforeBuild { get; init; }
         public LawBuild? BuildResult { get; init; }
         public List<string> Builds { get; } = [];
@@ -52,7 +52,7 @@ public sealed partial class LawProofLawTests {
     }
 
     // A checkout whose law project declares FixLawTests and whose fix file starts as `initial`.
-    private static GitScratchCheckout Checkout(string initial) {
+    private protected static GitScratchCheckout Checkout(string initial) {
         var checkout = new GitScratchCheckout();
 
         checkout.Write(name: ".gitignore", text: "bin/\nobj/\n");
@@ -64,7 +64,7 @@ public sealed partial class LawProofLawTests {
 
         return checkout;
     }
-    private static (int ExitCode, string Output, string Error) Prove(GitScratchCheckout checkout, LawFix fix, FakeRunner runner, TemporaryDirectory scratch, string? repository = null) => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
+    private protected static (int ExitCode, string Output, string Error) Prove(GitScratchCheckout checkout, LawFix fix, FakeRunner runner, TemporaryDirectory scratch, string? repository = null) => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
         fix: fix,
         law: Law,
         project: null,
@@ -73,15 +73,17 @@ public sealed partial class LawProofLawTests {
         scratchRoot: scratch.RootPath,
         lawTreesRoot: LawTreesRoot(checkout: checkout)
     ));
-    private static string LawTreesRoot(GitScratchCheckout checkout) => Path.Combine(path1: Path.GetDirectoryName(path: checkout.Root)!, path2: "law-trees");
-    private static LawProofTree HoldTree(GitScratchCheckout checkout) => (LawProofTree.TryAcquire(root: LawTreesRoot(checkout: checkout), repository: checkout.Root, reason: out _) ?? throw new InvalidOperationException(message: "test could not hold the proof-tree lock"));
+    private protected static string LawTreesRoot(GitScratchCheckout checkout) => Path.Combine(path1: Path.GetDirectoryName(path: checkout.Root)!, path2: "law-trees");
+    private protected static LawProofTree HoldTree(GitScratchCheckout checkout) => (LawProofTree.TryAcquire(root: LawTreesRoot(checkout: checkout), repository: checkout.Root, reason: out _) ?? throw new InvalidOperationException(message: "test could not hold the proof-tree lock"));
     // The proof leaves the caller's checkout clean, its worktree list holding only itself, and the scratch root empty.
-    private static void AssertNothingLeftBehind(GitScratchCheckout checkout, TemporaryDirectory scratch, string status) {
+    private protected static void AssertNothingLeftBehind(GitScratchCheckout checkout, TemporaryDirectory scratch, string status) {
         Assert.Equal(actual: checkout.Git("status", "--porcelain"), expected: status);
         Assert.Single(collection: checkout.Git("worktree", "list", "--porcelain").Split(separator: '\n'), predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree "));
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
     }
-
+}
+/// <summary>The proof's verdicts, its evidence and its cleanup, over the shared fixtures of <see cref="LawProofLaws"/>.</summary>
+public sealed partial class LawProofLawTests : LawProofLaws {
     [Fact]
     public void ALawThatCanFailIsProvenWithItsEvidence() {
         using var checkout = Checkout(initial: "broken");

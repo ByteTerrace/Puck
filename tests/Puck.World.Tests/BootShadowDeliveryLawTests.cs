@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The real boot presenter consumes coherent client revisions at definition and snapshot delivery.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class BootShadowDeliveryLawTests {
     private static WorldStateRow Weights(long first, long second, long third) => new(
         Name: CellName.Parse(candidate: "shadowWeights"), Kind: CellKind.Int, Cells: [

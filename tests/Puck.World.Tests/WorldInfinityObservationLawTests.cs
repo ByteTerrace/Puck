@@ -13,7 +13,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Infinity layers observe through the authority's ordinary destination admission and nesting lifetime,
 /// with names independent of physical screen indices.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldInfinityObservationLawTests {
     private const string Layer = "zenith";
     private const int Screen = WorldPrototypeFacets.DerivedFaceBase;

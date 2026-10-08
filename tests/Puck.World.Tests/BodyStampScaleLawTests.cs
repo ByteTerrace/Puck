@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// state-only write of that cell moves the scene's revision, so the next frame rebuilds and packs the stamp at the new
 /// scale; a frame with nothing delivered moves nothing. Held on a session view, which reads its destination through
 /// the same <see cref="WorldBodyStampCensus"/> the local scene does.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class BodyStampScaleLawTests {
     // The body wears a creation look whose one shape sits one unit above the root, so its packed height is its scale.
     private static WorldDefinition Document(double scale) {

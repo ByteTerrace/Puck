@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// rejects every physical device activation, and the render graph records over the upload model. Every executed pass line
 /// the canary holds exactly is a line <see cref="GpuWorkReport"/> can write: each submission kind once, in column order,
 /// each count a canonical decimal.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldCounterUploadLawTests {
     [Fact]
     public void CanaryExactPassLinesNameEverySubmissionKindOnceInColumnOrder() {

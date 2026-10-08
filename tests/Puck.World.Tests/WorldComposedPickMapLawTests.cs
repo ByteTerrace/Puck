@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldComposedPickMapLawTests {
     [InlineData(0x40000001U, 0)]
     [InlineData(0x40000002U, 1)]

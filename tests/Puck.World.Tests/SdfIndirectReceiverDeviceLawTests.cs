@@ -8,7 +8,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Production receiver certificates preserve exact scopes and completed outcomes without quantizing launch data.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectReceiverDeviceLawTests {

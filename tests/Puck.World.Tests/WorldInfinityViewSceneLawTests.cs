@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// the presentation fitted this frame, at a quality that leaves soft shadows and ambient occlusion off unless the
 /// layer's levers turn them on, and its own far distance.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldInfinityViewSceneLawTests {
     private const string Destination = "tests/Puck.World.Canaries/uploaded-sources/session.puck";
 

@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldSkyLayerLawTests {
     [Fact]
     public void RunningWorldCommandAuditionsExistingRowsAndRefusesUnknownOnes() {

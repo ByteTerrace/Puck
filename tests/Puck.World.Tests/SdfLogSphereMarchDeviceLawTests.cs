@@ -16,7 +16,6 @@ namespace Puck.World.Tests;
 /// acceptance distance, and samples the next shell there. Each march case samples within a few thousandths of a wall,
 /// where a step floored at a thousandth of the radius, or a soft shadow's minimum stride, jumps the copy. The field
 /// cases evaluate <c>map()</c> under every wallpaper group a program accepts and hold it to the CPU fold.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfLogSphereMarchDeviceLawTests {

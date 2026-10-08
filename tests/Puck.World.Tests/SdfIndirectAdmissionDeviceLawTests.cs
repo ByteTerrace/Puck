@@ -11,7 +11,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The real shared admission counter stays bounded under two viewport dispatches, independently of field evaluation.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectAdmissionDeviceLawTests {

@@ -55,17 +55,19 @@ runs an uploaded source's conversion on the same three devices with its region
 staged, chosen by handing the runtime the device's own memory profile with no
 host-visible device-local bytes, and holds a capture of each tick's image to the
 CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer
-on and fails on any `[d3d12-debug]` line, so the law runs alone in
-`DebugLayerCollection`. `SurfaceEncoderUploadDeviceLawTests` hands
+on and fails on any `[d3d12-debug]` line, which is safe because device laws run
+one at a time with no other device alive. `SurfaceEncoderUploadDeviceLawTests` hands
 `SurfaceEncoder.ReadSurface` CPU pixels in both float working formats on the
 same three devices, uploaded and drawn through the display encode in SDR, and
 holds each RGBA8 channel within one code of the value's own code, headroom
-saturating to 255; it shares that collection for the same debug-layer leg.
+saturating to 255; its debug-layer leg runs alone the same way.
 The device laws share `tests/Shared`'s
 `HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
 hardware device carries `[Trait("Category", "Gpu")]`, which the build holds
-(GPU001), so `--filter-not-trait Category=Gpu` runs the rest of the suite beside a
-GPU leg. A Vulkan device law's
+(GPU001). The trait places the class in the suite's one serial collection of
+[device laws](../../docs/development/contributing.md#device-laws), which runs after
+the parallel ones, and `--filter-not-trait Category=Gpu` runs the rest of the suite
+beside a GPU leg. A Vulkan device law's
 instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
 `HeadlessVulkanDevice.Validation` says (on), unless the law passes
 `validation` itself; a host without the layer skips the law by name. An instance
@@ -83,7 +85,7 @@ failures and synchronized snapshots over recording APIs without opening a device
 debug layer stays off for `DirectXTestDevices.Hardware` and `Warp`: the layer
 is enabled for the whole process and removes every device the process already
 holds, and on some configurations it stops the next device from being created,
-so only a law that runs alone in `DebugLayerCollection` takes
+so only a device law, which runs alone, takes
 `DirectXTestDevices.Debug`. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
@@ -146,6 +148,18 @@ Step until the observable operation completes, with a finite failure bound.
 Use a fixed tick window when elapsed simulation time is itself the claim.
 Independent card games run in separate test collections; live servers and
 shuffle streams are never shared between tests.
+
+Three collections decide what may run together. A class that owns a full host
+or a scene probe (`WorldBootHarness`, `WorldSceneEmitter`, `WorldFramePresenter`,
+`SdfCompositionFrameSource` or `ComposedSdfWorldFixture`) holds a large reserved
+scene, so it joins `SceneProbeCollection`, which runs one class at a time beside
+the other parallel classes; `WorldRenderProbeAllocationLawTests` holds every such
+class to it. A class that bounds the calling thread's allocation over a host or
+scene, or that changes process-wide state, joins `AllocationCollection`, which
+runs alone after the parallel classes. Device laws run alone after both, as the
+[device-law collection](../../docs/development/contributing.md#device-laws) places
+them. Keep a class out of the serial collections unless one of these reasons
+holds: every class there adds its whole duration to the suite's wall time.
 
 Allocation checks run with tiered compilation disabled, so optimized code is
 available from startup. Warm enough to cover initialization and a complete

@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// and <c>world.place</c> through the host's own registry rests a placement on the floor the presentation's static
 /// field holds, under the seat's aim, its column snapped to the grid. Every claim has a red leg.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldEditorBuildModeLawTests : IDisposable {
     private const float FloorTop = 1.25f;
     private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck";

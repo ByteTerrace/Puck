@@ -4,7 +4,9 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
-public sealed partial class LawProofLawTests {
+/// <summary>The proof's persistent tree: its lease and its incremental reuse, over the shared fixtures of
+/// <see cref="LawProofLaws"/>.</summary>
+public sealed class LawProofTreeLawTests : LawProofLaws {
     [Fact]
     public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
         using var checkout = Checkout(initial: "broken");
