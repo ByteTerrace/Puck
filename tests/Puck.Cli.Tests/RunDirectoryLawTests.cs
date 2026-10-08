@@ -6,7 +6,8 @@ namespace Puck.Cli.Tests;
 
 /// <summary>The one run-directory policy, <see cref="RunDirectory"/>: a run that passes leaves no directory behind, a
 /// run that fails or never concludes keeps its own directory and names its absolute path, a directory that holds no
-/// evidence is deleted whatever the verdict, and the age sweep removes only stale directories of its own prefix. A
+/// evidence is deleted whatever the verdict, the age sweep of a kind removes only stale directories of that kind, and
+/// the sweep of every kind removes stale directories of any kind. A
 /// recording's inner canary transcript lives in the recording's run directory, so a failed inner run keeps it.</summary>
 public sealed class RunDirectoryLawTests {
     // A prefix no other law or run shares, so a sweep in one law never reaches another's directories.
@@ -163,28 +164,25 @@ public sealed class RunDirectoryLawTests {
         }
     }
     [Fact]
-    public void TheFirstCreationOfAPrefixSweepsItsStaleDirectories() {
-        var family = UniquePrefix(role: "first");
-        // A longer prefix of the same family, created first, so the family itself has not been swept yet.
+    public void TheSweepOfEveryKindRemovesStaleDirectoriesOfAnyKind() {
+        var family = UniquePrefix(role: "every");
+        // Two kinds no other law creates; the sweep a process runs on its first creation names neither.
         var leftover = RunDirectory.CreatePath(prefix: (family + "crashed-"));
-        string? created = null;
+        var other = RunDirectory.CreatePath(prefix: (family + "failed-"));
+        var stale = ((DateTime.UtcNow - RunDirectory.StaleAge) - TimeSpan.FromHours(value: 1));
 
         try {
-            Directory.SetCreationTimeUtc(
-                creationTimeUtc: ((DateTime.UtcNow - RunDirectory.StaleAge) - TimeSpan.FromHours(value: 1)),
-                path: leftover
-            );
+            // Dated before this process started, so their owner reads as a finished run whose id was reused.
+            Directory.SetCreationTimeUtc(creationTimeUtc: stale, path: leftover);
+            Directory.SetCreationTimeUtc(creationTimeUtc: stale, path: other);
 
-            created = RunDirectory.CreatePath(prefix: family);
+            _ = RunDirectory.Sweep();
 
             Assert.False(condition: Directory.Exists(path: leftover));
-            Assert.True(condition: Directory.Exists(path: created));
+            Assert.False(condition: Directory.Exists(path: other));
         } finally {
             RunDirectory.Delete(path: leftover);
-
-            if (created is not null) {
-                RunDirectory.Delete(path: created);
-            }
+            RunDirectory.Delete(path: other);
         }
     }
     [Fact]
