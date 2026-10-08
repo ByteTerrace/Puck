@@ -191,6 +191,40 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             ),
             loaded!.Lifecycle
         );
+        Assert.Equal(
+            "127.0.0.1",
+            loaded.Lifecycle!.HealthAddress
+        );
+    }
+    [InlineData("127.0.0.1", true)]
+    [InlineData("::1", true)]
+    [InlineData("192.0.2.1", true)]
+    [InlineData("localhost", false)]
+    [InlineData("", false)]
+    [Theory]
+    public void HealthAddressMustBeAnIpLiteral(string address, bool accepted) {
+        var definition = MakeValid() with {
+            Lifecycle = new WorldSiloLifecycle(
+            120,
+            8081,
+            HealthAddress: address
+        ),
+        };
+        var validated = WorldSiloDefinitionValidator.TryValidate(
+            definition: definition,
+            reason: out var reason
+        );
+
+        Assert.Equal(
+            actual: validated,
+            expected: accepted
+        );
+        if (!accepted) {
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: "lifecycle.healthAddress"
+            );
+        }
     }
     [Fact]
     public void PinnedCountExceedsBudget_Refuses() {
@@ -244,7 +278,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             Lifecycle = new WorldSiloLifecycle(
             30,
             8081,
-            new WorldSiloExtension(
+            Observer: new WorldSiloExtension(
                 "test.retirement",
                 JsonDocument.Parse("{}").RootElement.Clone()
             )

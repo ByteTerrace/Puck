@@ -644,7 +644,15 @@ the host OS and container libraries are upgraded independently. The bootstrap
 installs Microsoft's Moby packages on Azure Linux and retains Ubuntu support
 for rollback. It preserves the host firewall policy and installs only the
 configured QUIC UDP port and the health port from Azure's load-balancer probe
-address. The service restores those rules after reboot. Host-image qualification
+address. The service restores those rules after reboot. The deployment is the
+one place that names every interface: the world document it publishes sets
+`host.listen` to `0.0.0.0:<port>` and the silo document it composes sets
+`lifecycle.healthAddress` to `0.0.0.0`, both from
+`AzureCommand.DeploymentListenAddress`, so the probe and forwarded QUIC reach
+the worker. The container smoke test, `puck azure test-world-container`, writes
+the same address inside its container and publishes the ports on the runner's
+loopback only. A local World or silo listens on loopback, and the `NET001` analyzer
+refuses an any-address bind anywhere else. Host-image qualification
 must exercise public QUIC with the expected world key, checkpoint recovery,
 drain/readiness withdrawal, and reboot recovery before changing the pinned image.
 The production release check compares the running VM's image reference as well

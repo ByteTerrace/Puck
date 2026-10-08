@@ -59,11 +59,21 @@ documents cannot install code. For a local host:
 ```json
 "store": { "type": "directory", "settings": { "path": "/world-store" } },
 "lifecycle": {
-  "shutdownSeconds": 120, "healthPort": 8081,
+  "shutdownSeconds": 120, "healthPort": 8081, "healthAddress": "127.0.0.1",
   "progressTimeoutSeconds": 30, "checkpointTimeoutSeconds": 180,
   "journalTimeoutSeconds": 30, "journalBacklogLimit": 1024
 }
 ```
+
+The health listener binds `healthAddress`, an IP literal that defaults to
+`127.0.0.1`, so a local silo listens on no network interface and raises no
+firewall prompt. A deployment whose load balancer probes the health port names
+its interface instead: the Azure deployment writes `0.0.0.0` into the silo
+document it composes ([deployment](../../docs/development/ci.md#azure-production-deployment)).
+Orleans clustering stays on loopback. A row's QUIC door listens on its world's
+`host.listen`, with the
+[msquic limitation on Windows](../Puck.World/README.md#usage) that the
+address does not narrow the sockets it opens.
 
 A `worlds[]` row may add `extensions`, the path of its own host-approved
 extension configuration: the same `puck.world.extensions.v1` document a local

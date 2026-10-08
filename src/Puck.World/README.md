@@ -254,7 +254,11 @@ by that remote authority. Listening and connecting may coexist on the shared
 while the host starts and narrates `[world.listen: bound <ip:port> …]`; port 0
 binds any free port, and that line names the one bound. An endpoint that is not
 an `ip:port` pair refuses the boot with exit 1, and one this host cannot bind
-exits 2 as described under the exit codes above. The networking
+exits 2 as described under the exit codes above. A local run names `127.0.0.1`
+(or `::1`); only a deployment's document names `0.0.0.0`. On Windows, msquic
+still opens the listener's UDP port on every interface whatever address the
+endpoint names, so a QUIC door can raise a firewall prompt that the address does
+not prevent. A dial to a loopback endpoint binds its own socket on loopback. The networking
 library owns TLS, certificate-bound identity, and bounded message delivery;
 there is no TCP fallback. `PeerStream` adapts those messages to World's byte
 codecs. After that peer handshake, an interactive connection crosses two
