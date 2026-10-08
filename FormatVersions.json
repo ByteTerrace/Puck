@@ -2173,7 +2173,7 @@
                 "M:Puck.World.WorldSiloDefinitionValidator.TryValidateFederationKey(SafeName,Puck.World.WorldSiloFederation,System.String@)",
                 "P:Puck.World.WorldJsonContext.WorldSiloDefinition"
             ],
-            "shape": "1c71b5c28a14ac51",
+            "shape": "fa8db65c3b7805c0",
             "source": "src/Puck.World.Schema/WorldSiloDefinition.cs",
             "token": "puck.silo.configuration.v1"
         }
