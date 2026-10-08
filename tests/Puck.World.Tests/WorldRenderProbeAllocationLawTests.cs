@@ -3,12 +3,14 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Full host and scene probe laws run alone. Their reserved instruction streams are large even when the
-/// live world is empty; parallel class fixtures multiply that temporary storage by the worker count.</summary>
-[Collection(AllocationCollection.Name)]
+/// <summary>Full host and scene probe laws run one at a time. Their reserved instruction streams are large even when
+/// the live world is empty; parallel probe classes multiply that temporary storage by the worker count. Every probe
+/// class sits in <see cref="SceneProbeCollection"/>, which runs one class at a time beside the other parallel
+/// collections, or in a collection that disables parallelization and so runs alone.</summary>
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldRenderProbeAllocationLawTests(ITestOutputHelper output) {
     [Fact]
-    public void NoCpuSceneProbeClassCanRunBesideAnotherCollection() {
+    public void NoTwoCpuSceneProbeClassesRunAtOnce() {
         var assembly = typeof(WorldRenderProbeAllocationLawTests).Assembly;
         var classes = assembly.GetTypes().Where(predicate: type => (!type.IsNested && type.GetMethods().Any(predicate: method =>
             method.GetCustomAttributesData().Any(predicate: attribute => typeof(FactAttribute).IsAssignableFrom(c: attribute.AttributeType)))))
@@ -41,10 +43,16 @@ public sealed partial class WorldRenderProbeAllocationLawTests(ITestOutputHelper
         var parallel = probes.Where(predicate: type => {
             var collection = type.GetCustomAttributesData().SingleOrDefault(predicate: attribute => (attribute.AttributeType == typeof(CollectionAttribute)));
 
-            return ((collection is null) || !definitions.TryGetValue(key: ((string)collection.ConstructorArguments[0].Value!), value: out var runsAlone) || !runsAlone);
+            if (collection is null) {
+                return true;
+            }
+            var name = ((string)collection.ConstructorArguments[0].Value!);
+
+            return ((name != SceneProbeCollection.Name) && (!definitions.TryGetValue(key: name, value: out var runsAlone) || !runsAlone));
         }).Select(selector: type => type.Name).Order(comparer: StringComparer.Ordinal).ToArray();
 
-        output.WriteLine(message: $"CPU probe classes: {probes.Count}; classes allowed beside another collection: {parallel.Length}; ceiling 0");
+        Assert.False(condition: definitions[SceneProbeCollection.Name], userMessage: "the scene-probe collection runs beside the parallel collections, one class at a time");
+        output.WriteLine(message: $"CPU probe classes: {probes.Count}; classes allowed beside another probe: {parallel.Length}; ceiling 0");
         Assert.Empty(collection: parallel);
     }
 

@@ -11,23 +11,23 @@ explains the pipeline; this page holds what an edit must respect.
 dotnet build src/Puck.SdfVm -c Release          # dxc on PATH, or /p:DxcCommand=<path>
 ```
 
-The recipe is `build/Shaders.targets`, imported into every project by
-`Directory.Build.targets`; projects without shader items never run DXC. DXC runs
-in place in the source tree and compiles each declared stage for its enabled
-backends. `PuckShaderSpirvEnabled` selects SPIR-V; `PuckShaderDxilEnabled` selects
+The shader build is `build/Shaders.targets`, imported into every project by
+`Directory.Build.targets`; projects without shader items never run DXC. It runs
+`ShaderBuild` in the build-only `Puck.Shaders.Generator`, which compiles each
+declared stage for its enabled backends through `ShaderCompiler` and its
+per-user cache, and publishes the bytecode beside the source.
+`PuckShaderSpirvEnabled` selects SPIR-V; `PuckShaderDxilEnabled` selects
 vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
-All three default to true. Admission compares each kernel's source plus ordered includes,
-effective compiler command and backend options, and compiled bytes with its
-sidecar. Equal content with newer timestamps reuses the pair; changed source
-recompiles that kernel, and changed include content conservatively recompiles
-the whole project. Changed recipes, missing recipe identities and damaged pairs
-also require compilation. The `.spv`, `.dxil`, and `.hash` outputs are
-gitignored build products; never commit them.
-`ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
-when its sidecar records its bytes (the build wrote it), printing one line per
-file, and fails the build on any other sourceless bytecode, which it leaves in
-place; `CollectShaderBytecode` fails it on bytecode stale against its
-source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
+All three default to true. Each output's cache key hashes its stage source's
+include closure (paths relative to each other, and contents), its `StepsOf`
+options and the DXC identity, so an edit recompiles exactly the outputs whose
+closure holds the edited file, and an output any checkout compiled is published
+from the cache with no DXC run. The `.spv`, `.dxil`, and `.hash` outputs are
+gitignored build products; never commit them. The build removes bytecode
+without a same-stem `.hlsl` when its sidecar records its bytes (the build wrote
+it), printing one line per file, and fails on any other sourceless bytecode,
+which it leaves in place; a pack that skips the build fails on bytecode stale
+against its source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 
 ## Hot reload

@@ -17,7 +17,7 @@ internal sealed class GateClock : TimeProvider {
     public void Advance(TimeSpan duration) => m_ticks += duration.Ticks;
 }
 
-public sealed partial class GateRunLawTests {
+public sealed class GateBatchLawTests : GateRunLaws {
     private static void Workload(Branches branches, string name, bool ceilings = true, bool script = false) {
         branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.world.json", text: "{}");
         if (ceilings) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.ceilings.json", text: $$"""{"workload":"tests/Puck.Counters/{{name}}.world.json"}"""); }
@@ -73,7 +73,7 @@ public sealed partial class GateRunLawTests {
     }
     [Fact]
     public void EveryDeviceSuiteRunsTheGpuTraitAndTheCpuRunsItsComplement() {
-        Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu", "--parallel", "none"]));
+        Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu"]));
         Assert.Equal(actual: AffectedCommand.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
     }
     [Fact]

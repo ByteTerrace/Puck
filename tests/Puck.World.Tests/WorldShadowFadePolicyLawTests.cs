@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 
 /// <summary>A free-form session lever reaches the frame's live fade capacity. One shadow kernel and one kernel per views
 /// variant serve every capacity, so no authored policy row declares pipelines of its own.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldShadowFadePolicyLawTests {
     [Fact]
     public void AFreeFormLeverReachesTheLiveFadeCapacity() {

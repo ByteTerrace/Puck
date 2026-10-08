@@ -81,6 +81,7 @@ subdirectory there:
 | `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
 | `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` |
 | `compilations` | The `.puck` compile cache the game and the CLI share |
+| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) |
 | `corpora` | The conformance corpora the emulator batteries fetch |
 
 ## Temporary directories
@@ -278,6 +279,25 @@ Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
 test; one law of a tier is selected by its id, the case's display name
 (`--explicit on --filter-display-name <law-id>`).
 
+### Device laws
+
+A test class that opens a hardware GPU device carries
+`[Trait("Category", "Gpu")]`, which the build requires of it (`GPU001`, from
+`Puck.Analyzers`). The same trait schedules it. Every test project links
+`tests/Shared/GpuDeviceCollection.cs`, whose collection factory puts every
+class with the trait into one collection that disables parallelization. xUnit
+runs that collection after all the parallel ones have finished, one law at a
+time. A device law therefore never shares the GPU, the driver's shader
+compiler or the processors with another law, and a law that turns on the
+Direct3D 12 debug layer, which removes every device the process holds, runs
+with no other device alive. A plain `dotnet test` of a suite needs no option to
+keep its device laws apart. A class that names a collection of its own keeps
+it, and that collection must disable parallelization too.
+
+A run beside another GPU leg leaves the device laws out with
+`--filter-not-trait Category=Gpu`; `puck affected` runs its suites that way, and
+`puck gate --gpu` runs the device laws alone with `--filter-trait Category=Gpu`.
+
 ### Game changes
 
 Run the application to check composed game behavior, alongside relevant World tests:
@@ -468,7 +488,15 @@ Model 6.6. Do not raise that floor without evidence for every supported GPU.
 DXC compiles the same HLSL sources to SPIR-V and DXIL during the build. `dxc`
 must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
-describes. The `Puck.World` build also packages every pipeline source a shipped
+describes. The build compiles through the runtime's `ShaderCompiler` into the
+per-user shader cache, keyed by each source's include closure, its options and
+the DXC, not by the checkout. A cold machine compiles every kernel once, many at
+a time on the cores MSBuild grants, the longest first. After that, a fresh
+worktree on any commit compiles only the outputs whose closure it changed, and
+editing one `.hlsli` recompiles only the outputs that include it, so no special
+build flags are needed. The [shader reference](../reference/shaders.md#freshness)
+owns the cache, its `PuckShaderCacheDirectory` override and the publication rules.
+The `Puck.World` build also packages every pipeline source a shipped
 world names into the [package store](../reference/shaders.md#the-builds-package-store)
 beside the worlds, so a pipeline source row does one of two things. In a
 developer checkout with DXC, an unedited shipped source loads its stored package

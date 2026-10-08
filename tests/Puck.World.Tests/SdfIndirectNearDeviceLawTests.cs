@@ -12,7 +12,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Uses the production resource-only Near helper and its replacement fold. The emission oracle is
 /// independently albedo times emission times bleed; resolved color, fog and specular are not source inputs.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectNearDeviceLawTests {

@@ -2606,7 +2606,15 @@ the cache is consulted, and a new include rule changes it, never a second
 scanner. `ShaderCompiler.StepsOf` is the one statement of the native tool
 options. The compiler runs (and counts) those steps, the cache key hashes
 them, and the package manifest records them, so a new flag goes there and
-moves all three. A cache hit reads bytecode with `AtomicFile.ReadAllBytes`,
+moves all three. `ShaderCompiler` (in `Puck.Shaders.Model`, which compiles no
+shader) is the one compiler, and the build and the CLI share its per-user cache:
+the build compiles through it (`ShaderBuild`, hosted by `Puck.Shaders.Generator`),
+one entry per output, keyed by the stage's closure laid out relative to itself,
+its step and the DXC's content, so never key an entry by an absolute path or a
+file time. A World keeps its compiler cache under its state root (`pipelines`),
+so a World run in a fresh state directory compiles what it observes, which
+canaries and `shaders.compiler.runs.dxc` counts rely on. A cache hit reads
+bytecode with `AtomicFile.ReadAllBytes`,
 never `File.ReadAllBytes`: a peer's publishing rename holds the file with
 delete access, and a read that does not share delete fails on Windows.
 `ShaderCompileIdentity`, carried on every `CompiledShader`, is what a
@@ -2678,16 +2686,16 @@ pacing, and when briefing a review of such a change.
 
 ## Verifying
 
-For a required cold shader build under an exclusive heavy grant, normal MSBuild
-supports `-p:PuckShaderCompileJobs=4` with `-m:1 -nodeReuse:false
---disable-build-servers` on the 32 GB, 16-thread lead machine. The default is one
-compiler per project. Keep MSBuild single-node when increasing compiler workers;
-otherwise project-level parallelism multiplies the per-project limit. Preserve
-both enabled backend families and the exact generated recipe. Source/include,
-recipe and bytecode admission still selects all genuinely stale outputs, and
-workers join before the existing publication transaction. Use the host load
-governor and report the actual build's memory and elapsed costs; do not promise
-a timing from the worker count or add competing builds.
+Shader builds need no flags. Every output compiles through `ShaderCompiler`
+into the per-user shader cache, keyed by its include closure, its `StepsOf`
+options and its DXC, never by the checkout, so a fresh worktree publishes what
+any checkout on the machine compiled and runs DXC only for the closures it
+changed. Missing outputs compile concurrently on cores MSBuild grants
+(`IBuildEngine9.RequestCores`), the longest first, so a cold machine pays the
+slowest kernel rather than the serial sum, and parallel project nodes share one
+core budget. Never copy bytecode between trees or add a second cache: the cache
+is the one. To make a host really compile, as `puck shaders compare --build`
+must, point `-p:PuckShaderCacheDirectory` at an empty directory.
 
 The [`verification`](../verification/SKILL.md) skill owns the gate route, the
 CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which

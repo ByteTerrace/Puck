@@ -11,7 +11,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Boot, quality selection and save retain one authored indirect tier and its independent source controls.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldIndirectQualityLawTests {
     [InlineData(false)]
     [InlineData(true)]

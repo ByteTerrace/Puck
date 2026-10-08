@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// world's own: its text screens draw through its own font catalog, resolved beside its own document, and its cameras
 /// are views of it that read each other at their previous frame, so two cameras of one world filming each other's
 /// screens compose.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldPresentedSourcesLawTests {
     // A destination whose screen 5 shows two lines of text through its own font catalog, beside its own document.
     private const string Destination = "tests/Puck.World.Canaries/uploaded-sources/fixture.puck";

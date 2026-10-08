@@ -1,10 +1,15 @@
 using Puck.SdfVm;
+using Puck.Shaders.Generator;
 
-// The kernel builds' host of the declaration generator: the one list `puck shaders generate` writes and checks
-// (ShaderDeclarations), run over the checkout named by the one argument. It writes only the files whose text the model
-// has changed, prints one line for each, and exits 1 naming every include it cannot own.
+// The kernel builds' build-time host. With the repository root as its one argument it runs the declaration generator:
+// the one list `puck shaders generate` writes and checks (ShaderDeclarations), writing only the files whose text the
+// model has changed, printing one line for each, and exiting 1 naming every include it cannot own. With `compile` or
+// `check` it runs one project's shader build (ShaderBuild) for build/Shaders.targets.
+if (args is ["compile" or "check", ..]) {
+    return await ShaderBuildCommand.RunAsync(arguments: args).ConfigureAwait(continueOnCapturedContext: false);
+}
 if (args.Length != 1) {
-    Console.Error.WriteLine(value: "Puck.Shaders.Generator: expected the repository root as the one argument.");
+    Console.Error.WriteLine(value: "Puck.Shaders.Generator: expected the repository root as the one argument, or 'compile' or 'check' and a shader build's options.");
 
     return 2;
 }

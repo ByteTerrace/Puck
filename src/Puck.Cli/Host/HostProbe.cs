@@ -19,28 +19,12 @@ internal sealed partial class HostProbe(string checkoutRoot) {
 
     private (ulong Idle, ulong Total)? m_previous;
 
-    [StructLayout(layoutKind: LayoutKind.Sequential)]
-    private struct MemoryStatusEx {
-        public uint Length;
-        public uint MemoryLoad;
-        public ulong TotalPhysical;
-        public ulong AvailablePhysical;
-        public ulong TotalPageFile;
-        public ulong AvailablePageFile;
-        public ulong TotalVirtual;
-        public ulong AvailableVirtual;
-        public ulong AvailableExtendedVirtual;
-    }
-
     [LibraryImport(libraryName: "kernel32.dll")]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool CloseHandle(nint handle);
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
-    [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
-    private static partial bool GlobalMemoryStatusEx(ref MemoryStatusEx status);
     [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
@@ -143,24 +127,8 @@ internal sealed partial class HostProbe(string checkoutRoot) {
 
         return null;
     }
-    private static double FreeRamGb() {
-        if (OperatingSystem.IsWindows()) {
-            var status = new MemoryStatusEx { Length = ((uint)Marshal.SizeOf<MemoryStatusEx>()) };
-
-            return (GlobalMemoryStatusEx(status: ref status)
-                ? (status.AvailablePhysical / 1073741824.0)
-                : double.NaN);
-        }
-        if (OperatingSystem.IsLinux()) {
-            var available = File.ReadLines(path: "/proc/meminfo").FirstOrDefault(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "MemAvailable:"));
-
-            return ((available is null)
-                ? double.NaN
-                : (ulong.Parse(provider: CultureInfo.InvariantCulture, s: available.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')[1]) / 1048576.0));
-        }
-
-        return double.NaN;
-    }
+    private static double FreeRamGb() =>
+        ((Puck.Hosting.HostMemory.AvailablePhysicalBytes() is { } available) ? (available / 1073741824.0) : double.NaN);
 
     /// <summary>Computes CPU busy percentage from two counter readings, or NaN when the interval is unusable.</summary>
     /// <param name="before">The previous idle and total counters.</param>

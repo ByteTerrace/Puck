@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// rows, compares no bytes and owes nothing, and a frame moving k of many bodies packs, compares and owes work
 /// proportional to k — each moved body's leaf range once — whatever the population.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldSceneMovedTransformsLawTests {
     private const int Bodies = 16;
     private const int FirstBody = 8;

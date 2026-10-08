@@ -12,7 +12,8 @@
         compiles kernels after ResolveProjectReferences. The generator reads only the model (Puck.Shaders.Model and
         Puck.SdfVm.Model), which compiles no shader, so a kernel reading a declaration the model has just gained builds
         in one pass, with no header seeded by hand. `puck shaders generate` runs the same list (ShaderDeclarations) and
-        stays the one way to write the build's shader recipe and to check the tree.
+        checks the tree. With `compile` or `check` it runs one project's shader build for build/Shaders.targets
+        (ShaderBuild, through the one shader compiler and its cache).
     -->
     <ItemGroup>
         <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />

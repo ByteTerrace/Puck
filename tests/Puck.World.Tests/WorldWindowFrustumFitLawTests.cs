@@ -28,7 +28,7 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldWindowFrustumFitLawTests {
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
 

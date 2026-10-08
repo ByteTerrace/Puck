@@ -12,7 +12,6 @@ namespace Puck.World.Tests;
 /// boundary. The probe compares the production masked march to the full field and samples every cleared interval.
 /// A shallow inside origin remains unresolved even when an outward witness could bracket its nearby surface.
 /// Cone, ball and box walks also produce exactly the flat query's bits with one and sixty-four lanes.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed partial class SdfIndirectGatherLawTests {

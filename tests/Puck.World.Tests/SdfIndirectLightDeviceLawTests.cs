@@ -14,7 +14,6 @@ namespace Puck.World.Tests;
 /// <summary>The GPU conservative sweep agrees with known CPU visibility and independently bounds every answer.
 /// The same subtexel rod must disappear when the sweep alone becomes a point ray; a thin nearby caster checks the
 /// finite camera's production near-plane helper while an ordinary-camera control retains its perspective floor.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectLightDeviceLawTests {

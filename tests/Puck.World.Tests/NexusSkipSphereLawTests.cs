@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 /// presenter's emitters with no device. Placement emission wraps most static shapes in a uniform
 /// <see cref="SdfOp.Scale"/>, so these laws hold that a uniform scale costs no sphere: every Union shape whose chain
 /// carries only rigid ops and uniform scales, and whose primitive has a local sphere at all, is bounded.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class NexusSkipSphereLawTests {
     private static readonly Lazy<SdfProgram> Nexus = new(valueFactory: static () =>
         ComposedSdfWorldFixture.Capture(relativePath: "src/Puck.World/Assets/worlds/puck.world.json").Program);

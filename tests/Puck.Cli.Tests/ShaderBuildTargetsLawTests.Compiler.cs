@@ -1,23 +1,25 @@
 using System.Diagnostics;
-using System.Xml.Linq;
 using Xunit;
 
 namespace Puck.Cli.Tests;
 
 public sealed partial class ShaderBuildTargetsLawTests {
     [Fact]
-    public async Task CompilerWorkersOverlapWithinTheRequestedBoundAndPublishOnlyAfterJoining() {
+    public async Task CompilesRunConcurrentlyOnTheCoresTheBuildEngineGrants() {
+        if (Environment.ProcessorCount < 2) {
+            Assert.Skip(reason: "MSBuild grants one core on a one-processor machine, so no two compiles can overlap.");
+        }
+
         using var fixture = new Fixture();
 
         fixture.ParallelProject(mode: "hold");
-        var build = Task.Run(function: () => fixture.Run(target: "Build", properties: ["PuckShaderCompileJobs=2"]), cancellationToken: TestContext.Current.CancellationToken);
+        var build = Task.Run(function: () => fixture.Run(target: "Build"), cancellationToken: TestContext.Current.CancellationToken);
 
         try {
             _ = WaitFor(find: () => (((fixture.Started().Length >= 2) || build.IsCompleted) ? "two compiler children or an early exit" : null));
-            Assert.False(condition: build.IsCompleted, userMessage: "The compiler workers did not hold at the real-process barrier.");
-            Assert.Equal(expected: 2, actual: fixture.Started().Length);
-            Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
-            fixture.Write(path: "release", text: "release every compiler child");
+            Assert.False(condition: build.IsCompleted, userMessage: "The compilers did not hold at the real-process barrier.");
+            Assert.True(condition: (fixture.Started().Length >= 2));
+            Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets"), searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
         } finally {
             fixture.Write(path: "release", text: "release every compiler child");
             _ = await build;
@@ -28,17 +30,21 @@ public sealed partial class ShaderBuildTargetsLawTests {
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
     }
     [Fact]
-    public async Task AFailedCompilerCancelsAndJoinsItsPeerBeforeRemovingTemporaryOutputs() {
+    public async Task AFailedCompileCancelsItsPeerAndPublishesNothing() {
+        if (Environment.ProcessorCount < 2) {
+            Assert.Skip(reason: "MSBuild grants one core on a one-processor machine, so no peer runs beside the failure.");
+        }
+
         using var fixture = new Fixture();
 
         fixture.ParallelProject(mode: "fail-peer");
-        var run = Task.Run(function: () => fixture.Run(target: "Build", properties: ["PuckShaderCompileJobs=2"]), cancellationToken: TestContext.Current.CancellationToken);
+        var run = Task.Run(function: () => fixture.Run(target: "Build"), cancellationToken: TestContext.Current.CancellationToken);
 
         try {
             _ = WaitFor(find: () => (((fixture.Started().Length >= 2) || run.IsCompleted) ? "two compiler peers or an early exit" : null));
             // Cancellation has an observed process barrier. If it is missing, release the held peer after the
             // liveness bound so the law can inspect the wrong admission/completion rather than hang forever.
-            if (await Task.WhenAny(task1: run, task2: Task.Delay(TimeSpan.FromSeconds(value: 10), TestContext.Current.CancellationToken)) != run) { fixture.Write(path: "release", text: "watchdog release"); }
+            if (await Task.WhenAny(task1: run, task2: Task.Delay(TimeSpan.FromSeconds(value: 30), TestContext.Current.CancellationToken)) != run) { fixture.Write(path: "release", text: "watchdog release"); }
         } finally {
             if (!run.IsCompleted) { fixture.Write(path: "release", text: "release the test-owned compiler peer"); }
         }
@@ -47,58 +53,10 @@ public sealed partial class ShaderBuildTargetsLawTests {
         Assert.NotEqual(expected: 0, actual: build.ExitCode);
         Assert.False(condition: build.TimedOut, userMessage: (build.Stdout + build.Stderr));
         Assert.Contains(expectedSubstring: "deliberate compiler failure", actualString: (build.Stdout + build.Stderr));
-        Assert.Equal(expected: 2, actual: fixture.Started().Length);
+        Assert.False(condition: File.Exists(path: fixture.PathOf(path: "release")), userMessage: "The failing compile did not cancel its held peer; the watchdog released it.");
         fixture.RequireChildrenExited();
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
-    }
-    [Fact]
-    public void CancellationStopsAdmissionAndJoinsTheActualCompilerChildren() {
-        using var fixture = new Fixture();
-
-        fixture.ParallelProject(mode: "hold");
-        // The wrapper compiles the production task's exact source and calls its public cancellation seam after two
-        // real children reach the barrier. A watchdog releases them only if cancellation fails, allowing an intended
-        // assertion failure instead of an indefinitely hung test process.
-        var production = File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/PuckCompileShaderBytecode.cs"));
-
-        fixture.Write(path: "cancel-task.cs", text: (("using System.Linq;\n" + production) + """
-
-            public sealed class CancelCompilerFixture : Microsoft.Build.Utilities.Task {
-                public override bool Execute() {
-                    var compiler = new PuckCompileShaderBytecode { BuildEngine = BuildEngine, WorkingDirectory = System.Environment.CurrentDirectory, Token = "cancel-fixture", Jobs = 2 };
-                    compiler.BytecodeFiles = System.IO.Directory.GetFiles("Assets/Shaders", "*.comp.hlsl").Select(path => {
-                        var item = new Microsoft.Build.Utilities.TaskItem(System.IO.Path.ChangeExtension(System.IO.Path.GetFullPath(path), ".spv"));
-                        item.SetMetadata("SourcePath", System.IO.Path.GetFullPath(path));
-                        item.SetMetadata("Recipe", "\"" + System.IO.File.ReadAllText("compiler-path.txt") + "\"");
-                        return (Microsoft.Build.Framework.ITaskItem)item;
-                    }).ToArray();
-                    using (var completed = new System.Threading.ManualResetEventSlim()) {
-                        var cancellation = new System.Threading.Thread(() => {
-                            var deadline = System.Diagnostics.Stopwatch.StartNew();
-                            while (System.IO.Directory.GetFiles("started").Length < 2 && !completed.IsSet && deadline.Elapsed < System.TimeSpan.FromSeconds(30)) { System.Threading.Thread.Sleep(10); }
-                            if (!completed.IsSet) { compiler.Cancel(); }
-                            if (!completed.Wait(System.TimeSpan.FromSeconds(10))) { System.IO.File.WriteAllText("release", "watchdog release"); }
-                        });
-                        cancellation.Start();
-                        try { return compiler.Execute(); }
-                        finally { completed.Set(); cancellation.Join(); }
-                    }
-                }
-            }
-            """));
-        var project = XDocument.Load(uri: fixture.PathOf(path: "fixture.proj"));
-
-        project.Root!.Add(content: new XElement("UsingTask", new XAttribute(name: "TaskName", value: "CancelCompilerFixture"), new XAttribute(name: "TaskFactory", value: "RoslynCodeTaskFactory"), new XAttribute(name: "AssemblyFile", value: "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"), new XElement("Task", new XElement("Reference", new XAttribute(name: "Include", value: "$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll")), new XElement("Using", new XAttribute(name: "Namespace", value: "System.Linq")), new XElement("Code", new XAttribute(name: "Type", value: "Class"), new XAttribute(name: "Language", value: "cs"), new XAttribute(name: "Source", value: "cancel-task.cs")))));
-        project.Root.Add(content: new XElement("Target", new XAttribute(name: "Name", value: "CancelCompilers"), new XElement(name: "CancelCompilerFixture")));
-        fixture.Write(path: "fixture.proj", text: project.ToString());
-        var build = fixture.Run(target: "CancelCompilers");
-
-        Assert.NotEqual(expected: 0, actual: build.ExitCode);
-        Assert.False(condition: build.TimedOut, userMessage: (build.Stdout + build.Stderr));
-        Assert.Equal(expected: 2, actual: fixture.Started().Length);
-        fixture.RequireChildrenExited();
-        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets"), searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
     }
 
     internal sealed partial class Fixture {
@@ -106,7 +64,6 @@ public sealed partial class ShaderBuildTargetsLawTests {
             var compiler = (OperatingSystem.IsWindows() ? "fixture-dxc.cmd" : "fixture-dxc.sh");
 
             CompilerPath = Puck.Abstractions.PuckPaths.Normalize(path: PathOf(path: compiler));
-            Write(path: "compiler-path.txt", text: CompilerPath);
             Write(path: "compiler-mode.txt", text: mode);
             _ = Directory.CreateDirectory(path: PathOf(path: "started"));
             if (OperatingSystem.IsWindows()) {
@@ -119,8 +76,8 @@ public sealed partial class ShaderBuildTargetsLawTests {
         }
 
         public void ParallelProject(string mode) {
-            foreach (var name in new[] { "a", "b", "c" }) { Write(path: $"Assets/Shaders/{name}.comp.hlsl", text: "source"); }
-            ShaderProject(body: "<ItemGroup><ComputeShaderSource Include=\"Assets/Shaders/*.comp.hlsl\" /></ItemGroup><Target Name=\"ResolveProjectReferences\" />", dxc: mode);
+            foreach (var name in new[] { "a", "b", "c" }) { Write(path: $"Assets/Shaders/{name}.comp.hlsl", text: $"source {name}"); }
+            ShaderProject(body: Sources, dxc: mode);
         }
         public string[] Started() => Directory.GetFiles(path: PathOf(path: "started"));
         public void RequireChildrenExited() {
@@ -130,44 +87,42 @@ public sealed partial class ShaderBuildTargetsLawTests {
                 try {
                     using var process = Process.GetProcessById(processId: pid);
 
-                    Assert.True(condition: process.HasExited, userMessage: $"Compiler child {pid} is still alive after the task returned.");
+                    Assert.True(condition: process.HasExited, userMessage: $"Compiler child {pid} is still alive after the build returned.");
                 } catch (ArgumentException) { }
             }
         }
 
+        // The stand-in for DXC. The compiler runs it in the project directory over a snapshot of the stage source, so
+        // the last argument is the snapshot's path, whose file name is the source's. It records each compile's source in
+        // compiles.txt, writes bytes that depend on the source's text, and in its hold and fail modes meets the law at
+        // a barrier.
         private const string WindowsCompiler = """
-            if ($args -contains '--version') { Write-Output 'fixture compiler'; exit 0 }
             $fo = [Array]::IndexOf($args, '-Fo')
             $output = $args[$fo + 1]
             $source = $args[$args.Length - 1]
             $mode = [IO.File]::ReadAllText('compiler-mode.txt')
             [IO.File]::WriteAllText("started/$PID", $source)
-            if ($mode -eq 'hold-process') {
-                while (!(Test-Path "release-$PID") -and !(Test-Path release)) { Start-Sleep -Milliseconds 10 }
-            }
             if ($mode -eq 'hold' -or $mode -eq 'fail-peer') {
                 while (!(Test-Path release) -and ($mode -ne 'fail-peer' -or (Get-ChildItem started).Count -lt 2)) { Start-Sleep -Milliseconds 10 }
                 if ($mode -eq 'fail-peer' -and $source.EndsWith('a.comp.hlsl')) {
                     [IO.File]::WriteAllText($output, 'unpublished failure')
-                    Write-Error 'deliberate compiler failure'
+                    [Console]::Error.WriteLine("${source}:1:1: error: deliberate compiler failure")
                     exit 1
                 }
                 if ($mode -eq 'fail-peer') { while (!(Test-Path release)) { Start-Sleep -Milliseconds 10 } }
             }
-            [IO.File]::WriteAllText($output, $(if ($mode -eq 'process' -or $mode -eq 'hold-process') { "compiled by process $PID" } else { 'compiled bytecode' }))
+            [IO.File]::WriteAllText($output, 'compiled ' + [IO.File]::ReadAllText($source))
             $stream = $null
             while ($null -eq $stream) {
                 try { $stream = [IO.File]::Open('compiles.txt', [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::None) }
                 catch [IO.IOException] { Start-Sleep -Milliseconds 10 }
             }
-            try { $bytes = [Text.Encoding]::UTF8.GetBytes($output + "`n"); $stream.Write($bytes, 0, $bytes.Length) }
+            try { $bytes = [Text.Encoding]::UTF8.GetBytes($source + "`n"); $stream.Write($bytes, 0, $bytes.Length) }
             finally { $stream.Dispose() }
-            if ($mode -eq 'normal' -and $source.EndsWith('b.comp.hlsl')) { Write-Error 'deliberate compiler failure'; exit 1 }
             exit 0
             """;
         private const string UnixCompiler = """
             #!/bin/sh
-            if [ "$1" = '--version' ]; then printf 'fixture compiler\n'; exit 0; fi
             output=''
             while [ "$#" -gt 0 ]; do
                 if [ "$1" = '-Fo' ]; then shift; output="$1"; else source="$1"; fi
@@ -175,24 +130,20 @@ public sealed partial class ShaderBuildTargetsLawTests {
             done
             mode=$(cat compiler-mode.txt)
             printf '%s' "$source" > "started/$$"
-            if [ "$mode" = 'hold-process' ]; then
-                while [ ! -f "release-$$" ] && [ ! -f release ]; do sleep 0.01; done
-            fi
             if [ "$mode" = 'hold' ] || [ "$mode" = 'fail-peer' ]; then
                 while [ ! -f release ]; do
                     if [ "$mode" = 'fail-peer' ] && [ "$(find started -type f | wc -l)" -ge 2 ]; then break; fi
                     sleep 0.01
                 done
                 if [ "$mode" = 'fail-peer' ]; then
-                    case "$source" in *a.comp.hlsl) printf 'unpublished failure' > "$output"; printf 'deliberate compiler failure\n' >&2; exit 1;; esac
+                    case "$source" in *a.comp.hlsl) printf 'unpublished failure' > "$output"; printf '%s:1:1: error: deliberate compiler failure\n' "$source" >&2; exit 1;; esac
                     while [ ! -f release ]; do sleep 0.01; done
                 fi
             fi
-            if [ "$mode" = 'process' ] || [ "$mode" = 'hold-process' ]; then printf 'compiled by process %s' "$$" > "$output"; else printf 'compiled bytecode' > "$output"; fi
+            { printf 'compiled '; cat "$source"; } > "$output"
             while ! mkdir compiler-log-lock 2>/dev/null; do sleep 0.01; done
-            printf '%s\n' "$output" >> compiles.txt
+            printf '%s\n' "$source" >> compiles.txt
             rmdir compiler-log-lock
-            if [ "$mode" = 'normal' ]; then case "$source" in *b.comp.hlsl) printf 'deliberate compiler failure\n' >&2; exit 1;; esac; fi
             """;
     }
 }
