@@ -1,7 +1,7 @@
 #ifndef SDF_INDIRECT_CACHE_HLSLI
 #define SDF_INDIRECT_CACHE_HLSLI
 #include "sdf-indirect-cells.hlsli"
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 #define SDF_INDIRECT_WORDS indirectCacheRW
 #else
 #define SDF_INDIRECT_WORDS indirectCache
@@ -21,7 +21,7 @@ uint sdfIndirectLoad(uint word) {
     if (!sdfIndirectRange(word, 1u)) { return 0xffffffffu; }
     return SDF_INDIRECT_WORDS[word];
 }
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 void sdfIndirectStore(uint word, uint value) {
     if (sdfIndirectRange(word, 1u)) { indirectCacheRW[word] = value; }
 }
@@ -54,7 +54,7 @@ bool sdfIndirectCellAt(float3 position, float spacing, out int3 cell) {
     cell = int3(scaled);
     return true;
 }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
 static bool sdfIndirectReceiverPermit = false;
 static bool sdfIndirectReceiverDeferred = false;
 // The finite CAS loop never overflows the counter. Contention may defer a receiver, but cannot admit past the limit.
@@ -93,7 +93,7 @@ SdfIndirectPlacement sdfIndirectReadProbe(int index) {
     if (!sdfIndirectRange(address, SdfIndirectProbeWords)) { return placement; }
     uint state = sdfIndirectLoad(address + 3u);
     if ((state >> SdfIndirectEpochShift) == 0u) { return placement; }
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_VIEWS_PASS)
     if ((state >> SdfIndirectEpochShift) != passGroup.indirectEpoch) { return placement; }
 #endif
     placement.position = asfloat(uint3(sdfIndirectLoad(address), sdfIndirectLoad(address + 1u), sdfIndirectLoad(address + 2u)));
@@ -145,7 +145,7 @@ void sdfIndirectStoreCell(uint cell, uint proof, SdfIndirectCell value) {
 
 #include "sdf-indirect-proof.hlsli"
 
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
     uint length, stride;
     indirectDirections.GetDimensions(length, stride);
@@ -168,7 +168,7 @@ float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
 }
 #endif
 
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoint) {
     return dot(endpoint - handoff, direction) > 0.0;
 }

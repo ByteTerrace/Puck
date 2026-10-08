@@ -777,7 +777,13 @@ base, so passing both is refused.
   build-order-only reference such as a test that launches `Puck.World`. A file
   no project owns, such as a test data directory under `tests/`, chooses the
   projects whose sources name that directory, spelled by its first two
-  segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`.
+  segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`. A file a
+  project links into its own build from outside its directory, such as a shared
+  fixture under `tests/Shared` or content copied from another project, chooses
+  the projects whose project files include it as their own changes would, each
+  include resolved from its project's directory and a glob matched below its
+  last literal directory; one the root `Directory.Build.targets` links into
+  every test project chooses every suite.
 - **Baselines** follow the same reached projects: a baseline is chosen when its
   owning test project is reached, or a changed or deleted path matches the
   repository-relative data globs declared beside its artifact. The plan lists
@@ -909,7 +915,7 @@ projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
 side on that build, then `puck test` on the chosen worlds, then the catalog
 check, and exits 1 when any of them fails. At most `--suite-jobs` suites run at
 once (default: a quarter of the logical processors). A heavy suite
-(`Puck.World.Tests`) starts first and, before its run, waits on the one
+(`Puck.World.Tests` or `Puck.World.Presentation.Tests`) starts first and, before its run, waits on the one
 machine-wide heavy-suite admission the gate uses (see
 [`puck gate`](#puck-gatethe-change-scoped-gate)): no other process running a
 heavy suite, and memory and disk headroom. Each suite prints one verdict line with its wall time
@@ -1027,7 +1033,7 @@ ran under; the gate never waits or refuses for CPU alone. A step that opens a
 device (the canaries, parity, each device suite, counters, citations and
 recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
-on a GPU holder. A heavy suite (`Puck.World.Tests`, whatever its filter) also
+on a GPU holder. A heavy suite (`Puck.World.Tests` or `Puck.World.Presentation.Tests`, whatever its filter) also
 waits while another process on the machine runs one, since two at once exhaust
 its memory: the gate's `Puck.World.Tests` device suite waits before it starts,
 and `affected --run` waits before each heavy suite's run, so a CPU run inside one
@@ -1710,6 +1716,16 @@ tick plus the declared `settleTicks` margin). Unpaced means the ordinary fixed
 step loop advances exactly one simulation tick per iteration without sleeping
 for wall time; command ingress, authority, physics and rules stay on their usual
 paths.
+
+A run is bounded by its progress, not by how long its ticks take on a loaded
+machine. The verb waits past the export tick one simulated second at a time,
+and the World answers each `world.wait` as it starts it, so every answer is a
+tick the run reached. The first answer must arrive within three minutes of
+launch, which covers start-up, loading and composing the world; each later one
+must arrive within a minute of the one before it. A run that stops answering is
+stopped and reported with its last answer, as a usage refusal (exit 2). The
+World is given the longest run that bound allows as its own
+`--exit-after-seconds`, so a host whose runner has gone stops too.
 
 A path may name a `.puck` source instead of a document, which is how behaviour
 is normally written: the source is compiled and the worlds its
@@ -2718,7 +2734,7 @@ separate evidence, and unresolved rows remain unmodeled.
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `puck.world.json` and a checked-in Klondike fixture document
 (`Bench/klondike.fixture.puck`, spliced the way
-`tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
+`tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
 allocation (median over a sampled window, after a warmup), and a scripted
@@ -2734,7 +2750,7 @@ puck bench world
 ```
 
 Regenerate the fixture document only when
-`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
+`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Shared/World/Fixtures.cs) or
 `src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
 it—it is a checked-in snapshot, not derived at run time.
 
@@ -2744,7 +2760,7 @@ Measures the actual World executable in fresh processes, serially. Build World
 in Release first; the benchmark never builds inside a sample. With no world
 arguments it runs a representative corpus: overworld, Moth courtyard,
 Backgammon, Reversi, the three parlor games, the complete game host fixtures
-under `tests/Puck.World.Tests/Fixtures`, and the Jump, Kart, and Dive canary
+under `tests/Puck.World.Fixtures`, and the Jump, Kart, and Dive canary
 hosts. Most other files under `Assets/worlds/games` are modules that need a
 host; they cannot be benchmarked by launching the module alone. Explicit paths
 select another corpus:
@@ -3840,7 +3856,7 @@ baseline is what a recording replaces; a run that does not write its records, or
 | `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 | `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier (Smoke and Default) |
-| `state` | `<world>.state.json` and `<world>.cost.json` in `tests/Puck.World.Tests/ShippedWorldStateBaselines` | `ShippedWorldStateBaselineTests` |
+| `state` | `<world>.state.json` and `<world>.cost.json` in `tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` | `ShippedWorldStateBaselineTests` |
 
 ```text
 puck baselines <artifact>           build, run, and promote the fresh records over the committed files

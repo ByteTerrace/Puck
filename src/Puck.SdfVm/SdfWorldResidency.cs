@@ -406,8 +406,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareIndirect(frame: frame, tables: tables);
 
         ApplyPendingShaderReload();
-        tables.Pipelines.RequestShadowFadeVariants(cache: m_pipelines.Catalog.Pipelines, device: device,
-            variants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity));
+        tables.RequireComparison(cache: m_pipelines.Catalog.Pipelines, device: device, required: SelectsComparison(frame: frame));
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -454,9 +453,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objA: frame,
             objB: m_packedFrame
         )) {
-            // Policy changes wait before publishing the new F to graph planning. A source may recycle light tables,
-            // so the retained frame takes its own copy before the next capture can overwrite them.
-            if (tables.FrameWaiting(program: frame.Program, fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity) is { } waiting) {
+            // A frame whose shadow or views kernel still builds waits. A source may recycle light tables, so a retained
+            // frame of another fade capacity takes its own copy before the next capture can overwrite them.
+            if (tables.FrameWaiting(program: frame.Program) is { } waiting) {
                 m_pipelineWaiting = waiting;
                 m_pendingFrame = frame;
                 if ((m_packedFrame is { } packed) && !m_holdingFrame &&
@@ -740,6 +739,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
             value: frame.MeshDraws.Count
         );
     }
+    // Whether a view of the frame selects a comparison method, which only the comparison receiver answers.
+    private bool SelectsComparison(SdfFrame frame) {
+        if ((IndirectTierOverride ?? frame.IndirectTier) == SdfIndirectTier.Off) { return false; }
+        foreach (var view in frame.Views) {
+            if (view.Quality.IndirectMethod != SdfIndirectMethod.Cache) { return true; }
+        }
+        return false;
+    }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until
     // it completes this returns false and no view renders, so a cold driver cache delays the first frame rather than
     // freezing the pump. A refused build has no previous tables to fall back to: NotReadyReason names the refusal, which
@@ -763,7 +770,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             device: device,
             hostsOnDirectX: false,
             includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
-            shadowFadeVariants: frame.ShadowFadeVariants | SdfWorldPipelines.FadeVariantsFor(fadeCapacity: frame.Lights.ShadowSlots.FadeCapacity),
             inputsOf: static state => (
                 state.Residency,
                 state.Device,
@@ -787,7 +793,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return true;
     }
-    private static string KernelRole(SdfKernel kernel) => (SdfWorldPipelines.IsViews(kernel: kernel) ? "views kernel its program selects" : "shadow kernel its policy selects");
+    private static string KernelRole(SdfKernel kernel) => kernel switch {
+        SdfKernel.ReceiverComparison => "comparison receiver its view's indirect method selects",
+        _ when SdfWorldPipelines.IsViews(kernel: kernel) => "views kernel its program selects",
+        _ => "shadow kernel its policy selects",
+    };
     private void ResetReady() {
         var ready = Volatile.Read(location: ref m_ready);
 

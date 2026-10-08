@@ -1,0 +1,927 @@
+using Puck.Commands;
+using System.Numerics;
+using System.Text;
+using System.Text.Json.Nodes;
+
+
+using Puck.Assets.Documents;
+using Puck.Hosting;
+using Puck.Physics.Fields;
+using Puck.Maths;
+using Puck.SignedDistance;
+using Puck.World.Protocol;
+using Puck.Physics.Motion;
+
+namespace Puck.World.Testing;
+
+/// <summary>
+/// Fixture construction — the Domains-module equivalent for this suite: where a law's raw material (a base
+/// document, a fresh in-process <c>WorldServer</c>) comes from, kept out of the law bodies themselves.
+/// The base document is COMPILER-MAINTAINED: <see cref="BuildDocument"/> constructs a minimal, valid
+/// <see cref="WorldDefinition"/> directly in code (never read from <c>src/Puck.World/Assets/worlds</c> — Puck.World,
+/// the composition root, is out of scope; see README.md, and AGENTS.md's greenfield/scope rules). A change to
+/// <see cref="WorldDefinition"/>'s required member set breaks this file at COMPILE time rather than at a runtime
+/// parse of a JSON fixture nobody is watching — the whole point of the shape.
+/// </summary>
+internal static partial class Fixtures {
+    /// <summary>How far off vertical (as a fraction of <see cref="BallSurfaceRadius"/>) the flank point
+    /// <c>GradientUpContactLawTests</c> grounds on sits — 0.9 puts the surface normal at
+    /// <c>acos(sqrt(1-0.9^2))</c> ~= 64 degrees off world +Y, comfortably past the fixture's 60-degree
+    /// <c>maxSlopeDegrees</c> (the brief's own sizing).</summary>
+    private const float FlankHorizontalRatio = 0.9f;
+    /// <summary>How far above the ball's surface, along the flank ray, the seat spawns — small enough that the
+    /// FLAT-UP control arm's straight vertical fall still lands on the same steep face (proving the control's push
+    /// is real contact, not a body that free-falls past the ball entirely) rather than missing the sphere outright.</summary>
+    private const float FlankSpawnClearance = 0.3f;
+    /// <summary>The default fixture simulation rate; individual documents may author another rate through
+    /// <see cref="BuildDocumentAtRate"/>.</summary>
+    private const uint SimulationRateHz = WorldDefinition.UnauthoredSimulationRateHz;
+    /// <summary><c>Puck.World.Authoring.CreationGeometry</c>'s own canonical <c>SdfSolidPrimitive.Sphere</c> local
+    /// radius — that table's constant is private, so this mirrors its grepped value rather than referencing it, to
+    /// size <see cref="BuildBallCreation"/>'s shape <c>Scale</c> against a known local unit. A change to the
+    /// upstream table's value is exactly the kind of drift <see cref="BuildBallCreation"/>'s canonicalize-at-build
+    /// hash pin cannot silently accept: only the RESULTING surface radius matters here, so a mismatch just resizes
+    /// the ball, never breaks the fixture.</summary>
+    private const float SphereLocalRadius = 1f;
+
+    /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
+    /// <c>GradientUpContactLawTests</c>'s brief, never a raw magic number at the call site.</summary>
+    public const float BallSurfaceRadius = 3f;
+    /// <summary>The rate <see cref="BuildDocument()"/> authors — the shipped game's own, for a law with no reason to
+    /// want another.</summary>
+    public const int DefaultRateHz = ((int)SimulationRateHz);
+    /// <summary>The simulation rate the recorded traces and hand-derived tick counts in the laws that ask for it by
+    /// name were authored against. It is a stress rate, never a default.</summary>
+    public const int RecordedTraceRateHz = 240;
+    /// <summary>The seat slot <c>GradientUpContactLawTests</c> joins and repositions onto the ball's flank —
+    /// slot 0 maps directly to body index 0 (the 0-based seat/body correspondence
+    /// <c>EngageAuthorityLawTests</c> also relies on), and is the ONE spawn point
+    /// <see cref="BuildGradientUpDocument"/> relocates.</summary>
+    public const int GradientUpSeatSlot = 0;
+    /// <summary>The one locomotion kit name every fixture document declares.</summary>
+    public const string SeatKitName = "traveler";
+    /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target
+    /// <c>EngageAuthorityLawTests</c> routes against. The GPU-side <c>Puck.SdfVm.SdfWorldTables</c> that
+    /// actually enforces <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> is out of reach here (Puck.SdfVm is not
+    /// referenced by this project), so this simply names index 0, comfortably below any reserved derived-face
+    /// band.</summary>
+    public const int TestPatternScreenIndex = 0;
+
+    // The one creation GradientUpContactLawTests needs: a single sphere scaled so the placed ball's surface radius is
+    // exactly BallSurfaceRadius, its hash computed by the canonicalizer rather than hand-pinned.
+    private static WorldPrototype BuildBallCreation() => CreationFixtures.Sphere(id: "ball", scale: (BallSurfaceRadius / SphereLocalRadius));
+    /// <summary>The parameterized core every <see cref="WorldDefinition"/> fixture in this suite builds from — the
+    /// pieces that vary across the two callers (<see cref="BuildDocument"/>, <see cref="BuildGradientUpDocument"/>)
+    /// are parameters; everything else is the one shared literal, never forked.</summary>
+    /// <param name="spawnPoints">The seat spawn layout.</param>
+    /// <param name="collision">The contact tuning and requirements.</param>
+    /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
+    /// <param name="creations">The document's creation rows.</param>
+    /// <param name="placements">The document's placement rows.</param>
+    /// <param name="rateHz">The document's authored <c>simulation.rateHz</c>.</param>
+    private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldPrototype[] creations, WorldPlacement[] placements, int rateHz) {
+        var channels = new WorldChannel[] {
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
+        };
+
+        var bodyMotionPrograms = new BodyMotionProgram[] {
+            new(
+            Name: "grounded",
+            Version: BodyMotionProgram.CurrentVersion,
+            Kind: BodyProgramKind.Motion,
+            Operations: [
+                    BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                    BodyMotionOp.ResolveHold,
+                    BodyMotionOp.ComputePlanarTargetVelocity,
+                    BodyMotionOp.ShapeVelocity,
+                    BodyMotionOp.SnapYawToPlanarIntent,
+                    BodyMotionOp.RunActionTriggers,
+                    BodyMotionOp.ApplyHold,
+                    BodyMotionOp.IntegratePlanarAndVerticalVelocity,
+                    BodyMotionOp.CommitPose,
+                ]
+        ),
+            // Keep an authored roam program available for laws that explicitly select it. Spawn and color
+            // initialization are independent of whether the assigned kit declares this optional behavior.
+            new(
+            Name: "roam",
+            Version: BodyMotionProgram.CurrentVersion,
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.ProduceSteeringIntent]
+        ),
+        };
+
+        var population = new WorldBodiesDefaults(
+            SeatActivationRaw: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
+            NetworkPlayers: 0,
+            // The minimal fixture leaves simulated bodies idle; individual laws opt into a named producer.
+            DefaultPeerSourceRaw: IntentSource.Idle,
+            SeatSpawnsRaw: ["seat-1", "seat-2", "seat-3", "seat-4"],
+            DistributionRaw: new WorldDistribution(
+                Region: new WorldDistributionRegion.Disc(
+                    Radius: 40f,
+                    SampleCount: 124
+                ),
+                Fill: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: 0,
+                    Step: 0.38196602f
+                )
+            ),
+            PeerVariationRaw: new WorldPopulationVariation(
+                Phase: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: -4,
+                    Step: 0.38196602f
+                ),
+                Weave: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: -4,
+                    Step: 0.618034f
+                ),
+                Activity: new WorldSequence(
+                    Name: WorldSequence.R2,
+                    Offset: 1,
+                    Step: 0f
+                )
+            ),
+            SeatVariationRaw: new WorldPopulationVariation(
+                Phase: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: 0,
+                    Step: 0.38196602f
+                ),
+                Weave: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: 0,
+                    Step: 0.618034f
+                ),
+                Activity: new WorldSequence(
+                    Name: WorldSequence.R2,
+                    Offset: 1,
+                    Step: 0f
+                )
+            ),
+            PeerColorsRaw: new WorldSequence(
+                Name: WorldSequence.Additive,
+                Offset: -4,
+                Step: 0.618034f
+            ),
+            // Allocate just the four seats by default. Laws exercising peers explicitly enlarge this table.
+            CapacityRaw: WorldBodiesLimits.LocalSeatCount,
+            ReconnectGraceSeconds: 3.0f
+        );
+
+        var playerDefaults = new WorldPlayerDefaults(
+            IdentitiesRaw: [
+                new WorldIdentitySeed(
+                    Id: SafeName.Parse(candidate: "amber"),
+                    Name: "amber",
+                    Color: "#ED8530"
+                ),
+            ],
+            NeutralColorRaw: "#8C8C8C",
+            ColorSequenceRaw: new WorldSequence(
+                Name: WorldSequence.Additive,
+                Offset: 0,
+                Step: 0.618034f
+            ),
+            Saturation: 0.65f,
+            Value: 0.85f,
+            ColorSearchLimit: 64,
+            NoseFactor: 0.35f,
+            PickerThreshold: 0.6f,
+            PickerNeutralColorRaw: "#8C8C8C",
+            PickerNeutralBlend: 0.5f,
+            // Explicit — this fixture states what its seats feel like, matching the shipped worlds' numbers.
+            SeatLookRaw: new WorldSeatCameraFeel(
+                InvertPitch: false,
+                InvertYaw: false,
+                PitchSensitivity: 0.001f,
+                StickLookRate: 2.6f,
+                YawSensitivity: 0.001f
+            )
+        );
+
+        var addons = new WorldAddonRow[] {
+            // The strict-parse sabotage target (StrictParseLawTests / Fixtures.SabotagedAddonBytes) — the exact row
+            // kind docs/verification/strict-definition-parse (now ported in-process) was originally named against.
+            // Enabled:false — this suite never mounts an addon runtime, so the row is inert furniture, never a
+            // live-mount attempt against a WASM module that does not exist on disk.
+            new(
+            Name: "probe",
+            ModulePath: "probe.wasm",
+            Hash: "sha256-64/0123456789abcdef",
+            Fuel: 1_000_000UL,
+            Enabled: false
+        ),
+        };
+
+        var testPatternScreen = new WorldScreen(
+            Index: TestPatternScreenIndex,
+            Origin: new Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            Right: new Vector3(
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ),
+            Up: new Vector3(
+                x: 0f,
+                y: 1f,
+                z: 0f
+            ),
+            HalfWidth: 1f,
+            HalfHeight: 1f,
+            HalfDepth: 0.1f,
+            Round: 0f,
+            Source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.TestPatternId,
+                settings: new WorldTestPatternSettings(
+                    Height: 240,
+                    Width: 320
+                )
+            ),
+            // Passive: EngageAuthorityLawTests calls Server.Engagement.Engage directly (the authority door itself),
+            // never the screen-policy precheck (proximity/auto-insert/machine-presence) WorldServer.ApplyCommand
+            // layers on top — so the route policy fields are inert for this suite's purposes.
+            Route: WorldScreenRoute.Passive
+        );
+
+        return new WorldDefinition(
+            MotionRaw: new WorldMotionDefaults(
+                MaxSmoothError: 3f,
+                MoveSpeed: 4f,
+                TurnSpeed: 2.5f
+            ),
+            SpawnPointsRaw: spawnPoints,
+            RenderRaw: null,
+            ScreensRaw: [testPatternScreen],
+            CamerasRaw: [],
+            PopulationRaw: population,
+            PlayerDefaultsRaw: playerDefaults,
+            ChannelsRaw: channels,
+            TargetRegistersRaw: [],
+            BodyMotionProgramsRaw: bodyMotionPrograms,
+            KitsRaw: new WorldKitsSection(
+                Assignment: new WorldRowAssignment(
+                    Sequence: new WorldSequence(
+                        Name: WorldSequence.R1,
+                        Offset: 1,
+                        Step: 0f
+                    ),
+                    Rows: []
+                ),
+                Rows: BuildKits(seatCollider: seatCollider)
+            ),
+            DefaultSeatKitRaw: "traveler",
+            AddonsRaw: addons,
+            BindingOverlaysRaw: [],
+            StorageRaw: WorldStorageDefaults.None,
+            CreationsRaw: creations,
+            PlacementsRaw: new WorldPlacementsSection(
+                Policy: StandardAuthoring,
+                Rows: placements
+            ),
+            SpeakersRaw: [],
+            TunesRaw: [],
+            PatchesRaw: [],
+            AudioRaw: null,
+            CollisionRaw: collision,
+            HostRaw: StandardHost,
+            // The engine ships no rig (Assets/worlds/standard.puck authors the standard one), and a nonzero
+            // census must author a views section, so the fixture carries the standard chase framing itself.
+            ViewsRaw: StandardViews,
+            DynamicsRaw: StandardDynamics,
+            LooksRaw: new WorldLooksSection(
+                Assignment: new WorldRowAssignment(
+                    Sequence: new WorldSequence(
+                        Name: WorldSequence.R1,
+                        Offset: 129,
+                        Step: 0f
+                    ),
+                    Rows: []
+                ),
+                Rows: []
+            ),
+            GrantsRaw: [],
+            HudRaw: new WorldHudSection(
+                Defaults: new WorldHudDefaults(Enabled: true),
+                Panels: []
+            ),
+            StateRaw: new WorldStateSection(World: []),
+            // WorldDefinition.InputHold is the AUTHORED (seconds) shape, so these are rate-independent.
+            InputHoldRaw: new WorldInputHoldAuthoring(
+                CeilingSeconds: 0.5f,
+                DefaultSeconds: 0f,
+                EqualizeByDefault: true,
+                LowerAfterSeconds: 0.25f,
+                Participants: []
+            ),
+            // The engine holds no rate of its own (absence is a rate-0 resident world), so a stepping fixture
+            // authors one itself, like its views section.
+            Simulation: new WorldSimulationDefaults(RateHz: rateHz)
+        );
+    }
+    /// <summary>The one locomotion kit every fixture document declares — <see cref="BuildDocument"/> passes
+    /// <see langword="null"/> (no law here needs a body collider); <see cref="BuildGradientUpDocument"/> is the
+    /// ONE caller that supplies one, so every other law's compiled kit table is untouched byte-for-byte.</summary>
+    /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
+    private static WorldKit[] BuildKits(WorldCollider? seatCollider) => [
+        new(
+            Name: SeatKitName,
+            BodyMotionProgram: "grounded",
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 4f),
+                Turn: new WorldTurn(Rate: 2.5f),
+                // The one row every Motion-kind kit must author: a Free bond takes it unconditionally every tick
+                // (no collider here for a Surface row to probe against anyway).
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
+                        Gravity: new WorldHoldGravity(
+                            Fall: 23f,
+                            Rise: 14f
+                        ),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
+                // One unconditional row using the exact authored spelling: absent engage/release rates snap planar
+                // velocity to its target instead of approximating "instant" with a large finite rate.
+                Shaping: [
+                    new WorldShaping(Along: new WorldShapingAlong()),
+                ]
+            ),
+            // The full parameter set ValidateProducerParameters requires for a kit naming the "roam"
+            // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
+            // shipped worlds' own "traveler"-style kit; none of them is exercised by this suite's laws.
+            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
+                ["roam"] = TravelerRoamParameters,
+            },
+            ActionsRaw: new Dictionary<string, ActionSpec>(),
+            Collider: seatCollider
+        ),
+    ];
+    /// <summary>The default 4-corner spawn layout every <see cref="BuildDocumentCore"/> call starts from — a fresh
+    /// array per call, since <see cref="BuildGradientUpDocument"/> overwrites one entry's position without disturbing
+    /// <see cref="BuildDocument"/>'s own copy.</summary>
+    private static WorldSpawnPoint[] BuildSpawnPoints() => [
+        new(
+            Id: "seat-1",
+            Position: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 0f
+            )
+        ),
+        new(
+            Id: "seat-2",
+            Position: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 0f
+            )
+        ),
+        new(
+            Id: "seat-3",
+            Position: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 2f
+            )
+        ),
+        new(
+            Id: "seat-4",
+            Position: new Vector3(
+                x: 2f,
+                y: 0f,
+                z: 2f
+            )
+        ),
+    ];
+    private static byte[] ToJsonBytes(this JsonNode node) => Encoding.UTF8.GetBytes(s: node.ToJsonString());
+
+    /// <summary>Builds the <c>admission</c> row that authorizes travelers from any authenticated federation
+    /// authority, minting the same three rows a driven arrival needs: <c>Control</c>/<c>all</c>, and exclusive
+    /// <c>Drive</c> plus <c>Observe</c> over the body admission assigns (an absent subject).</summary>
+    /// <summary>The code-built document with <paramref name="networkPlayers"/> peer slots beyond the local seats and
+    /// an admission entry accepting arrivals from any authority — the destination shape every transfer law boots.</summary>
+    /// <param name="networkPlayers">The number of network peer slots.</param>
+    /// <returns>The document.</returns>
+    public static WorldDefinition PeerPopulationDocument(int networkPlayers) {
+        var document = BuildDocument();
+
+        return document with {
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + networkPlayers),
+                NetworkPlayers = networkPlayers,
+            },
+            Admission = [AnyAuthorityArrivals()],
+        };
+    }
+    /// <summary>Builds the exact fixed-point position with integer components.</summary>
+    /// <param name="x">The X component, in world units.</param>
+    /// <param name="y">The Y component, in world units.</param>
+    /// <param name="z">The Z component, in world units.</param>
+    /// <returns>The position.</returns>
+    public static FixedVector3 FixedPoint(int x, int y = 0, int z = 0) => new(
+        X: FixedQ4816.FromInteger(value: x),
+        Y: FixedQ4816.FromInteger(value: y),
+        Z: FixedQ4816.FromInteger(value: z)
+    );
+    /// <summary>Builds the fixed-point position nearest the given components.</summary>
+    /// <param name="x">The X component, in world units.</param>
+    /// <param name="y">The Y component, in world units.</param>
+    /// <param name="z">The Z component, in world units.</param>
+    /// <returns>The position.</returns>
+    public static FixedVector3 FixedPoint(double x, double y, double z) => new(
+        X: FixedQ4816.FromDouble(value: x),
+        Y: FixedQ4816.FromDouble(value: y),
+        Z: FixedQ4816.FromDouble(value: z)
+    );
+    public static WorldAdmissionEntry AnyAuthorityArrivals() => new(
+        Domain: WorldAdmissionEntry.AnyAuthority,
+        Subject: null,
+        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+        Algorithm: string.Empty,
+        PublicKey: string.Empty,
+        Grants: [
+            new WorldAdmissionGrant(
+                Capability: WorldCapability.Control,
+                Subject: GrantSubject.All
+            ),
+            new WorldAdmissionGrant(
+                Capability: WorldCapability.Drive,
+                Exclusive: true,
+                Budget: 64
+            ),
+            new WorldAdmissionGrant(
+                Capability: WorldCapability.Observe,
+                Budget: 64
+            ),
+        ]
+    );
+    /// <summary>Extends <see cref="BuildDocument"/> with the inhabited <c>camera-seat-0</c> placement a
+    /// camera-targeting <c>seatModes</c> state needs a body from — the coupling
+    /// <c>WorldDefinitionValidator.ValidateSeatModes</c> refuses a document for missing.</summary>
+    public static WorldDefinition BuildCameraBodyDocument() {
+        var creation = BuildBallCreation();
+        var document = BuildDocumentCore(
+            spawnPoints: BuildSpawnPoints(),
+            collision: new WorldCollision(
+                ContactSkin: 0.02f,
+                GradientProbe: 0f,
+                MaxIterations: 4,
+                MaxSlopeDegrees: 60f,
+                Requirements: []
+            ),
+            rateHz: DefaultRateHz,
+            seatCollider: null,
+            creations: [creation],
+            placements: [
+                new WorldPlacement(
+                    Id: $"{WorldSeatModeState.CameraPlacementIdPrefix}0",
+                    PrototypeId: creation.Id,
+                    Position: new DocumentVector3(value: Vector3.Zero),
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Inhabit: new WorldPlacementInhabit(
+                        Kit: SeatKitName,
+                        Look: null,
+                        Source: IntentSource.Idle,
+                        Distribution: WorldDistribution.Default
+                    )
+                ),
+            ]
+        );
+
+        // One body of headroom past the seats: an inhabited placement draws from the census, and the shared core
+        // pins capacity to the seat count.
+        return (document with {
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
+        });
+    }
+    /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
+    /// section, each populated with the smallest value shape
+    /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the
+    /// bare-minimum skeleton:
+    /// <list type="bullet">
+    /// <item><description>an <c>addons</c> row (<c>StrictParseLawTests</c> injects an unknown member into
+    /// its serialized form);</description></item>
+    /// <item><description>an empty <c>state</c> section — <c>MutationAllOrNothingLawTests</c> targets it by
+    /// ADDING a row through <c>UpsertStateRow</c>, so no row needs to pre-exist;</description></item>
+    /// <item><description>the default 4-seat population (<c>AuthorityAdministrationLawTests</c> needs
+    /// Seat(1)/Seat(2), body indices 0 and 1 — bodies 1 and 2 in this 0-based scheme);</description></item>
+    /// <item><description>a <see cref="WorldScreen"/> carrying a <c>testPattern</c> producer source
+    /// (the simplest engageable-shaped source that needs no booted machine) at
+    /// <see cref="TestPatternScreenIndex"/> — <c>EngageAuthorityLawTests</c>'s target.</description></item>
+    /// </list>
+    /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
+    /// ("traveler", a bare-bones grounded program with one exact instant-convergence shaping row), the three
+    /// channels its body motion program's selected operations require
+    /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
+    /// default peer source so no producer program (roam/approach/designated) is needed at all. This kit carries NO
+    /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
+    /// <see cref="BuildGradientUpDocument"/> extends with the ONE collider-bearing arm
+    /// <c>GradientUpContactLawTests</c> needs, without duplicating this whole literal.
+    /// </summary>
+    // The disclosure and the projection read the live store, so a law over a document alone composes one over it
+    // first, through the same import door a boot takes.
+    public static StateArena Store(WorldDefinition definition) => new(
+        catalog: definition.StateCatalog,
+        section: definition.StateRaw,
+        time: ArenaTime.Origin
+    );
+    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) => WorldStateDisclosure.Compose(
+        arena: Store(definition: definition),
+        definition: definition,
+        recipient: recipient
+    );
+    public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
+        var time = ArenaTime.At(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        return WorldProjection.Compose(
+            arena: Store(definition: definition),
+            authority: authority,
+            definition: definition,
+            recipient: recipient,
+            revision: revision,
+            tier: tier,
+            time: in time
+        );
+    }
+    /// <summary>Returns the base fixture document at the default <see cref="SimulationRateHz"/>.</summary>
+    public static WorldDefinition BuildDocument() => BuildDocumentAtRate(rateHz: DefaultRateHz);
+    /// <summary>Returns the base fixture document at an explicitly authored simulation rate.</summary>
+    /// <remarks>A fixture booted from this document through <c>FreshServer</c> steps one SIMULATION tick per
+    /// <c>Step</c>, so <paramref name="rateHz"/> also sets how much world TIME one step spans.
+    /// Pass <see cref="RecordedTraceRateHz"/> for a law whose recorded trace or hand-derived tick counts were
+    /// authored at that rate.</remarks>
+    /// <param name="rateHz">The document's authored <c>simulation.rateHz</c>; must divide
+    /// <c>FixedTickConversion.TicksPerSecond</c> exactly.</param>
+    public static WorldDefinition BuildDocumentAtRate(int rateHz) => BuildDocumentCore(
+        spawnPoints: BuildSpawnPoints(),
+        collision: new WorldCollision(
+            ContactSkin: 0.02f,
+            GradientProbe: 0f,
+            MaxIterations: 4,
+            MaxSlopeDegrees: 60f,
+            Requirements: []
+        ),
+        seatCollider: null,
+        creations: [],
+        placements: [],
+        rateHz: rateHz
+    );
+    /// <summary>Extends <see cref="BuildDocumentCore"/> with the ONE fixture <c>GradientUpContactLawTests</c>
+    /// needs: <see cref="BuildBallCreation"/> placed at the origin with <c>solid.margin</c> 0, a capsule collider on
+    /// the seat kit (the shipped shape: endpoint (0,1,0), radius 0.35 — no other law in this suite needs a
+    /// collider, so <see cref="BuildDocument"/>'s own kit stays colliderless), and <c>seat-1</c>'s spawn point
+    /// relocated to <see cref="GradientUpSpawnPosition"/>, on the ball's steep flank. <paramref name="gradientUp"/>
+    /// selects the ONE discriminating fact — <see cref="WorldContactRequirement.GradientDerivedUp"/> alongside
+    /// <see cref="WorldContactRequirement.SmoothUnionContact"/>, or the latter alone (the control arm) — the
+    /// geometry, collider, and spawn position are byte-identical between the two calls.</summary>
+    /// <param name="gradientUp">Whether the compiled collision authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</param>
+    public static WorldDefinition BuildGradientUpDocument(bool gradientUp) {
+        var creation = BuildBallCreation();
+        var spawnPoints = BuildSpawnPoints();
+
+        spawnPoints[0] = (spawnPoints[0] with { Position = GradientUpSpawnPosition });
+
+        var requirements = (gradientUp
+            ? new[] { WorldContactRequirement.SmoothUnionContact, WorldContactRequirement.GradientDerivedUp }
+            : new[] { WorldContactRequirement.SmoothUnionContact }
+        );
+
+        return BuildDocumentCore(
+            spawnPoints: spawnPoints,
+            collision: new WorldCollision(
+                ContactSkin: 0.02f,
+                GradientProbe: 0f,
+                MaxIterations: 4,
+                MaxSlopeDegrees: 60f,
+                Requirements: requirements
+            ),
+            seatCollider: new WorldCollider.Capsule(
+                Endpoint: new Vector3(
+                    x: 0f,
+                    y: 1f,
+                    z: 0f
+                ),
+                Radius: 0.35f
+            ),
+            rateHz: DefaultRateHz,
+            creations: [creation],
+            placements: [
+                new WorldPlacement(
+                    Id: "ball",
+                    PrototypeId: creation.Id,
+                    Position: Vector3.Zero,
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Solid: new WorldSolid(Margin: 0f)
+                ),
+            ]
+        );
+    }
+    /// <summary>The code-built document's canonical UTF-8 bytes — <see cref="WorldDefinitionSerialization.Serialize"/>
+    /// over <see cref="BuildDocument"/>, freshly built and serialized on every call (cheap, and it keeps a caller
+    /// free to mutate its own copy without a shared-buffer hazard). This is also the round-trip proof: the fixture
+    /// is only trustworthy if <c>Deserialize(Serialize(BuildDocument()))</c> both succeeds AND validates, which
+    /// every consumer of this method exercises simply by using it (<c>FreshServer</c> deserializes these
+    /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <c>WorldServer</c> from
+    /// the result).</summary>
+    public static byte[] DefaultWorldBytes() => WorldDefinitionSerialization.Serialize(definition: BuildDocument());
+    /// <summary>Loads a document file through the one admission door
+    /// (<see cref="WorldDefinitionLoader.TryLoadFileForAdmission"/>), drawn for the boot instance, keeping the
+    /// admitted definition and the content pin a law compares.</summary>
+    /// <param name="path">The document file.</param>
+    /// <param name="definition">The drawn, admitted definition, or <see langword="null"/> on refusal.</param>
+    /// <param name="contentHash">The content-address pin, or empty on refusal.</param>
+    /// <param name="reason">The loader's refusal, or empty on success.</param>
+    /// <param name="documents">The source compositions read through, or <see langword="null"/> for the local one.</param>
+    /// <returns>Whether the file loaded and was admitted.</returns>
+    public static bool TryLoadDrawn(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldDocumentSource? documents = null) {
+        var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out var admission,
+            contentHash: out contentHash,
+            documents: documents,
+            path: path,
+            reason: out reason
+        );
+
+        definition = admission?.Definition;
+
+        return loaded;
+    }
+    /// <summary>The floatable medium row a medium-hold fixture splices into its <c>state.world</c>: a
+    /// full-value lattice row over <paramref name="topology"/> whose <paramref name="heightScale"/> places the free
+    /// surface at that Y.</summary>
+    public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
+        Name: CellName.Parse(candidate: name),
+        Kind: CellKind.Fixed,
+        Domain: new StateDomain.CellsOf(Topology: topology),
+        Field: new WorldStateFieldTrait(
+            Initial: 1f,
+            Min: 0f,
+            Max: 1f,
+            HeightScale: heightScale,
+            Color: "#3B7BD6",
+            Medium: new WorldLatticeMedium()
+        )
+    );
+    /// <summary>Serializes the code-built document and REMOVES <c>host.presentation</c>, returning the re-serialized
+    /// bytes. The member has no C# default, so the source-generated context requires it of a document — but a
+    /// generated schema marking a member <c>required</c> proves nothing about the LOADER, which is exactly the
+    /// disagreement this fixture exists to pin: before
+    /// <see cref="Puck.World.WorldJsonContext"/> respected required constructor parameters, an absent
+    /// <c>presentation</c> was silently filled with enum 0 and the document lost the argument. Starts from the
+    /// canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only thing that could
+    /// make it refuse.</summary>
+    public static byte[] MissingHostPresentationBytes() => DefaultWorldBytesWithout(
+        member: "presentation",
+        section: "host"
+    );
+    /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
+    /// re-serialized bytes — proves the member parses absent and resolves through <see cref="WorldSeatCameraFeel.Default"/>.
+    /// Starts from the canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only
+    /// difference from a document known to parse clean.</summary>
+    public static byte[] MissingSeatLookBytes() => DefaultWorldBytesWithout(
+        member: "seatCameraFeel",
+        section: "seatDefaults"
+    );
+
+    // The canonical writer's own bytes with one member of one top-level section removed, so the removal is the only
+    // thing that could make a parse refuse.
+    private static byte[] DefaultWorldBytesWithout(string section, string member) {
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
+
+        _ = node[section]!.AsObject().Remove(propertyName: member);
+
+        return node.ToJsonBytes();
+    }
+
+    /// <summary>Serializes the code-built document, injects <c>bogusField: true</c> into the first row of
+    /// <c>addons</c> (mirroring <c>docs/verification/strict-definition-parse</c>'s own choice of a
+    /// <see cref="WorldAddonRow"/> as the target — the row the strict-parse gap was originally named against), and
+    /// returns the re-serialized bytes. Starts from the canonical writer's own output
+    /// (<see cref="DefaultWorldBytes"/>), so the ONLY thing that could make deserialization refuse is the injected
+    /// member.</summary>
+    public static byte[] SabotagedAddonBytes() {
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
+        var addons = node["addons"]!.AsArray();
+
+        addons[0]!.AsObject()["bogusField"] = true;
+
+        return node.ToJsonBytes();
+    }
+    /// <summary>Advances one <see cref="FieldLattice"/> a single tick with no bodies, against
+    /// <paramref name="host"/> or an all-default <see cref="LambdaHost"/>.</summary>
+    public static void StepLattice(FieldLattice lattice, IFieldLatticeHost? host = null) => lattice.Step(
+        tick: 1,
+        bodyCount: 0,
+        host: (host ?? new LambdaHost())
+    );
+    /// <summary>The document spelling of a composite: state.lattices topology + one lattice-shaped row per
+    /// composite row — what <c>with { Fields = ... }</c> said before the fold made Fields a compiled view of the
+    /// state section.</summary>
+    public static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
+        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
+
+    /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "roam"
+    /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
+    /// any other suite file's own custom kit — see <c>TransferAbortKitWideningLawTests</c>'s drive/medium
+    /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
+    /// suites' laws. Kits that declare roam seed its variation whether or not it is selected; kits without
+    /// roam still receive ordinary spawn/color initialization.</summary>
+    public static BodyProgramParameters TravelerRoamParameters { get; } = new(
+        Scalars: new Dictionary<string, float> {
+            ["forward"] = 0.375f,
+            ["softRadius"] = 45f,
+            ["weaveAmplitude"] = 0.5f,
+            ["inwardGain"] = 1.6f,
+            ["turnScale"] = 2.5f,
+            ["weaveFrequencyBase"] = 0.3f,
+            ["weaveFrequencyRange"] = 0.2f,
+            ["altitudeGain"] = 0.32f,
+            ["activityRateBase"] = 2.2f,
+            ["activityRateRange"] = 1.3f,
+            ["strafeWave"] = 0f,
+            ["turnWave"] = 0f,
+            ["upWave"] = 0f,
+            ["pitchWave"] = 0f,
+            ["rollTurn"] = 0f,
+            ["pressThreshold"] = 0f,
+            ["altitudeBase"] = 0f,
+            ["altitudeRange"] = 0f,
+            // standoffRadius/approach/orbit are omitted: this producer's program has no SenseNearestInCone, so
+            // ProduceSteeringIntent's approach shape can never govern it and the compiler does not require them.
+        },
+        Channels: new Dictionary<string, string>()
+    );
+    /// <summary>The standard host row (the values <c>standard.puck</c> authors), for fixtures whose documents
+    /// must carry an authored host (serialization round-trips, the host-member strict-parse laws) — the engine no
+    /// longer carries one.</summary>
+    public static WorldHostDefaults StandardHost { get; } = new(
+        Presentation: WorldHostPresentation.Windowed,
+        Backend: WorldBackendPreference.Auto,
+        Width: 1280,
+        Height: 800,
+        SurfaceFormat: Puck.Abstractions.Gpu.GpuPixelFormat.R8G8B8A8Unorm,
+        Fullscreen: false,
+        PresentMode: Puck.Abstractions.Presentation.PresentMode.Immediate,
+        TargetHertz: 0.0,
+        ExitAfterSeconds: 0,
+        Genlock: null,
+        Listen: null,
+        Authority: null
+    );
+    /// <summary>A representative declared authoring policy row, for fixtures that exercise editor/placement
+    /// behavior — the engine carries none, and a world of only static placement rows authors none either (its
+    /// rows ride the derived policy; see <see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>).</summary>
+    public static WorldPlacementPolicyDefaults StandardAuthoring { get; } = new(
+        AuthoringHeadroomPlacements: 8,
+        AuthoringHeadroomScreens: 4,
+        CandidateCap: 16,
+        CandidateRadius: 32f,
+        DerivedFaceScreens: 4,
+        MaxPlacementScale: 5.0f,
+        MinPlacementScale: 0.2f,
+        PreviewDeadlineFrames: 12
+    );
+    /// <summary>The document's declared <c>dynamics</c> rows, mirroring what
+    /// <c>src/Puck.World/Assets/worlds/standard.puck</c> authors — <c>chase</c> backs
+    /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
+    /// own row.</summary>
+    public static DynamicsRow[] StandardDynamics { get; } = [
+        new DynamicsRow(
+            Damping: 1f,
+            Frequency: 0.9549f,
+            Name: "chase",
+            Response: 1f
+        ),
+        new DynamicsRow(
+            Damping: 1f,
+            Frequency: 2f,
+            Name: "probe",
+            Response: 0f
+        ),
+    ];
+    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.puck</c>
+    /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
+    /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
+    public static WorldCameraProgram StandardSeatRig { get; } = new(
+        Name: "seatChase",
+        Version: WorldCameraProgram.CurrentVersion,
+        Operations: [
+            new WorldCameraProgramOp.Orbit(
+                Distance: 5.4626001f,
+                Yaw: new BindableScalar(literal: 0f),
+                Pitch: new BindableScalar(literal: 0.4145069f),
+                PivotOffset: new DocumentVector3(value: Vector3.Zero)
+            ),
+            new WorldCameraProgramOp.LookAt(
+                Subject: new WorldCameraSubject.Reference(),
+                TargetOffset: new DocumentVector3(
+                    x: 0f,
+                    y: 1f,
+                    z: 0f
+                ),
+                WorldAxes: false
+            ),
+            new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9599311f)),
+            new WorldCameraProgramOp.Dynamics(Row: "chase"),
+        ]
+    );
+
+    private static WorldViewDefaults StandardViews { get; } = new(
+        SeatRigRaw: StandardSeatRig,
+        SeatControlRaw: new WorldSeatViewControl(
+            MaxPitch: 1.2f,
+            MinPitch: -0.35f,
+            YawReference: WorldSeatYawReference.World
+        ),
+        Layouts: []
+    );
+    /// <summary>The unit direction from the ball's center to its flank contact point — <see cref="FlankHorizontalRatio"/>
+    /// out along world X, the rest along +Y (already unit-length by construction: the two components are
+    /// <c>sin</c>/<c>cos</c> of the same angle). Radial gravity under <see cref="WorldContactRequirement.GradientDerivedUp"/>
+    /// falls exactly along this ray toward the origin (no tangential velocity is ever introduced — see
+    /// <see cref="BuildGradientUpDocument"/>'s remarks), so a body spawned anywhere on it lands on the SAME flank
+    /// point every time.</summary>
+    private static Vector3 FlankDirection { get; } = new(
+        x: FlankHorizontalRatio,
+        y: MathF.Sqrt(x: (1f - (FlankHorizontalRatio * FlankHorizontalRatio))),
+        z: 0f
+    );
+    /// <summary>The seat spawn position <c>GradientUpContactLawTests</c> relocates <c>seat-1</c> to — on the
+    /// flank ray, <see cref="FlankSpawnClearance"/> world units above the ball's surface.</summary>
+    private static Vector3 GradientUpSpawnPosition { get; } = (FlankDirection * (BallSurfaceRadius + FlankSpawnClearance));
+    private static readonly Lazy<byte[]> DefaultBytes = new(valueFactory: static () => WorldDefinitionSerialization.Serialize(definition: BuildDocument()));
+
+    /// <summary>The engine-tick duration one simulation tick spans at the default <see cref="SimulationRateHz"/>,
+    /// computed once and reused.</summary>
+    public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+
+    /// <summary>Returns the engine-tick duration one simulation tick spans at <paramref name="rateHz"/>, or the
+    /// default <see cref="StepTicks"/> for the resident, non-stepping rate 0 (which has no tick duration).</summary>
+    /// <param name="rateHz">The authored simulation rate.</param>
+    public static ulong StepTicksAt(int rateHz) => ((rateHz > 0)
+        ? EngineTicks.PerRate(ratePerSecond: ((uint)rateHz))
+        : StepTicks
+    );
+
+    /// <summary>The test double for <see cref="IFieldLatticeHost"/>: every hook defaults to the same
+    /// no-op/zero <see cref="FieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
+    public sealed class LambdaHost(
+        Func<int, FixedVector3?>? bodyPosition = null,
+        Func<StateHandle, int, ulong, long>? readTag = null,
+        Action<StateHandle, int, long, ulong>? writeTag = null,
+        Func<StateHandle, ulong, FixedQ4816>? readScalar = null,
+        Action<StateHandle, FixedQ4816, ulong>? addScalar = null
+    ) : IFieldLatticeHost {
+        public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(
+            row,
+            amount,
+            tick
+        );
+        public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
+        public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => (readScalar?.Invoke(
+            row,
+            tick
+        ) ?? FixedQ4816.Zero);
+        public long ReadTag(StateHandle row, int body, ulong tick) => (readTag?.Invoke(
+            row,
+            body,
+            tick
+        ) ?? 0L);
+        public void WriteTag(StateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(
+            row,
+            body,
+            value,
+            tick
+        );
+    }
+}

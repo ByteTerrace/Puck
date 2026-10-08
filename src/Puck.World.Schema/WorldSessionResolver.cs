@@ -16,7 +16,7 @@ namespace Puck.World;
 /// <see cref="WorldDestination"/>, <see cref="WorldGroupSelector"/>, <see cref="WorldGroup"/>,
 /// <see cref="Principal"/>) already lives in this assembly, so it is declared here rather than in
 /// <c>Puck.World</c> behind an <c>InternalsVisibleTo</c> grant. This also lets an in-process law in
-/// <c>tests/Puck.World.Tests</c> (which references this assembly but deliberately never <c>Puck.World</c> — see
+/// <c>tests/Puck.World.Schema.Tests</c> (which references this assembly but deliberately never <c>Puck.World</c> — see
 /// that project's own README) exercise the idempotence and generation-lifecycle rules directly.
 /// </summary>
 /// <remarks>

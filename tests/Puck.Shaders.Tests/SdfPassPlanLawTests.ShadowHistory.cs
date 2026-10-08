@@ -27,4 +27,22 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.Contains(collection: views.Inputs, filter: static input => ((input.Name == SdfWorldPackage.ShadowHistory) && !input.PreviousFrame));
         }
     }
+    [Fact]
+    public void IncomingVisibilityIsTwoBytesAPixelAtEveryNonzeroCapacityAndAbsentAtZero() {
+        foreach (var (reconstructs, temporal) in new[] { (false, false), (true, false), (false, true) }) {
+            Assert.DoesNotContain(collection: SdfWorldPackage.FragmentFor(fadeCapacity: 0, reconstructs: reconstructs, temporal: temporal).Resources,
+                filter: static resource => (resource.Name == SdfWorldPackage.IncomingVisibility));
+            foreach (var capacity in new[] { 1, 2 }) {
+                var fragment = SdfWorldPackage.FragmentFor(fadeCapacity: capacity, reconstructs: reconstructs, temporal: temporal);
+                var image = Assert.Single(collection: fragment.Resources, predicate: static resource => (resource.Name == SdfWorldPackage.IncomingVisibility));
+
+                // One shadow kernel writes both fade channels, so one channel's capacity still allocates two bytes a
+                // pixel, at the grid the shadow pass marches.
+                Assert.True(condition: image.Retained);
+                Assert.Equal(expected: Puck.Abstractions.Gpu.GpuPixelFormat.R8G8Unorm.ToString(), actual: image.Format);
+                Assert.Equal(expected: 2U, actual: Puck.Abstractions.Gpu.GpuPixelFormats.UnitBytes(format: Puck.Abstractions.Gpu.GpuPixelFormat.R8G8Unorm));
+                Assert.Equal(expected: ((reconstructs || temporal) ? ShaderPipelineDimensions.Render() : ShaderPipelineDimensions.Relative()), actual: image.Dimensions);
+            }
+        }
+    }
 }

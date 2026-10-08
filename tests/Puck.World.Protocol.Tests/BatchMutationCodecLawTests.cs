@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.State;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;

@@ -69,7 +69,7 @@ public static class SdfSkyEnvironmentGraph {
         return [.. source.Reads.Where(predicate: static read => (read.Kind == ShaderPipelineResourceKind.Image))
             .Select(selector: read => read with { PreviousFrame = (read.PreviousFrame || (read.Producer == view) || world[set.IndexOf(name: read.Producer)]) })];
     }
-    /// <summary>Adds the shared environment dependency to the view's lighting and composition passes.</summary>
+    /// <summary>Adds the shared environment dependency to the view's indirect receiver, lighting and composition passes.</summary>
     /// <param name="fragment">The selected view fragment.</param>
     /// <returns>The same passes and storages with their current environment dependency.</returns>
     public static RenderGraphPackageFragment WithEnvironment(RenderGraphPackageFragment fragment) => fragment with {
@@ -83,7 +83,7 @@ public static class SdfSkyEnvironmentGraph {
             new ShaderPipelineResource(Name: ScreensInput, Kind: ShaderPipelineResourceKind.Buffer,
                 SizeBytes: SdfScreenEmission.Bytes, StrideBytes: (sizeof(float) * 4),
                 Initialization: ShaderPipelineInitialization.External)],
-        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.Composite)
+        Passes = [.. fragment.Passes.Select(selector: static pass => ((pass.Name is SdfWorldPackage.Parts.Receiver or SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.Composite)
             ? pass with { Inputs = [.. pass.Inputs, new ResourceReference(Input), new ResourceReference(MapInput), new ResourceReference(ScreensInput)],
                 InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead] }
             : pass))],

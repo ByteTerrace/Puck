@@ -13,7 +13,7 @@ namespace Puck.World.Tests;
 public sealed class WorldSourceSaveIntegrationLawTests {
     [Fact]
     public void LiveNudgeSavesAndReloadsWithUnrelatedSourceIntact() {
-        using var row = WorldEditorPlacementLawTests.Build();
+        using var row = EditorPlacementFixtures.Build();
         using var files = new TemporaryDirectory();
         var source = (("// Keep this authored heading.\n" + WorldDecompiler.Decompile(root: JsonNode.Parse(utf8Json: WorldDefinitionSerialization.Serialize(definition: row.Server.Definition))!.AsObject())) + "\n// Keep this constant and its spacing.\nlet retained = 3\n");
         var path = files.WriteText(name: "world.puck", text: source);

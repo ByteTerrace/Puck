@@ -86,11 +86,7 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
         float2 incoming = 1.0;
 #if SDF_SHADOW_FADE_SLOTS > 0
         if (!worldSoftShadowsDisabled() && passGroup.shadowFadeCount > 0u) {
-#if SDF_SHADOW_FADE_SLOTS == 1
-            incoming.x = incomingVisibility.Load(int3(pixel, 0));
-#else
             incoming = incomingVisibility.Load(int3(pixel, 0));
-#endif
         }
 #endif
         sources = sdfIndirectAlternativeDiffuse(surfacePoint, visible.normal, direction, visible.material, shadows, incoming);
@@ -100,7 +96,8 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
 }
 
 // Cone clearance follows the existing full-field ball certificate. A hit still requires absolute acceptance and
-// a sign witness; a small conservative distance or an exhausted budget supplies no fabricated bounce.
+// a sign witness; a small conservative distance or an exhausted budget supplies no fabricated bounce. The cone's
+// sample and the hit's sign witness are two phases of one field call site, in the original order and allowance.
 bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndirectSources fallback,
     out SdfIndirectSources sources, out bool hitSurface, out bool screenTerminal, inout uint samples) {
     sources = fallback;
@@ -110,21 +107,39 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
     float reach = min(SdfIndirectAlternativeReach, p.farDistance);
     float visibility = 1.0;
     uint budget = SdfIndirectAlternativeConeSteps;
-    [loop] for (uint step = 0u; step < SdfIndirectAlternativeConeSteps && budget > 0u; step++) {
-        budget--;
-        float3 position = origin + direction * travel;
-        SdfHit hit = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
+    uint step = 0u;
+    bool witnessPhase = false;
+    float3 position = 0.0;
+    float3 normal = 0.0;
+    float offset = 0.0;
+    SdfHit hit = (SdfHit)0;
+    [loop] for (;;) {
+        float3 at;
+        if (!witnessPhase) {
+            if (!(step < SdfIndirectAlternativeConeSteps && budget > 0u)) { break; }
+            budget--;
+            position = origin + direction * travel;
+            at = position;
+        } else {
+            at = position + normal * offset;
+        }
+        SdfHit query = sdfIndirectSample(at, SDF_INSTANCE_MASK_ALL);
         samples++;
-        if (!isfinite(hit.distance) || (travel == 0.0 && hit.distance <= 0.0)) { return false; }
-        if (abs(hit.distance) <= SdfIndirectSurfaceEpsilon && budget >= 2u) {
-            budget--;
-            float3 normal = sdfIndirectGradient(position);
-            samples++;
-            if (dot(normal, normal) == 0.0 || dot(normal, -direction) <= 0.0) { return false; }
-            budget--;
-            float offset = hit.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
-            SdfHit witness = sdfIndirectSample(position + normal * offset, SDF_INSTANCE_MASK_ALL);
-            samples++;
+        if (!witnessPhase) {
+            hit = query;
+            if (!isfinite(hit.distance) || (travel == 0.0 && hit.distance <= 0.0)) { return false; }
+            if (abs(hit.distance) <= SdfIndirectSurfaceEpsilon && budget >= 2u) {
+                budget--;
+                normal = sdfIndirectGradient(position);
+                samples++;
+                if (dot(normal, normal) == 0.0 || dot(normal, -direction) <= 0.0) { return false; }
+                budget--;
+                offset = hit.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
+                witnessPhase = true;
+                continue;
+            }
+        } else {
+            SdfHit witness = query;
             bool bracket = isfinite(witness.distance) && (hit.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0);
             if (!bracket || hit.material < 0) { return false; }
             float3 screenEmission;
@@ -159,19 +174,26 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
         float advance = min(clearance, reach - travel);
         if (advance <= 0.0) { return false; }
         travel += advance;
+        step++;
     }
     return false;
 }
 
-// Preserve this shared comparison body in SPIR-V: expanding it into Views overflows or crashes legalization.
+// Whether a comparison method replaces this pixel's incoming light this frame: one render-pixel parity class a frame.
+bool sdfIndirectAlternativeAdmitted(SdfPixel p) {
+    if (passGroup.indirectMethod == SdfIndirectMethodCache || passGroup.indirectTier == SdfIndirectTierOff) { return false; }
+    uint phase = passGroup.historyFrames % SdfIndirectAlternativePhases;
+    return ((p.pixel.x & 1u) | ((p.pixel.y & 1u) << 1u)) == phase;
+}
+
+// Preserve this shared comparison body in SPIR-V: expanding it into the receiver overflows or crashes legalization.
 // DXIL retains ordinary inlining because its validator rejects vector values in retained helper functions.
 #ifdef __spirv__
 [noinline]
 #endif
 SdfIndirectSources sdfIndirectAlternative(SdfPixel p, SdfSurfaceSample receiver, float3 launched, SdfIndirectSources fallback) {
-    if (passGroup.indirectMethod == SdfIndirectMethodCache || passGroup.indirectTier == SdfIndirectTierOff) { return fallback; }
+    if (!sdfIndirectAlternativeAdmitted(p)) { return fallback; }
     uint phase = passGroup.historyFrames % SdfIndirectAlternativePhases;
-    if (((p.pixel.x & 1u) | ((p.pixel.y & 1u) << 1u)) != phase) { return fallback; }
     SdfIndirectSources total = (SdfIndirectSources)0;
     uint hits = 0u;
     uint samples = 0u;

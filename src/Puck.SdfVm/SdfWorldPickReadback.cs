@@ -38,7 +38,8 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         picker.Attach(readback: this);
     }
 
-    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, string box, SdfReprojectionView sample, long cut) {
+    // With a receiver pass (armedOnly), a surface request records only once the receiver armed it this frame.
+    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, string box, SdfReprojectionView sample, long cut, bool armedOnly) {
         Poll();
         var target = m_slots[slot];
 
@@ -48,7 +49,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
             target.Submit = false;
             m_picker.Complete(readback: this, result: null);
         }
-        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
+        if (!m_picker.Take(armedOnly: armedOnly, cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
             return;
         }
         if (request.Sample is not null) {

@@ -21,6 +21,7 @@ public sealed class SdfWorldPicker {
     // The readback holding the one copy in flight, or null.
     private SdfWorldPickReadback? m_flight;
     private bool m_surface;
+    private bool m_armed;
     private long m_cut;
     private SdfProgram? m_program;
     private ISdfPickMap? m_map;
@@ -118,8 +119,20 @@ public sealed class SdfWorldPicker {
             Clear();
         }
     }
-    internal bool Take(SdfWorldPickReadback readback, uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, out SdfPickResult request) {
-        if (!Pending) {
+    // Arms the pending surface request for the receiver pass, which records before views in a view with indirect light:
+    // the pixel whose near ray and replacing sources the receiver records into the selected receiver record. Views takes
+    // a surface request only once it is armed (Take), so the record's two writers always describe one pixel.
+    internal bool Arm(uint width, uint height, out uint x, out uint y) {
+        m_armed = (Pending && m_surface);
+        x = Math.Min(val1: ((uint)(m_x * width)), val2: (width - 1));
+        y = Math.Min(val1: ((uint)(m_y * height)), val2: (height - 1));
+        return m_armed;
+    }
+    internal bool Take(SdfWorldPickReadback readback, uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, bool armedOnly, out SdfPickResult request) {
+        var armed = m_armed;
+
+        m_armed = false;
+        if (!Pending || (armedOnly && m_surface && !armed)) {
             request = default;
             return false;
         }

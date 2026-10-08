@@ -98,6 +98,9 @@ internal static class AffectedSelection {
     /// through the documents the base's tree held (<see cref="AffectedDocuments"/> over
     /// <see cref="AffectedRevisionTree"/>), or <see langword="null"/> for none; a deleted file is never reached in the
     /// working tree.</param>
+    /// <param name="linkedBy">The projects whose project files link a changed file into their own build from outside
+    /// their directory (a source under <c>tests/Shared</c>, content copied from another project), which reach it as their
+    /// own changes do, or <see langword="null"/> for none.</param>
     /// <returns>The plan.</returns>
     public static AffectedPlan Select(
         IReadOnlyList<string> changed,
@@ -117,7 +120,8 @@ internal static class AffectedSelection {
         IReadOnlySet<string>? deleted = null,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
         Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
-        Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null
+        Func<string, IReadOnlySet<string>>? recordedCanariesReaching = null,
+        Func<string, IReadOnlyList<string>>? linkedBy = null
     ) {
         var catalog = false;
         var everything = false;
@@ -237,6 +241,10 @@ internal static class AffectedSelection {
             var owner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
 
             catalog |= catalogInputs(arg1: path, arg2: owner?.Name);
+
+            if (linkedBy is not null) {
+                seeds.UnionWith(other: linkedBy(arg: path));
+            }
 
             if (owner is null) {
                 seeds.UnionWith(other: consumersOf(arg: path));

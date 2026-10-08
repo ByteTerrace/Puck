@@ -35,7 +35,7 @@ public sealed class AffectedBaselineLawTests {
         Assert.Empty(collection: Select(path: "src/Unrelated/Thing.cs").Baselines);
     }
     [InlineData("Puck.State.Rebuild.Corpus", "corpus-inventory")]
-    [InlineData("Puck.World.Tests", "state")]
+    [InlineData("Puck.World.Games.Tests", "state")]
     [InlineData("Puck.Maths.Tests", "maths-ledger")]
     [InlineData("Puck.World.Browser.Tests", "browser-parity")]
     [Theory]

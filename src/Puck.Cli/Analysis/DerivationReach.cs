@@ -107,6 +107,13 @@ public static class DerivationReach {
             if (symbol is ILocalSymbol local) { Add(symbol: local.Type); return; }
             if (symbol is IParameterSymbol argument) { Add(symbol: argument.Type); return; }
             if (symbol is IMethodSymbol method) {
+                // A built-in operator of a pointer type (byte* + int) belongs to no assembly: the language defines it,
+                // so only its operand and result types reach the walk.
+                if (method.ContainingAssembly is null) {
+                    foreach (var operand in method.Parameters) { Add(symbol: operand.Type); }
+                    Add(symbol: method.ReturnType);
+                    return;
+                }
                 foreach (var type in method.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { AddGenericArgument(type: type); }
                 if (method.MethodKind is MethodKind.LocalFunction or MethodKind.AnonymousFunction) { Add(symbol: method.ContainingSymbol); return; }
                 // A metadata-only callee can return an implementation constructed outside the producer's reach.

@@ -9,8 +9,8 @@ public sealed partial class SdfWorldPasses {
     /// <inheritdoc/>
     /// <remarks>A view that asks for temporal reconstruction runs <see cref="SdfWorldPackage.TemporalFragment"/> at
     /// any render scale; otherwise a reduced view runs <see cref="SdfWorldPackage.Fragment"/> and a native one
-    /// <see cref="SdfWorldPackage.NativeFragment"/>. Each uses the fade-capacity variant supplied by
-    /// <see cref="SdfWorldPackage.FragmentFor"/>.</remarks>
+    /// <see cref="SdfWorldPackage.NativeFragment"/>. Each allocates the incoming handoff image when its policy allows
+    /// fades (<see cref="SdfWorldPackage.FragmentFor"/>).</remarks>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
         var entry = Refresh(instance: instance);
 
@@ -55,9 +55,10 @@ public sealed partial class SdfWorldPasses {
         public int RenderedShadowFadeCapacity { get; set; } = -1;
         public RenderGraphPackageFragment Fragment => SdfWorldPackage.FragmentFor(reconstructs: Snapshot.Reconstructs, temporal: RequestsTemporal, fadeCapacity: CurrentShadowFadeCapacity);
 
-        // Three low bits distinguish temporal reconstruction and the three fade capacities. Render ceilings are
-        // fractions from zero through one, whose binary exponents share the high bits shifted out here.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 3) | (RequestsTemporal ? 1L : 0L) | (((long)CurrentShadowFadeCapacity) << 1);
+        // Two low bits distinguish temporal reconstruction and whether the policy allows fades, which allocates the
+        // incoming image; every nonzero capacity plans the same fragment. Render ceilings are fractions from zero through
+        // one, whose binary exponents share the high bits shifted out here.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsTemporal ? 1L : 0L) | ((CurrentShadowFadeCapacity > 0) ? 2L : 0L);
         double IShaderPipelineRenderExtent.Grid => CurrentScale;
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => ((View is { LightView: true }) ? (SdfIndirectLightLayout.Resolution, SdfIndirectLightLayout.Resolution) : Pixels(width: width, height: height, scale: Ceiling));

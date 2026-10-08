@@ -60,7 +60,7 @@ path, even when every value is still correct.
 
 The world document's own converters and validators are covered by
 `tests/Puck.World.Schema.Tests`, and game-level behavior that boots a server is
-covered by the [World tests](../../../tests/Puck.World.Tests/README.md).
+covered by the [World games tests](../../../tests/Puck.World.Games.Tests/README.md).
 
 ## Check that authored sources still mean the same thing
 
@@ -99,19 +99,19 @@ syntax, and the [`puck test` reference](../cli.md#puck-testtest-worlds) covers e
 
 ## Compare shipped worlds against their baselines
 
-`tests/Puck.World.Tests/ShippedWorldStateBaselines` holds one canonical state
+`tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` holds one canonical state
 export per shipped game, taken after a fixed scripted input sequence, together
 with the sequence and the game's per-tick work budget. The baselines are
 evidence for review: after a change, you re-record them and read what moved.
 
 ```powershell
-dotnet test tests/Puck.World.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
+dotnet test tests/Puck.World.Games.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
 ```
 
 To re-record, run `puck baselines state`, and `puck baselines state --check`
 to compare without writing. The verb runs the baseline tests twice and refuses
 to write if the two runs differ, so a nondeterministic world fails the
-recording. The [baseline README](../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/README.md)
+recording. The [baseline README](../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
 describes each file. The README also
 explains which parts of the authoritative hash the export shows as values and
 which it shows only as digests.

@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The client surface this project exercises is read directly (public members only; see AGENTS.md's
+             InternalsVisibleTo ruling), never through reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The presentation-facing client seam and what it draws with, and no server: a change to the authoritative
+             simulation never selects this suite. -->
+        <ProjectReference Include="../../src/Puck.World.Client/Puck.World.Client.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
+        <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
+        <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
+        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
+        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+        <Compile Include="../Shared/World/MirrorBindings.cs" Link="World/MirrorBindings.cs" />
+        <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
+        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/ValueDomainFixtures.cs" Link="World/ValueDomainFixtures.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
+        <Compile Include="../Shared/World/WindowCameraFixtures.cs" Link="World/WindowCameraFixtures.cs" />
+        <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
+    </ItemGroup>
+</Project>

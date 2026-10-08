@@ -27,6 +27,7 @@ bool sdfIndirectReceiverCertificate(uint record, out uint level, out uint mask, 
     clearance = asfloat(sdfVisibilityRecordBuffer[word + 3u]);
     return level < sdfIndirectLevelCount() && all(isfinite(launched)) && isfinite(clearance);
 }
+#ifdef SDF_RECEIVER_PASS
 void sdfIndirectStoreReceiverCertificate(uint record, uint level, uint mask, float3 launched, float clearance, bool completed) {
     if (!completed || !sdfIndirectReceiverRecordValid(record)) { return; }
     uint word = record + SdfVisibilityRowI;
@@ -34,5 +35,6 @@ void sdfIndirectStoreReceiverCertificate(uint record, uint level, uint mask, flo
     sdfVisibilityStoreRow(word + 4u, uint4(passGroup.indirectAllocation, passGroup.indirectCertificateRevision,
         0x80000000u | (level << 8u) | mask));
 }
+#endif
 
 #endif

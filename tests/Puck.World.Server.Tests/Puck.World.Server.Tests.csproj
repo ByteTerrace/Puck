@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The document, protocol and server surface this project exercises is read directly (public members only;
+             see AGENTS.md's InternalsVisibleTo ruling), never through reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite drives the
+             real routed store rather than a second, hand-rolled dispatch. -->
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The authoritative simulation and what drives it, and nothing above it: no client, renderer, backend or
+             transpiler, so a change there never selects this suite. -->
+        <ProjectReference Include="../../src/Puck.World.Server/Puck.World.Server.csproj" />
+        <!-- The server-only console modules, whose narration sink the fixture server writes through. -->
+        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Addons/Puck.World.Addons.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AdmissionWireFixture.cs" Link="World/AdmissionWireFixture.cs" />
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AudioAssetFixtures.cs" Link="World/AudioAssetFixtures.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Server.cs" Link="World/AuthoredGameFixtures.Server.cs" />
+        <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
+        <Compile Include="../Shared/World/CensusFixtures.cs" Link="World/CensusFixtures.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
+        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
+        <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
+        <Compile Include="../Shared/World/DeferredVerbFixtures.cs" Link="World/DeferredVerbFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EditorPlacementFixtures.cs" Link="World/EditorPlacementFixtures.cs" />
+        <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
+        <Compile Include="../Shared/World/FakeObjectBlobStore.cs" Link="World/FakeObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/JournalDepthFixtures.cs" Link="World/JournalDepthFixtures.cs" />
+        <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
+        <Compile Include="../Shared/World/MachineOperationFixtures.cs" Link="World/MachineOperationFixtures.cs" />
+        <Compile Include="../Shared/World/MirrorBindings.cs" Link="World/MirrorBindings.cs" />
+        <Compile Include="../Shared/World/NarrationPaths.cs" Link="World/NarrationPaths.cs" />
+        <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
+        <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
+        <Compile Include="../Shared/World/PuckStorageTestComposition.cs" Link="World/PuckStorageTestComposition.cs" />
+        <Compile Include="../Shared/World/RecordingNarrationSink.cs" Link="World/RecordingNarrationSink.cs" />
+        <Compile Include="../Shared/World/StallingObjectBlobStore.cs" Link="World/StallingObjectBlobStore.cs" />
+        <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/TestExtension.cs" Link="World/TestExtension.cs" />
+        <Compile Include="../Shared/World/TestMachines.Empty.cs" Link="World/TestMachines.Empty.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Server.cs" Link="World/VocabularyHooks.Server.cs" />
+        <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
+        <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- AddonGuestLawTests reads the committed guest binaries the game ships, at the path the game ships them. -->
+        <None Include="../../src/Puck.World/Assets/addons/*.wasm" LinkBase="Assets/addons" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

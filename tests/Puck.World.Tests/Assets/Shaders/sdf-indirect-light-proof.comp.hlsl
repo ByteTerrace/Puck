@@ -7,8 +7,8 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-light-projection.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-viewport.hlsli"
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> lightCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> lightResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> lightCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> lightResults : register(u127, space3);
 struct LightProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<LightProbeIndex> lightProbeIndex : register(b0, space4);
 

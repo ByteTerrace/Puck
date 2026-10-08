@@ -56,7 +56,7 @@ public sealed class SdfIndirectShaderInputLawTests {
     [Fact]
     public void ReceiverRecordsAndShadowSlotsHaveFiniteResourceBounds() {
         var certificate = Source(file: "indirect/sdf-indirect-receiver-certificate.hlsli");
-        var receiver = Source(file: "indirect/sdf-indirect-apply.hlsli");
+        var receiver = Source(file: "indirect/sdf-indirect-receiver.hlsli");
         var diffuse = Source(file: "indirect/sdf-indirect-diffuse.hlsli");
 
         Assert.Contains(actualString: certificate, expectedSubstring: "sdfVisibilityRecordBuffer.GetDimensions(count, stride)");

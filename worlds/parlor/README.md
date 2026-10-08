@@ -59,8 +59,8 @@ The CLI test suite also runs every entry point listed in `manifest.json` through
 scenarios are examples, not an exhaustive independent oracle for every legal
 game position.
 
-The independent [Hearts](../../tests/Puck.World.Tests/HeartsLawTests.cs) and
-[Chinese Checkers](../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs)
+The independent [Hearts](../../tests/Puck.World.Games.Tests/HeartsLawTests.cs) and
+[Chinese Checkers](../../tests/Puck.World.Games.Tests/ChineseCheckersLawTests.cs)
 law suites also load these package sources directly. They check legality
 against separate oracles and cover physical correction, complete AI play,
 and Hearts deck conservation across multiple hands.
@@ -96,7 +96,7 @@ Each bust is one attribute mask, and a question is one bit of it. The answer set
 of a question is the twenty-four-bit set of busts carrying that bit, so
 eliminating is one AND of a seat's standing set with the answer set or its
 complement. Every pair of busts differs in at least one bit, and
-[LineupLawTests](../../tests/Puck.World.Tests/LineupLawTests.cs) holds the roster
+[LineupLawTests](../../tests/Puck.World.Games.Tests/LineupLawTests.cs) holds the roster
 to that and holds every answer to a brute-force filter of the roster. The
 computer asks the question whose yes/no split of its own standing set is closest
 to half, the lowest question on a tie, and names the bust once one remains. It

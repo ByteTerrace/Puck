@@ -7,7 +7,7 @@ namespace Puck.Physics.Tests;
 /// <summary>Pins the mass-conserving <see cref="FieldReactionInput.Flow"/> transport reaction: exact conservation
 /// (including boundary spill), equilibrium under flat terrain, directional movement under a ramp, and determinism —
 /// the kernel-only half of the flow contract; the authoring vocabulary's own <c>over</c>/<c>spillRow</c> validator
-/// laws stay in <c>tests/Puck.World.Tests</c>.</summary>
+/// laws stay in <c>tests/Puck.World.Schema.Tests</c>.</summary>
 public sealed class FieldLatticeFlowLawTests {
     // Field 0 ("water", transported) and, when includeGround, field 1 ("ground", static terrain the reaction's
     // Over names). Both fields carry a [0, 100] envelope -- generous enough that the small whole-number test

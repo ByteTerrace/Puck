@@ -116,7 +116,7 @@ offscreen host composes at most one frame per step, and composes the owed frame
 again only while a capture waits for it. The comparator's tick verdict holds
 each side's `regionTick` to the armed tick, so a frame that shows another
 tick's regions fails there whatever its pixels.
-`WorldCaptureSchedulerLawTests` (`tests/Puck.World.Tests`) drives this without
+`WorldCaptureSchedulerLawTests` (`tests/Puck.World.Server.Tests`) drives this without
 a GPU.
 
 `parity-inside.puck` is the negative-path proof: its camera is authored

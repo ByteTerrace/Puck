@@ -31,18 +31,28 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.DoesNotContain(collection: node.Plan!.Storages, filter: IsIncoming);
 
+        var previousCapacity = 0;
+
         foreach (var capacity in new[] { 1, 2, 0 }) {
             var previousRevision = node.WorkRevision;
+            var previousPlan = node.Plan;
 
             current = ShadowFrame(active: false, capacity: capacity, weight: 0f);
             _ = view.Produce(context: in context);
             _ = view.Residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
-            TestLiveness.Within(frames: 12, building: () => node.IsBuildingCandidate, step: () => {
-                _ = view.Produce(context: in context);
-                return ((node.WorkRevision > previousRevision) && !node.IsBuildingCandidate && view.Passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
-            }, reason: () => $"F={capacity}: revision {node.WorkRevision}, prior {previousRevision}, building={node.IsBuildingCandidate}, status={view.Runtime.Latest!.Instances[0].Status}, error={node.LastSwapError}, residency={view.NotReadyReason}");
+            // Only whether the policy allows fades moves the plan: every nonzero capacity plans one two-channel image.
+            if ((capacity > 0) != (previousCapacity > 0)) {
+                TestLiveness.Within(frames: 12, building: () => node.IsBuildingCandidate, step: () => {
+                    _ = view.Produce(context: in context);
+                    return ((node.WorkRevision > previousRevision) && !node.IsBuildingCandidate && view.Passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
+                }, reason: () => $"F={capacity}: revision {node.WorkRevision}, prior {previousRevision}, building={node.IsBuildingCandidate}, status={view.Runtime.Latest!.Instances[0].Status}, error={node.LastSwapError}, residency={view.NotReadyReason}");
+            }
             Settle(capacity: capacity);
-            var policyBytes = (zeroBytes + ((((ulong)capacity) * Extent) * Extent));
+            if ((capacity > 0) == (previousCapacity > 0)) {
+                Assert.Same(expected: previousPlan, actual: node.Plan);
+            }
+            previousCapacity = capacity;
+            var policyBytes = (zeroBytes + ((capacity > 0) ? ((2UL * Extent) * Extent) : 0UL));
 
             Assert.Equal(expected: policyBytes, actual: node.AllocationBytes);
             Assert.Equal(expected: policyBytes, actual: node.InstalledAccount.SteadyBytes);
@@ -53,7 +63,7 @@ public sealed partial class SdfWorldPassesLawTests {
             var storage = Assert.Single(collection: node.Plan!.Storages, predicate: IsIncoming);
 
             Assert.True(condition: storage.Declaration.Retained);
-            Assert.Equal(expected: ((capacity == 1) ? GpuPixelFormat.R8Unorm : GpuPixelFormat.R8G8Unorm), actual: ShaderPipelineRenderNode.ParseFormat(format: storage.Declaration.Format));
+            Assert.Equal(expected: GpuPixelFormat.R8G8Unorm, actual: ShaderPipelineRenderNode.ParseFormat(format: storage.Declaration.Format));
             var shadow = node.Plan.Passes.Single(predicate: pass => (pass.Package?.Part == SdfWorldPackage.Parts.Shadow));
             var views = node.Plan.Passes.Single(predicate: pass => (pass.Package?.Part == SdfWorldPackage.Parts.Views));
             var read = Assert.Single(collection: views.Accesses, predicate: access => (access.Storage == storage.Index));
