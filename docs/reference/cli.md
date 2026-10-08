@@ -1124,7 +1124,9 @@ Thresholds must be finite and nonnegative; `--capacity-cpu` must be at most 100.
 A `NaN` CPU or memory reading cannot produce `CAPACITY`; a failed CPU reading
 stays in the mean until it leaves the window.
 An unreadable process command line cannot identify a managed entry assembly or
-CLI verb; a recognizable World or device-test apphost still counts by name.
+CLI verb; a recognizable World apphost still counts by name. Test hosts run
+under `dotnet`, never their apphost, so a device-test run is recognized only
+from its command line.
 
 Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 1), 130 cancelled.

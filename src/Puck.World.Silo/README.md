@@ -6,7 +6,9 @@ never rides the Orleans wire: cross-instance effects flow through the same
 thread `Puck.Launcher.HeadlessTickHostedService` pumps.
 
 Run: `dotnet run --project src/Puck.World.Silo -c Release -- --silo <path>`,
-where `<path>` names a `puck.silo.configuration.v1` document (`WorldSiloDefinition`,
+which starts `dotnet Puck.World.Silo.dll` rather than the apphost, so one
+firewall decision for the shared `dotnet` host covers the silo's listeners in
+every worktree. Here `<path>` names a `puck.silo.configuration.v1` document (`WorldSiloDefinition`,
 `Puck.World.Schema`)—the `worlds[]` rows this silo may activate, its
 declared door budget, checkpoint/journal/definition store target, state
 directory, and clustering. The generated schema is

@@ -768,10 +768,19 @@ meant to establish.
   constant. Make a switch a flag, a document or profile setting, or a test
   fixture instead ([configuration and diagnostics](#configuration-and-diagnostics)).
 - A listener takes its address from configuration and defaults to loopback
-  (`127.0.0.1`, or `::1` where the code is IPv6-first), so a local run, test or
-  canary raises no firewall prompt. A QUIC listener is the exception the address
-  cannot fix: on Windows, msquic opens its UDP port on every interface whatever
-  address it is given. `Puck.Analyzers` fails the build with NET001
+  (`127.0.0.1`, or `::1` where the code is IPv6-first). A QUIC listener is the
+  one the address cannot narrow: on Windows, msquic opens its UDP port on
+  `0.0.0.0` and `[::]` whatever address it is given, and Windows Firewall asks
+  about every interface bind once per executable image path. So every process
+  the repository starts locally that may listen runs under the shared host,
+  `dotnet <assembly>.dll`, never a per-worktree apphost. `Directory.Build.targets`
+  points `dotnet test` and `dotnet run` of every test project, and of an
+  executable that sets `PuckRunUnderDotnetHost` (the silo), at
+  `dotnet exec <assembly>.dll`; the apphost is still built, because xUnit v3
+  requires one and a published executable ships its own. Every `puck` runner
+  starts `dotnet <suite>.dll`, and canaries, parity, counters and `puck test`
+  start `dotnet Puck.World.dll`. One firewall decision for `dotnet.exe` then
+  covers every worktree and run. `Puck.Analyzers` fails the build with NET001
   on `IPAddress.Any`, `IPAddress.IPv6Any`, Kestrel's `ListenAnyIP`, a
   port-only `TcpListener` or `UdpClient`, and any literal spelling `0.0.0.0`,
   `[::]` or a `*`/`+` wildcard URL host, outside the deployment sites
