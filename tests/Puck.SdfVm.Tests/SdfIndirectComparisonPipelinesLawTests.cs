@@ -54,13 +54,22 @@ public sealed partial class SdfIndirectComparisonPipelinesLawTests {
     [Fact]
     public void TheDefaultReceiverCompilesNoComparisonMethod() {
         var receiver = File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-receiver.hlsli"));
-        var comparison = ComparisonBlock().Match(input: receiver);
+        var blocks = ComparisonBlock().Matches(input: receiver);
 
-        Assert.True(condition: comparison.Success, userMessage: "The receiver has no SDF_INDIRECT_COMPARISON block.");
-        Assert.Contains(expectedSubstring: "sdfIndirectAlternative(", actualString: comparison.Groups["comparison"].Value);
-        Assert.DoesNotContain(expectedSubstring: "sdfIndirectAlternative", actualString: comparison.Groups["default"].Value);
-        Assert.Contains(expectedSubstring: "sdfIndirectNear(", actualString: comparison.Groups["default"].Value);
-        Assert.DoesNotContain(expectedSubstring: "sdfIndirectAlternative", actualString: receiver.Remove(startIndex: comparison.Index, count: comparison.Length));
+        Assert.True(condition: (blocks.Count > 0), userMessage: "The receiver has no SDF_INDIRECT_COMPARISON block.");
+        // The comparison receiver calls the comparison methods, and the default receiver the near-field sample.
+        Assert.Contains(collection: blocks, filter: static block => block.Groups["comparison"].Value.Contains(comparisonType: StringComparison.Ordinal, value: "sdfIndirectAlternativeBegin("));
+        Assert.Contains(collection: blocks, filter: static block => block.Groups["default"].Value.Contains(comparisonType: StringComparison.Ordinal, value: "sdfIndirectNearIncomingBegin("));
+        var outside = receiver;
+
+        foreach (var block in blocks.Reverse()) {
+            Assert.DoesNotContain(expectedSubstring: "sdfIndirectAlternativeBegin(", actualString: block.Groups["default"].Value);
+            Assert.DoesNotContain(expectedSubstring: "sdfIndirectAlternativeProc", actualString: block.Groups["default"].Value);
+            Assert.DoesNotContain(expectedSubstring: "sdfIndirectNearIncoming", actualString: block.Groups["comparison"].Value);
+            outside = outside.Remove(startIndex: block.Index, count: block.Length);
+        }
+        Assert.DoesNotContain(actualString: outside, expectedSubstring: "sdfIndirectAlternativeBegin(");
+        Assert.DoesNotContain(actualString: outside, expectedSubstring: "sdfIndirectAlternativeProc");
     }
 
     [GeneratedRegex(pattern: @"#ifdef SDF_INDIRECT_COMPARISON(?<comparison>.*?)#else(?<default>.*?)#endif", options: RegexOptions.Singleline)]

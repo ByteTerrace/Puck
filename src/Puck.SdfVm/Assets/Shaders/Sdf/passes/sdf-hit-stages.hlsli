@@ -14,9 +14,11 @@
 #include "../surface/sdf-surface.hlsli"
 #include "../surface/sdf-shadow.hlsli"
 #include "../indirect/sdf-indirect-receiver.hlsli"
+#include "sdf-views-field.hlsli"
 #include "sdf-light-stage.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
+#include "../indirect/sdf-indirect-procedures.hlsli"
 
 #ifdef SDF_VIEWS_PASS
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
@@ -42,15 +44,30 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     // The query tally the evals heatmap reads, from the marches every stage before this one made.
     sdfEvalCount = s.queries;
 
-    float3 color = sdfLightStage(p, s, coverage, reactivity);
+    // Every field read of the stage runs through one loop (sdfViewsFieldReads) ahead of the shading that uses it: the
+    // light stage's detail re-resolve and probes for a hit it shades with a material below the screen range, and the
+    // debug views' reads.
+    bool useFinalShading = worldFinalShadingMode(p.viewMode) || p.viewMode == DebugViewModeIndirect;
+    bool curvatureShading = worldCurvatureShadingEnabled();
+    precise float3 rayTravel = p.rayDirection * s.t;
+    precise float3 surfacePoint = p.rayOrigin + rayTravel;
+    bool shaded = s.hit && useFinalShading && (s.material < SDF_SCREEN_MATERIAL);
+    int material = s.material;
+    SdfLightMesh mesh = (SdfLightMesh)0;
+    if (shaded && s.mesh) {
+        mesh = sdfLightMeshAt(p, s, surfacePoint, material);
+    }
+    SdfDebugSlice slice = sdfDebugSliceOf(p);
+    SdfViewsFieldReads reads = sdfViewsFieldReads(p, s, shaded, surfacePoint, material, curvatureShading, slice);
+
+    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, mesh, reads, coverage, reactivity);
     // Shadow changes reject old color even when every shadow is marched afresh and no K history is reused.
     if ((passGroup.temporal != 0u) && !worldSoftShadowsDisabled() && (passGroup.shadowSlotCount > 1u)) {
         uint word = (SDF_SHADOW_HISTORY_WORDS * (((p.viewIndex * passGroup.imageExtent.y + p.pixel.y) * passGroup.imageExtent.x) + p.pixel.x));
         reactivity = max(reactivity, (float)shadowHistory[word + 4u]);
     }
 
-    // One call site: each sdfDebugView call inlines its field reads again.
-    float3 viewColor = sdfDebugView(p, s, color);
+    float3 viewColor = sdfDebugView(p, s, color, slice, reads.firstRead, reads.secondRead);
     if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {
         coverage = 1.0;
 

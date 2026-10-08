@@ -4,7 +4,12 @@
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_SHADOW_FADE_SLOTS 2
+// A hit's slot visibilities are the one procedure the kernel runs; its fallback rays are their march calls.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_VISIBILITIES
+#define SDF_INDIRECT_PROC_MARCH
 #include "../indirect/sdf-indirect-shade.hlsli"
+#include "../indirect/sdf-indirect-procedures.hlsli"
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {

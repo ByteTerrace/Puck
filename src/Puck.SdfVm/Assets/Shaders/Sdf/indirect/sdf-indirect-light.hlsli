@@ -36,22 +36,12 @@ bool sdfIndirectLightLookup(uint light, float3 surfacePoint, float3 normal, out 
 }
 
 // Point and spot lights retain the direct path's unshadowed policy. Directional misses and invalid maps use one
-// bounded ray; its samples and normal witnesses count at the existing full-field evaluation sites.
-float sdfIndirectLightVisibility(uint light, float3 surfacePoint, float3 normal, float3 toward, out bool fallback, out uint region) {
-    float visibility;
-    fallback = false;
-    if (dot(normal, toward) <= 0.0) { region = 0u; return 0.0; }
-    if (sdfIndirectLightLookup(light, surfacePoint, normal, visibility, region)) { return visibility; }
-    fallback = true;
-    uint budget = SdfIndirectLightMarchSteps;
-    bool previousSecondary = sdfSecondaryMarchActive;
-    bool previousParticipation = sdfShadowParticipationActive;
-    sdfSecondaryMarchActive = true;
-    sdfShadowParticipationActive = true;
-    SdfIndirectRay ray = sdfIndirectMarch(surfacePoint + normal * 0.002, toward, 0.0, passGroup.farDistance,
-        SDF_INSTANCE_MASK_ALL, 0.0, budget);
-    sdfShadowParticipationActive = previousParticipation;
-    sdfSecondaryMarchActive = previousSecondary;
-    return ray.kind == SdfIndirectKindExit ? 1.0 : 0.0;
+// bounded ray, which the receiving procedure marches (sdfIndirectVisibilitiesStep); its samples and normal witnesses
+// count at the existing full-field evaluation sites. False when the light needs that ray: no facing decision and no
+// usable map texel.
+bool sdfIndirectLightDecided(uint light, float3 surfacePoint, float3 normal, float3 toward, out float visibility, out uint region) {
+    visibility = 0.0;
+    if (dot(normal, toward) <= 0.0) { region = 0u; return true; }
+    return sdfIndirectLightLookup(light, surfacePoint, normal, visibility, region);
 }
 #endif

@@ -94,28 +94,45 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
 // tracks each program's stepScale bake, not geometry.
 // `stepScale` combines the program clamp with the hit's geometric gradient magnitude. This is a local distance
 // correction, not an exact Euclidean distance guarantee away from the hit.
+//
+// `fast` selects the one-sample fleet approximation. Its middle quality rung (h=.07) captures the contact/crease
+// signal, and its gain matches the three-rung ladder's constant-factor response:
+// 5.07*(.01 + .9025*.07 + .9025^2*.13)/.07 = 12.97. It also matches the small-gap response within ~6%, retaining the
+// grounding cue while removing two field walks. Both forms share the ladder's one rolled field call site; the fast tap
+// keeps its own literal rung, its unclipped mask and its unclamped deficit.
 static const float AmbientOcclusionReach = 0.13;
-float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
+float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale, bool fast) {
     float occlusion = 0.0;
     float scale = 1.0;
+    int rungs = (fast ? 1 : 3);
 
     [loop]
-    for (int i = 0; (i < 3); i++) {
-        float h = (0.01 + (((AmbientOcclusionReach - 0.01) * float(i)) / 2.0));
+    for (int i = 0; (i < rungs); i++) {
+        float h = (fast ? 0.07 : (0.01 + (((AmbientOcclusionReach - 0.01) * float(i)) / 2.0)));
+        uint queryMask = instanceMaskBase;
 #ifdef SDF_PRIMARY_READ
         bool oldAmbientMask = sdfAmbientMaskActive;
-        bool clipQuery = sdfCanTracePartsIndependently() && h * stepScale <= 0.15 * sdfProgramLayout.stepScale;
-        sdfAmbientMaskActive = oldAmbientMask && clipQuery;
-        sdfAmbientDistanceCeiling = clipQuery ? h * stepScale / sdfProgramLayout.stepScale : SDF_FAR_DISTANCE;
-        float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), clipQuery ? instanceMaskBase : SDF_INSTANCE_MASK_ALL), stepScale);
-        sdfAmbientDistanceCeiling = SDF_FAR_DISTANCE;
-        sdfAmbientMaskActive = oldAmbientMask;
-#else
-        float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
+        if (!fast) {
+            bool clipQuery = sdfCanTracePartsIndependently() && h * stepScale <= 0.15 * sdfProgramLayout.stepScale;
+            sdfAmbientMaskActive = oldAmbientMask && clipQuery;
+            sdfAmbientDistanceCeiling = clipQuery ? h * stepScale / sdfProgramLayout.stepScale : SDF_FAR_DISTANCE;
+            queryMask = (clipQuery ? instanceMaskBase : SDF_INSTANCE_MASK_ALL);
+        }
+#endif
+        float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), queryMask), stepScale);
+#ifdef SDF_PRIMARY_READ
+        if (!fast) {
+            sdfAmbientDistanceCeiling = SDF_FAR_DISTANCE;
+            sdfAmbientMaskActive = oldAmbientMask;
+        }
 #endif
 
-        sdfEvalCount += 1.0; // one of the three AO rungs
+        sdfEvalCount += 1.0; // one AO rung, or the single fleet-tier tap
         sdfWorkSteps += 1u;
+
+        if (fast) {
+            return clamp((1.0 - (12.97 * (h - d))), 0.0, 1.0);
+        }
 
         // A distant rung cannot cancel a closer rung's contact occlusion.
         occlusion += (max(h - d, 0.0) * scale);
@@ -123,17 +140,5 @@ float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, f
     }
 
     return clamp((1.0 - (5.07 * occlusion)), 0.0, 1.0);
-}
-// One-sample fleet approximation of calcAO. The middle quality rung (h=.07) captures the contact/crease signal. Its
-// gain matches the three-rung ladder's constant-factor response: 5.07*(.01 + .9025*.07 + .9025^2*.13)/.07 = 12.97.
-// It also matches the small-gap response within ~6%, retaining the grounding cue while removing two field walks.
-float calcFastAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
-    const float h = 0.07;
-    float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
-
-    sdfEvalCount += 1.0; // the single fleet-tier AO tap
-    sdfWorkSteps += 1u;
-
-    return clamp((1.0 - (12.97 * (h - d))), 0.0, 1.0);
 }
 #endif

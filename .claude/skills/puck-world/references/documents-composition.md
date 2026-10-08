@@ -252,7 +252,7 @@ a small union carrying its own material (a rivet) that stays a crisp mark at any
 march-carved groove thinner than the footprint-relative acceptance produces. Refused by name alongside `panel` or
 `trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
 `secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
-ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`/`calcFastAO`, gated on
+ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`, gated on
 `sdfSecondaryMarchActive`) — it still marches for the camera, still carves the silhouette, and
 `CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` still hold it as ordinary contact geometry. No Panel/
 Trims restriction, since it packs its own bit on the SAME instruction rather than composing a second shape. A shape's

@@ -58,7 +58,7 @@ public sealed class SdfIndirectKernelSafetyLawTests {
         Assert.Contains(actualString: source, expectedSubstring: "indirectDirections.GetDimensions(length, stride);");
         Assert.Contains(actualString: source, expectedSubstring: "min(passGroup.indirectReceiverProofs, sdfIndirectReceiverProofBudget(passGroup.indirectTier))");
         Assert.Contains(actualString: Source(path: "indirect/sdf-indirect-proof.hlsli"),
-            expectedSubstring: "if (!sdfIndirectRange(proof, SdfIndirectProofWords)) { return 0u; }");
+            expectedSubstring: "if (!sdfIndirectRange(proof, SdfIndirectProofWords)) { return SdfIndirectStepReturn; }");
     }
     [Fact]
     public void FieldWorkHasAStaticTripCeilingAsWellAsItsRemainingQueryBudget() {
@@ -66,13 +66,17 @@ public sealed class SdfIndirectKernelSafetyLawTests {
         var cells = Source(path: "indirect/sdf-indirect-cells.hlsli");
         var field = Source(path: "indirect/sdf-indirect-field.hlsli");
         var trace = Source(path: "passes/sdf-indirect-trace.comp.hlsl");
+        var run = Source(path: "indirect/sdf-indirect-run.hlsli");
 
-        Assert.Contains(actualString: march, expectedSubstring: "step < SdfIndirectLightMarchSteps && budget > 0u");
-        Assert.Contains(actualString: march, expectedSubstring: "step < SdfIndirectSegmentSteps && budget > 0u");
-        Assert.Contains(actualString: cells, expectedSubstring: "step < max(SdfIndirectLaunchSteps, SdfIndirectNearSteps) && budget > 0u");
+        Assert.Contains(actualString: march, expectedSubstring: "sdfIndirectMarchProc.step < SdfIndirectLightMarchSteps && sdfIndirectMarchProc.budget > 0u");
+        Assert.Contains(actualString: march, expectedSubstring: "sdfIndirectSegmentProc.step < SdfIndirectSegmentSteps && sdfIndirectSegmentProc.budget > 0u");
+        Assert.Contains(actualString: cells, expectedSubstring: "sdfIndirectLaunchProc.step < max(SdfIndirectLaunchSteps, SdfIndirectNearSteps) && sdfIndirectLaunchProc.budget > 0u");
         Assert.Contains(actualString: field, expectedSubstring: "candidate < SDF_MAX_INSTANCES");
-        Assert.Contains(actualString: trace, expectedSubstring: "segment < SdfIndirectTraceSteps && budget > 0u");
-        Assert.DoesNotContain(actualString: (((march + cells) + field) + trace), expectedSubstring: "while (");
+        Assert.Contains(actualString: trace, expectedSubstring: "sdfIndirectTraceProc.segment < SdfIndirectTraceSteps && sdfIndirectTraceProc.budget > 0u");
+        // The procedures' driver bounds its turns too, below its stack.
+        Assert.Contains(actualString: run, expectedSubstring: "turn < SdfIndirectRunTurns && depth > 0u");
+        Assert.Contains(actualString: run, expectedSubstring: "depth = min(depth + 1u, SdfIndirectProcDepth);");
+        Assert.DoesNotContain(actualString: ((((march + cells) + field) + trace) + run), expectedSubstring: "while (");
     }
     [Fact]
     public void OneLaunchCallSitePreservesBothPhaseSampleSequences() {
@@ -104,15 +108,15 @@ public sealed class SdfIndirectKernelSafetyLawTests {
             }
         }
         var source = Source(path: "indirect/sdf-indirect-cells.hlsli");
-        var declaration = source.IndexOf(comparisonType: StringComparison.Ordinal, value: "bool sdfIndirectLaunch(");
+        var declaration = source.IndexOf(comparisonType: StringComparison.Ordinal, value: "uint sdfIndirectLaunchStep(");
 
         Assert.True(condition: (declaration >= 0));
-        var launch = source[declaration..];
+        var launch = source[declaration..source.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: declaration, value: "\n}")];
 
-        // A second field call expands another complete interpreter in the compiled Views kernel.
-        Assert.Single(collection: Regex.Matches(input: launch, pattern: @"\bsdfIndirectSample\s*\("));
-        Assert.Contains(actualString: launch, expectedSubstring: "descended = true; height = SdfIndirectSurfaceEpsilon;");
-        Assert.Contains(actualString: launch, expectedSubstring: "sdfIndirectLaunchEvaluations += sdfIndirectEvaluations - start;");
+        // A second sample point expands another complete interpreter wherever the launch runs.
+        Assert.Single(collection: Regex.Matches(input: launch, pattern: @"\bsdfIndirectAsk\s*\("));
+        Assert.Contains(actualString: launch, expectedSubstring: "sdfIndirectLaunchProc.descended = true; sdfIndirectLaunchProc.height = SdfIndirectSurfaceEpsilon;");
+        Assert.Contains(actualString: launch, expectedSubstring: "sdfIndirectLaunchEvaluations += sdfIndirectEvaluations - sdfIndirectLaunchProc.start;");
     }
     [InlineData("trace", "Trace")]
     [InlineData("classify", "Classify")]
