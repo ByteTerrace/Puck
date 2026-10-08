@@ -20,10 +20,10 @@ contracts every phase keeps.
 
 ## Implementation status
 
-Nothing on this page has landed. It assumes the work in flight that gives every
-kernel one field-evaluation call site and splits the indirect receiver out of the
-views kernel (described below as the call-site work); phase 1 can start beside
-it, and phase 2 starts once it lands. A scratch prototype of the generator,
+Nothing on this page has landed. It builds on the work that gives every kernel
+one field-evaluation call site and splits the indirect receiver out of the views
+kernel (described below as the call-site work), which has landed, so phases 1
+and 2 can start. A scratch prototype of the generator,
 outside the repository, produced the compile numbers quoted here; nothing of it
 is meant to be merged.
 
@@ -46,16 +46,16 @@ instructions. Each copy carries the whole shape switch (`evaluateShape`, about
 Half of the views kernel's DXIL time is LLVM jump threading over the
 interpreter's switch lattice. Drivers pay again: compiling these kernels takes
 minutes, cold pipeline builds stall GPU tests and first launches, and a cold
-NVIDIA cache peaks at about 7.5 GB with four builds running at once. SPIR-V
-keeps a `[noinline]` function boundary, and NVIDIA driver 610.74 has crashed on
-such real calls in the Near path.
+NVIDIA cache peaks at about 7.5 GB with four builds running at once.
 
-The call-site work removes the copies rather than their content. With it, the
-views kernel compiles in 13.7 s to 393 KB of DXIL, and the field work moves to a
-receiver kernel of 114.7 s and 1.35 MB (88 s and 1.05 MB for the comparison
-receiver, built only on selection). Each remaining call site is still a whole
-interpreter: every opcode, shape and blend in the instruction set, whatever the
-world uses.
+The call-site work removes the copies rather than their content: every kernel
+inlines `mapCore` once and `mapGradCore` at most once, with no `[noinline]`
+boundary (NVIDIA driver 610.74 crashes on real SPIR-V calls in the Near path).
+With it, the views kernel compiles in 8.0 s of DXC CPU time to 220 KB of DXIL,
+and the field work moves to a receiver kernel of 51.8 s and 552 KB (69.3 s and
+615 KB for the comparison receiver, built only on selection); the trace kernel
+takes 31.3 s and 407 KB. The remaining call site is still a whole interpreter:
+every opcode, shape and blend in the instruction set, whatever the world uses.
 
 ## The programs shipped worlds render
 
@@ -198,15 +198,14 @@ the generic kernel's entry point, interface and stamp, and the interface check
 `SDF_SPECIALIZED` defined, the interpreter's dispatch includes are not compiled
 at all.
 
-A specialized kernel keeps no `[noinline]` boundary. The SPIR-V views and
-indirect helpers keep one today only because expanding the whole interpreter
-into Views overflows SPIR-V legalization or crashes the compiler, and NVIDIA
-610.74 has crashed on those real calls. A world's field is a fraction of that
-size: every chain-form kernel in the prototype compiled to SPIR-V, while the
-larger shapes-inlined form crashed DXC three times. The prototype kept the
-existing boundaries, so phase 3 measures the specialized views and receiver
-kernels without them before phase 4 ships them that way; the generic SPIR-V
-kernels keep whatever boundary the call-site work leaves them.
+A specialized kernel keeps no `[noinline]` boundary, like every generic kernel:
+with one call site per kernel the whole interpreter legalizes inlined in
+SPIR-V, and NVIDIA 610.74 crashes on real calls in the Near path. A world's
+field is a fraction of the interpreter's size: every chain-form kernel in the
+prototype compiled to SPIR-V, while the larger shapes-inlined form crashed DXC
+three times. The prototype's numbers include SPIR-V function boundaries that no
+kernel keeps, so phase 3 measures the specialized views and receiver kernels
+without them.
 
 The C# half is `SdfProgram.Chains` in `Puck.SignedDistance`: the chain table the
 program packs, the set it uses, and the key of each chain. Which header lanes
@@ -363,9 +362,8 @@ growing the engine's file; a shipped world's stored sets join its content key.
   baker are fixed-point simulation code and do not change.
 
 With the call-site work landed, each generic field kernel holds one interpreter
-copy per field-evaluation site. The generic views kernel is then about 13.7 s
-and 393 KB of DXIL, the receiver about 115 s and 1.35 MB, and those are the
-kernels the build still compiles.
+copy. The generic views kernel is about 8 s and 220 KB of DXIL, the receiver
+about 52 s and 552 KB, and those are the kernels the build still compiles.
 
 ## Determinism and verification
 
@@ -447,18 +445,19 @@ views `-core` kernel: 55 s and 1.27 MB generic, 45 s and 1.22 MB specialized).
 - **Build-time shader compile.** The build compiles only the generic kernels,
   minus the deleted views strip variants and their fade twins. World compile
   adds one specialized set per distinct world set: about fifteen field kernels
-  for each backend, each smaller than its generic twin. Summing the generic
-  field kernels' measured times after the call-site work (receiver 115 s, trace
-  68 to 130 s, views 14 s, the small kernels 3 to 9 s each) and applying the
-  measured ratios, one set costs roughly four to five CPU-minutes cold, spread
-  over the build's compiler workers. The shared shader cache makes a rebuild
+  for each backend, each smaller than its generic twin. The generic field
+  kernels' measured DXIL times after the call-site work (receiver 52 s, trace
+  31 s, classify and shade 23 s each, views 8 s, the other kernels 3 to 21 s
+  each) sum to about three and a half CPU-minutes, so one specialized set costs
+  less than that cold, spread over the build's compiler workers. The shared
+  shader cache makes a rebuild
   with unchanged sets compile nothing, but every distinct set pays that once,
   which is why the set's scope is a decision below.
 - **Per-program DXC.** An editor recompile builds the host backend's field
   kernels for the new set. Applying the full views kernel's measured ratio (21
   to 28 per cent less time and code with `mapCore` alone specialized) to the
-  receiver's 115 seconds of DXIL, and a similar cut to the gradient walk, puts
-  the slowest Direct3D 12 kernel near 70 to 90 seconds and every SPIR-V kernel
+  receiver's 52 seconds of DXIL, and a similar cut to the gradient walk, puts
+  the slowest Direct3D 12 kernel near 35 to 40 seconds and every SPIR-V kernel
   under 20; the small kernels take 3 to 9 seconds either way.
 - **Driver compile and memory.** Driver work tracks the DXIL it is given, and a
   per-world set hands it 33 to 49 per cent less per field kernel (13 to 18 for
@@ -541,8 +540,8 @@ Specialized kernels exist and are proved; nothing at run time selects them.
 - The walk drivers gain their `SDF_SPECIALIZED` include points. The generator
   covers every field site the prototype left generic: the dual chains of
   `mapGradCore`, the part-program leaf step and the tape builder's hooks.
-- The specialized views and receiver kernels are measured without their SPIR-V
-  `[noinline]` boundaries, which phase 4 then drops in specialized kernels.
+- The specialized views and receiver kernels are measured as they ship, with no
+  SPIR-V function boundary.
 - A verb, `puck shaders specialize --world <path>`, prints a world's set, key,
   and each specialized kernel's size and compile time.
 - Laws: the replay law and key law in `tests/Puck.SdfVm.Tests`, and
