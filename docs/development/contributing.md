@@ -70,30 +70,46 @@ Puck keeps per-user state and caches in one directory, `Puck` under your local
 application data: `%LOCALAPPDATA%/Puck` on Windows and `~/.local/share/Puck` on
 Linux, or the temporary directory when the platform names no such folder
 (`PuckUserDirectory` in `Puck.Abstractions`). Each owner keeps one lower-case
-subdirectory there:
+subdirectory there. Every cache among them is bounded:
 
-| Subdirectory | Owner |
-|---|---|
-| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) |
-| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds |
-| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
-| `bakes` | The creation bakes presentations make, shared the same way |
-| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
-| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` |
-| `compilations` | The `.puck` compile cache the game and the CLI share |
-| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) |
-| `corpora` | The conformance corpora the emulator batteries fetch |
+| Subdirectory | Owner | Bound |
+|---|---|---|
+| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipeline-cache` keeps 8 files per backend, and its `pipelines` shader cache is bounded as `shaders` is |
+| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds | 4096 objects, 256 MiB |
+| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root | 1024 files, 256 MiB |
+| `bakes` | The creation bakes the game's build, `puck compile --tree`, `puck parity` and presentations make, shared by every checkout | 8192 objects, 512 MiB |
+| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run | 4 builds |
+| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
+| `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
+| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) | 4096 files, 1 GiB |
+| `corpora` | The conformance corpora the emulator batteries fetch | none: a fixed fetched set |
+
+Every bound follows one policy, `CacheRetention` in `Puck.Abstractions`: least
+recently used out. An entry's last use is its stamp, the last write time of the
+file or directory that stands for it; an owner stamps an entry when it reads
+it, and writing one stamps it. When an owner writes, it removes the least
+recently used entries beyond its bound, keeps the entry it is using whatever its
+stamp, and leaves an entry another process holds open. A process lists a
+directory for this at most once a minute, so a build that publishes many
+entries pays for one listing. Every cache is content-addressed, so an evicted
+entry costs its next reader a derivation, never a different answer.
+`puck shaders cache prune` applies the same policy with an age bound instead.
 
 ## Temporary directories
 
 Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
-into file apps. A directory gets a prefix that names its owner and a unique
-suffix. A run that passes deletes it. A run that fails keeps it and names its
-absolute path in a `run directory kept: <path>` line. The first directory a
-process creates under a prefix deletes that prefix's directories older than six
-hours, which clears a killed run's leftovers. The
+into file apps. A directory is named `<kind><process id>-<token>`: its kind,
+which starts with `puck-` and names its owner, the process that created it, and
+a unique token. A run that passes deletes it. A run that fails keeps it, names
+its absolute path in a `run directory kept: <path>` line, and trims its kind: of
+the kind's directories whose process has finished, the newest four stay and the
+rest go. The first directory a process creates sweeps every kind the same way
+and also removes any finished process's directory older than six hours, which
+clears a killed run's leftovers and the evidence of kinds that never run again.
+A directory whose process still runs is never removed, however old, and a
+process id that a later process reuses is told apart by its start time. The
 [CLI conventions](../reference/cli.md#conventions) list the verbs that follow
 it and the directories that are deleted whatever the outcome.
 
@@ -107,6 +123,31 @@ verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
 law ends. A deletion failure fails a passing law, so a handle the code under
 test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
 host may still hold a file as it is disposed.
+
+## Build output and hard links
+
+Every project copies its dependency closure into its own `bin`, so a built
+tree would hold each package and Puck assembly many times over.
+`Directory.Build.props` makes those copies hard links instead: each package
+file links to the NuGet global cache, each project reference to the referenced
+project's `bin`, and each `None` or `Content` item with `CopyToOutputDirectory`
+(assets, fonts, shader bytecode, world outputs) to the file the item names. A
+built tree therefore holds one file per distinct output.
+
+A hard link is the same file under another name, so writing an output file in
+place writes every name at once: the NuGet global cache, other projects'
+outputs, and the repository's own sources. Never open a file under `bin`, a
+publish directory, or a file a build ships as content for writing, truncating
+or appending. Replace it instead: write the new bytes with `AtomicFile`, or
+delete the file before writing a new one. An inline MSBuild task, which cannot
+reference `AtomicFile`, writes a temporary file beside the destination and moves
+it over the destination. The compiler is the one writer that rewrites its
+outputs in place (`obj/<name>.dll`, `.pdb` and `.xml`), so the copy from `obj` to
+`bin` and the copy into a publish directory stay plain copies;
+`BuildOutputLinkLawTests` fails when a `bin` file shares its file with a
+compiler output. A build into a directory that outlives it, such as the World
+builds in `world-builds`, passes `--output` and links no content items, since
+an editor saving a source in place would otherwise rewrite the kept build.
 
 ## C# file apps
 

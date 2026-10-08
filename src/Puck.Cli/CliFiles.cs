@@ -24,9 +24,12 @@ internal static class CliFiles {
             );
 
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+            // A target under a build output can be a hard link that shares its file with the NuGet cache, a source or
+            // another output; deleting it first replaces only this name, where a copy over it would rewrite them all.
+            File.Delete(path: target);
             File.Copy(
                 destFileName: target,
-                overwrite: true,
+                overwrite: false,
                 sourceFileName: file
             );
         }

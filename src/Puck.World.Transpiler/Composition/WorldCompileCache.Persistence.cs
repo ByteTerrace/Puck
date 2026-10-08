@@ -23,7 +23,10 @@ public sealed partial class WorldCompileCache {
             if ((reader.ReadString() != FormatShapes.WorldCompileCacheMagic) || (reader.ReadString() != CompilerIdentity) || (reader.ReadString() != key)) { return null; }
             var value = read(reader);
 
-            return ((stream.Position == stream.Length) ? value : null);
+            if (stream.Position != stream.Length) { return null; }
+            // A served entry is used now, so the directory's retention keeps it over entries no read wants.
+            Puck.Abstractions.CacheRetention.Stamp(path: path);
+            return value;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or FormatException or ArgumentException or OverflowException)) {
             return null;
         }
@@ -48,7 +51,7 @@ public sealed partial class WorldCompileCache {
                 }
                 stream.Write(buffer: hash.Hash!);
             });
-            Trim(directory: Path.GetDirectoryName(path: path)!);
+            Trim(directory: Path.GetDirectoryName(path: path)!, written: path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // A refused write only costs a future derivation.
         }
