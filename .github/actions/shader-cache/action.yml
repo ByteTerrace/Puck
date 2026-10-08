@@ -23,7 +23,7 @@ runs:
     # tools under .tmp and the published artifacts are excluded, so every job of a run names the same key wherever its
     # steps stand. Save takes the key its restore or lookup named rather than naming it again.
     - env:
-        KEY: shaders-${{ runner.os }}-${{ hashFiles('**/*.hlsl', '**/*.hlsli', '**/*.csproj', '**/Directory.Build.props', '**/Directory.Build.targets', 'build/Shaders.targets', 'build/PuckShaderBuild.cs', 'src/Puck.Shaders.Model/**/*.cs', 'src/Puck.Shaders.Generator/**/*.cs', 'src/Puck.Cli/Shaders/CompareCommand.cs', '.github/actions/setup-dxc/action.yml', '!experimental/**', '!**/bin/**', '!**/obj/**', '!.tmp/**', '!artifacts/**') }}
+        KEY: shaders-${{ runner.os }}-${{ hashFiles('**/*.hlsl', '**/*.hlsli', '**/*.csproj', '**/Directory.Build.props', '**/Directory.Build.targets', 'build/Shaders.targets', 'build/PuckShaderBuild.cs', 'src/Puck.Shaders.Model/**/*.cs', 'src/Puck.Shaders.Generator/**/*.cs', 'src/Puck.Cli.Shaders/CompareCommand.cs', '.github/actions/setup-dxc/action.yml', '!experimental/**', '!**/bin/**', '!**/obj/**', '!.tmp/**', '!artifacts/**') }}
       id: key
       if: inputs.mode != 'save'
       name: Name the shader cache key

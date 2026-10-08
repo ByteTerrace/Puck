@@ -5,7 +5,9 @@ tracked parents. See [generated assets](../../build/README.md) for build,
 source-control, and packaging rules.
 
 `Puck.Cli` provides `puck`, the repository's developer command line. Its
-commands share the System.CommandLine tree declared in `PuckRootCommand.cs`.
+commands share the System.CommandLine tree declared in `PuckRootCommand.cs`,
+which composes the verb assemblies under `src/Puck.Cli.*` through `CliRoot`;
+each assembly references only what its own verbs need.
 `PuckRootCommand.Create` takes the CLI's one `TimeProvider`, and every deadline a
 verb puts on a process, a connection, a lease, or a request runs on it, so a law
 drives the verb's deadline with a virtual clock.
@@ -41,7 +43,7 @@ whose command no longer breaks its rule, until the row is deleted.
    `references`) found nothing, as with grep. 2 means a usage error, a refusal, or
    an infrastructure failure. 130 means the run was cancelled. An exception that
    escapes a verb is reported on one line, `puck <verb>: <message>`, and exits 2;
-   `CliExit` in `src/Puck.Cli` owns the mapping.
+   `CliExit` in `src/Puck.Cli.Core` owns the mapping.
 6. **Help is layered.** The root listing is alphabetical and gives each verb one
    imperative sentence. A verb's own `--help` carries its detail: modes, exit
    codes, and examples.
@@ -1618,8 +1620,8 @@ The store is the `world-builds` subdirectory of the
 `~/.local/share/Puck/world-builds` on Linux. It is never inside the checkout.
 
 A build is keyed by the sources it is made from. The key covers the World
-project, every project it references (including `Puck.Cli` and
-`Puck.Analyzers`, which carry no assembly into it), and every file those
+project, every project it references (including `Puck.Cli.Worlds`, the world
+compiler, and `Puck.Analyzers`, which carry no assembly into it), and every file those
 project files import or link from elsewhere in the checkout, read as MSBuild
 reads them, with a backslash as a directory separator on every platform. It also
 covers every file directly in the repository root. For these paths, the key hashes
@@ -1666,11 +1668,10 @@ Build log names come from the project name, so projects can share a log
 directory without overwriting each other's output.
 
 None of these verbs builds in place. `Puck.World` has a build-time reference to
-`Puck.Cli`, whose build compiles the shipped `.puck` worlds, so an in-place
-World build would also write into the CLI's own Release output directory
-(`bin/Release/net10.0` under `src/Puck.Cli`). A CLI started from there holds those assemblies open, and the copy would fail with
-MSB3027. Because the build goes to the store, a branch can run these verbs from
-its own build output:
+`Puck.Cli.Worlds`, the world-authoring verbs' own executable, whose build compiles
+the shipped `.puck` worlds; no other verb assembly is in the World's closure, so a
+change to another verb neither rebuilds the World nor changes its key. Because the
+build goes to the store, a branch can run these verbs from its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release

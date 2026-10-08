@@ -92,7 +92,7 @@ public sealed class AffectedStandInsLawTests {
 
         Assert.Equal(actual: Assert.Single(collection: AffectedStandIns.Kernels(projects: projects, tree: tree)).Projects, expected: ["src/Contracts", "src/Engine"]);
         Assert.Equal(
-            actual: AffectedStandIns.Create(indexed: ["src/Contracts/Passes.cs", "src/Other/Echo.cs"], projects: projects, tree: tree)(arg: "src/Engine/Assets/source-rgba.comp.hlsl"),
+            actual: AffectedStandIns.Create(indexed: ["src/Contracts/Passes.cs", "src/Other/Echo.cs"], projects: projects, schemaSourceTypes: PuckRootCommand.Gate.SchemaSourceTypes, tree: tree)(arg: "src/Engine/Assets/source-rgba.comp.hlsl"),
             expected: ["src/Contracts/Passes.cs"]
         );
     }
@@ -125,6 +125,7 @@ public sealed class AffectedStandInsLawTests {
         var standInsFor = AffectedStandIns.Create(
             indexed: ["src/Engine/Post.cs"],
             projects: projects,
+            schemaSourceTypes: PuckRootCommand.Gate.SchemaSourceTypes,
             shaders: new AffectedShaders(packages: packages, projects: projects, tree: tree),
             tree: tree
         );
@@ -145,6 +146,7 @@ public sealed class AffectedStandInsLawTests {
         var indexed = AffectedCoverage.Read(repositoryRoot: repositoryRoot).Keys.ToArray();
         var standInsFor = AffectedStandIns.Create(
             indexed: indexed,
+            schemaSourceTypes: PuckRootCommand.Gate.SchemaSourceTypes,
             projects: AffectedCommand.Projects(
                 model: ArchitectureModel.Load(repositoryRoot: repositoryRoot),
                 repositoryRoot: repositoryRoot

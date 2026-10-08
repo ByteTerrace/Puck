@@ -1,133 +1,68 @@
 # Puck.Cli.Tests
 
-This xUnit suite tests [Puck.Cli](../../src/Puck.Cli/README.md), including
-formatting, authored-content tooling, `.puck` source migration, canary
-accounting, parity comparison,
-process handling, branding asset synchronization, and MCP behavior. Individual fixtures define their inputs
-and service or process setup; the suite is not a replacement for running a
-hardware-dependent CLI operation in its intended environment.
+This suite tests the composed `puck` tool, [Puck.Cli](../../src/Puck.Cli/README.md):
+the laws about how the verb assemblies fit together, and the repository-wide
+convention laws. Each verb assembly's own laws live in its own suite, which
+references that assembly alone, so a change reaches the laws of the verbs it can
+change:
 
-`CountersDetailLawTests` holds detail identity through readings and report
-comparisons, including skipped rows, device-aware ceilings and required zeros.
-Reports require explicit detail keys and pass detail labels. Ceilings retain
-those identities in compact measurement layouts. `CountersCeilingsCompactLawTests`
-compares every shipped ledger against fixed reports and exact checker messages
-in `Assets/counters-ceilings-equivalence.zip`, including missing and unexpected
-zero rows, changed classes, exceeded budgets, and device and driver changes.
-It also holds the writer's fixed point, kind defaults and device differences.
+| Suite | Verb assembly |
+|---|---|
+| [Puck.Cli.Core.Tests](../Puck.Cli.Core.Tests/README.md) | [Puck.Cli.Core](../../src/Puck.Cli.Core/README.md) |
+| [Puck.Cli.Harness.Tests](../Puck.Cli.Harness.Tests/README.md) | [Puck.Cli.Harness](../../src/Puck.Cli.Harness/README.md) |
+| [Puck.Cli.Source.Tests](../Puck.Cli.Source.Tests/README.md) | [Puck.Cli.Source](../../src/Puck.Cli.Source/README.md) |
+| [Puck.Cli.Format.Tests](../Puck.Cli.Format.Tests/README.md) | [Puck.Cli.Format](../../src/Puck.Cli.Format/README.md) |
+| [Puck.Cli.Shaders.Tests](../Puck.Cli.Shaders.Tests/README.md) | [Puck.Cli.Shaders](../../src/Puck.Cli.Shaders/README.md) |
+| [Puck.Cli.Worlds.Tests](../Puck.Cli.Worlds.Tests/README.md) | [Puck.Cli.Worlds](../../src/Puck.Cli.Worlds/README.md) |
+| [Puck.Cli.Gate.Tests](../Puck.Cli.Gate.Tests/README.md) | [Puck.Cli.Gate](../../src/Puck.Cli.Gate/README.md) |
+| [Puck.Cli.Laws.Tests](../Puck.Cli.Laws.Tests/README.md) | [Puck.Cli.Laws](../../src/Puck.Cli.Laws/README.md) |
+| [Puck.Cli.Worktrees.Tests](../Puck.Cli.Worktrees.Tests/README.md) | [Puck.Cli.Worktrees](../../src/Puck.Cli.Worktrees/README.md) |
+| [Puck.Cli.Runs.Tests](../Puck.Cli.Runs.Tests/README.md) | [Puck.Cli.Runs](../../src/Puck.Cli.Runs/README.md) |
+| [Puck.Cli.Bench.Tests](../Puck.Cli.Bench.Tests/README.md) | [Puck.Cli.Bench](../../src/Puck.Cli.Bench/README.md) |
+| [Puck.Cli.Release.Tests](../Puck.Cli.Release.Tests/README.md) | [Puck.Cli.Release](../../src/Puck.Cli.Release/README.md) |
+| [Puck.Cli.Content.Tests](../Puck.Cli.Content.Tests/README.md) | [Puck.Cli.Content](../../src/Puck.Cli.Content/README.md) |
 
-`StartupBenchmarkTests` checks that incomplete or failed samples cannot produce
-a corpus average, pending or unrelated captures cannot prove rendered readiness,
-missing overlays fail rendered samples, and process output carries elapsed observation times.
-`CliProcessHandshakeTests` checks that output can release a final stdin command
-without closing input early, and that early exit and timeout remain bounded. Actual startup performance
-requires running `puck bench startup` against the built World executable.
+The suites share their fixtures from [`tests/Shared/Cli`](../Shared/Cli/README.md).
 
-`ShippedSourceLintLawTests` runs `puck lint --strict` over every tracked source
-under `worlds`, `src/Puck.World/Assets` and `tests/Puck.World.Verdicts`, so an
-error or warning in a shipped world or cartridge fails the suite with the report
-the verb printed. `FormatProjectionLawTests` holds every tracked source outside
-`experimental` to what `puck format` prints.
+## What this suite holds
 
-`CompileBatchTests` verifies ordered compilation, independent source bindings,
-byte parity with single-source compilation, stopping on failure, and refusal
-of batch requests with a shared output path or watch mode.
-`CompositionCompileCommandTests` verifies that one source can publish several
-named world documents, that a refused member publishes none of them, and that
-`--output` names their directory. It also covers explicit asset-lock updates,
-the semantic-validation gate on an update, stale-byte refusal without output
-replacement, and a document written away from its source naming its asset and
-graph files from where it lands.
+`CliConventionLawTests` holds every verb of the composed tree to the CLI
+conventions, with its exemptions in `CliConventionExemptions.json`, and checks
+that help loads no compiler, build engine, benchmark or GPU assembly.
+`SchemaBootstrapLawTests` holds the schema bootstrap's root, and
+`LedgerDriftTests` holds the architecture, registry and schema ledgers to what
+their verbs generate.
 
-`WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact
-over small git checkouts of their own, with a counting builder in place of
-`dotnet build`. Two resolutions of an unchanged tree build once, and concurrent
-resolutions of one source state share one build. A one-byte uncommitted change
-under the World's closure produces a new key, while documentation and
-unreferenced projects do not. A publish that loses the race keeps the winner's
-build. Pruning keeps the most recently used builds and every leased one, and a
-killed run's leftover directories and lock files are removed only after six hours.
-`WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
-and requires every input it names to lie under a keyed path.
-`RunDirectoryLawTests` holds the one run-directory policy: a passing run leaves
-no directory, a failing or unfinished run keeps its own and names its absolute
-path, a directory that holds no evidence is deleted whatever the verdict, and
-the age sweep removes only stale directories of its own prefix. It also checks
-that a recording keeps its inner canary transcript when that run fails, and that
-a law's `TemporaryDirectory` outlives its disposal until the law's verdict.
-`ShaderBuildTargetsLawTests` runs the shared shader targets over isolated projects
-with a CPU-only compiler stand-in. It checks restored include inputs, unchanged
-builds, temporary cleanup, refusal of missing compiler outputs, and collection
-of existing Direct3D 11 kernels without compiling during pack.
-`ShaderDeclarationBuildLawTests` runs the generator targets with the built
-`Puck.Shaders.Generator` host. It checks repair of drift and missing declarations,
-unchanged file times, and explicit checking without generation.
-`CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
-It also checks that a World refusing its listener is classified as an
-infrastructure failure rather than unsupported.
+The composition laws hold the contracts between verb assemblies: every command
+`puck affected` and `puck gate` print for another verb parses through the root
+(`AffectedSelectionLawTests`, `GatePlanLawTests`, `AffectedManifestCheckLawTests`);
+the composed grammars decide which running processes are GPU work
+(`HostGpuWorkLawTests`); a recorded counters workload becomes one gate step
+(`CountersGateStepLawTests`); generated schema files stand for the sources of
+their types (`AffectedStandInsLawTests`); and an ordinary verb refuses a
+misspelled option beside one that forwards its tokens (`MisspelledOptionLawTests`).
+`McpInteropTests` and `WorldReleaseRefusalLawTests` run the real `puck` process.
 
-The release laws cover immutable deployment configuration references, exclusive
-controller ownership, complete official package preparation, registry retention
-readback, bootstrap refusal over existing gameplay, and cancellation of an owned
-child process. `WorldReleaseRollbackTests` verifies rollback directly from an
-admitted commit, refusal during unfinished maintenance, and finalization closing
-eligibility. `WorldReleaseGuestGuardTests` checks the Python guest guard against
-the C# durable group wire format, including stale operations and recovery roles.
-It requires Python 3 on PATH (`python` on Windows, `python3` elsewhere).
-`WorldReleaseAzureLeaseTests` uses the actual Azure
-SDK against an isolated local Azurite container. Load
-`mcr.microsoft.com/azure-storage/azurite:3.35.0` and start Docker to run that law;
-it reports an asset-gated skip when the image or Docker is unavailable. It does
-not contact a production storage account.
-
-`WorldReleaseFixtureBuilderTests` covers bootstrap and captured exports, distinct
-test keys, retained checkpoint bytes and machine identity, incomplete-export
-refusal, metadata publication in both directions, and refusal of simulation edits
-before Docker starts. It checks original receipt lookups and excludes later receipts
-in materialized fixtures. Build the checkout's world-silo image as
-`puck/world-silo:candidate`
-(`docker build --file src/Puck.World.Silo/Dockerfile --tag puck/world-silo:candidate .`)
-to run an unchanged-definition control and a metadata release pair, each
-through four Docker qualification legs. The metadata control uses the public
-`qualify` command, including retention of both packages, and verifies that the
-source export survives unchanged. This optional same-image control verifies the
-export and runner path; compatibility between builds needs separate pair evidence.
-The outer test reads receipt history from container-written forward and rollback
-stores and checks each image's receipt proof. `WorldReleaseReceiptProofTests`
-covers complete lookups, duplicate and conflicting retries, unchanged roots, and
-new receipts after continuation.
-Those Docker legs and their hash evidence are retained for inspection in
-`world-release-evidence` beside the test assembly, replaced by the next run.
-
-`WorldReleasePackagedHostTests` uses that candidate image through the default silo
-entry point and both silo/CLI MCP entry points. Each process must activate and
-checkpoint a world containing both Gaming Brick engine types, serve the installed
-Azure health response, expose MCP discovery only when configured, and drain with
-a successful exit. This catches missing runtime extensions that the CLI exercise's
-statically composed catalog cannot detect. No Azure account or OAuth issuer is
-contacted; the test uses disposable local state and denies all MCP subjects.
-A conflicting MCP listener must stop the worker with a failure exit code.
-
-`WorldReleaseRollbackTests` also starts real CLI processes for invalid status and
-exercise inputs, checking a concise diagnostic, failure exit code, and no stack
-trace in the operator output.
-Official package and bootstrap tests include unfilled boot draws and exact-byte
-retry checks. The hosted composition control moves a nested machine document to
-the common worlds directory and verifies its asset path still names the same
-asset without embedding the build directory.
+The repository-wide laws read the whole tree: `JsonNewlineSpellingLawTests`,
+`MsBuildPathSpellingLawTests`, `LockFileOwnershipLawTests`,
+`SchemaTokenOwnershipLawTests` and `SourceRevisionLawTests`.
+`ShippedFormatLedgerLawTests` holds `FormatVersions.json` and the generated
+`FormatShapes.g.cs` files to the shipped source. It runs here because a
+format's shape compiles against the assemblies the computing process trusts,
+and this suite's host loads the same assemblies as the `puck` tool that records
+the ledger.
 
 ## Verification
 
 From the repository root, run in PowerShell or another shell:
 
 ```powershell
-dotnet test tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj -c Release
+dotnet test --project tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj -c Release --filter-not-trait Category=Gpu
 ```
 
 A successful run reports passing tests and exits with code zero. Use the
-framework's test filter to narrow an investigation. Keep the test project's
-fixtures with the test when evaluating what a passing result establishes.
-The [CLI reference](../../src/Puck.Cli/README.md) owns command syntax and
+framework's test filter to narrow an investigation. The
+[CLI reference](../../docs/reference/cli.md) owns command syntax and
 operational prerequisites.
 
 ## Documentation

@@ -12,6 +12,19 @@
         <Project Path="src/Puck.Azure/Puck.Azure.csproj" />
         <Project Path="src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
+        <Project Path="src/Puck.Cli.Bench/Puck.Cli.Bench.csproj" />
+        <Project Path="src/Puck.Cli.Content/Puck.Cli.Content.csproj" />
+        <Project Path="src/Puck.Cli.Core/Puck.Cli.Core.csproj" />
+        <Project Path="src/Puck.Cli.Format/Puck.Cli.Format.csproj" />
+        <Project Path="src/Puck.Cli.Gate/Puck.Cli.Gate.csproj" />
+        <Project Path="src/Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
+        <Project Path="src/Puck.Cli.Laws/Puck.Cli.Laws.csproj" />
+        <Project Path="src/Puck.Cli.Release/Puck.Cli.Release.csproj" />
+        <Project Path="src/Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
+        <Project Path="src/Puck.Cli.Shaders/Puck.Cli.Shaders.csproj" />
+        <Project Path="src/Puck.Cli.Source/Puck.Cli.Source.csproj" />
+        <Project Path="src/Puck.Cli.Worktrees/Puck.Cli.Worktrees.csproj" />
+        <Project Path="src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
@@ -86,6 +99,19 @@
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
         <Project Path="tests/Puck.Audio.Tests/Puck.Audio.Tests.csproj" />
         <Project Path="tests/Puck.Azure.Tests/Puck.Azure.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Bench.Tests/Puck.Cli.Bench.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Content.Tests/Puck.Cli.Content.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Core.Tests/Puck.Cli.Core.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Format.Tests/Puck.Cli.Format.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Gate.Tests/Puck.Cli.Gate.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Harness.Tests/Puck.Cli.Harness.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Laws.Tests/Puck.Cli.Laws.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Release.Tests/Puck.Cli.Release.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Runs.Tests/Puck.Cli.Runs.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Shaders.Tests/Puck.Cli.Shaders.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Source.Tests/Puck.Cli.Source.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Worktrees.Tests/Puck.Cli.Worktrees.Tests.csproj" />
+        <Project Path="tests/Puck.Cli.Worlds.Tests/Puck.Cli.Worlds.Tests.csproj" />
         <Project Path="tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.DirectX.Tests/Puck.DirectX.Tests.csproj" />
@@ -97,6 +123,7 @@
         <Project Path="tests/Puck.Input.Tests/Puck.Input.Tests.csproj" />
         <Project Path="tests/Puck.Launcher.Tests/Puck.Launcher.Tests.csproj" />
         <Project Path="tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj" />
+        <Project Path="tests/Puck.Mcp.Tests/Puck.Mcp.Tests.csproj" />
         <Project Path="tests/Puck.Networking.Tests/Puck.Networking.Tests.csproj" />
         <Project Path="tests/Puck.Physics.Tests/Puck.Physics.Tests.csproj" />
         <Project Path="tests/Puck.Platform.Windows.Tests/Puck.Platform.Windows.Tests.csproj" />
@@ -125,6 +152,7 @@
         <Project Path="tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj" />
         <Project Path="tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj" />
         <Project Path="tests/Puck.World.Tests/Puck.World.Tests.csproj" />
+        <Project Path="tests/Puck.Embeddings.Tests/Puck.Embeddings.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Transpiler.Tests/Puck.GamingBricks.Transpiler.Tests.csproj" />
         <Project Path="tests/Puck.World.Transpiler.Tests/Puck.World.Transpiler.Tests.csproj" />
     </Folder>

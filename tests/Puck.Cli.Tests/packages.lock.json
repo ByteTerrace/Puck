@@ -1754,37 +1754,19 @@
       "ByteTerrace.Puck.Cli": {
         "type": "Project",
         "dependencies": {
-          "BenchmarkDotNet": "[0.15.*, )",
-          "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
-          "FSharp.Core": "[11.*, )",
-          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
-          "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
-          "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
-          "Puck.Analyzers": "[1.0.0, )",
-          "Puck.Launcher": "[1.0.0, )",
-          "Puck.Mcp": "[1.0.0, )",
-          "Puck.World.Client": "[1.0.0, )",
-          "Puck.World.Embeddings": "[1.0.0, )",
-          "Puck.World.Machines": "[1.0.0, )",
-          "Puck.World.Schema": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )",
-          "Puck.World.Silo": "[1.0.0, )",
-          "Puck.World.Transpiler": "[1.0.0, )",
-          "Resharp": "[1.*, )",
-          "System.CommandLine": "[2.*, )"
+          "Puck.Cli.Bench": "[1.0.0, )",
+          "Puck.Cli.Content": "[1.0.0, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Format": "[1.0.0, )",
+          "Puck.Cli.Gate": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Laws": "[1.0.0, )",
+          "Puck.Cli.Release": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Shaders": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.Cli.Worktrees": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )"
         }
       },
       "ByteTerrace.Puck.Commands": {
@@ -2014,6 +1996,137 @@
           "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
         }
       },
+      "puck.cli.bench": {
+        "type": "Project",
+        "dependencies": {
+          "BenchmarkDotNet": "[0.15.*, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )"
+        }
+      },
+      "puck.cli.content": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.core": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
+          "FSharp.Core": "[11.*, )",
+          "Resharp": "[1.*, )",
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.cli.format": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.World.Transpiler": "[1.0.0, )"
+        }
+      },
+      "puck.cli.gate": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.Extensions.FileSystemGlobbing": "[10.*, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.World.Transpiler": "[1.0.0, )"
+        }
+      },
+      "puck.cli.harness": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Launcher": "[1.0.0, )"
+        }
+      },
+      "puck.cli.laws": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Build.Framework": "[17.*, )",
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.release": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.Mcp": "[1.0.0, )",
+          "Puck.World.Silo": "[1.0.0, )"
+        }
+      },
+      "puck.cli.runs": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.World.Console": "[1.0.0, )"
+        }
+      },
+      "puck.cli.shaders": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.SdfVm.Model": "[1.0.0, )"
+        }
+      },
+      "puck.cli.source": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
+          "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
+          "Puck.Analyzers": "[1.0.0, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )"
+        }
+      },
+      "puck.cli.worktrees": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.worlds": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Format": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Shaders": "[1.0.0, )",
+          "Puck.World.Client": "[1.0.0, )",
+          "Puck.World.Machines": "[1.0.0, )",
+          "Puck.World.Server": "[1.0.0, )"
+        }
+      },
       "puck.launcher": {
         "type": "Project",
         "dependencies": {
@@ -2120,13 +2233,6 @@
           "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )"
-        }
-      },
-      "puck.world.embeddings": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
           "Puck.World.Server": "[1.0.0, )"
         }
       },

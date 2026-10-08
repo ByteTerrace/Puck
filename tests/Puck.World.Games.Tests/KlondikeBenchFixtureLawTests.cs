@@ -8,7 +8,7 @@ namespace Puck.World.Games.Tests;
 public sealed class KlondikeBenchFixtureLawTests {
     [Fact]
     public void TheBenchFixtureLoadsAndCarriesTheKlondikeGame() {
-        var definition = AuthoredGameFixtures.Load(relativePath: "src/Puck.Cli/Bench/klondike.fixture.puck");
+        var definition = AuthoredGameFixtures.Load(relativePath: "src/Puck.Cli.Bench/klondike.fixture.puck");
 
         Assert.Contains(
             collection: definition.State,

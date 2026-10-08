@@ -235,8 +235,8 @@ out the default branch, installs the CLI packed from that checkout through
 `setup-puck`, and runs `puck pull-request submit-format`, which reads the artifact
 as data.
 Only default-branch code ever runs with the write token. Its
-`src/Puck.Cli/PullRequest/FormatSubmission.cs` policy is covered by
-`tests/Puck.Cli.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
+`src/Puck.Cli.Format/PullRequest/FormatSubmission.cs` policy is covered by
+`tests/Puck.Cli.Format.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
 and successful build job, limits artifact size and file count, and accepts only
 ordinary C# and `.puck` sources already changed by that PR. The write token never reaches the
 PR's build or formatter.
@@ -410,10 +410,10 @@ artifact contains only those `.nupkg` and `.snupkg` files and a `release.json`
 manifest recording the version, source commit, file checksums, and dependencies
 already on NuGet.org. The publisher checks those checksums and uploads these
 files in dependency order after all gates succeed. It does not rebuild them.
-Selection and failure paths have offline tests in `tests/Puck.Cli.Tests`:
+Selection and failure paths have offline tests in `tests/Puck.Cli.Release.Tests`:
 
 ```sh
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*NuGetCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*NuGetCommandTests"
 ```
 
 `puck nuget --help` lists the release commands. The tests construct package

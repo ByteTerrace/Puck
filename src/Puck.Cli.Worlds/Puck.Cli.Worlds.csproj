@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The world-authoring verbs (compile, decompile, lint, lsp, migrate, embed, test, creation, registry, vocabulary) and the machine vocabulary they compose. The game build runs this assembly to compile the shipped worlds, so it is an executable of its own beside the puck root. -->
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Worlds</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <OutputType>Exe</OutputType>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
+        <ProjectReference Include="../Puck.Cli.Format/Puck.Cli.Format.csproj" />
+        <ProjectReference Include="../Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
+        <ProjectReference Include="../Puck.Cli.Shaders/Puck.Cli.Shaders.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.Embeddings/Puck.Embeddings.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
+        <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>

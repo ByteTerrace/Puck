@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Worlds.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The world-authoring verbs. -->
+        <ProjectReference Include="../../src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
+        <!-- The laws that boot a real World run the repository's own Release output, so that build exists before the suite runs; nothing here links against it. -->
+        <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/Cli/ScheduledWorldBoot.cs" Link="ScheduledWorldBoot.cs" />
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/Cli/TrackedPuckSources.cs" Link="TrackedPuckSources.cs" />
+        <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Update="Assets/**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+</Project>

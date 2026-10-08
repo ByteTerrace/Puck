@@ -66,7 +66,7 @@ worlds under `src/Puck.World/Assets/worlds`, the packages under `worlds/`
 importers) and the transpiler samples — less a shrinking exemption ledger whose
 every row is held to its reason.
 
-**Every shipped source is lint- and format-gated.** `tests/Puck.Cli.Tests/ShippedSourceLintLawTests.cs`
+**Every shipped source is lint- and format-gated.** `tests/Puck.Cli.Worlds.Tests/ShippedSourceLintLawTests.cs`
 runs `puck lint --strict` over every tracked source under `worlds/`,
 `src/Puck.World/Assets` (cartridges included) and `tests/Puck.World.Verdicts`, and
 `FormatProjectionLawTests` holds every tracked source to what `puck format` prints. A
@@ -111,8 +111,8 @@ through the emulator battery, never a standalone driver (`gaming-bricks`,
 `rom-forge`). A committed source additionally owes the byte-for-byte
 regeneration gate above before merge.
 
-`puck format` (`src/Puck.Cli/Format/FormatCommand.cs`) formats every source kind Puck owns: a `.puck` file goes
-through `PuckPrinter` (`src/Puck.Cli/Format/PuckSourcePhase.cs`, the `puck` pass), a `.cs` file through the C#
+`puck format` (`src/Puck.Cli.Format/Format/FormatCommand.cs`) formats every source kind Puck owns: a `.puck` file goes
+through `PuckPrinter` (`src/Puck.Cli.Format/Format/PuckSourcePhase.cs`, the `puck` pass), a `.cs` file through the C#
 phases `boy-scout` describes. The language server's formatting request prints through the same `PuckPrinter`, so
 the editor and the CLI write identical text. The printer has one layout: `PuckPrinter.IndentWidth` (2) spaces a
 level, with no indent or tab option anywhere, and the editor's `tabSize`/`insertSpaces` are ignored.

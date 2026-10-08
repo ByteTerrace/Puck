@@ -427,13 +427,13 @@ one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
 
-`tests/Puck.Cli.Tests/Official/OfficialBuildCommandTests.cs` builds a real
+`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real
 `puck.official.manifest.v1` tree from this checkout's own worlds and the
 browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project

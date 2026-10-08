@@ -1597,7 +1597,7 @@ the first observable. Source entry points: planning and loading in
 `RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
-`src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
+`src/Puck.Cli.Harness/Canary` and `src/Puck.Cli.Runs/Canary`; authoring in `WorldPipelineCommandModule`,
 `WorldViewGraphHost`, `WorldViewGraph`; work counting in
 `src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
 graphics in `src/Puck.Abstractions/Gpu`,
@@ -6041,7 +6041,7 @@ counted rows recorded in the same change.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
-     `src/Puck.Cli/Counters`,
+     `src/Puck.Cli.Runs/Counters`,
      `tests/Puck.Counters`, `SdfPassPlanLawTests`, `SdfWorldResidencyWorkLawTests`.
    - Done when: a law over the fake device holds the readback's placement in the
      plan and the kinds' classes; the ceilings file states, for every pass, what

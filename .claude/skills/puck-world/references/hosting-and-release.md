@@ -48,7 +48,7 @@ and observation providers through request-confined OBO with federated managed id
 never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
 persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
-Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
+Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in
 [`Puck.Mcp`](../../../../src/Puck.Mcp/README.md) when changing this attachment seam.
 
 ## Host provider boundary

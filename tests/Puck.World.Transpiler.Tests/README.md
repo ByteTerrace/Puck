@@ -10,7 +10,7 @@ instantiates it.
 `MultiWorldCompilationTests` and the composition suites cover independent named
 world outputs, reciprocal borders and doors, geometric module arguments, shared
 expansion budgets, source origins, and malformed-input refusals. CLI publication
-and lock refresh behavior are checked in `Puck.Cli.Tests`; host crossing behavior
+and lock refresh behavior are checked in `Puck.Cli.Worlds.Tests`; host crossing behavior
 is checked in `Puck.World.Server.Tests`.
 
 `AssetLockTests` covers `asset "path"` parsing and compilation, deterministic

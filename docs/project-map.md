@@ -87,30 +87,43 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.AdvancedGamingBrick.Forge.Tests
                          Puck.AdvancedGamingBrick.Tests  Puck.Analyzers.Tests
                          Puck.Assets.Tests  Puck.Attestation.Tests
-                         Puck.Audio.Tests  Puck.Azure.Tests  Puck.Cli.Tests
+                         Puck.Audio.Tests  Puck.Azure.Tests
+                         Puck.Cli.Bench.Tests  Puck.Cli.Content.Tests
+                         Puck.Cli.Core.Tests  Puck.Cli.Format.Tests
+                         Puck.Cli.Gate.Tests  Puck.Cli.Harness.Tests
+                         Puck.Cli.Laws.Tests  Puck.Cli.Release.Tests
+                         Puck.Cli.Runs.Tests  Puck.Cli.Shaders.Tests
+                         Puck.Cli.Source.Tests  Puck.Cli.Tests
+                         Puck.Cli.Worktrees.Tests  Puck.Cli.Worlds.Tests
                          Puck.Commands.Tests  Puck.DirectX.Tests
+                         Puck.Embeddings.Tests
                          Puck.GamingBricks.Transpiler.Tests  Puck.Hosting.Tests
                          Puck.HumbleGamingBrick.Forge.Tests
                          Puck.HumbleGamingBrick.Tests
                          Puck.HumbleGamingDeck.Tests  Puck.Input.Tests
                          Puck.Launcher.Tests  Puck.Machines.Tests
-                         Puck.Maths.Tests  Puck.Networking.Tests
-                         Puck.Physics.Tests  Puck.Platform.Windows.Tests
-                         Puck.Recording.Tests  Puck.SdfVm.Tests
-                         Puck.Shaders.Tests  Puck.SignedDistance.Tests
-                         Puck.State.Generators.Tests  Puck.State.Rebuild.Corpus
-                         Puck.State.Rules.Tests  Puck.State.Search.Tests
-                         Puck.State.Tests  Puck.State.Topology.Tests
-                         Puck.State.Vectors.Tests  Puck.Text.Tests
-                         Puck.Vulkan.Tests  Puck.World.Agents.Tests
-                         Puck.World.Azure.Tests  Puck.World.Browser.Tests
-                         Puck.World.Client.Tests  Puck.World.Games.Tests
-                         Puck.World.Machines.Tests
+                         Puck.Maths.Tests  Puck.Mcp.Tests
+                         Puck.Networking.Tests  Puck.Physics.Tests
+                         Puck.Platform.Windows.Tests  Puck.Recording.Tests
+                         Puck.SdfVm.Tests  Puck.Shaders.Tests
+                         Puck.SignedDistance.Tests  Puck.State.Generators.Tests
+                         Puck.State.Rebuild.Corpus  Puck.State.Rules.Tests
+                         Puck.State.Search.Tests  Puck.State.Tests
+                         Puck.State.Topology.Tests  Puck.State.Vectors.Tests
+                         Puck.Text.Tests  Puck.Vulkan.Tests
+                         Puck.World.Agents.Tests  Puck.World.Azure.Tests
+                         Puck.World.Browser.Tests  Puck.World.Client.Tests
+                         Puck.World.Games.Tests  Puck.World.Machines.Tests
                          Puck.World.Presentation.Tests
                          Puck.World.Protocol.Tests  Puck.World.Schema.Tests
                          Puck.World.Server.Tests  Puck.World.Silo.Tests
                          Puck.World.Tests  Puck.World.Transpiler.Tests
-(Tool)                   Puck.Cli  Puck.Shaders.Generator
+(Tool)                   Puck.Cli  Puck.Cli.Bench  Puck.Cli.Content
+                         Puck.Cli.Core  Puck.Cli.Format  Puck.Cli.Gate
+                         Puck.Cli.Harness  Puck.Cli.Laws  Puck.Cli.Release
+                         Puck.Cli.Runs  Puck.Cli.Shaders  Puck.Cli.Source
+                         Puck.Cli.Worktrees  Puck.Cli.Worlds
+                         Puck.Shaders.Generator
 (Analyzer)               Puck.Analyzers
 ```
 
@@ -276,7 +289,7 @@ filter somewhere else.
 |---|---|
 | `docs/examples/` | Reference documents for the live authoring families: `creations/` (`puck.creation.v1`) and `tunes/` (`puck.audio.v1`). Nothing loads them; they are read by hand. |
 | `src/Puck.Dashboard/` | The world-authoring studio: a TypeScript/React portal (`src/portal`) plus a module-federation host (`src/host`), outside `Puck.slnx` and the architecture gate—no `<PuckKind>`/`<PuckLayer>`, built and tested through `npm`, never `dotnet`. Edits `puck.world.definition.v1` documents and previews their rules; `Puck.World.Browser`'s `browser-wasm` publish is its native engine. |
-| `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), the layering report (`architecture`), and the repository automation CI runs (`artifacts`, `azure`, `nuget`). Kind `Tool`: it consumes the tree and nothing consumes it. |
+| `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), the layering report (`architecture`), and the repository automation CI runs (`artifacts`, `azure`, `nuget`). It is the root that composes the verb assemblies under `src/Puck.Cli.*` (`Core`, `Harness`, `Source`, `Format`, `Shaders`, `Worlds`, `Gate`, `Laws`, `Worktrees`, `Runs`, `Bench`, `Release`, `Content`), each referencing only what its own verbs need, with a suite of its own under `tests/`. Kind `Tool`: they consume the tree and nothing below them consumes them; the game's build runs `Puck.Cli.Worlds` to compile the shipped worlds. |
 | `src/Puck.Shaders.Generator/` | The build-time host of `ShaderDeclarations` and of every shader project's `ShaderBuild`: every project whose kernels include a declaration the C# model owns references it with `ReferenceOutputAssembly="false"`, its build writes each declaration whose text the model has changed before those kernels compile, and `build/Shaders.targets` runs it to compile each project's shaders through the shared cache. A `Tool`, referenced as no assembly. |
 | `build/` | Build policy the whole tree imports: the `[VerifiedCode]` marker source, the architecture ledger (`Architecture.props`), the gate (`Puck.Architecture.targets` + `PuckArchitectureGate.cs`), and the NuGet packaging policy (`Packaging.targets`—shared version and metadata, applied only to projects that opt in with `<IsPackable>true</IsPackable>`; the tree default is `false`). |
 | `.claude/skills/` | Current factual and procedural agent references for repository-specific work. |

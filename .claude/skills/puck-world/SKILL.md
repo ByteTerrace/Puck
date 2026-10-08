@@ -314,7 +314,7 @@ reserved-prefix (`$`/`_`) keys. Adding a top-level section refuses at boot
 until every shipped world carries it; adding a nested member silently
 defaults at parse and (usually) refuses at validation — sweep the shipped
 worlds in the same change either way. `ShippedSourceLintLawTests`
-(`tests/Puck.Cli.Tests`) runs `puck lint --strict` over every shipped `.puck`
+(`tests/Puck.Cli.Worlds.Tests`) runs `puck lint --strict` over every shipped `.puck`
 source, so a sweep that leaves one red fails the suite. Any change to the
 document model is regenerated with `puck schema`, which writes the JSON
 Schemas, the dashboard portal's `worldDefinition.generated.ts` and the engine's

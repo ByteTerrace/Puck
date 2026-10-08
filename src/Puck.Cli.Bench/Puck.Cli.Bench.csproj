@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The benchmark verbs (`puck bench`): the Puck.Maths and State kernels, startup, the World lane and State evidence. -->
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Bench</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="[0.15.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
+        <ProjectReference Include="../Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
+        <ProjectReference Include="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>
