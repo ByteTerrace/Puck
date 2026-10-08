@@ -68,6 +68,7 @@ public sealed partial class SdfWorldTables {
         ? SdfKernel.ReceiverComparison : SdfKernel.Receiver));
 
     private bool m_comparisonRequired;
+
     // Why a frame's kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
     internal Exception? PipelineRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
 

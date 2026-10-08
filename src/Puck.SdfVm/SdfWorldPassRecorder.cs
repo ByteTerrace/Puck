@@ -67,9 +67,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the planned graph allocates the incoming handoff image (a policy allowing fades). Without it the passes
     // bind the tables' fillers and read a zero fade count, whatever the live frame's handoffs.
     private readonly bool m_incoming;
+
     // Whether the receiver records the comparison receiver this frame: its view selects a comparison method.
     private bool m_comparison;
-
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
     private SdfWorldView m_view;

@@ -67,8 +67,8 @@ public sealed partial class SdfIndirectViewsLawTests {
 
         Assert.Empty(collection: violations);
         Assert.Contains(expectedSubstring: "sdfIndirectReceive(", actualString: CodeOf(path: "indirect/sdf-indirect-receiver.hlsli"));
-        Assert.Contains(expected: "sdfIndirectReceive", collection: evaluators);
-        Assert.DoesNotContain(expectedSubstring: "#include \"sdf-indirect-near.hlsli\"", actualString: apply);
+        Assert.Contains(collection: evaluators, expected: "sdfIndirectReceive");
+        Assert.DoesNotContain(actualString: apply, expectedSubstring: "#include \"sdf-indirect-near.hlsli\"");
     }
 
     [GeneratedRegex(pattern: @"^[A-Za-z_][\w<>]*\s+(?<name>sdfIndirect\w+)\([^)]*\)\s*\{(?<body>.*?)^\}", options: RegexOptions.Multiline | RegexOptions.Singleline)]

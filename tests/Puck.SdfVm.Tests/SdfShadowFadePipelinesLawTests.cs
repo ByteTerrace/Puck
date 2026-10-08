@@ -33,7 +33,7 @@ public sealed class SdfShadowFadePipelinesLawTests {
         Assert.DoesNotContain(collection: created, filter: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: "-fade"));
         Assert.Equal(expected: Pipelines, actual: catalog.Pipelines.SharedPipelines);
         Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var pipelines));
-        Assert.Equal(expected: Pipelines, actual: pipelines);
+        Assert.Equal(actual: pipelines, expected: Pipelines);
     }
     [Fact]
     public void APolicyChangeAndItsCrossingsCreateNoPipelineAndWaitForNone() {
@@ -46,7 +46,7 @@ public sealed class SdfShadowFadePipelinesLawTests {
         residency.ProduceFirstFrame(context: in context);
         _ = residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var initial));
-        Assert.Equal(expected: Pipelines, actual: initial);
+        Assert.Equal(actual: initial, expected: Pipelines);
         foreach (var capacity in new[] { 1, 2, 0 }) {
             source.Frame = source.Frame with { Lights = Lights(capacity: capacity) };
             Assert.True(condition: residency.Produce(context: in context));
@@ -62,7 +62,7 @@ public sealed class SdfShadowFadePipelinesLawTests {
                 Assert.True(condition: residency.IsReady);
             }
             Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var after));
-            Assert.Equal(expected: initial, actual: after);
+            Assert.Equal(actual: after, expected: initial);
         }
     }
 

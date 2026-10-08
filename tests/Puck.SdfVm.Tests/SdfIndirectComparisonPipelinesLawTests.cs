@@ -21,7 +21,7 @@ public sealed partial class SdfIndirectComparisonPipelinesLawTests {
     public void TheCacheMethodLeasesNoComparisonReceiverAndAComparisonMethodLeasesItOnce() {
         var created = new ConcurrentBag<string>();
         var gpu = new FakeGpuDevice { BeforeComputePipeline = description => created.Add(item: description.Name) };
-        var source = new Source { Frame = Frame(tier: SdfIndirectTier.Medium, method: SdfIndirectMethod.Cache) };
+        var source = new Source { Frame = Frame(method: SdfIndirectMethod.Cache, tier: SdfIndirectTier.Medium) };
         using var residency = Residency(catalog: SdfTestPipelines.Cache(), source: source);
         var context = Context(gpu: gpu);
 
@@ -31,7 +31,7 @@ public sealed partial class SdfIndirectComparisonPipelinesLawTests {
         Assert.DoesNotContain(collection: created, filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: Comparison));
 
         foreach (var method in new[] { SdfIndirectMethod.Screen, SdfIndirectMethod.Cone, SdfIndirectMethod.Cache, SdfIndirectMethod.Screen }) {
-            source.Frame = Frame(tier: SdfIndirectTier.Medium, method: method);
+            source.Frame = Frame(method: method, tier: SdfIndirectTier.Medium);
             _ = residency.Produce(context: in context);
             _ = residency.WaitPipelineBuilds(cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(condition: residency.Produce(context: in context), userMessage: residency.NotReadyReason);
@@ -42,7 +42,7 @@ public sealed partial class SdfIndirectComparisonPipelinesLawTests {
     public void AComparisonMethodWithIndirectLightOffLeasesNoComparisonReceiver() {
         var created = new ConcurrentBag<string>();
         var gpu = new FakeGpuDevice { BeforeComputePipeline = description => created.Add(item: description.Name) };
-        var source = new Source { Frame = Frame(tier: SdfIndirectTier.Off, method: SdfIndirectMethod.Screen) };
+        var source = new Source { Frame = Frame(method: SdfIndirectMethod.Screen, tier: SdfIndirectTier.Off) };
         using var residency = Residency(catalog: SdfTestPipelines.Cache(), source: source);
         var context = Context(gpu: gpu);
 
@@ -65,7 +65,6 @@ public sealed partial class SdfIndirectComparisonPipelinesLawTests {
 
     [GeneratedRegex(pattern: @"#ifdef SDF_INDIRECT_COMPARISON(?<comparison>.*?)#else(?<default>.*?)#endif", options: RegexOptions.Singleline)]
     private static partial Regex ComparisonBlock();
-
     private static SdfFrame Frame(SdfIndirectTier tier, SdfIndirectMethod method) {
         var builder = new SdfProgramBuilder();
 

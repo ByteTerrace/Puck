@@ -62,7 +62,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: views.Inputs, filter: input => (input.Name == SdfWorldPackage.IndirectAnswer));
         Assert.DoesNotContain(collection: views.Inputs, filter: input => (input.Name == SdfWorldPackage.Parts.ShadowVisibility));
         Assert.DoesNotContain(collection: views.Outputs, filter: output => (output.Name == SdfWorldPackage.IndirectVisibility));
-        Assert.All(views.InputAccesses, access => Assert.Equal(RenderGraphPortAccess.ComputeRead, access));
+        Assert.All(views.InputAccesses, access => Assert.Equal(actual: access, expected: RenderGraphPortAccess.ComputeRead));
         Assert.True(condition: (fragment.Passes.ToList().IndexOf(item: receiver) < fragment.Passes.ToList().IndexOf(item: views)));
     }
     [InlineData("native", false)]
