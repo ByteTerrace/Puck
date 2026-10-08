@@ -375,7 +375,7 @@ field sample and gradient wrappers (`sdfIndirectSample`, `sdfIndirectGradient`)
 and the Near sample (`sdfIndirectNear`) carry no boundary. A real SPIR-V call on
 the Near path loses the device on NVIDIA's Vulkan driver at High
 (`instruction pointer invalid`), and with one call site per marcher the receiver
-legalizes fully inlined. Do not reintroduce `[noinline]` there.
+legalizes fully inlined. Keep `[noinline]` off those default-receiver helpers.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), the
@@ -1596,8 +1596,8 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
   backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps, texels
-  written, sky evaluations, hashes and texture loads, shadow-slot steps, shape
-  evaluations and shape gradients), which are `PerBackendDeterministic` like created-object
+  written, sky evaluations, hashes and texture loads, shadow-slot steps, shadow
+  pixels, the three indirect counts, shape evaluations and shape gradients), which are `PerBackendDeterministic` like created-object
   kinds, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
@@ -1934,9 +1934,9 @@ dispatches over raw fixed buffers. A package may run as a fragment
 naming it, `<pass>$<part>`; `sdf.world` runs as `SdfWorldPackage.Fragment`, the
 one statement of its passes, members, scratch and layout constants
 (`TileSize`, `VisibilityRecordByteLength`, the tile planes and part bounds, the
-mesh target and depth attachment). Its scratch is `transient`: one allocation
-every frame slot shares, ordered across frames by the planned barrier of each
-frame's first use, never one per slot. A node allocates counted buffers through
+mesh target and depth attachment). Its scratch is retained: one queue-ordered
+allocation every frame slot shares, ordered across frames by the planned barrier
+of each frame's first use, never one per slot, so an unchanged pass can stand. A node allocates counted buffers through
 the counter its packages state for its instance
 (`IRenderGraphPackageFactory.CounterOf`) and rebuilds when the counter's
 revision moves.

@@ -14,7 +14,7 @@ channel — a kart's "boost") and `Turn` (`WorldTurn`: `rate`, an optional
 speed-scaled authority curve — `referenceSpeed`/`falloff` — `pitchRate` for a
 drive kit's flying variant, and `maxPitch` — the radian ceiling the flying
 variant's climb/dive attitude is clamped to, unread while `pitchRate` is
-zero, defaulting to the engine's old hardcoded clamp) — plus
+zero (its default is in `kits.schema.json`)) — plus
 `MoveFrame`/`FacingSnap`, and two rows beside them, each supplying its own
 tuning facet and each read by its own operations: `Holds` (below; the hold
 LIST is mandatory — the hold list is the only spelling of a vertical channel,
@@ -37,7 +37,7 @@ units/second) a
 grounded body on a curving surface is held against; it is independent of
 `Speed` — a kit's own resolved move speed measurably over-corrects a shallow
 slope climb (the bias converts to downhill drift under depenetration faster
-than to held contact) — and also defaults to the engine's old constant.
+than to held contact) — and has its own schema default.
 In-medium locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
 is a kit whose shaping table carries an `across` row.
 
@@ -72,9 +72,9 @@ curve while this row governs — `1` (the default) for an ordinary row, and a
 held drift row's own tightened arc. A `dynamics` row names a `dynamics`-
 section row (a pole-matched second-order follower — see
 [documents-render.md](documents-render.md)) shaping velocity instead of either mechanism; it compiles
-once per kit (`WorldKit.Compile`) against the world's own
-`simulation.rateHz` — a world authoring no simulation rate cannot compile
-one and refuses by name. The follower's state lives in `WorldBody` as
+once per kit (`WorldKit.Compile`) against the world's resolved simulation
+rate (`WorldDefinition.SimulationRateHz`) — a resident world authoring
+`rateHz: 0` cannot compile one and refuses by name. The follower's state lives in `WorldBody` as
 ordinary sim state, included in whatever the body snapshot/checkpoint
 covers; changing which mechanism a row uses, or retuning a live `dynamics`
 row, is expected to change replay hashes. A drift/boost row is authored as
@@ -101,8 +101,7 @@ one facet each.
 A worked kart kit, in `.puck` (a fragment — `bodyMotionProgram`, the
 `boost`/`drift` channels, and the `kart-drive` program itself live in the
 declaring world; a standalone `--validate` on this excerpt alone refuses
-those three names, exactly as the original JSON excerpt was never a
-standalone document either):
+those three names):
 
 ```
 kits {
@@ -282,8 +281,8 @@ A seated player's live profile overrides the kit's `Speed.Value`
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
 program ever sees it), regardless of whether it came from the profile or
-the profileless fallback. Absent (the default) is wide-open, today's
-behavior exactly; `min == max` pins the effective speed outright; the
+the profileless fallback. Absent (the default) is wide-open;
+`min == max` pins the effective speed outright; the
 validator refuses `min > max` and refuses a kit whose OWN `speed.value`
 falls outside its own envelope, by name. `identity.show`'s
 `moveEffective=` echoes what the sim actually applied beside `move=` (the
@@ -543,7 +542,7 @@ that case.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
-recorded 240-tick fixed-point trace. The dive module's `fishKit` (`modules/dive.world.json`) is
+recorded 240-tick fixed-point trace. The dive module's `fishKit` (`modules/dive.puck`) is
 the worked example: a kit whose `diveFishMotion` program runs
 `ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets,
 and a trailing `air` row (`Free`, `Gravity`) for the water's own dry fallback.

@@ -281,12 +281,12 @@ stable, and never add a path that reproduces old-wrong behaviour.
 `tests/Puck.Maths.Tests` is the machine-checked story a `src/Puck.Maths` change
 gets — a committed four-tier suite — and the tiers below are all of it.
 
-**Is a contract claim actually tested?**
-`tests/Puck.Maths.Tests/LawRegistry.cs` is the executable index of what the
-suite proves about every member: every case it runs is declared there with the
-public members that case covers and the legs it stands on, so that one file is
-the first place to look, and per-member classification — covered and by which
-case, waived, or uncovered — is queryable in `coverage-manifest.json` beside it.
+**Is a contract claim actually tested?** Every case is declared in
+`tests/Puck.Maths.Tests/laws/<family>.json` with the public members it covers
+and the legs it stands on, and `LawRegistry.cs` (with its per-family partials)
+binds each id to the code that runs it. Per-member classification — covered and
+by which case, waived, or uncovered — is queryable in `coverage-manifest.json`
+beside them.
 
 **The floor: one command.** Anything under `src/Puck.Maths` owes this, whichever
 wing it touched, and in the ordinary case owes nothing else:
@@ -317,7 +317,7 @@ in a change loop.
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
-narrow it with a `--filter` on the law id when one law is the question. Run it only
+narrow it with `--explicit on --filter-display-name '<law-id>*'` when one law is the question. Run it only
 when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.
@@ -341,15 +341,6 @@ at one of these**:
 | `PrimeExploration` / `PrimeConstellation` / `PrimeWheel30` / `PrimeExtensions` on `ulong` | the `prime-exploration.*` and `prime-selection.*` law families (`laws/prime-*.json`); their Deep and `exhaustive.prime-selection-*` mirrors carry the published 10^15 and 10^16 counts and ranks |
 | Quadratic integer arithmetic | the `quadratic-integer.*` and `algebra.quadratic-*` law families (`laws/quadratic-integer.json`, `laws/doubling-tower.json`) |
 
-**Machine gotcha — `-c Release` must PRECEDE the file path.** In
-`dotnet run -c Release <file>.cs` the flag comes first or the file
-is silently built and run as Debug. This is not cosmetic on the reference
-machine: Windows App Control blocks loading never-seen Debug binaries
-(`FileLoadException 0x800711C7`), so file-based `dotnet run <script>.cs`
-programs fail outright at their default configuration. Release outputs load
-cleanly. `puck bench` is unaffected — it runs through `dotnet run --project`,
-not a file-based script.
-
 **What green means, and does not.** A green battery means no probe failed. It
 does not by itself mean no probe *diverged*: a defect that turns a subject
 predicate uniformly false can spin a search helper rather than trip an
@@ -357,8 +348,9 @@ assertion, which is why every unbounded search whose predicate is a subject
 carries a step budget whose exhaustion is a named failure. Read the exit code
 *and* the section output.
 
-**Land a new public member with its classification.** A law case in
-`LawRegistry.cs` or a waiver with a reason in `Coverage.WaiverDeclarations`;
+**Land a new public member with its classification.** A law case (a
+`laws/<family>.json` declaration naming the member, bound in `LawRegistry.cs`)
+or a waiver with a reason in `Coverage.WaiverDeclarations`;
 never a hand-edit of `coverage-manifest.json`. Without one the coverage ratchet
 fails on every run and cannot heal itself — mechanism in
 [tests/Puck.Maths.Tests → The ratchet](../../../../tests/Puck.Maths.Tests/README.md#the-ratchet).

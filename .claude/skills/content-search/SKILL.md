@@ -23,7 +23,7 @@ the running tool never locks the build output another build needs:
 dotnet <scratch-copy>/Puck.Cli.dll search <pattern> [path] [options]
 ```
 
-If that build is absent, build it (`dotnet build src/Puck.Cli -c Release`) or
+If that build is absent, build it (`dotnet build src/Puck.Cli -c Release -nodeReuse:false`) or
 run the tracked project directly:
 
 ```text
@@ -53,11 +53,12 @@ support for Puck-only intersection, complement, or lookaround behavior.
   safety. Route those questions to `symbol-analysis`.
 - Quote patterns for the active shell; do not silently rewrite regex syntax.
 - The walk has no extension filter, so it reads `.puck` DSL sources by
-  default. An authored `.puck` file and its compiled `.world.json`/
-  `.cartridge.json` can each hold a fact the other lacks — a `let`/template
-  name or unexpanded `for`/lambda body exists only in `.puck`; a lowered
-  default or basis-merged value exists only in the compiled JSON. Search both
-  before concluding a value is absent.
+  default. A cartridge `.puck` source and its committed `.cartridge.json` twin
+  can each hold a fact the other lacks — a `let`/template name or unexpanded
+  `for`/lambda body exists only in `.puck`; a lowered default or basis-merged
+  value exists only in the compiled JSON. Search both before concluding a value
+  is absent. A world `.puck` source's compiled JSON is build output, which the
+  walk skips.
 
 ## Load the full reference selectively
 

@@ -60,8 +60,8 @@ bits, even for an integer target. `clock.substepTicks` sits in
 `[0,ticksPerStep)` so reload preserves the next transition, not only the value
 visible at the save tick.
 
-`world.state.hash` defaults to the historical `capture` digest and accepts an
-explicit `capture|pose|world|authoritative` scope. `capture` remains the manifest
+`world.state.hash` defaults to the `capture` digest and accepts an
+explicit `capture|pose|world|authoritative` scope. `capture` is the manifest
 digest (pose plus resolved `state.world` values); `pose` is the replay pose fold;
 `world` includes stored state traits plus resolved values; `authoritative` adds
 the tick, poses, rule/interaction edge latches, per-body body/identity action
@@ -259,10 +259,9 @@ the first write. Read back on `world.state`'s cell line as
 `advance=<num>/<den>/s@engineEpoch<n>`.
 
 `clock.epochEngineTick` is SESSION-relative (an engine tick count from process
-start), so `world.save` writing it verbatim would leave a reloaded document
-reading FROZEN at its stored base until the new session's own engine-tick
-counter climbed back past the old epoch — the fix: **settle at save, in the
-serialized PROJECTION only.** `WorldSessionCapture.Capture` (the `world.save`
+start), so `world.save` **settles at save, in the serialized PROJECTION only**
+— a verbatim epoch would read frozen at its base after a reload until the new
+session's counter passed it. `WorldSessionCapture.Capture` (the `world.save`
 fold, `src/Puck.World.Server/WorldSessionCapture.cs`) writes every advancing cell's
 base as its LIVE value (`StateAdvance.ComputeCurrentValue`) at the server's
 completed engine tick, and projects `clock.epochEngineTick: 0` (alongside
@@ -277,8 +276,10 @@ pool's generated storage rows keep their live state in the pool's own
 continuation and are never written into `state.world`.
 
 Authority is TWO holds, both decided by the one admission predicate
-(`WorldServer.TryAdmitMutation`): `Mutate`/`section:state` gates the four
-State kinds like any other section, PLUS a second, row-scoped `Edit` over the
+(`WorldServer.TryAdmitMutation`): `Mutate`/`section:state` gates the five
+row-and-cell State kinds (`UpsertStateRow`/`RemoveStateRow`,
+`UpsertStateCell`/`RemoveStateCell`, and `Generate`, which names the row it
+writes) like any other section, PLUS a second, row-scoped `Edit` over the
 CONCRETE `state:<name>` subject (`GrantSubjectKind.State`) or the `all`
 wildcard — the SAME subject for the whole-row pair (`UpsertStateRow`/
 `RemoveStateRow`) and the per-cell pair (`UpsertStateCell`/`RemoveStateCell`),
@@ -779,5 +780,8 @@ and atomic `rewindGroup`. A write outside the closure makes the turn unrewindabl
 it must never be silently omitted from a compact retained record.
 
 After changing this surface, regenerate schema, vocabulary, and name-registry
-outputs with their CLI owners and run the affected State, Rules, World, and
-World.Transpiler suites. A generated projection probe must cover every new arm.
+outputs with their CLI owners and run the affected `tests/Puck.State.Tests`,
+`tests/Puck.State.Rules.Tests`, `tests/Puck.World.Transpiler.Tests` and World
+suites — `puck affected` against the merge base names which of
+`tests/Puck.World.Tests` and the Server, Client, Games, Machines, Presentation
+and Silo suites the change reaches. A generated projection probe must cover every new arm.

@@ -25,9 +25,7 @@ the engine's model walks read (`WorldModelShape`).
 that TypeScript or the model shape drifts from the code, and `puck schema --bundle` emits the
 single-file, fully-`$ref`-resolved form for a quick read. When this reference states a
 field name, an enum member list, or a numeric default with no accompanying
-reason, treat it as a drift hazard and read the schema instead — the
-`Machines`/`WorldSection` gap fixed below is exactly what letting a hand-kept
-catalog drift looks like. This file's job is what the schema cannot say: why a
+reason, treat it as a drift hazard and read the schema instead. This file's job is what the schema cannot say: why a
 shape is what it is, an ordering rule, a refusal condition, a worked trap.
 
 **`.puck` is the authoring surface; JSON is the compiled wire form.** Every
@@ -114,7 +112,7 @@ and engine tick before the delta (`EncodeProjectionDelta`/
 what it was handed rather than sniffing it — the observation lane narrates it
 once per tier change on stderr. A traveler's reservation carries a
 `WorldIdentityProjection` (id, name, colour, move/turn rate), never its owned
-document. `population.disclosure` (`WorldObserverDisclosure` — `all` (the
+document. `bodies.disclosure` (`WorldObserverDisclosure` — `all` (the
 unauthored default), `radius`, `selfOnly`) redacts snapshot ENTRIES per sink at
 `WorldOutputHub`, never inside the tick. `updateSeconds` samples remote QUIC
 projections (default 0.03 s; zero means every authority tick) while coalescing
