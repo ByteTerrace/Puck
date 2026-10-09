@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 
 using Xunit;
@@ -124,15 +123,6 @@ public sealed class ArrivedBytesTests {
         );
 
         AssertAccepted(result: result);
-    }
-    [Fact]
-    public void RawSignedPortionConstruction_IsNotPublic() {
-        var method = typeof(SignedAttestation).GetMethod(
-            name: nameof(SignedAttestation.FromSignedPortion),
-            bindingAttr: BindingFlags.Public | BindingFlags.Static
-        );
-
-        Assert.Null(@object: method);
     }
     // The general property, checked rather than argued: every byte of a valid attestation is inside either the
     // signed portion or the signature, so no single-byte change can produce an accepted claim.

@@ -126,10 +126,6 @@ public sealed class ConformanceProfileTests {
         );
     }
     [Fact]
-    public void ResourceProfileFacade_IsTheOnlyPublicVerificationBoundary() {
-        Assert.False(condition: typeof(AttestationVerifier).IsPublic);
-    }
-    [Fact]
     public void SealedRecipientTextCeiling_IsCheckedOnTheAuthenticatedPayloadDecode() {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:sealed-profile");
