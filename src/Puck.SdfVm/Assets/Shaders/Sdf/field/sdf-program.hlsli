@@ -95,6 +95,16 @@ float4 sdfDynamicTransformRow(uint index) {
 #define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
 groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
 groupshared uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
+// The group mask's word summary (sdfSummarizeGroupMask): for each of the first SDF_GROUP_MASK_SUMMARY_WORDS mask words,
+// one sphere enclosing the current bounds of the ordinary-sized instances its set bits name (radius < 0 when it
+// summarizes none), the smallest field-rescale inverse among them, and the bits of the oversized ones (a ground, a
+// building) it leaves out. mapCore rejects every summarized instance of a word against its running minimum at once, so a
+// march whose group mask holds a many-instance body tests the body once per word rather than once per instance.
+#define SDF_GROUP_MASK_SUMMARY_WORDS 128u
+groupshared float4 sdfGroupMaskSpheres[SDF_GROUP_MASK_SUMMARY_WORDS];
+groupshared float sdfGroupMaskScales[SDF_GROUP_MASK_SUMMARY_WORDS];
+groupshared uint sdfGroupMaskKept[SDF_GROUP_MASK_SUMMARY_WORDS];
+static bool sdfGroupMaskSummarized = false;
 #else
 #define SDF_SHADOW_MASK_WORDS 32u
 static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];

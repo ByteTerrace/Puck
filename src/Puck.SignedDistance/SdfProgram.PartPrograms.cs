@@ -273,10 +273,17 @@ public sealed partial class SdfProgram {
         }
 
         for (var index = 0; (index < plan.Instances.Length); index++) {
+            var entry = (((offset + 1) + index) * WordsPerVector);
+
             if (plan.Instances[index] is not { } placement) {
+                // An instance the table does not compile still carries its field rescale's inverse, so mapCore's
+                // whole-instance skip (sdfInstanceCannotWin) can reject it against its packed bound under the root-union
+                // certificate. Its zero leaf count keeps it on the generic walk.
+                var instance = m_instances[index];
+
+                m_words[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: (1f / FieldScopeExtent(first: instance.First, end: instance.End).Rescale));
                 continue;
             }
-            var entry = (((offset + 1) + index) * WordsPerVector);
 
             m_words[entry] = ((uint)assetOffsets[placement.Asset]);
             m_words[(entry + 1)] = ((uint)cursor);

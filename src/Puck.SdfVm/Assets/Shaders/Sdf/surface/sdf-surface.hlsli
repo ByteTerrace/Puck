@@ -132,6 +132,8 @@ void sdfBuildAmbientMask(float3 surfacePoint, bool lit, uint lane) {
         sdfAmbientMaskWords[word] = bits;
     }
     GroupMemoryBarrierWithGroupSync();
+    SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(offset, count);
+    sdfSummarizeGroupMask(true, (grid.enabled ? grid.footprintPad : 1.0e30), lane);
 }
 #endif
 

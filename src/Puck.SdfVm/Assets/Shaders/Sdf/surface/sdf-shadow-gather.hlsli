@@ -61,7 +61,58 @@ void sdfShadowMovedCandidate(uint instanceOffset, uint index, float3 origin, flo
 }
 #endif
 
+// Summarizes the group mask just built (the ambient mask when `ambient`) into sdfGroupMaskSpheres/Scales/Kept, one entry
+// per summarized word: the box of its set instances' current bound spheres, then the radius reaching every one of them
+// from the box's center. An instance whose radius exceeds `oversized` (the grid's largest binned radius, the split that
+// keeps a ground or a building in the grid's always-list) stays out of the sphere and in the word's kept bits, so one
+// large neighbour cannot hide a body's whole word. UNIFORM CONTROL FLOW like the gathers: every lane calls it, after the
+// barrier that completes the mask; it ends with its own barrier. Only a program under the root-union certificate is
+// summarized (each instance then joins as a hard union, which the word rejection relies on), and every instance carries
+// its field rescale's inverse in the part table.
+void sdfSummarizeGroupMask(bool ambient, float oversized, uint lane) {
+    uint table = sdfProgramLayout.partProgramOffset;
+    sdfGroupMaskSummarized = ((table != 0u) && sdfCanTracePartsIndependently());
+    if (!sdfGroupMaskSummarized) { return; }
+    uint count = min(sdfInstanceCount(), SDF_MAX_INSTANCES);
+    uint offset = sdfInstanceDirectoryOffset();
+    uint words = min(sdfInstanceMaskWordCount(count), SDF_GROUP_MASK_SUMMARY_WORDS);
+    for (uint word = lane; word < words; word += SDF_GROUP_SHADOW_LANES) {
+        uint bits = (ambient ? sdfAmbientMaskWords[word] : sdfShadowMaskWords[word]);
+        float3 low = float3(1.0e30, 1.0e30, 1.0e30);
+        float3 high = float3(-1.0e30, -1.0e30, -1.0e30);
+        float scale = 1.0;
+        uint kept = 0u;
+        uint summarized = 0u;
+        [loop] for (uint pending = bits; pending != 0u; pending &= (pending - 1u)) {
+            uint bit = firstbitlow(pending);
+            uint index = ((word << 5u) + bit);
+            float4 bound = sdfInstanceBoundAt(offset, index);
+            if (bound.w < 0.0) { continue; }
+            if (bound.w > oversized) { kept |= (1u << bit); continue; }
+            low = min(low, (bound.xyz - bound.w));
+            high = max(high, (bound.xyz + bound.w));
+            float inverseRescale = asfloat(sdfProgramWord(table + 1u + index).w);
+            scale = min(scale, ((inverseRescale > 0.0) ? inverseRescale : 0.0));
+            summarized |= (1u << bit);
+        }
+        float3 center = (0.5 * (low + high));
+        float radius = -1.0;
+        if ((summarized != 0u) && (scale > 0.0)) {
+            radius = 0.0;
+            [loop] for (uint pending = summarized; pending != 0u; pending &= (pending - 1u)) {
+                float4 bound = sdfInstanceBoundAt(offset, ((word << 5u) + firstbitlow(pending)));
+                radius = max(radius, (length(bound.xyz - center) + bound.w));
+            }
+        }
+        sdfGroupMaskSpheres[word] = float4(center, radius);
+        sdfGroupMaskScales[word] = scale;
+        sdfGroupMaskKept[word] = kept;
+    }
+    GroupMemoryBarrierWithGroupSync();
+}
+
 uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, int lightIndex, uint lane) {
+    sdfGroupMaskSummarized = false;
     // Phase 0 — clear the group mask and publish this lane's hitPoint.
     for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
         sdfShadowMaskWords[word] = 0u;
@@ -169,6 +220,7 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     }
     // Every lane's bits are visible to every lane's march after this.
     GroupMemoryBarrierWithGroupSync();
+    sdfSummarizeGroupMask(false, grid.footprintPad, lane);
 
     return 2u;
 }
