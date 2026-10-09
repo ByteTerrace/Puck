@@ -192,9 +192,14 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 ### Verify a change
 
 `puck gate` is the batch qualification, run from a copy of the candidate's own
-CLI outside the checkout. It builds the solution, copies the CLI it built,
-runs the affected selection against the merge base, and checks the repository's
-ledgers and generated files. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
+CLI outside the checkout. It checks every lock file with a locked restore
+before anything builds, builds the solution and the file app, copies the CLI it
+built, runs the affected selection against the merge base, and checks the
+repository's ledgers and generated files: every cheap static check CI runs
+([which CI checks the gate runs](ci.md#which-ci-checks-the-local-gate-runs)).
+Every restore is locked, so a package or project reference change fails the
+build until [`puck locks`](../reference/cli.md#puck-locksrestore-lock-files)
+re-records the lock files it drifted. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
 is shared with help and held by laws. The affected suites run side by side
 (`--suite-jobs`). `--gpu` adds the affected canaries, side by side up to
 `--gpu-jobs` legs on the GPU, then parity, device suites, every recorded

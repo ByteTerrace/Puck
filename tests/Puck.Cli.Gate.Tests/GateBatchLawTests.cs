@@ -110,7 +110,7 @@ public sealed class GateBatchLawTests : GateBatchLaws {
             var start = DateTimeOffset.UnixEpoch.AddMilliseconds(milliseconds: (2700 * index));
 
             Assert.Equal($"{start:O} start {names[index]} exit=- elapsed=0s", lines[(2 * index)]);
-            Assert.Equal($"{start.AddMilliseconds(milliseconds: 2700):O} exit {names[index]} exit={(failedBuild ? 1 : 0)} elapsed=2s", lines[((2 * index) + 1)]);
+            Assert.Equal($"{start.AddMilliseconds(milliseconds: 2700):O} exit {names[index]} exit={((failedBuild && (names[index] == "build")) ? 1 : 0)} elapsed=2s", lines[((2 * index) + 1)]);
         }
     }
 }
@@ -193,7 +193,8 @@ public sealed class GateAdmissionLawTests : GateBatchLaws {
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: "")) { Admitted = false };
 
         Assert.Equal(CliExit.Refused, Gate(branches, runner, directory).ExitCode);
-        Assert.Equal(["admit build"], runner.Events);
-        Assert.Empty(collection: File.ReadAllLines(path: directory.PathOf(name: "gate.steps")));
+        // The locked restore is light and runs first; the build is the first step admission holds.
+        Assert.Equal(["run locks", "admit build"], runner.Events);
+        Assert.DoesNotContain(collection: File.ReadAllLines(path: directory.PathOf(name: "gate.steps")), filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: " build "));
     }
 }
