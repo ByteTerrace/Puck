@@ -225,18 +225,18 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.fps",
-            description: "Echoes the measured frame rate over the recent window — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target. The world's reference desktop contract is 120 FPS under VRR.",
+            description: "Echoes the measured frame rate over the last 2 s, reaching back to the last four frames when they span longer — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target; a renderer that has composed nothing for longer than both the window and four times its longest recent frame reads as stalled. The world's reference desktop contract is 120 FPS under VRR.",
             valueKind: CommandValueKind.Digital,
             handler: _ => {
-                var (averageFps, worstFps, frameCount) = frameRate.Summarize();
+                var (averageFps, worstFps, frameCount, stalledSeconds) = frameRate.Summarize();
 
                 if (frameCount == 0) {
-                    return CommandResult.Error(output: ((worstFps > 0f)
-                        ? string.Create(
-                            provider: CultureInfo.InvariantCulture,
-                            handler: $"[world.fps: no frame composed for {(1f / worstFps):0.0} s]"
-                        )
-                        : "[world.fps: no frames sampled yet]"
+                    return CommandResult.Error(output: "[world.fps: no frames sampled yet]");
+                }
+                if (stalledSeconds > 0f) {
+                    return CommandResult.Error(output: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[world.fps: no frame composed for {stalledSeconds:0.0} s]"
                     ));
                 }
 

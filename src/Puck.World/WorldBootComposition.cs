@@ -876,11 +876,12 @@ public static class WorldBootComposition {
         // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
         // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
-        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
+        services.AddSingleton<WorldControlCommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
             () => sp.GetRequiredService<TextCommandSource>(),
             sp.GetRequiredService<WorldCaptureScheduler>(),
             sp.GetService<WorldRenderProbe>()
         ));
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => sp.GetRequiredService<WorldControlCommandModule>());
 
         // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
         // AddWorldPresentation below for WorldWheelFeed/WheelStore, the genuinely presentation-only pointer/viewport
@@ -980,6 +981,11 @@ public static class WorldBootComposition {
             TargetRenderRate = hostSettings.TargetRenderRate,
             Unpaced = inputs.Unpaced,
         });
+        // --control: the operator's explicit launch-time opt-in to the endpoint world.control start opens; absent, it
+        // stays closed until a console line starts it.
+        if (inputs.Control) {
+            services.AddHostedService(implementationFactory: static sp => new WorldControlBootStart(control: sp.GetRequiredService<WorldControlCommandModule>()));
+        }
 
         // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
         // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit

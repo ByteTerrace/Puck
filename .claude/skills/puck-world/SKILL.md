@@ -385,7 +385,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `--user-id`, `--state-dir`, `--headless`, `--capture-dir`, `--schedule-dir`,
   `--listen`, `--connect`, `--federation-key-file`,
   `--authentication-config-file`, `--extensions-config-file`,
-  `--update-config-file`, `--debug-layers`); host-related flags are nullable
+  `--update-config-file`, `--debug-layers`, `--control`); host-related flags are nullable
   deployment overrides. Absent host overrides leave the world document's
   `host` section in control. `--world` accepts a `.puck` path directly —
   `PuckWorldLoader` compiles it through the compile cache before boot — or an ordinary JSON

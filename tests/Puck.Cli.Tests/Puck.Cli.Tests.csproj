@@ -14,6 +14,8 @@
              verb prints for another, the grammars the gate reads), and the repository-wide convention laws. Each verb
              assembly's own laws live in its own suite. -->
         <ProjectReference Include="../../src/Puck.Cli/Puck.Cli.csproj" />
+        <!-- Build order only: the MCP interop law boots the real World executable from its own Release output. -->
+        <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/Cli/AffectedMemoryTree.cs" Link="AffectedMemoryTree.cs" />

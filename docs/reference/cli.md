@@ -115,7 +115,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
-| [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
+| [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
@@ -170,7 +170,9 @@ forward slashes.
 
 The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
 `puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
-`puck --version` reports the running CLI's version and source revision;
+`puck --version` reports the running CLI's version with the commit it was built
+at as build metadata (`0.1.0-alpha+<commit>`), and warns on stderr when the
+Puck checkout it runs in is at another commit;
 `puck nuget version` reads the release version from the current checkout.
 See [the CLI used by CI](../development/ci.md#the-cli-used-by-ci) for candidate
 installation, package installation checks, and release adoption.
@@ -199,6 +201,14 @@ restored the earlier package from the NuGet cache; remove
 `byteterrace.puck.cli` from the global packages folder
 (`dotnet nuget locals global-packages --list`) and install again. CI avoids the
 same trap with a private cache per run, in `.github/actions/setup-puck`.
+
+An installed tool keeps its revision while the checkout moves on. Run inside a
+Puck checkout, `puck --version` and `puck mcp --profile operator` print
+`puck: this CLI was built at <commit>, but the checkout at <root> is at <HEAD>`
+on stderr when the two differ; reinstall as above when the tool's behavior
+should match the checkout's. An MCP client launches the installed tool, so its
+server log carries that line. Outside a checkout, or without git, the check
+says nothing; the tool never needs a checkout to run.
 
 To build the candidate directly for local development:
 
