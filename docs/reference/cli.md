@@ -805,7 +805,13 @@ base, so passing both is refused.
   the projects whose project files include it as their own changes would, each
   include resolved from its project's directory and a glob matched below its
   last literal directory; one the root `Directory.Build.targets` links into
-  every test project chooses every suite.
+  every test project chooses every suite. A file under `.github/`, a workflow
+  or composite action, chooses only through such an include: a suite whose laws
+  read that tree declares it with a `PuckAffectedInput` item
+  (`<PuckAffectedInput Include="../../.github/**" />`), and a source that names
+  a workflow in a comment or as a datum it compares chooses nothing
+  (`AffectedWorkflowReadersLawTests` holds every reading suite to its
+  declaration).
 - **Baselines** follow the same reached projects: a baseline is chosen when its
   owning test project is reached, or a changed or deleted path matches the
   repository-relative data globs declared beside its artifact. The plan lists
@@ -906,8 +912,8 @@ base, so passing both is refused.
   its project's suites still run. Nothing reads a deleted file from disk.
 
 - Build infrastructure (`build/`, `Directory.Build.*`, `global.json`,
-  `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
-  and `experimental/` choose nothing.
+  `Puck.slnx`) chooses every suite. Prose, `.claude/`, `editors/` and
+  `experimental/` choose nothing.
 
 The plan names each choice and prints the catalog's build and check commands:
 

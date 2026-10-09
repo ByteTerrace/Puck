@@ -796,7 +796,9 @@ meant to establish.
   points `dotnet test` and `dotnet run` of every test project, and of an
   executable that sets `PuckRunUnderDotnetHost` (the silo), at
   `dotnet exec <assembly>.dll`; the apphost is still built, because xUnit v3
-  requires one and a published executable ships its own. Every `puck` runner
+  requires one and a published executable ships its own, but every test
+  assembly refuses to run under it (`tests/Shared/SharedTestHost.cs`, exit 87),
+  so never start a suite's `.exe` directly. Every `puck` runner
   starts `dotnet <suite>.dll`, and canaries, parity, counters and `puck test`
   start `dotnet Puck.World.dll`. One firewall decision for `dotnet.exe` then
   covers every worktree and run. `Puck.Analyzers` fails the build with NET001

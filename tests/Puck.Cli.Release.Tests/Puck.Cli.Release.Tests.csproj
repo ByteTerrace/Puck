@@ -23,6 +23,11 @@
         <PackageReference Include="YamlDotNet" Version="[16.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <!-- The repository data these laws read outside the project: a change under it selects this suite in `puck
+             affected`, which reaches .github/ through such a declaration alone (AffectedWorkflowReadersLawTests). -->
+        <PuckAffectedInput Include="../../.github/**" />
+    </ItemGroup>
+    <ItemGroup>
         <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
         <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
         <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />

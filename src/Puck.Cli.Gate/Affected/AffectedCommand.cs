@@ -602,7 +602,8 @@ public static class AffectedCommand {
               every suite. A changed .puck source that declares test blocks is run with puck test, and
               prints as a test line. A catalog line names the game's Release catalog, followed by the
               dotnet build and puck compile --check commands --run uses, runnable from the repository root;
-              it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
+              it holds no test worlds. A change under .github/ chooses only the suites whose project files
+              declare it (PuckAffectedInput). Prose, .claude/, editors/ and experimental/ choose nothing.
 
               A baseline is chosen when its owning test project is reached or a changed or deleted
               file matches its declared data inputs. Each baseline line names its artifact and is

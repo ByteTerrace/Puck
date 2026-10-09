@@ -1,7 +1,8 @@
 # Puck.Cli.Gate.Tests
 
 These laws hold `puck affected`, `puck gate`, `puck host`, `puck baselines` and `puck locks`: selection over memory trees and
-scratch checkouts, non-executing edits, recording, revision export, suite scheduling, the gate's batch and step order,
+scratch checkouts, the `.github/` readers each declaring that tree (`AffectedWorkflowReadersLawTests`, over the
+repository's own workflows, which is why this suite declares them too), non-executing edits, recording, revision export, suite scheduling, the gate's batch and step order,
 host admission and load lines, and the locked restore against a real scratch solution (`GateLockFileLawTests`, `LockFileRecordLawTests`). `RunDirectoryLawTests` holds the one run-directory policy: a passing run leaves no
 directory, a failing or unfinished run keeps its own and names its absolute path, a directory that holds no evidence is
 deleted whatever the verdict, the age sweep of a kind removes only stale directories of that kind, and the sweep of
