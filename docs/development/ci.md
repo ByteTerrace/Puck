@@ -233,8 +233,8 @@ a cache under the commit's key compiles no shader. The two pins change together.
 A cache from the previous shader inputs still answers every unchanged output.
 Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
-the artifact producer's Functions payload and the WebAssembly producer's browser
-payload, builds the dashboard and API docs,
+the artifact producer's Functions payload, the WebAssembly producer's browser
+payload and the documentation producer's site, builds the dashboard,
 then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
 image. Artifact consumers download immutable artifacts from their own workflow
 run, and missing artifacts fail rather than starting a fallback build.
@@ -242,9 +242,13 @@ The dashboard's schema-driven tests use the installed candidate CLI and do not
 need a second publish into `src/Puck.Cli/publish`.
 Studio integration tests consume the stable official tree in the release bundle
 through `PUCK_TEST_OFFICIAL_MANIFEST`, avoiding a second development content build.
-The `compiler-analyzers` artifact supplies DocFX's Roslyn dependency to both
-application assembly and documentation generation. A standalone documentation
-run invokes the artifact producer first; a release reuses its existing producer.
+The API documentation is a producer of its own (`docs.yml`), started beside the
+solution build: DocFX reads the API projects through a design-time build of
+their sources, which compiles no shader, and `docs/api/docfx.json` sets
+`PuckApiReference`, which drops the analyzer reference, so the site needs no
+compiled output. Having no CLI, the producer runs DocFX with exactly the
+arguments `puck docs build` runs, a law holds the two equal, and application
+assembly stages the uploaded site with `puck azure build --documentation`.
 Infrastructure compilation likewise runs once, after it has linted and
 format-checked every Bicep source; any diagnostic fails it
 ([Bicep conventions](../../src/Puck.Azure.Resources/README.md#bicep-sources)).
@@ -257,11 +261,13 @@ it does not compile Bicep again.
 flowchart LR
     source[Source commit] --> managed[Compile and publish .NET artifacts]
     source --> browser[Publish and verify the WebAssembly payload]
+    source --> docs[Generate the API documentation]
     source --> images[Build Linux images]
     managed --> tests[Solution tests, four shards]
     managed --> runtime[Runtime and package verification]
     managed --> bundle[Assemble application bundle]
     browser --> bundle
+    docs --> bundle
     managed --> containers[Verify saved images]
     images --> containers
     tests --> deploy[Deploy verified artifacts]
@@ -293,7 +299,8 @@ The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, Linux DXC
 comparison (`puck shaders compare`), Linux determinism (`puck determinism
 compare`), the published World's startup check, `puck nuget pack` and `smoke`,
-API documentation (`puck docs build`), Bicep compilation, container images and
+API documentation (`docs.yml`'s DocFX run, the command `puck docs build`
+runs), Bicep compilation, container images and
 deployment.
 
 Every restore is locked locally as in CI (`Directory.Build.props` sets
@@ -540,10 +547,11 @@ whole version to one source commit, while the manifests record its package batch
 exchanges the publishing job's OIDC token for a short-lived key. No package API
 key is stored here.
 
-`docs.yml` builds and validates documentation without Azure credentials. The
-Azure application bundle includes that documentation, so the website, docs,
-Functions, containers, and official content are built from one commit. Running
-Docs manually builds an artifact; it does not overwrite the website.
+`docs.yml` builds and validates documentation without Azure credentials or a
+compiled artifact. The Azure application bundle includes that documentation, so
+the website, docs, Functions, containers, and official content are built from
+one commit. Running Docs manually builds an artifact; it does not overwrite the
+website.
 
 Repository and service setup is still required:
 

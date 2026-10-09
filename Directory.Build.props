@@ -131,8 +131,10 @@
     <!-- Every project except the analyzer itself (which would otherwise be a build-order cycle: the analyzer
          cannot reference itself as an analyzer before it has built) carries Puck.Analyzers as a compiler
          extension, never as a regular assembly reference — ReferenceOutputAssembly="false" means it neither
-         becomes a compile-time dependency nor ships in any output. -->
-    <ItemGroup Condition="('$(MSBuildProjectName)' != 'Puck.Analyzers') AND ('$(IsFileBasedProgram)' != 'true') AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Analyzers.csproj')))">
+         becomes a compile-time dependency nor ships in any output. The API reference's workspace
+         (docs/api/docfx.json sets PuckApiReference) reads declarations only, so it carries no analyzer: it
+         reads sources alone and starts before the analyzer is compiled. -->
+    <ItemGroup Condition="('$(MSBuildProjectName)' != 'Puck.Analyzers') AND ('$(IsFileBasedProgram)' != 'true') AND ('$(PuckApiReference)' != 'true') AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Analyzers.csproj')))">
         <ProjectReference
             Include="$(MSBuildThisFileDirectory)src/Puck.Analyzers/Puck.Analyzers.csproj"
             OutputItemType="Analyzer"

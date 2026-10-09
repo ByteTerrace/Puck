@@ -109,12 +109,6 @@ jobs:
           if-no-files-found: error
           name: nuget-packages
           path: artifacts/packages/*.*nupkg
-      - name: Upload the compiled Roslyn analyzers
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          if-no-files-found: error
-          name: compiler-analyzers
-          path: src/Puck.Analyzers/bin/Release/netstandard2.0
       - name: Upload the compiled shader bytecode
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
