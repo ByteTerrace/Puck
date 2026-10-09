@@ -662,8 +662,10 @@ These are one-line cautions; the owning pages hold the derivations.
   assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
   carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
   its first eight hexadecimal digits as an unsigned integer. Regenerate after
-  changing any reached declaration, re-record the product pin in
-  `CreationBakeLawTests`, and verify with `puck derivations --check`. A held
+  changing any reached declaration and verify with `puck derivations --check`.
+  `CreationBakeLawTests` pins each outcome's bytes, not the pack, so a
+  regenerated fingerprint or a moved pack shape moves no pin; re-record an
+  outcome pin there only when the change moves the bake's bytes. A held
   bake is keyed by the code that wrote it, so two lanes that change the bytes
   never share a key; a held bake this baker cannot decode draws the field,
   counted and named (`sdf.bakes.undecodable`).
