@@ -28,3 +28,12 @@ default = ["main"]
 main = []
 bound64 = []
 bound65 = []
+
+# The committed builds `puck wasm build` makes of this crate, one per variant: each build's outputs
+# (repository-relative), and its features when it does not build the crate's defaults.
+[package.metadata.puck]
+builds = [
+    { outputs = ["wasm/puck-addon-channelwalk/dist/channelwalk.wasm"] },
+    { features = ["bound64"], outputs = ["wasm/puck-addon-channelwalk/dist/channelwalk-bound64.wasm"] },
+    { features = ["bound65"], outputs = ["wasm/puck-addon-channelwalk/dist/channelwalk-bound65.wasm"] },
+]

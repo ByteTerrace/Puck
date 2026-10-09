@@ -6,7 +6,9 @@ formatter's submission policy (`FormatSubmissionTests`). The suite references `P
 formatting every tracked `.puck` source leaves its compiled document unchanged needs the compiler and lives in
 [`Puck.Cli.Worlds.Tests`](../Puck.Cli.Worlds.Tests/README.md). A format's shape compiles the sources against the shared
 framework alone, so the shipped ledger the puck tool records holds here too, in a host that loads none of the tool's
-other verb assemblies (`FormatVersionsLedgerLawTests`).
+other verb assemblies (`FormatVersionsLedgerLawTests`). Each source compiles with its own project's usings, and every
+repository type a shipped closure names binds (`FormatClosureScopeLawTests`); the laws that read the shipped or a
+scratch checkout's sources evaluate its projects with `dotnet msbuild`, which builds nothing.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

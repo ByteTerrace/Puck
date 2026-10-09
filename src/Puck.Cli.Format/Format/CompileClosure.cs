@@ -53,7 +53,7 @@ public sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string> 
         """;
 
     // MSBuild's item-spec escaping, then XML's, for a path written into a generated project.
-    private static string Escape(string path) =>
+    internal static string Escape(string path) =>
         System.Security.SecurityElement.Escape(str: path
             .Replace(
                 newValue: "%25",

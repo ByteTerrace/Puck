@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Scripting;
 using Puck.Testing;
@@ -179,12 +178,21 @@ public sealed class AddonGuestLawTests {
             expectedSubstring: $"guest ABI shape 0000000000000001, host speaks ABI shape {FormatLedgerShapes.Of(id: "AddonAbi.AbiVersion")}"
         );
     }
+    // Every committed guest binary: the modules Puck.World ships and each verification guest's dist builds.
+    public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateFiles(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/addons"), searchPattern: "*.wasm")
+        .Concat(second: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
+            .Select(selector: static crate => Path.Combine(path1: crate, path2: "dist"))
+            .Where(predicate: Directory.Exists)
+            .SelectMany(selector: static dist => Directory.EnumerateFiles(path: dist, searchPattern: "*.wasm")))
+        .Select(selector: static path => Path.GetRelativePath(path: path, relativeTo: RepositoryPaths.RequireRoot()).Replace(newChar: '/', oldChar: '\\'))
+        .Order(comparer: StringComparer.Ordinal));
     // The committed guest binaries are built against this host's ABI shape: a stale one reports another word from
-    // puck_abi_shape (or none) and is refused here, so rebuilding them is owed whenever the ABI's shape moves.
-    [InlineData("Assets/addons/puck-addon-default.wasm")]
-    [InlineData("Assets/addons/puck-addon-hudbuilder.wasm")]
+    // puck_abi_shape (or none) and is refused here, so rebuilding them (`puck wasm build`) is owed whenever the ABI's
+    // shape moves. A guest may be refused for its own reason (channelwalk-bound65 declares one channel name too many),
+    // never for its ABI.
+    [MemberData(memberName: nameof(CommittedGuests))]
     [Theory]
-    public void ACommittedGuestBinaryReportsTheHostsAbiShape(string relativePath) {
+    public void ACommittedGuestBinaryReportsTheHostsAbiShape(string path) {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
         var instance = new AddonInstance(
             channelResolver: new NoChannels(),
@@ -196,11 +204,11 @@ public sealed class AddonGuestLawTests {
                 Name: "guest"
             ),
             engine: engine,
-            moduleInfo: Load(bytes: File.ReadAllBytes(path: PuckPaths.Shipped(relativePath: relativePath)), engine: engine)
+            moduleInfo: Load(bytes: File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: path)), engine: engine)
         );
 
         Assert.NotEqual(expected: AddonFaultKind.AbiMismatch, actual: instance.Fault.Kind);
-        Assert.NotEqual(expected: AddonFaultKind.BadExport, actual: instance.Fault.Kind);
+        Assert.DoesNotContain(expectedSubstring: AddonAbi.Exports.AbiShape, actualString: (instance.Fault.Detail ?? string.Empty));
     }
     [Fact]
     public void AGuestGrowsToTheCeilingAndIsRefusedOnePagePastIt() {

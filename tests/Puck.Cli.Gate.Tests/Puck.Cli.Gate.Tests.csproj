@@ -11,7 +11,7 @@
         <RootNamespace>Puck.Cli.Gate.Tests</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <!-- The verbs that choose and run verification: affected, gate, host and baselines. -->
+        <!-- The verbs that choose and run verification: affected, gate, host, baselines and locks. -->
         <ProjectReference Include="../../src/Puck.Cli.Gate/Puck.Cli.Gate.csproj" />
     </ItemGroup>
     <ItemGroup>

@@ -37,8 +37,32 @@ public abstract class GateRunLaws {
             Admissions.Add(item: (step, device, heavySuite));
             return Admitted;
         }
+
+        /// <summary>Every restore the gate ran, in order.</summary>
+        public List<string[]> Restores { get; } = [];
+        /// <summary>Every <c>dotnet build</c> the gate ran, in order.</summary>
+        public List<string[]> Builds { get; } = [];
+
+        /// <summary>Runs a restore in place of <c>dotnet</c>; by default it exits as <see cref="ExitCode"/> says for
+        /// <c>locks --check</c>, the step a restore belongs to.</summary>
+        public Func<string, IReadOnlyList<string>, GateStepResult>? Restore { get; init; }
+
         public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
-            if (arguments[0] == "build") { Execute(name: "build"); return build; }
+            if (arguments[0] == "restore") {
+                Restores.Add(item: [.. arguments]);
+                Execute(name: "locks");
+                return ((Restore is null) ? new GateStepResult(ExitCode: ExitCode(["locks", "--check"]), Output: "restore output") : Restore(repositoryRoot, arguments));
+            }
+            if (arguments[0] == "build") {
+                Builds.Add(item: [.. arguments]);
+                // The one file app compiles on its own, as an ordinary step.
+                if (arguments[1].EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs")) {
+                    Execute(name: "bootstrap");
+                    return new GateStepResult(ExitCode: ExitCode([.. arguments]), Output: "bootstrap output");
+                }
+                Execute(name: "build");
+                return build;
+            }
             Devices.Add(item: [.. arguments]);
             Execute(name: Path.GetFileNameWithoutExtension(path: arguments[(arguments.ToList().IndexOf(item: "--project") + 1)]));
             return new GateStepResult(ExitCode: ExitCode([.. arguments]), Output: "device output");
@@ -82,6 +106,8 @@ public abstract class GateRunLaws {
 
         public Branches() {
             Checkout.Write(name: "build/Architecture.props", text: "<Project />");
+            // The solution the locked restore reads; it lists no project unless a law adds one.
+            Checkout.Write(name: "Puck.slnx", text: "<Solution />\n");
             foreach (var artifact in BaselinesCommand.Artifacts) {
                 Checkout.Write(name: $"tests/{artifact.Project}/{artifact.Project}.csproj", text: "<Project />");
             }
@@ -241,6 +267,25 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
         Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
+    }
+    [Fact]
+    public void TheBootstrapFileAppCompilesAsAnOrdinaryStepWithoutABuildServer() {
+        const string Bootstrap = "src/Puck.Azure.Resources/bootstrap.cs";
+        using var branches = new Branches();
+        using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
+        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty)) { ExitCode = static arguments => (arguments.Contains(value: Bootstrap) ? 1 : 0) };
+
+        var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
+
+        Assert.Equal(actual: exitCode, expected: CliExit.Failed);
+        Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: bootstrap; full output in ");
+        var compile = runner.Builds.Single(predicate: static build => (build[1] == Bootstrap));
+
+        // A file-based app's build reads -nodeReuse:false as its project; the SDK switch leaves no server instead.
+        Assert.Equal(actual: compile[..5], expected: ["build", Bootstrap, "-c", "Release", "--disable-build-servers"]);
+        Assert.DoesNotContain(collection: compile, expected: CliOptions.NoNodeReuse);
+        // An ordinary step: the checks after it still run.
+        Assert.Contains(collection: runner.Steps, filter: static step => (step[0] == "derivations"));
     }
     [Fact]
     public void GpuWorkRunsOnlyWhenAskedFor() {

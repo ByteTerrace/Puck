@@ -107,12 +107,13 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format's token and shape, and each project's generated `FormatShapes.g.cs`, or checks them with `--check`. |
-| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
+| [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
@@ -132,7 +133,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
-| [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
+| [`puck wasm`](../../wasm/README.md) | builds every committed WASM guest and writes each to its committed paths. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 | [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
@@ -294,8 +295,10 @@ referenced neighbours under canonical hosted file names. It rebases provider-dec
 asset paths from nested documents to the common worlds directory; the image retains
 the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
-and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
-committed default addon, printing the content hash needed by its document rows.
+and contacts the supplied host. `wasm build` builds every committed WebAssembly guest with Cargo, one build per variant
+each crate declares under `[package.metadata.puck]` in its `Cargo.toml`, writes each module to every repository path
+its build names, and prints each module's content hash for the `addons` rows that pin it. It refuses before building
+when a tracked `.wasm` under `wasm/` or `src/` is no declared build's output.
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest (`release.json` in the package directory unless
@@ -959,39 +962,50 @@ and named (see [Conventions](#conventions)).
 against the merge base of `HEAD` and `--merge-base` (default
 `origin/features/gfx-pipeline`). The plan runs serially in this order:
 
-1. `build`: `dotnet build Puck.slnx -c Release -nodeReuse:false -v q -nologo`.
-   A failed build stops the gate before it can use stale binaries.
-2. `copy CLI`: copy the freshly built CLI into the run's own directory.
+1. `locks`: `puck locks --check`, run by the gate's own CLI before anything
+   builds: `dotnet restore Puck.slnx --locked-mode --force`, reporting by name
+   each project whose `packages.lock.json` no longer matches it or that has none
+   ([`puck locks`](#puck-locksrestore-lock-files)). It writes no lock file. A
+   failure stops the gate, since the build after it restores nothing.
+2. `build`: `dotnet build Puck.slnx -c Release -nodeReuse:false --no-restore -v q -nologo`.
+   A failed build stops the gate before it can use stale binaries. The build
+   restores nothing, so no unlocked restore can rewrite a lock file the first
+   step passed; CI pairs the same locked restore with a `--no-restore` build.
+3. `bootstrap`: `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release --disable-build-servers -v q -nologo`,
+   the compile CI runs over the one [C# file app](../development/contributing.md#c-file-apps).
+   A file-based build reads `-nodeReuse:false` as its project, so it takes the
+   SDK's switch instead, which leaves no build server behind.
+4. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
-3. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
+5. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
    for the selected suites, side by side, worlds and catalog check. The gate's
    `--suite-jobs` sets the bound.
-4. `format`: `puck format --check --file-list <file list>` over changed C# and
+6. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
-5. `lengths`: `puck lengths --check`.
-6. `comment-smells`: `puck comment-smells --check`.
-7. `docs links`: `puck docs links`.
-8. `schema`: `puck schema --check`.
-9. `architecture`: `puck architecture --check`.
-10. `registry`: `puck registry --check`.
-11. `vocabulary`: `puck vocabulary --check`.
-12. `shaders generate`: `puck shaders generate --check`.
-13. `shaders interface echo`: `puck shaders interface --echo-fixtures --check tests/Puck.World.Canaries/interface-echo`.
-14. `branding`: `puck branding --check`.
-15. `formats`: `puck formats --check`.
-16. `canary-ceilings`: `puck canary-ceilings --check`.
-17. `derivations`: `puck derivations --check`.
-18. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-19. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-20. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
-21. `baselines state`: `puck baselines state --check` when reached.
-22. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-23. `parity`: `puck parity` when selected, only with `--gpu`.
-24. `Puck.World.Tests`: device suite, only with `--gpu`.
-25. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-26. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-27. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-28. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
+7. `lengths`: `puck lengths --check`.
+8. `comment-smells`: `puck comment-smells --check`.
+9. `docs links`: `puck docs links`.
+10. `schema`: `puck schema --check`.
+11. `architecture`: `puck architecture --check`.
+12. `registry`: `puck registry --check`.
+13. `vocabulary`: `puck vocabulary --check`.
+14. `shaders generate`: `puck shaders generate --check`.
+15. `shaders interface echo`: `puck shaders interface --echo-fixtures --check tests/Puck.World.Canaries/interface-echo`.
+16. `branding`: `puck branding --check`.
+17. `formats`: `puck formats --check`.
+18. `canary-ceilings`: `puck canary-ceilings --check`.
+19. `derivations`: `puck derivations --check`.
+20. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+21. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+22. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+23. `baselines state`: `puck baselines state --check` when reached.
+24. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+25. `parity`: `puck parity` when selected, only with `--gpu`.
+26. `Puck.World.Tests`: device suite, only with `--gpu`.
+27. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+28. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+29. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+30. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
     `tests/Puck.Counters` in ordinal order, using their actual `workload` and
     `script` paths. A declared `.batch.json` association routes its complete
     measured observation set once through `puck counters --batch <manifest> --check`;
@@ -999,8 +1013,8 @@ against the merge base of `HEAD` and `--merge-base` (default
     run `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the recorded
     script supplies it, or the verb's default when absent.
-29. `docs citations`: `puck docs citations`, only with `--gpu`.
-30. `affected record`: `puck affected --record`, only with `--gpu --record`
+31. `docs citations`: `puck docs citations`, only with `--gpu`.
+32. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -3678,6 +3692,49 @@ sweep covers one tree—and its parse with `scan`.
 
 ---
 
+## `puck locks`—restore lock files
+
+Every project in `Puck.slnx` restores with a lock file (`packages.lock.json`
+beside the project), and every restore is locked: `Directory.Build.props` sets
+`RestoreLockedMode` unless a command sets it, locally as in CI. A locked restore
+never rewrites a lock file, so a package or project reference change fails the
+build that made it with NU1004, naming the project, rather than rewriting the
+lock file silently and failing CI's `dotnet restore Puck.slnx --locked-mode`
+later. Package versions float (`[10.*, )`), so locking also makes taking a newer
+package an explicit step.
+
+```sh
+puck locks            # re-record the lock files a reference change drifted
+puck locks --update   # also re-evaluate every floating version
+puck locks --check    # report drift by project; write nothing
+```
+
+- `puck locks` restores the solution with `-p:RestoreLockedMode=false`, the one
+  way to restore unlocked. NuGet rewrites only the lock files that no longer
+  match their projects, re-resolving those projects' floating ranges, and keeps
+  every other lock file as it is. The verb names each lock file it wrote or
+  created.
+- `--update` adds `--force-evaluate`: every project re-resolves its floating
+  ranges and takes the newest packages they admit. This is the dependency
+  update; review the rewritten lock files like any other change.
+- `--check` runs `dotnet restore Puck.slnx --locked-mode --force` and reports
+  each project whose lock file no longer matches it, with NuGet's reason, and
+  each project that has no lock file. `--force` skips NuGet's no-op shortcut,
+  which otherwise trusts a project whose own inputs are unchanged and never
+  reads a lock file edited or merged on its own. A locked restore writes no
+  lock file except a first one for a project that has none; the check removes
+  that one again and reports the project. The check costs about what a no-op
+  restore of the solution does.
+  [`puck gate`](#puck-gatethe-change-scoped-gate) runs it as its first step,
+  before anything builds.
+
+Commit the rewritten lock files with the reference change that moved them.
+`--check` and `--update` together are refused. Exit codes: 0 every lock file
+matches its project (or was recorded); 1 drift was found or the restore failed;
+2 refused.
+
+---
+
 ## `puck lengths` and `puck comment-smells`—ratchet ledgers
 
 A ratchet ledger holds one count per source file and lets that count only fall. It declares a ceiling that no
@@ -3781,6 +3838,17 @@ Both forms read tracked and non-ignored new C# sources under `src/`, excluding
 participates in discovery before it is staged, and `--check` reports its missing
 entry without writing the ledger.
 
+Each source compiles with the usings its own project compiles it with. Both forms evaluate every tracked or unignored
+new project under `src/` with MSBuild (one `dotnet msbuild` run that reads items and builds nothing, with the
+package-restore imports under `obj/` and the workload imports switched off), so the project's `Using` items, implicit usings included, come from
+its project file, the `Directory.Build` files and the SDK that `global.json` pins, never from a build or restore. The
+`global using` directives a project's files state belong to that project. The closure is one compilation, so each file
+receives its own project's usings as file-scoped directives and no project's usings reach another's files. The files a
+project links in from outside `src/` (the `build/*.cs` markers and helpers) and a `FormatShapes` class per namespace that
+declares a format bind names but are never part of a shape. A name a covered unit writes that binds to nothing while its
+project's scope holds a repository type of that name is refused (`unresolved: <id> names <type>`), because the shape
+would be blind to that type. A project the evaluation cannot read refuses both forms.
+
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:
 
@@ -3827,8 +3895,8 @@ of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, 
 outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
 the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
 re-recorded. `puck formats --explain <id>`
-prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
-repository and outside the digest.
+prints the units a format covers, by file, the calls it leaves open, and the names outside the repository it binds to
+nothing. Platform and package members are outside the repository and outside the digest.
 
 A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
 `.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest

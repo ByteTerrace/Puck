@@ -19,15 +19,15 @@ public sealed class FormatsSourceDiscoveryLawTests {
         checkout.Write(name: "src/Puck.Demo/Generated.g.cs", text: "public sealed class Generated { public const int Format = 8; }");
         var sources = FormatsCommand.ReadSources(repositoryRoot: checkout.Root);
 
-        Assert.Equal(expected: [Document, Mode], actual: sources.Keys.Order(comparer: StringComparer.Ordinal));
-        var unstaged = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(files: sources));
+        Assert.Equal(expected: [Document, Mode], actual: sources.Files.Keys.Order(comparer: StringComparer.Ordinal));
+        var unstaged = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(sources: sources));
 
         _ = checkout.Git("add", "--", Mode);
-        var staged = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(files: FormatsCommand.ReadSources(repositoryRoot: checkout.Root)));
+        var staged = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(sources: FormatsCommand.ReadSources(repositoryRoot: checkout.Root)));
 
         Assert.Equal(actual: staged, expected: unstaged);
         checkout.Write(name: Mode, text: "public enum Mode { Instant = 2, Queue }");
-        var changed = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(files: FormatsCommand.ReadSources(repositoryRoot: checkout.Root)));
+        var changed = FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(sources: FormatsCommand.ReadSources(repositoryRoot: checkout.Root)));
 
         Assert.NotEqual(actual: changed, expected: staged);
     }

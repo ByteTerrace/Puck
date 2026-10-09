@@ -12,3 +12,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 puck-stdlib = { path = "../puck-stdlib" }
+
+# The committed builds `puck wasm build` makes of this crate: each build's outputs (repository-relative), and its
+# features when it does not build the crate's defaults.
+[package.metadata.puck]
+builds = [
+    { outputs = ["src/Puck.World/Assets/addons/puck-addon-default.wasm"] },
+]

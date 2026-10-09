@@ -47,7 +47,8 @@ The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
 implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
-and its dependency locks together. Regenerate locks across the entire solution:
+and its dependency locks together. Regenerate locks across the entire solution
+with `puck locks --update`:
 unchanged consumer locks can pass restore while retaining older assemblies than
 their project dependencies, which fails compilation. Update container SDK pins
 in the same change.
@@ -60,8 +61,10 @@ then recreates ordinary independent files; symbols and runtime layouts are prese
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
 a fresh Windows checkout, verifies its commit and platform, and runs each test
 assembly of its manifest as `dotnet <assembly.dll>`, two assemblies at a time and largest first, so the
-longest suite runs alongside the others; each run's output is printed whole when it finishes. This consumer does not
-evaluate the solution, restore project dependencies, or install WASM workloads.
+longest suite runs alongside the others; each run's output is printed whole when it finishes. A failing assembly
+cancels nothing: every assembly runs, and the job ends by naming each one that failed. The job installs the
+pinned DXC through `setup-dxc`, so shader laws that compile or reflect bytecode run here rather than skipping.
+This consumer does not evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
 producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
@@ -210,6 +213,36 @@ flowchart LR
     bundle --> deploy
     containers --> deploy
 ```
+
+### Which CI checks the local gate runs
+
+A Release run costs tens of minutes, so every cheap static check a workflow runs
+is also a step of [`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate),
+where it fails in seconds. When a workflow gains such a check, the gate gains
+the step in the same change.
+
+| CI step | Workflow | Gate step |
+|---|---|---|
+| `dotnet restore Puck.slnx --locked-mode` | `artifacts.yml`, `format.yml` | `locks` (`puck locks --check`), before anything builds; the solution build then restores nothing |
+| `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release` | `artifacts.yml` | `bootstrap` |
+| `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
+| `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
+| `puck derivations --check` | `artifacts.yml` | `derivations` |
+| `puck schema`, `registry`, `architecture`, `branding`, `formats` and `canary-ceilings --check` | `verify.yml` | the step of the same name |
+| `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
+| Every test assembly (`puck artifacts test-windows`, with the pinned DXC so shader laws run), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` |
+
+The gate leaves out the steps that are runs, packages or other platforms rather
+than static checks: the emulator batteries, the WebAssembly harness, Linux DXC
+comparison (`puck shaders compare`), Linux determinism (`puck determinism
+compare`), the published World's startup check, `puck nuget pack` and `smoke`,
+API documentation (`puck docs build`), Bicep compilation, container images and
+deployment.
+
+Every restore is locked locally as in CI (`Directory.Build.props` sets
+`RestoreLockedMode`), so a reference change fails the first local build that
+makes it, by project, and [`puck locks`](../reference/cli.md#puck-locksrestore-lock-files)
+re-records the lock files it drifted.
 
 ## Automatic PR formatting
 
