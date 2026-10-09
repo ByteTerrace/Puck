@@ -21,9 +21,11 @@ jobs:
     if: ${{ !inputs.prebuilt }}
     name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
+  # The manifest's assemblies split into one shard per matrix entry, balanced by the recorded durations in
+  # TestDurations.json; the shards together run every assembly exactly once, and each runs whatever another did.
   build:
     if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    name: Run .NET tests (Windows)
+    name: Run .NET tests (Windows, shard ${{ matrix.shard }})
     needs: artifacts
     runs-on: windows-2025
     steps:
@@ -45,13 +47,21 @@ jobs:
           artifact: nuget-packages
       - name: Restore this commit's compiled outputs
         run: puck artifacts restore
-      - name: Test the producer's assembly manifest
-        run: puck artifacts test-windows
+      - env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        name: Test this shard of the producer's assembly manifest
+        run: puck artifacts test-windows --shard "$SHARD" --shards "$SHARDS"
+        shell: bash
       - if: always()
         name: Upload test diagnostics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: warn
-          name: test-diagnostics
+          name: test-diagnostics-${{ matrix.shard }}
           path: artifacts/test-results
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     timeout-minutes: 60

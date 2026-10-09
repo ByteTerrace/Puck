@@ -151,32 +151,12 @@ jobs:
           name: hgb-post-frontier
           path: artifacts/hgb-post
     timeout-minutes: 60
+  # The WebAssembly payload is its own producer, which verifies what it publishes; a release calls it beside this
+  # workflow, and a standalone run calls it here.
   browser:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    name: Verify the deployed WebAssembly payload
-    needs: artifacts
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-      - name: Download Functions and browser payloads
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: runtime-payloads
-          path: artifacts/runtime
-      - name: Stage the exact browser payload that will be deployed
-        run: |
-          mkdir -p src/Puck.World.Browser/bin/Release/net10.0/browser-wasm
-          cp -R artifacts/runtime/browser src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
-          test -f src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle/main.mjs
-      - name: Run the Node harness against the AppBundle
-        run: node --test tests/engine-wasm.test.cjs
-        working-directory: src/Puck.Dashboard/src/portal
-    timeout-minutes: 10
+    if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
+    name: Build and verify the WebAssembly payload
+    uses: ./.github/workflows/browser.yml
   world:
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify world authentication and recovery (Linux)

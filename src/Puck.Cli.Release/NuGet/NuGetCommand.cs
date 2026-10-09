@@ -206,38 +206,20 @@ public static class NuGetCommand {
         if (projects.Length == 0) { throw new InvalidDataException(message: "No packable projects found."); }
         var expected = new HashSet<string>(comparer: PackageComparer);
 
-        foreach (var project in projects) {
-            using var metadata = JsonDocument.Parse(await CliProcess.RunCheckedAsync(
-                arguments: ["msbuild", project, "-nologo", "--disable-build-servers", "-getProperty:PackageId,Version"],
-                fileName: "dotnet",
-                workingDirectory: root,
-                capture: true
-            ));
-            var properties = metadata.RootElement.GetProperty(propertyName: "Properties");
-            var id = properties.GetProperty(propertyName: "PackageId").GetString()!;
-
-            if (properties.GetProperty(propertyName: "Version").GetString() != version) {
-                throw new InvalidDataException(message: $"{id} overrides the shared version {version}.");
-            }
-            if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
-            // The package batch streams its builds to the console and deliberately reuses nodes across the shared
-            // project graph. Metadata and release smoke probes disable build servers to keep children scoped to the verb.
-            if (!noBuild) {
-                await CliProcess.RunCheckedAsync(
-                    arguments: ["restore", CliOptions.NoNodeReuse, project, "--locked-mode"],
-                    fileName: "dotnet",
-                    workingDirectory: root
-                );
-            }
-            List<string> pack = ["pack", CliOptions.NoNodeReuse, project, "--configuration", "Release", "--no-restore", "--output", output];
-
-            if (noBuild) { pack.Add(item: "--no-build"); }
-            await CliProcess.RunCheckedAsync(
-                arguments: pack,
-                fileName: "dotnet",
-                workingDirectory: root
-            );
-        }
+        // A pack that builds restores and compiles the shared project graph, so those run one at a time. A --no-build pack
+        // only reads the outputs a build already wrote and writes its own package, so those run on every core.
+        await Parallel.ForEachAsync(
+            body: async (project, _) => await PackOneAsync(
+                expected: expected,
+                noBuild: noBuild,
+                output: output,
+                project: project,
+                root: root,
+                version: version
+            ),
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = (noBuild ? Environment.ProcessorCount : 1) },
+            source: projects
+        );
         var catalog = ReadPackages(
             input: output,
             version: version
@@ -253,6 +235,40 @@ public static class NuGetCommand {
             _ => throw new InvalidOperationException(message: "Unexpected feed lookup.")
         );
         Console.WriteLine(value: $"Validated {catalog.Count} packages and their internal dependency closure in {output}.");
+    }
+    private static async Task PackOneAsync(HashSet<string> expected, bool noBuild, string output, string project, string root, string version) {
+        using var metadata = JsonDocument.Parse(await CliProcess.RunCheckedAsync(
+            arguments: ["msbuild", project, "-nologo", "--disable-build-servers", "-getProperty:PackageId,Version"],
+            fileName: "dotnet",
+            workingDirectory: root,
+            capture: true
+        ));
+        var properties = metadata.RootElement.GetProperty(propertyName: "Properties");
+        var id = properties.GetProperty(propertyName: "PackageId").GetString()!;
+
+        if (properties.GetProperty(propertyName: "Version").GetString() != version) {
+            throw new InvalidDataException(message: $"{id} overrides the shared version {version}.");
+        }
+        lock (expected) {
+            if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
+        }
+        // The package batch streams its builds to the console and deliberately reuses nodes across the shared
+        // project graph. Metadata and release smoke probes disable build servers to keep children scoped to the verb.
+        if (!noBuild) {
+            await CliProcess.RunCheckedAsync(
+                arguments: ["restore", CliOptions.NoNodeReuse, project, "--locked-mode"],
+                fileName: "dotnet",
+                workingDirectory: root
+            );
+        }
+        List<string> pack = ["pack", CliOptions.NoNodeReuse, project, "--configuration", "Release", "--no-restore", "--output", output];
+
+        if (noBuild) { pack.Add(item: "--no-build"); }
+        await CliProcess.RunCheckedAsync(
+            arguments: pack,
+            fileName: "dotnet",
+            workingDirectory: root
+        );
     }
     private static async Task<int> PrepareBatchAsync(string input, string output, string selection) {
         var root = RepositoryPaths.RequireRoot();

@@ -1,0 +1,55 @@
+description: Restore or save the content-addressed creation bake cache of this runner's OS, keyed by the bake code's fingerprint and the world sources.
+inputs:
+  key:
+    default: ""
+    description: The key to save under, the key output of this run's restore; required by save, ignored by restore.
+  mode:
+    description: restore (the newest cache baked by this bake code, then the directory exists) or save (under key).
+    required: true
+name: Creation bake cache
+outputs:
+  cache-hit:
+    description: Whether a cache under exactly this run's key exists (restore).
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: This run's key, computed before any build writes into the checkout (restore).
+    value: ${{ steps.key.outputs.key }}
+runs:
+  steps:
+    # A bake's own key is the creation's pin, the bake code's fingerprint (DerivationFingerprint.Bake, which `puck
+    # derivations --check` holds to the bake code) and the tier, so an entry is only ever read by the bake it records. The
+    # fingerprint therefore leads this key and is the whole restore prefix: a restore never brings in entries an older bake
+    # code wrote, which no build of this commit could read, and the cache cannot grow across bake code changes. The world
+    # sources only decide when a new cache is saved: a run that bakes a new or changed creation saves one.
+    - env:
+        BAKE: bakes-${{ runner.os }}-${{ hashFiles('src/Puck.SignedDistance/Baking/DerivationFingerprint.cs') }}
+        WORLDS: ${{ hashFiles('src/Puck.World/Assets/worlds/**') }}
+      id: key
+      if: inputs.mode == 'restore'
+      name: Name the bake cache key
+      run: |
+        echo "Bake cache key: $BAKE-$WORLDS"
+        echo "key=$BAKE-$WORLDS" >> "$GITHUB_OUTPUT"
+        echo "prefix=$BAKE-" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - id: restore
+      if: inputs.mode == 'restore'
+      name: Restore the newest bake cache of this bake code
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/bakes' || '~/.local/share/Puck/bakes' }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+    - if: inputs.mode == 'save' && inputs.key == ''
+      name: Require the key to save under
+      run: |
+        echo "Save the bake cache under the key output of this run's restore." >&2
+        exit 1
+      shell: bash
+    - if: inputs.mode == 'save' && inputs.key != ''
+      name: Save the bake cache
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ inputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/bakes' || '~/.local/share/Puck/bakes' }}
+  using: composite
