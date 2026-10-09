@@ -6,7 +6,7 @@ using Puck.Abstractions;
 
 namespace Puck.Cli.Gate;
 
-public enum GateStepKind { Build, CopyCli, Puck, DeviceSuite, Counters, Baseline, Canaries, Parity }
+public enum GateStepKind { Locks, Build, FileApp, CopyCli, Puck, DeviceSuite, Counters, Baseline, Canaries, Parity }
 public sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments, bool Heavy = false, bool Gpu = false, bool Record = false, bool Sources = false);
 /// <summary>The ordered batch qualification, shared by execution, help and the documentation laws.</summary>
 public static class GatePlan {
@@ -23,8 +23,16 @@ public static class GatePlan {
         ("Puck.Vulkan.Tests", GpuSelection),
         ("Puck.Platform.Windows.Tests", GpuSelection),
     ];
+    // A file-based app's build refuses MSBuild's -nodeReuse switch (it reads it as the project), so the one file app
+    // builds with the SDK's own switch that leaves no build server behind.
+    public static readonly string[] FileAppArguments = ["build", "src/Puck.Azure.Resources/bootstrap.cs", "-c", CliOptions.DefaultConfiguration, "--disable-build-servers", "-v", "q", "-nologo"];
+    // The locked restore runs first, from the running gate, so a lock file that drifted from its project stops the
+    // gate by name before anything builds; the build then restores nothing, so no unlocked restore can rewrite a lock
+    // file the check passed. CI runs the same pair (artifacts.yml: restore --locked-mode, then build --no-restore).
     public static readonly IReadOnlyList<GateStep> Steps = [
-        new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"], Heavy: true),
+        new("locks", GateStepKind.Locks, ["locks", "--check"]),
+        new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "--no-restore", "-v", "q", "-nologo"], Heavy: true),
+        new("bootstrap", GateStepKind.FileApp, FileAppArguments),
         new("copy CLI", GateStepKind.CopyCli, []),
         new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run", "--suite-jobs", "<suite-jobs>"], Heavy: true),
         new("format", GateStepKind.Puck, ["format", "--check", "--file-list", "<file list>"], Sources: true),
@@ -66,7 +74,7 @@ public static class GatePlan {
         : argument);
 
     public static string Detail() => ("Steps, in order:\n" + string.Join(separator: "\n", values: Steps.Select(selector: (step, index) =>
-        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{(step.Record ? " (only --gpu --record, after every prior step passes)" : ((step.Kind == GateStepKind.Baseline) ? " (only when affected reaches its inputs)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : string.Empty))))}.")));
+        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.FileApp or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{(step.Record ? " (only --gpu --record, after every prior step passes)" : ((step.Kind == GateStepKind.Baseline) ? " (only when affected reaches its inputs)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : ((step.Kind == GateStepKind.Locks) ? " (by the running gate, before anything builds)" : string.Empty)))))}.")));
     /// <summary>Expands every recorded workload in ordinal order; unrecorded worlds are not qualification steps.</summary>
     public static IEnumerable<GateStep> CounterWorkloads(string repositoryRoot, GateStep step) {
         const string DirectoryName = "tests/Puck.Counters";
