@@ -31,7 +31,7 @@ public sealed class GatePlanLawTests {
         directory.WriteText(name: "tests/Puck.Counters/b.ceilings.json", text: """{"workload":"tests/Puck.Counters/b.world.json"}""");
         var affected = new AffectedPlan(Baselines: BaselinesCommand.Artifacts, Canaries: ["example"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: true, Parity: true, Suites: [], Unmapped: [], Worlds: []);
         var steps = GatePlan.Expand(affected: affected, fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: directory.RootPath, sources: true, suiteJobs: 4, gpuJobs: 4)
-            .Where(predicate: static step => (step.Kind is GateStepKind.Puck or GateStepKind.Baseline or GateStepKind.Canaries or GateStepKind.Parity))
+            .Where(predicate: static step => (step.Kind is GateStepKind.Locks or GateStepKind.Puck or GateStepKind.Baseline or GateStepKind.Canaries or GateStepKind.Parity))
             .ToArray();
 
         Assert.Contains(collection: steps, filter: static step => (step.Arguments[0] == "counters"));

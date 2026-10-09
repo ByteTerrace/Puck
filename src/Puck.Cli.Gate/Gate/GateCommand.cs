@@ -73,7 +73,8 @@ public static class GateCommand {
             never its own.
             A step waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes and a heavy suite {HostAdmission.HeavyTimeout.TotalHours:0} hours, reporting when waiting
             starts, each new holder, a still-waiting line every {HostAdmission.Heartbeat.TotalMinutes:0} minutes, and when capacity returns.
-            A failed build or CLI copy stops the run. Other failures allow later checks, but skip recording.
+            The locks check runs first, from this CLI rather than the copy it builds, and the solution build restores nothing.
+            A failed locked restore, build or CLI copy stops the run. Other failures allow later checks, but skip recording.
             gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.
             Both files are kept and named in the summary. Run from a CLI copy outside the checkout.
 

@@ -21,6 +21,7 @@ using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Puck.Cli.Landing;
 using Puck.Cli.Laws;
+using Puck.Cli.Locks;
 using Puck.Cli.Mcp;
 using Puck.Cli.NuGet;
 using Puck.Cli.Official;
@@ -92,6 +93,7 @@ public static class PuckRootCommand {
             LandingCommand.Create(),
             LawsCommand.Create(),
             RatchetCommand.CreateLengths(),
+            LocksCommand.Create(),
             McpCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),

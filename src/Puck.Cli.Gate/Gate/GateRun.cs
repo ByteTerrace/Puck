@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Puck.Cli.Affected;
 using Puck.Cli.Host;
+using Puck.Cli.Locks;
 
 namespace Puck.Cli.Gate;
 
@@ -151,10 +152,19 @@ public static class GateRun {
 
                 summary.WriteLine(value: $"{clock.GetUtcNow():O} start {step.Name} exit=- elapsed=0s");
                 GateStepResult result;
+                IReadOnlyList<string>? report = null;
 
                 try {
                     switch (step.Kind) {
+                        case GateStepKind.Locks:
+                            // The check reads the restore's errors; the summary shows its report, the log both.
+                            var locks = LockFiles.Check(repositoryRoot: repositoryRoot, restore: arguments => runner.Dotnet(arguments: arguments, repositoryRoot: repositoryRoot));
+
+                            report = locks.Report;
+                            result = new GateStepResult(ExitCode: locks.ExitCode, Output: string.Join(separator: '\n', values: [.. locks.Report, string.Empty, locks.RestoreOutput]));
+                            break;
                         case GateStepKind.Build:
+                        case GateStepKind.FileApp:
                         case GateStepKind.DeviceSuite:
                             result = runner.Dotnet(repositoryRoot, step.Arguments);
                             break;
@@ -187,13 +197,14 @@ public static class GateRun {
                     continue;
                 }
                 failed.Add(item: step.Name);
-                var prerequisite = (step.Kind is GateStepKind.Build or GateStepKind.CopyCli);
+                // The build restores nothing, so it cannot run past a failed locked restore.
+                var prerequisite = (step.Kind is GateStepKind.Locks or GateStepKind.Build or GateStepKind.CopyCli);
 
                 Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}, {elapsed}s){(prerequisite ? "; nothing else ran." : string.Empty)}");
                 var lines = Lines(text: result.Output);
                 var errors = lines.Where(predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
 
-                foreach (var line in ((prerequisite && (errors.Length > 0)) ? errors : lines.TakeLast(count: FailureTail))) {
+                foreach (var line in (report ?? ((prerequisite && (errors.Length > 0)) ? errors : lines.TakeLast(count: FailureTail)))) {
                     Console.Out.WriteLine(value: $"  {line.Trim()}");
                 }
                 if (prerequisite) { break; }
