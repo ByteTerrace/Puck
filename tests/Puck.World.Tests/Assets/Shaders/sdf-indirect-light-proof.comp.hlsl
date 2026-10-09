@@ -2,8 +2,12 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// The production sweep's march, through one run.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_MARCH
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-field.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-light-projection.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-viewport.hlsli"
 

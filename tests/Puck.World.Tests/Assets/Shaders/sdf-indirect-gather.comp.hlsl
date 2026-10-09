@@ -2,6 +2,12 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// The masked and full marches and the independent interval reference are one procedure, so the probe inlines the
+// interpreter once: the reference's samples are plain field queries under its own mask flag.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_MARCH
+#define SDF_INDIRECT_PROC_KERNEL
+#define SDF_INDIRECT_PLAIN_QUERIES
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-field.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
 
@@ -14,33 +20,100 @@ struct GatherProbeIndex {
 };
 [[vk::push_constant]] ConstantBuffer<GatherProbeIndex> gatherProbeIndex : register(b0, space4);
 
-float4 gatherProbeIntervals(float3 origin, float3 direction, float reach, float farDistance, uint mask) {
-    float4 result = 0.0;
-    float traveled = 0.0;
-    [loop]
-    for (uint step = 0u; step < 64u && traveled < farDistance; step++) {
-        bool masked = sdfIndirectMasked(traveled, reach, mask);
-        sdfShadowMaskActive = masked;
-        float field = mapDistance(origin + direction * traveled);
-        float clearance = sdfMapBallClearance(field);
-        sdfShadowMaskActive = false;
-        if (clearance <= 0.00001) { break; }
-        float advance = sdfIndirectAdvance(clearance, traveled, reach, farDistance, mask);
-        if (advance <= 0.0) { break; }
-        if (masked && traveled + advance > reach + 0.000001) { result.y += 1.0; }
-        [loop]
-        for (uint sample = 1u; sample < 16u; sample++) {
-            float at = traveled + advance * ((float)sample / 16.0);
-            float full = mapDistance(origin + direction * at);
-            if (full < -0.00001) { result.x += 1.0; }
-        }
-        result.z += 1.0;
-        traveled += advance;
-    }
-    result.w = traveled;
-    return result;
+// The masked march, the full march, then the reference intervals along the ray: each step samples the field under
+// the masked flag at its travel, advances by the production advance, and samples its interval fifteen times on the full
+// field, counting inside samples (x), masked overruns past the reach (y) and steps (z), with the final travel (w).
+struct GatherProbeProc {
+    float3 origin;
+    float3 direction;
+    float reach;
+    float farDistance;
+    uint mask;
+    SdfIndirectRay masked;
+    uint maskedBudget;
+    SdfIndirectRay full;
+    uint fullBudget;
+    float4 intervals;
+    float traveled;
+    uint step;
+    float advance;
+    uint sample;
+    uint phase;
+};
+static GatherProbeProc gatherProbeProc = (GatherProbeProc)0;
+
+uint gatherProbeBegin(float3 origin, float3 direction, float reach, float farDistance, uint mask) {
+    gatherProbeProc.origin = origin;
+    gatherProbeProc.direction = direction;
+    gatherProbeProc.reach = reach;
+    gatherProbeProc.farDistance = farDistance;
+    gatherProbeProc.mask = mask;
+    gatherProbeProc.phase = 0u;
+    return SdfIndirectProcKernel;
 }
 
+uint sdfIndirectKernelStep() {
+    float3 origin = gatherProbeProc.origin;
+    float3 direction = gatherProbeProc.direction;
+    float reach = gatherProbeProc.reach;
+    float farDistance = gatherProbeProc.farDistance;
+    uint mask = gatherProbeProc.mask;
+    if (gatherProbeProc.phase == 0u) {
+        gatherProbeProc.phase = 1u;
+        return sdfIndirectCall(sdfIndirectMarchBegin(origin, direction, reach, farDistance, mask, 0.0, 64u));
+    }
+    if (gatherProbeProc.phase == 1u) {
+        gatherProbeProc.masked = sdfIndirectMarchProc.result;
+        gatherProbeProc.maskedBudget = sdfIndirectMarchProc.budget;
+        gatherProbeProc.phase = 2u;
+        return sdfIndirectCall(sdfIndirectMarchBegin(origin, direction, reach, farDistance, SDF_INSTANCE_MASK_ALL, 0.0, 64u));
+    }
+    if (gatherProbeProc.phase == 2u) {
+        gatherProbeProc.full = sdfIndirectMarchProc.result;
+        gatherProbeProc.fullBudget = sdfIndirectMarchProc.budget;
+        gatherProbeProc.intervals = 0.0;
+        gatherProbeProc.traveled = 0.0;
+        gatherProbeProc.step = 0u;
+    } else if (gatherProbeProc.phase == 3u) {
+        // The step's sample under the masked flag.
+        float clearance = sdfMapBallClearance(sdfIndirectReply.distance);
+        sdfShadowMaskActive = false;
+        bool masked = sdfIndirectMasked(gatherProbeProc.traveled, reach, mask);
+        bool stop = clearance <= 0.00001;
+        if (!stop) {
+            gatherProbeProc.advance = sdfIndirectAdvance(clearance, gatherProbeProc.traveled, reach, farDistance, mask);
+            stop = gatherProbeProc.advance <= 0.0;
+        }
+        if (stop) {
+            gatherProbeProc.intervals.w = gatherProbeProc.traveled;
+            return SdfIndirectStepReturn;
+        }
+        if (masked && gatherProbeProc.traveled + gatherProbeProc.advance > reach + 0.000001) { gatherProbeProc.intervals.y += 1.0; }
+        gatherProbeProc.sample = 1u;
+    } else {
+        // One of the step's interval samples on the full field.
+        if (sdfIndirectReply.distance < -0.00001) { gatherProbeProc.intervals.x += 1.0; }
+        gatherProbeProc.sample++;
+    }
+    if (gatherProbeProc.phase >= 3u) {
+        if (gatherProbeProc.sample < 16u) {
+            float at = gatherProbeProc.traveled + gatherProbeProc.advance * ((float)gatherProbeProc.sample / 16.0);
+            gatherProbeProc.phase = 4u;
+            return sdfIndirectAskPlain(origin + direction * at, SDF_INSTANCE_MASK_ALL);
+        }
+        gatherProbeProc.intervals.z += 1.0;
+        gatherProbeProc.traveled += gatherProbeProc.advance;
+        gatherProbeProc.step++;
+    }
+    if (gatherProbeProc.step < 64u && gatherProbeProc.traveled < farDistance) {
+        sdfShadowMaskActive = sdfIndirectMasked(gatherProbeProc.traveled, reach, mask);
+        gatherProbeProc.phase = 3u;
+        return sdfIndirectAskPlain(origin + direction * gatherProbeProc.traveled, SDF_INSTANCE_MASK_ALL);
+    }
+    gatherProbeProc.intervals.w = gatherProbeProc.traveled;
+    return SdfIndirectStepReturn;
+}
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 void gatherProbeQuery(SdfInstanceGridHeader grid, SdfGridQuery query, uint lane, uint lanes) {
     for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
         sdfAmbientMaskWords[word] = 0u;
@@ -81,12 +154,12 @@ void CSMain(uint lane : SV_GroupIndex) {
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(sdfInstanceDirectoryOffset(), sdfInstanceCount());
     uint mask = sdfIndirectGather(origin.xyz, origin.w, lane);
     if (lane == 0u) {
-        uint maskedBudget = 64u, fullBudget = 64u;
-        SdfIndirectRay masked = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, mask, 0.0, maskedBudget);
-        SdfIndirectRay full = sdfIndirectMarch(origin.xyz, direction.xyz, origin.w, direction.w, SDF_INSTANCE_MASK_ALL, 0.0, fullBudget);
-        gatherResults[uint2(index, 0u)] = float4((float)masked.kind, masked.distance, (float)masked.material, (float)maskedBudget);
-        gatherResults[uint2(index, 1u)] = float4((float)full.kind, full.distance, (float)full.material, (float)fullBudget);
-        gatherResults[uint2(index, 2u)] = gatherProbeIntervals(origin.xyz, direction.xyz, origin.w, direction.w, mask);
+        sdfIndirectRun(gatherProbeBegin(origin.xyz, direction.xyz, origin.w, direction.w, mask));
+        SdfIndirectRay masked = gatherProbeProc.masked;
+        SdfIndirectRay full = gatherProbeProc.full;
+        gatherResults[uint2(index, 0u)] = float4((float)masked.kind, masked.distance, (float)masked.material, (float)gatherProbeProc.maskedBudget);
+        gatherResults[uint2(index, 1u)] = float4((float)full.kind, full.distance, (float)full.material, (float)gatherProbeProc.fullBudget);
+        gatherResults[uint2(index, 2u)] = gatherProbeProc.intervals;
         float4 controls = 0.0;
         SdfGridQuery ball = sdfGridBall(origin.xyz, origin.w);
         SdfGridQuery shortBall = sdfGridBall(origin.xyz, max(origin.w - 1.0, 0.0));

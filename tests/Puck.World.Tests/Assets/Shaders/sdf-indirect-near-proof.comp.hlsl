@@ -1,7 +1,16 @@
 #define SDF_RECEIVER_PASS
 #define SDF_DYNAMIC_TRANSFORMS
+// The production near-field sample runs as the receiver runs it, through one run of its procedures.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_NEAR_INCOMING
+#define SDF_INDIRECT_PROC_MARCH
+#define SDF_INDIRECT_PROC_LAUNCH
+#define SDF_INDIRECT_PROC_PROVE
+#define SDF_INDIRECT_PROC_SEGMENT
+#define SDF_INDIRECT_PROC_VISIBILITIES
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-policy.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-near-incoming.hlsli"
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 
 [[vk::binding(126, 3)]] StructuredBuffer<float4> nearCases : register(t126, space3);
 [[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> nearResults : register(u127, space3);

@@ -48,126 +48,211 @@ bool sdfIndirectReuseProof(uint proof, uint key, uint frame, float3 position, fl
     return true;
 }
 
-// Successful proofs transfer through overlapping certified balls inside the same cell and anchor bin.
-uint sdfIndirectProve(float3 position, uint level, inout uint budget, float certifiedClearance = 0.0) {
-    uint start = sdfIndirectEvaluations;
-    float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
-    int3 cell;
-    if (level >= sdfIndirectLevelCount() || !sdfIndirectCellAt(position, spacing, cell)) { return 0u; }
-    int index = sdfIndirectProbeIndex(cell, level);
-    if (!sdfIndirectCellCurrent(index)) { return 0u; }
-    uint cellAddress = sdfIndirectCellWordOffset(passGroup.indirectTier) + (uint)index * SdfIndirectCellWords;
-    uint components = sdfIndirectLoad(cellAddress);
-    if (components == 0xffffffffu) { return 0u; }
+// Successful proofs transfer through overlapping certified balls inside the same cell and anchor bin. A procedure
+// (sdfIndirectProveStep): each attempt's segment is a call, and an owner's uncertified publication samples its point,
+// both answered by its owner's run.
+struct SdfIndirectProveProc {
+    float3 position;
+    uint level;
+    uint budget;
+    float certifiedClearance;
+    uint mask;
+    uint start;
+    float spacing;
+    int index;
+    uint cellAddress;
+    uint components;
     uint key;
-    uint entry = sdfIndirectProofEntry((uint)index, cell, sdfIndirectProofSlot(position, spacing), level, key);
-    uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + entry * SdfIndirectProofWords;
-    if (!sdfIndirectRange(proof, SdfIndirectProofWords)) { return 0u; }
-    sdfIndirectHashes++;
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
-    uint cachedMask;
-    if (sdfIndirectReuseProof(proof, key, passGroup.indirectFrame, position, certifiedClearance, spacing, cachedMask)) { return cachedMask; }
-#endif
-#ifdef SDF_RECEIVER_PASS
-    if (!sdfIndirectReceiverPermit && passGroup.indirectReceiverProofs == 0u) {
-        sdfIndirectReceiverDeferred = true;
-        return 0u;
-    }
-    // Claim before evaluating the segment. Pending and same-submission publications have no readable payload yet;
-    // defer without inspecting their key. An older non-reusable occupant keeps the bounded uncached fallback.
-    uint publication;
-    InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, publication);
-    bool receiverOwner = publication == 0u;
-    if (!receiverOwner && publication >= passGroup.indirectFrame) {
-        sdfIndirectReceiverDeferred = true;
-        sdfIndirectReceiverPermit = false;
-        return 0u;
-    }
-    if (!sdfIndirectReceiverPermit && !sdfIndirectAdmitReceiver()) {
-        if (receiverOwner) { sdfIndirectStore(proof + 6u, 0u); }
-        return 0u;
-    }
-    sdfIndirectReceiverPermit = false;
-#endif
+    uint proof;
+    bool receiverOwner;
     SdfIndirectPlacement corners[8];
-    [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(cell + sdfIndirectCorner(c), level)); }
-    uint tried = 0u;
-    uint mask = 0u;
-    // Plane sign changes the preferred component only. Every accepted component still needs a field segment.
-    uint plane = sdfIndirectLoad(cellAddress + 1u);
-    uint preferred = plane == 0u ? 0u : (dot(sdfIndirectUnpackNormal(plane), position) >= asfloat(sdfIndirectLoad(cellAddress + 2u)) ? 1u : 0u);
-    [loop] for (uint attempt = 0u; attempt < 2u && budget > 0u; attempt++) {
-        uint candidate = 8u;
-        float closest = 1.0e30;
-        [unroll] for (uint c = 0u; c < 8u; c++) {
-            uint component = (components >> (c * 4u)) & 15u;
-            if (component == 15u || (tried & (1u << component)) != 0u || corners[c].classification == SdfIndirectClassInactive) { continue; }
-            float distance = length(corners[c].position - position);
-            if (attempt == 0u && component != preferred) { distance += spacing * 8.0; }
-            if (distance < closest) { closest = distance; candidate = c; }
-        }
-        if (candidate == 8u) { break; }
-        uint component = (components >> (candidate * 4u)) & 15u;
-        tried |= 1u << component;
-        float3 blocked;
-        uint allowance = min(budget, SdfIndirectSegmentSteps);
-        uint remaining = allowance;
-        bool clear = sdfIndirectSegment(position, corners[candidate].position, remaining, blocked);
-        budget -= allowance - remaining;
-        if (clear) {
-            [unroll] for (uint c = 0u; c < 8u; c++) {
-                if (((components >> (c * 4u)) & 15u) == component && corners[c].classification != SdfIndirectClassInactive) { mask |= 1u << c; }
-            }
-            break;
-        }
-    }
+    uint tried;
+    uint preferred;
+    uint attempt;
+    uint component;
+    uint allowance;
+    float clearance;
+    uint phase;
+};
+static SdfIndirectProveProc sdfIndirectProveProc = (SdfIndirectProveProc)0;
+
+static const uint SdfIndirectProveBegun = 0u;
+static const uint SdfIndirectProveSegmented = 1u;
+static const uint SdfIndirectProveSampled = 2u;
+
+uint sdfIndirectProveBegin(float3 position, uint level, uint budget, float certifiedClearance) {
+    sdfIndirectProveProc.position = position;
+    sdfIndirectProveProc.level = level;
+    sdfIndirectProveProc.budget = budget;
+    sdfIndirectProveProc.certifiedClearance = certifiedClearance;
+    sdfIndirectProveProc.phase = SdfIndirectProveBegun;
+    return SdfIndirectProcProve;
+}
+
+// The publication of a proved mask, or the release of the receiver's transient claim: everything after the field work.
+void sdfIndirectProveFinish() {
 #if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
-    // Trace retains its single source-ray owner. The receiver claimed the empty slot before field work.
-    // Every reader rejects this submission's stamp, including its pending marker and partially written payload.
-    bool owns = false;
+    uint proof = sdfIndirectProveProc.proof;
+    float clearance = sdfIndirectProveProc.clearance;
+    if (sdfIndirectProveProc.mask != 0u && clearance > 0.0 && isfinite(clearance)) {
+        bool publish = true;
 #ifdef SDF_INDIRECT_PASS
-    owns = sdfIndirectProofOwner == (uint)index;
-#else
-    owns = receiverOwner;
+        uint previous;
+        InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, previous);
+        publish = previous == 0u;
 #endif
-    if (mask != 0u && owns) {
-        float clearance = isfinite(certifiedClearance) ? max(0.0, certifiedClearance) : 0.0;
-        if (clearance == 0.0 && budget > 0u) {
-            budget--;
-            SdfHit sample = sdfIndirectSample(position, SDF_INSTANCE_MASK_ALL);
-            clearance = sdfMapBallClearance(sample.distance);
-        }
-        if (clearance > 0.0 && isfinite(clearance)) {
-#ifdef SDF_INDIRECT_PASS
-            uint previous;
-            InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, previous);
-            if (previous != 0u) {
-                sdfIndirectProofEvaluations += sdfIndirectEvaluations - start;
-                return mask;
-            }
-#endif
+        if (publish) {
+            float3 position = sdfIndirectProveProc.position;
             sdfIndirectStore(proof, asuint(position.x));
             sdfIndirectStore(proof + 1u, asuint(position.y));
             sdfIndirectStore(proof + 2u, asuint(position.z));
             sdfIndirectStore(proof + 3u, asuint(clearance));
-            sdfIndirectStore(proof + 4u, mask);
+            sdfIndirectStore(proof + 4u, sdfIndirectProveProc.mask);
             DeviceMemoryBarrier();
-            sdfIndirectStore(proof + 5u, key);
+            sdfIndirectStore(proof + 5u, sdfIndirectProveProc.key);
             DeviceMemoryBarrier();
             sdfIndirectStore(proof + 6u, passGroup.indirectFrame);
 #ifdef SDF_RECEIVER_PASS
-            receiverOwner = false;
+            sdfIndirectProveProc.receiverOwner = false;
 #endif
         }
     }
 #ifdef SDF_RECEIVER_PASS
     // Failed support certifies no obstruction for neighboring receivers. Only this pixel may retain its unresolved
     // result. Release its transient claim instead of publishing a transferable negative proof.
-    if (receiverOwner) { sdfIndirectStore(proof + 6u, 0u); }
+    if (sdfIndirectProveProc.receiverOwner) { sdfIndirectStore(proof + 6u, 0u); }
 #endif
 #endif
-    sdfIndirectProofEvaluations += sdfIndirectEvaluations - start;
-    return mask;
+    sdfIndirectProofEvaluations += sdfIndirectEvaluations - sdfIndirectProveProc.start;
 }
 
+uint sdfIndirectProveStep() {
+    if (sdfIndirectProveProc.phase == SdfIndirectProveBegun) {
+        sdfIndirectProveProc.mask = 0u;
+        sdfIndirectProveProc.start = sdfIndirectEvaluations;
+        float3 position = sdfIndirectProveProc.position;
+        uint level = sdfIndirectProveProc.level;
+        float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
+        sdfIndirectProveProc.spacing = spacing;
+        int3 cell;
+        if (level >= sdfIndirectLevelCount() || !sdfIndirectCellAt(position, spacing, cell)) { return SdfIndirectStepReturn; }
+        int index = sdfIndirectProbeIndex(cell, level);
+        if (!sdfIndirectCellCurrent(index)) { return SdfIndirectStepReturn; }
+        sdfIndirectProveProc.index = index;
+        uint cellAddress = sdfIndirectCellWordOffset(passGroup.indirectTier) + (uint)index * SdfIndirectCellWords;
+        sdfIndirectProveProc.cellAddress = cellAddress;
+        sdfIndirectProveProc.components = sdfIndirectLoad(cellAddress);
+        if (sdfIndirectProveProc.components == 0xffffffffu) { return SdfIndirectStepReturn; }
+        uint key;
+        uint entry = sdfIndirectProofEntry((uint)index, cell, sdfIndirectProofSlot(position, spacing), level, key);
+        sdfIndirectProveProc.key = key;
+        uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + entry * SdfIndirectProofWords;
+        sdfIndirectProveProc.proof = proof;
+        if (!sdfIndirectRange(proof, SdfIndirectProofWords)) { return SdfIndirectStepReturn; }
+        sdfIndirectHashes++;
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
+        uint cachedMask;
+        if (sdfIndirectReuseProof(proof, key, passGroup.indirectFrame, position, sdfIndirectProveProc.certifiedClearance, spacing, cachedMask)) {
+            sdfIndirectProveProc.mask = cachedMask;
+            return SdfIndirectStepReturn;
+        }
+#endif
+        sdfIndirectProveProc.receiverOwner = false;
+#ifdef SDF_RECEIVER_PASS
+        if (!sdfIndirectReceiverPermit && passGroup.indirectReceiverProofs == 0u) {
+            sdfIndirectReceiverDeferred = true;
+            return SdfIndirectStepReturn;
+        }
+        // Claim before evaluating the segment. Pending and same-submission publications have no readable payload yet;
+        // defer without inspecting their key. An older non-reusable occupant keeps the bounded uncached fallback.
+        uint publication;
+        InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, publication);
+        sdfIndirectProveProc.receiverOwner = publication == 0u;
+        if (!sdfIndirectProveProc.receiverOwner && publication >= passGroup.indirectFrame) {
+            sdfIndirectReceiverDeferred = true;
+            sdfIndirectReceiverPermit = false;
+            return SdfIndirectStepReturn;
+        }
+        if (!sdfIndirectReceiverPermit && !sdfIndirectAdmitReceiver()) {
+            if (sdfIndirectProveProc.receiverOwner) { sdfIndirectStore(proof + 6u, 0u); }
+            return SdfIndirectStepReturn;
+        }
+        sdfIndirectReceiverPermit = false;
+#endif
+        [unroll] for (uint c = 0u; c < 8u; c++) { sdfIndirectProveProc.corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(cell + sdfIndirectCorner(c), level)); }
+        sdfIndirectProveProc.tried = 0u;
+        // Plane sign changes the preferred component only. Every accepted component still needs a field segment.
+        uint plane = sdfIndirectLoad(cellAddress + 1u);
+        sdfIndirectProveProc.preferred = plane == 0u ? 0u : (dot(sdfIndirectUnpackNormal(plane), position) >= asfloat(sdfIndirectLoad(cellAddress + 2u)) ? 1u : 0u);
+        sdfIndirectProveProc.attempt = 0u;
+    } else if (sdfIndirectProveProc.phase == SdfIndirectProveSegmented) {
+        sdfIndirectProveProc.budget -= sdfIndirectProveProc.allowance - sdfIndirectSegmentProc.budget;
+        if (sdfIndirectSegmentProc.clear) {
+            uint components = sdfIndirectProveProc.components;
+            [unroll] for (uint c = 0u; c < 8u; c++) {
+                if (((components >> (c * 4u)) & 15u) == sdfIndirectProveProc.component && sdfIndirectProveProc.corners[c].classification != SdfIndirectClassInactive) { sdfIndirectProveProc.mask |= 1u << c; }
+            }
+            // The attempts end at the first clear component.
+            sdfIndirectProveProc.attempt = 2u;
+        } else {
+            sdfIndirectProveProc.attempt++;
+        }
+    } else {
+        sdfIndirectProveProc.clearance = sdfMapBallClearance(sdfIndirectReply.distance);
+        sdfIndirectProveFinish();
+        return SdfIndirectStepReturn;
+    }
+    if (sdfIndirectProveProc.attempt < 2u && sdfIndirectProveProc.budget > 0u) {
+        uint candidate = 8u;
+        float closest = 1.0e30;
+        uint components = sdfIndirectProveProc.components;
+        [unroll] for (uint c = 0u; c < 8u; c++) {
+            uint component = (components >> (c * 4u)) & 15u;
+            if (component == 15u || (sdfIndirectProveProc.tried & (1u << component)) != 0u || sdfIndirectProveProc.corners[c].classification == SdfIndirectClassInactive) { continue; }
+            float distance = length(sdfIndirectProveProc.corners[c].position - sdfIndirectProveProc.position);
+            if (sdfIndirectProveProc.attempt == 0u && component != sdfIndirectProveProc.preferred) { distance += sdfIndirectProveProc.spacing * 8.0; }
+            if (distance < closest) { closest = distance; candidate = c; }
+        }
+        if (candidate != 8u) {
+            sdfIndirectProveProc.component = (components >> (candidate * 4u)) & 15u;
+            sdfIndirectProveProc.tried |= 1u << sdfIndirectProveProc.component;
+            sdfIndirectProveProc.allowance = min(sdfIndirectProveProc.budget, SdfIndirectSegmentSteps);
+            sdfIndirectProveProc.phase = SdfIndirectProveSegmented;
+            return sdfIndirectCall(sdfIndirectSegmentBegin(sdfIndirectProveProc.position, sdfIndirectProveProc.corners[candidate].position, sdfIndirectProveProc.allowance));
+        }
+    }
+    // Trace retains its single source-ray owner. The receiver claimed the empty slot before field work.
+    // Every reader rejects this submission's stamp, including its pending marker and partially written payload.
+    sdfIndirectProveProc.clearance = 0.0;
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
+    bool owns = false;
+#ifdef SDF_INDIRECT_PASS
+    owns = sdfIndirectProofOwner == (uint)sdfIndirectProveProc.index;
+#else
+    owns = sdfIndirectProveProc.receiverOwner;
+#endif
+    if (sdfIndirectProveProc.mask != 0u && owns) {
+        float certified = sdfIndirectProveProc.certifiedClearance;
+        sdfIndirectProveProc.clearance = isfinite(certified) ? max(0.0, certified) : 0.0;
+        if (sdfIndirectProveProc.clearance == 0.0 && sdfIndirectProveProc.budget > 0u) {
+            sdfIndirectProveProc.budget--;
+            sdfIndirectProveProc.phase = SdfIndirectProveSampled;
+            return sdfIndirectAsk(sdfIndirectProveProc.position, SDF_INSTANCE_MASK_ALL);
+        }
+    } else {
+        // Not this procedure's to publish: no clearance, so the finish only releases a receiver claim.
+        sdfIndirectProveProc.clearance = 0.0;
+    }
+#endif
+    sdfIndirectProveFinish();
+    return SdfIndirectStepReturn;
+}
+
+#ifdef SDF_INDIRECT_PROC_PROVE
+uint sdfIndirectProve(float3 position, uint level, inout uint budget, float certifiedClearance = 0.0) {
+    sdfIndirectRun(sdfIndirectProveBegin(position, level, budget, certifiedClearance));
+    budget = sdfIndirectProveProc.budget;
+    return sdfIndirectProveProc.mask;
+}
+#endif
 #endif

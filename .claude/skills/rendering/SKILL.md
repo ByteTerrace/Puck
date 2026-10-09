@@ -374,16 +374,12 @@ register.
 
 ## Editing kernels
 
-The indirect comparison helper keeps its SPIR-V function boundary with
-`[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
-body into the receiver exceeds legalization capacity or crashes the compiler. DXIL
-keeps ordinary inlining; retain identical arithmetic, policy restoration and
-work counts on both paths. The default receiver has no SPIR-V call at all: the
-field sample and gradient wrappers (`sdfIndirectSample`, `sdfIndirectGradient`)
-and the Near sample (`sdfIndirectNear`) carry no boundary. A real SPIR-V call on
-the Near path loses the device on NVIDIA's Vulkan driver at High
-(`instruction pointer invalid`), and with one call site per marcher the receiver
-legalizes fully inlined. Keep `[noinline]` off those default-receiver helpers.
+Every engine kernel inlines the interpreter once: one `mapCore` and at most one
+`mapGradCore` per compiled kernel, in DXIL and SPIR-V alike, with no
+`[noinline]` boundary anywhere. A real SPIR-V call on the receiver's Near path
+loses the device on NVIDIA's Vulkan driver at High (`instruction pointer
+invalid`); with one call site the kernels legalize fully inlined. Never
+reintroduce `[noinline]`.
 
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), the
@@ -450,24 +446,44 @@ legalizes fully inlined. Keep `[noinline]` off those default-receiver helpers.
   with its own shader, placed over the world by the root graph's `place` pass;
   no SDF kernel edit reaches it, and it reloads with `pipeline.reload`, not
   `world.shaders.reload`.
-- **Every `map*` call site is a full inlined copy of the interpreter.** Keep
-  sample loops rolled (`[loop]`) and reuse an existing call site through a loop
-  rather than adding one; a new call site costs register pressure in the
-  hottest kernels and a driver translation on every cold boot. The surface's
+- **Every `map*` call site is a full inlined copy of the interpreter.** A
+  kernel has one: reuse it, never add a second. A new call site costs register
+  pressure, compile time and a driver translation on every cold boot, and the
+  interpreter multiplies with every inlined path that reaches it. The surface's
   field probes (the tetrahedron normal and curvature taps, the curvature
   centre, the soften stencil) share one site, `sdfProbeField` in
   `surface/sdf-normals.hlsli`, which a kernel calls once with flags for every
-  probe it needs; the debug views' field reads share one loop over
-  `marchOvershootDepth`; the primary march's scene march, its exhaustion arm
-  and the attribute resolve are passes of one `sdfTracePrimaryField` call
-  (`sdfTracePrimary`), and the beam's entry, gap and far searches are phases of
-  one loop (`coneMarchTileBounds`). Each indirect marcher has one
-  `sdfIndirectSample` site: `sdfIndirectMarch`'s step, full-field resample and
-  sign witness, `sdfIndirectSegment`'s step and bracket and
-  `sdfIndirectConeBounce`'s step and witness are phases of one loop, as
-  `sdfIndirectLaunch`'s descent and ascent are, and the views stage calls
-  `sdfDebugView` once (`SdfIndirectMarcherCallSiteLawTests`). A new probe joins
-  those, never a call of its own.
+  probe it needs; ambient occlusion's ladder and its fleet tap share `calcAO`'s
+  loop; the primary march's scene march, its exhaustion arm and the attribute
+  resolve are passes of one `sdfTracePrimaryField` call (`sdfTracePrimary`), and
+  the beam's entry, gap and far searches are phases of one loop
+  (`coneMarchTileBounds`). The views stage reads the field through one loop,
+  `sdfViewsFieldReads` (`passes/sdf-views-field.hlsli`): the light stage's
+  detail re-resolve, the probe slots its material asks for, and the debug
+  views' resumable overshoot marches (`SdfOvershootMarch`), ahead of the
+  shading that uses them, so the light stage evaluates nothing.
+  Indirect field work runs as resumable procedures
+  (`indirect/sdf-indirect-run.hlsli`): each procedure keeps its state in a
+  static record and a step function that asks a field query
+  (`sdfIndirectAsk`, `sdfIndirectAskGradient`), calls another procedure
+  (`sdfIndirectCall` with the callee's `Begin`) or returns. One driver,
+  `sdfIndirectRun`, answers every query through its one `sdfIndirectServe`
+  call, so a kernel that runs its indirect work from one run inlines the
+  interpreter once however many procedures and query points it has: the
+  receiver runs `sdfIndirectReceiverStep`, the trace its kernel procedure, and
+  classify and shade one run each. A kernel enables the procedures it reaches
+  (`SDF_INDIRECT_PROC_*`, defaults by pass in `sdf-indirect-field.hlsli`) and
+  includes `indirect/sdf-indirect-procedures.hlsli` after them, since every
+  enabled procedure is compiled into the dispatch. A procedure is on the
+  stack at most once at a time. Each marcher procedure asks its sample at one
+  point (`SdfIndirectMarcherCallSiteLawTests`); a probe kernel's reference reads
+  are plain queries (`SDF_INDIRECT_PLAIN_QUERIES`) through the same site. A new
+  probe or procedure joins those, never a call of its own. A tape build
+  (`sdfBuildTileTape`) runs in a kernel of its own, as the tape pass does:
+  folding it into a reading kernel's one site puts the interpreter's
+  tape-recording paths behind a runtime flag in every read, and the World.Tests
+  tape probes then exceed the device timeout. Those probes build in a
+  `*-build.comp` kernel dispatched ahead of the walk.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.

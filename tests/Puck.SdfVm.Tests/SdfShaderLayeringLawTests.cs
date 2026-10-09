@@ -11,8 +11,8 @@ namespace Puck.SdfVm.Tests;
 /// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
 /// includes a higher module first would otherwise hide the dependency. Every source lives in a named directory, and
 /// every include resolves to a source in the tree or the shared reconstruction module, which has no SDF dependency.
-/// The indirect field, march and approach modules belong to the march layer: both the primary light camera and the
-/// indirect cache use that same certified traversal. Their indirect directory identifies the transport policy.
+/// The indirect field, procedure driver, march and approach modules belong to the march layer: both the primary light
+/// camera and the indirect cache use that same certified traversal. Their indirect directory identifies the transport policy.
 /// </summary>
 public sealed partial class SdfShaderLayeringLawTests {
     private const string SharedReconstruction = "Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli";
@@ -195,7 +195,7 @@ public sealed partial class SdfShaderLayeringLawTests {
     // A source's layer, by the directory it sits in, or -1 when it sits in none.
     private static int LayerOf(string path) {
         if (path == SharedReconstruction) { return 0; }
-        if (path is "indirect/sdf-indirect-field.hlsli" or "indirect/sdf-indirect-march.hlsli" or "indirect/sdf-indirect-approach.hlsli") {
+        if (path is "indirect/sdf-indirect-field.hlsli" or "indirect/sdf-indirect-run.hlsli" or "indirect/sdf-indirect-march.hlsli" or "indirect/sdf-indirect-approach.hlsli") {
             return Array.IndexOf(array: Layers, value: "march");
         }
         var slash = path.IndexOf(comparisonType: StringComparison.Ordinal, value: '/');

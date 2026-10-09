@@ -2,7 +2,13 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// A probe's placement and a cell's partition are procedures one run serves, so the kernel inlines the interpreter once.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_PLACE
+#define SDF_INDIRECT_PROC_PARTITION
+#define SDF_INDIRECT_PROC_SEGMENT
 #include "../indirect/sdf-indirect-cache.hlsli"
+#include "../indirect/sdf-indirect-procedures.hlsli"
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
@@ -32,8 +38,18 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint index = slot * SdfIndirectProbesPerBrick + lane;
     uint cell = sdfIndirectCellWordOffset(passGroup.indirectTier) + index * SdfIndirectCellWords;
     uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + index * SdfIndirectProofsPerCell * SdfIndirectProofWords;
+    uint procedure;
     if (placing) {
-        SdfIndirectPlacement placement = sdfIndirectPlace(float3(lattice) * spacing, spacing);
+        procedure = sdfIndirectPlaceBegin(float3(lattice) * spacing, spacing);
+    } else {
+        if (any(lattice == 2147483647)) { return; }
+        SdfIndirectPlacement corners[8];
+        [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(lattice + sdfIndirectCorner(c), level)); }
+        procedure = sdfIndirectPartitionBegin(corners, spacing);
+    }
+    sdfIndirectRun(procedure);
+    if (placing) {
+        SdfIndirectPlacement placement = sdfIndirectPlaceProc.result;
         uint address = index * SdfIndirectProbeWords;
         sdfIndirectStore(address, asuint(placement.position.x));
         sdfIndirectStore(address + 1u, asuint(placement.position.y));
@@ -47,11 +63,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         empty.components = 0xffffffffu;
         sdfIndirectStoreCell(cell, proof, empty);
     } else {
-        if (any(lattice == 2147483647)) { return; }
-        SdfIndirectPlacement corners[8];
-        [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(lattice + sdfIndirectCorner(c), level)); }
-        SdfIndirectCell partition = sdfIndirectPartition(corners, spacing);
-        sdfIndirectStoreCell(cell, proof, partition);
+        sdfIndirectStoreCell(cell, proof, sdfIndirectPartitionProc.result);
     }
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
     sdfWorkTexels = 1u;

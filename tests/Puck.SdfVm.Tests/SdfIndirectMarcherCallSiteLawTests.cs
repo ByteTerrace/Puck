@@ -5,10 +5,12 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// Every <c>sdfIndirectSample</c> call inlines the complete field interpreter in DXIL, so each indirect marcher keeps
-/// one call site and runs its resample and sign witness as later phases of the same loop. The models below replay the
-/// separate-call-site marchers and their phase loops over every answer pattern of a small field and hold the sample
-/// sequence, the remaining allowance and the result equal.
+/// Every mapCore and mapGradCore call inlines the complete field interpreter in DXIL, so a kernel's indirect queries
+/// all reach the one indirect field query (<c>sdfIndirectServe</c>), called once by the procedure driver
+/// (<c>sdfIndirectRun</c>), and each marcher procedure asks its sample at one point, running its resample and sign
+/// witness as later phases of the same procedure. The views stage's field reads share one loop. The models below
+/// replay the separate-call-site marchers and their phase loops over every answer pattern of a small field and hold
+/// the sample sequence, the remaining allowance and the result equal.
 /// </summary>
 public sealed class SdfIndirectMarcherCallSiteLawTests {
     private const uint All = uint.MaxValue;
@@ -20,12 +22,40 @@ public sealed class SdfIndirectMarcherCallSiteLawTests {
     private static readonly float[] MarchAnswers = [float.NaN, -0.0005f, 0.0005f, 0.004f, 0.3f, -0.4f, 3f];
     private static readonly float[] SegmentAnswers = [float.NaN, -0.1f, 0.0005f, 0.004f, 0.3f, 5f];
 
-    [InlineData("indirect/sdf-indirect-march.hlsli", "SdfIndirectRay sdfIndirectMarch(")]
-    [InlineData("indirect/sdf-indirect-march.hlsli", "bool sdfIndirectSegment(")]
-    [InlineData("indirect/sdf-indirect-alternatives.hlsli", "bool sdfIndirectConeBounce(")]
+    [InlineData("indirect/sdf-indirect-march.hlsli", "uint sdfIndirectMarchStep(")]
+    [InlineData("indirect/sdf-indirect-march.hlsli", "uint sdfIndirectSegmentStep(")]
+    [InlineData("indirect/sdf-indirect-alternatives.hlsli", "uint sdfIndirectConeBounceStep(")]
+    [InlineData("indirect/sdf-indirect-cells.hlsli", "uint sdfIndirectLaunchStep(")]
     [Theory]
     public void EachIndirectMarcherHasOneFieldSampleSite(string path, string signature) {
-        Assert.Single(collection: Regex.Matches(input: Body(path: path, signature: signature), pattern: @"\bsdfIndirectSample\s*\("));
+        Assert.Single(collection: Regex.Matches(input: Body(path: path, signature: signature), pattern: @"\bsdfIndirectAsk\s*\("));
+    }
+    [Fact]
+    public void TheIndirectQueriesReachOneInterpreterCallSite() {
+        var serve = Body(path: "indirect/sdf-indirect-field.hlsli", signature: "void sdfIndirectServe(");
+
+        Assert.Single(collection: Regex.Matches(input: serve, pattern: @"\bmapCore\s*\("));
+        Assert.Single(collection: Regex.Matches(input: serve, pattern: @"\bmapGradCore\s*\("));
+        Assert.Single(collection: Regex.Matches(input: Body(path: "indirect/sdf-indirect-run.hlsli", signature: "void sdfIndirectRun("),
+            pattern: @"\bsdfIndirectServe\s*\("));
+        // No indirect module calls the field anywhere else.
+        var root = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
+        var callers = Directory.EnumerateFiles(path: Path.Combine(path1: root, path2: "indirect"), searchPattern: "*.hlsli")
+            .Where(predicate: path => Regex.IsMatch(input: File.ReadAllText(path: path), pattern: @"\bmap(Core|GradCore|Masked|Distance|DistanceMasked|Grad|GradMasked)?\s*\("))
+            .Select(selector: static path => Path.GetFileName(path: path))
+            .Order(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(actual: callers, expected: new[] { "sdf-indirect-field.hlsli" });
+    }
+    [Fact]
+    public void TheViewsStageReadsTheFieldThroughOneLoop() {
+        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-views-field.hlsli", signature: "SdfViewsFieldReads sdfViewsFieldReads("),
+            pattern: @"\bmap(Core|Masked|Distance|DistanceMasked)?\s*\("));
+        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-hit-stages.hlsli", signature: "float3 sdfViewsStage("),
+            pattern: @"\bsdfViewsFieldReads\s*\("));
+        Assert.DoesNotMatch(expectedRegexPattern: @"\bmap(Core|Masked|Distance|DistanceMasked|Grad|GradMasked)?\s*\(",
+            actualString: Body(path: "passes/sdf-light-stage.hlsli", signature: "float3 sdfLightStage("));
     }
     [Fact]
     public void TheViewsStageCallsTheDebugViewOnce() {
