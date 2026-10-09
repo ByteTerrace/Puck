@@ -447,7 +447,7 @@ the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
 package declares no `engines` requirement, and CI runs it on Node 24.21.0
-(the `browser` job in `.github/workflows/verify.yml`). Use the system install,
+(the `verify` job in `.github/workflows/browser.yml`). Use the system install,
 not a version manager:
 
 ```powershell
@@ -487,8 +487,10 @@ dotnet publish src/Puck.World.Browser -c Release
 dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
-CI's `artifacts` workflow always publishes the browser before any test project
-runs, so this is a local-run-only step. Without the bundle the tree-building
+In CI the compiled archive carries the AppBundle the solution build generates
+(the `artifacts` workflow installs `wasm-tools`), so the test job has one without
+a publish and this is a local-run-only step; the ahead-of-time publish CI ships is
+the WebAssembly producer's (`browser.yml`). Without the bundle the tree-building
 tests skip by name, and the skip reason names the publish command; they never
 fail for the missing prerequisite.
 

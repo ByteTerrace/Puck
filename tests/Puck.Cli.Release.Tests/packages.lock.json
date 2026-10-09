@@ -21,6 +21,12 @@
           "xunit.v3.mtp-v2": "[4.0.1]"
         }
       },
+      "YamlDotNet": {
+        "type": "Direct",
+        "requested": "[16.*, )",
+        "resolved": "16.3.0",
+        "contentHash": "SgMOdxbz8X65z8hraIs6hOEdnkH6hESTAIUa7viEngHOYaH+6q5XJmwr1+yb9vJpNQ19hCQY69xbFsLtXpobQA=="
+      },
       "Apache.Arrow": {
         "type": "Transitive",
         "resolved": "22.1.0",

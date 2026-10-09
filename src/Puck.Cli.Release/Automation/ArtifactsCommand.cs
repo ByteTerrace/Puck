@@ -28,6 +28,63 @@ public static class ArtifactsCommand {
         .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15)),
     ];
 
+    /// <summary>The committed table of each test assembly's measured run time in whole seconds, by assembly name, that
+    /// <see cref="Partition"/> balances the shards by. <c>artifacts durations</c> records it from a run's shard
+    /// reports.</summary>
+    public const string DurationsTable = "TestDurations.json";
+    /// <summary>The report of one <c>test-windows</c> run's measured durations, in the same shape as
+    /// <see cref="DurationsTable"/>, written beside its TRX reports.</summary>
+    public const string DurationsReport = "durations.json";
+
+    /// <summary>Splits the test assemblies into <paramref name="count"/> shards of about equal recorded run time. Each
+    /// assembly goes, longest first, to the shard with the least recorded time so far (the lowest index on a tie), so the
+    /// shards together hold every assembly exactly once, and none ends more than the longest assembly's time past an even
+    /// split. An assembly <paramref name="seconds"/> has no time for, such as a new test project, weighs the median
+    /// recorded time. Each shard lists its assemblies longest first, the order it runs them in.</summary>
+    /// <param name="assemblies">The test assemblies, as paths; each is weighed by its file name without extension.</param>
+    /// <param name="seconds">The recorded run time of each assembly name, in seconds.</param>
+    /// <param name="count">The number of shards.</param>
+    /// <returns>The shards, in index order.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is less than one.</exception>
+    /// <exception cref="ArgumentException"><paramref name="assemblies"/> names one assembly twice.</exception>
+    public static IReadOnlyList<IReadOnlyList<string>> Partition(IReadOnlyList<string> assemblies, IReadOnlyDictionary<string, double> seconds, int count) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(other: 1, value: count);
+        if (assemblies.Distinct(comparer: StringComparer.OrdinalIgnoreCase).Count() != assemblies.Count) { throw new ArgumentException(message: "An assembly is listed twice.", paramName: nameof(assemblies)); }
+        var recorded = seconds.Values.Order().ToArray();
+        var fallback = ((recorded.Length == 0) ? 1.0 : recorded[(recorded.Length / 2)]);
+        var shards = Enumerable.Range(count: count, start: 0).Select(selector: _ => new List<string>()).ToArray();
+        var totals = new double[count];
+
+        foreach (var (assembly, weight) in assemblies
+            .Select(selector: assembly => (assembly, weight: seconds.GetValueOrDefault(key: Path.GetFileNameWithoutExtension(path: assembly), defaultValue: fallback)))
+            .OrderByDescending(keySelector: item => item.weight)
+            .ThenBy(comparer: StringComparer.Ordinal, keySelector: item => item.assembly)) {
+            var lightest = 0;
+
+            for (var index = 1; (index < count); index++) {
+                if (totals[index] < totals[lightest]) { lightest = index; }
+            }
+            shards[lightest].Add(item: assembly);
+            totals[lightest] += weight;
+        }
+        return shards;
+    }
+    /// <summary>Reads a durations table or report: one whole or fractional number of seconds per assembly name.</summary>
+    /// <param name="path">The table's path.</param>
+    /// <returns>The seconds by assembly name.</returns>
+    /// <exception cref="InvalidDataException">The file is not an object of nonnegative numbers.</exception>
+    public static IReadOnlyDictionary<string, double> ReadDurations(string path) {
+        var table = new Dictionary<string, double>(comparer: StringComparer.Ordinal);
+
+        foreach (var (name, value) in ((CliFiles.ReadJson(path: path) as JsonObject) ?? throw new InvalidDataException(message: $"{path} is not a JSON object."))) {
+            if ((value is null) || (value.GetValueKind() != System.Text.Json.JsonValueKind.Number) || !(value.GetValue<double>() >= 0)) {
+                throw new InvalidDataException(message: $"{path}: {name} is not a nonnegative number of seconds.");
+            }
+            table.Add(key: name, value: value.GetValue<double>());
+        }
+        return table;
+    }
+
     private const string Archive = "artifacts/compiled-windows.zip";
     private const string Identity = "source.json";
 
@@ -48,10 +105,6 @@ public static class ArtifactsCommand {
         CliFiles.WriteJson(
             path: "artifacts/runtime/source.json",
             value: source
-        );
-        CliFiles.CopyDirectory(
-            destination: "artifacts/runtime/browser",
-            source: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle"
         );
         CliFiles.CopyDirectory(
             destination: "artifacts/batteries/hgb",
@@ -85,67 +138,73 @@ public static class ArtifactsCommand {
 
         // The archive's entry order and its tests array are the walk order, so the walk is ordinal: a directory listing is the
         // host's order, and two hosts would write two archives from one tree.
-        foreach (var project in new[] { "src", "tests" }.SelectMany(selector: parent => Directory.EnumerateDirectories(path: Path.Combine(
+        var files = new[] { "src", "tests" }.SelectMany(selector: parent => Directory.EnumerateDirectories(path: Path.Combine(
             path1: root,
             path2: parent
-        )).Order(comparer: StringComparer.Ordinal))) {
-            var output = Path.Combine(
-                path1: project,
-                path2: "bin/Release"
+        )).Order(comparer: StringComparer.Ordinal)).Select(selector: project => Path.Combine(
+            path1: project,
+            path2: "bin/Release"
+        )).Where(predicate: Directory.Exists).SelectMany(selector: output => Directory.EnumerateFiles(
+            path: output,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*"
+        ).Order(comparer: StringComparer.Ordinal)).ToArray();
+        // Hashing reads every name in the outputs, most of them hard links to one another, so it runs on every core;
+        // which file is kept and which recorded as a copy still follows the walk order alone.
+        var hashes = new string[files.Length];
+
+        Parallel.For(
+            body: index => { hashes[index] = ContentPin.OfFile(path: files[index]).Hex; },
+            fromInclusive: 0,
+            toExclusive: files.Length
+        );
+        for (var index = 0; (index < files.Length); index++) {
+            var file = files[index];
+            var relative = RepositoryRelative(
+                path: file,
+                root: root
             );
+            var hash = hashes[index];
 
-            if (!Directory.Exists(path: output)) { continue; }
-            foreach (var file in Directory.EnumerateFiles(
-                path: output,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*"
-            ).Order(comparer: StringComparer.Ordinal)) {
-                var relative = RepositoryRelative(
-                    path: file,
-                    root: root
-                );
-                var hash = ContentPin.OfFile(path: file).Hex;
-
-                if (contents.TryGetValue(
+            if (contents.TryGetValue(
+                key: hash,
+                value: out var original
+            )) {
+                copies[relative] = original;
+            } else {
+                contents.Add(
                     key: hash,
-                    value: out var original
-                )) {
-                    copies[relative] = original;
-                } else {
-                    contents.Add(
-                        key: hash,
-                        value: relative
-                    );
-                    archive.CreateEntryFromFile(
-                        compressionLevel: CompressionLevel.Fastest,
-                        entryName: relative,
-                        sourceFileName: file
-                    );
-                }
-                if (Path.GetFileName(path: file) == "Puck.TestAssembly") {
-                    var name = File.ReadAllText(path: file).Trim();
-                    var assembly = Path.Combine(
-                        path1: Path.GetDirectoryName(path: file)!,
-                        path2: name
-                    );
+                    value: relative
+                );
+                archive.CreateEntryFromFile(
+                    compressionLevel: CompressionLevel.Fastest,
+                    entryName: relative,
+                    sourceFileName: file
+                );
+            }
+            if (Path.GetFileName(path: file) == "Puck.TestAssembly") {
+                var name = File.ReadAllText(path: file).Trim();
+                var assembly = Path.Combine(
+                    path1: Path.GetDirectoryName(path: file)!,
+                    path2: name
+                );
 
-                    if (
-                        (name != Path.GetFileName(path: name)) ||
-                        !name.EndsWith(
-                        comparisonType: StringComparison.Ordinal,
-                        value: ".dll"
-                    ) ||
-                        !File.Exists(path: assembly)
-                    ) {
-                        throw new InvalidDataException(message: $"Invalid test assembly marker: {file}");
-                    }
-                    tests.Add(item: new JsonObject {
-                        ["assembly"] = RepositoryRelative(
-                        path: assembly,
-                        root: root
-                    ),
-                    });
+                if (
+                    (name != Path.GetFileName(path: name)) ||
+                    !name.EndsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: ".dll"
+                ) ||
+                    !File.Exists(path: assembly)
+                ) {
+                    throw new InvalidDataException(message: $"Invalid test assembly marker: {file}");
                 }
+                tests.Add(item: new JsonObject {
+                    ["assembly"] = RepositoryRelative(
+                    path: assembly,
+                    root: root
+                ),
+                });
             }
         }
         if (tests.Count == 0) { throw new InvalidDataException(message: "No evaluated test outputs; build with -p:PuckCaptureTestArtifacts=true."); }
@@ -267,7 +326,8 @@ public static class ArtifactsCommand {
         Console.WriteLine(value: $"Restored compiled Release outputs for {source["commit"]}; no compilation was performed.");
         return 0;
     }
-    private static async Task<int> TestWindowsAsync() {
+    private static async Task<int> TestWindowsAsync(int shard, int shards) {
+        if ((shards < 1) || (shard < 0) || (shard >= shards)) { throw new ArgumentOutOfRangeException(paramName: nameof(shard), message: $"Shard {shard} is not one of {shards} (zero-based)."); }
         var root = RepositoryPaths.RequireRoot();
 
         var (archive, source, _, paths) = await OpenArchiveAsync(
@@ -303,20 +363,30 @@ public static class ArtifactsCommand {
 
         if (Directory.Exists(path: Results)) { throw new IOException(message: $"Use a fresh test result directory: {Results}"); }
         Directory.CreateDirectory(path: Results);
-        // Two assemblies at a time, largest first, so the longest suite runs alongside the others instead of after
+        // The manifest's ordinal order numbers the reports, so a report's name is the same whichever shard runs it.
+        var manifest = selected.Order(comparer: StringComparer.Ordinal).ToArray();
+        var seconds = ReadDurations(path: Path.Combine(path1: root, path2: DurationsTable));
+        var assemblies = Partition(assemblies: manifest, count: shards, seconds: seconds)[shard];
+        // Two assemblies at a time, longest first, so the longest suite runs alongside the others instead of after
         // them. Each run's output is printed whole when it finishes, so two runs never interleave. Every assembly runs
         // whatever another one did, so one CI run names every failing assembly instead of the first. The platform
         // exits nonzero for a run that discovered no test; a hardware-only assembly may still skip every case. Each run's
         // selection is TestWindowsArguments'.
+        const int Concurrency = 2;
         var console = new Lock();
         var failures = new List<string>();
-        var ordered = selected.Order(comparer: StringComparer.Ordinal).Select(selector: (assembly, index) => (assembly, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.assembly).Length);
+        var measured = new JsonObject();
 
+        Console.WriteLine(value: $"Shard {shard} of {shards} (zero-based): {assemblies.Count} of {manifest.Length} test assemblies, {Concurrency} at a time on {Environment.ProcessorCount} processors:");
+        foreach (var name in assemblies.Select(selector: Path.GetFileNameWithoutExtension)) {
+            Console.WriteLine(value: (seconds.TryGetValue(key: name!, value: out var recorded) ? $"  {name} ({recorded:0} s recorded)" : $"  {name} (no recorded time)"));
+        }
         await Parallel.ForEachAsync(
-            body: async (item, cancellationToken) => {
-                var (assembly, index) = item;
+            body: async (assembly, cancellationToken) => {
+                var name = Path.GetFileNameWithoutExtension(path: assembly);
+                var clock = System.Diagnostics.Stopwatch.StartNew();
                 var run = await CliProcess.RunAsync(
-                    arguments: TestWindowsArguments(assembly: assembly, report: $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx", results: Results),
+                    arguments: TestWindowsArguments(assembly: assembly, report: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.trx", results: Results),
                     cancellationToken: cancellationToken,
                     capture: true,
                     fileName: "dotnet",
@@ -326,21 +396,47 @@ public static class ArtifactsCommand {
                 lock (console) {
                     Console.Write(value: run.Stdout);
                     Console.Error.Write(value: run.Stderr);
+                    measured[name] = Math.Round(digits: 1, value: clock.Elapsed.TotalSeconds);
                     if (run.ExitCode != 0) { failures.Add(item: $"{Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
                 }
             },
-            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = 2 },
-            source: ordered
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = Concurrency },
+            source: assemblies
+        );
+        CliFiles.WriteJson(
+            path: Path.Combine(path1: Results, path2: DurationsReport),
+            value: SortedByName(table: measured)
         );
         if (failures.Count != 0) {
             failures.Sort(comparer: StringComparer.Ordinal);
-            Console.Error.WriteLine(value: $"{failures.Count} of {selected.Count} compiled test assemblies failed:");
+            Console.Error.WriteLine(value: $"{failures.Count} of {assemblies.Count} compiled test assemblies failed:");
             foreach (var failure in failures) { Console.Error.WriteLine(value: $"  {failure}"); }
             return 1;
         }
-        Console.WriteLine(value: $"Verified {selected.Count} compiled test assemblies without solution restore or workload installation.");
+        Console.WriteLine(value: $"Verified {assemblies.Count} compiled test assemblies without solution restore or workload installation.");
         return 0;
     }
+    // Every shard's durations report under the directory, one run's, becomes the table: each time rounded up to a whole
+    // second, so a table records no sub-second noise, and an assembly two reports name is refused.
+    private static int RecordDurations(string directory) {
+        var root = RepositoryPaths.RequireRoot();
+        var table = new JsonObject();
+
+        foreach (var report in Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: DurationsReport).Order(comparer: StringComparer.Ordinal)) {
+            foreach (var (name, seconds) in ReadDurations(path: report)) {
+                if (table.ContainsKey(propertyName: name)) { throw new InvalidDataException(message: $"Two durations reports under {directory} name {name}."); }
+                table[name] = Math.Max(val1: 1, val2: ((int)Math.Ceiling(a: seconds)));
+            }
+        }
+        if (table.Count == 0) { throw new InvalidDataException(message: $"No {DurationsReport} under {directory}."); }
+        CliFiles.WriteJson(
+            path: Path.Combine(path1: root, path2: DurationsTable),
+            value: SortedByName(table: table)
+        );
+        Console.WriteLine(value: $"Recorded {table.Count} test assembly durations in {DurationsTable}.");
+        return 0;
+    }
+    private static JsonObject SortedByName(JsonObject table) => new(properties: table.OrderBy(comparer: StringComparer.Ordinal, keySelector: entry => entry.Key).Select(selector: entry => KeyValuePair.Create(key: entry.Key, value: entry.Value?.DeepClone())));
     private static async Task<int> TestWorldAsync() {
         const string Results = "artifacts/world-test-results";
         var root = RepositoryPaths.RequireRoot();
@@ -378,23 +474,34 @@ public static class ArtifactsCommand {
             description: "Extract this commit's archive into place without compiling.",
             name: "restore"
         );
+        var shardOption = new Option<int>(name: "--shard") { DefaultValueFactory = static _ => 0, Description = "The zero-based shard of the manifest to run." };
+        var shardsOption = new Option<int>(name: "--shards") { DefaultValueFactory = static _ => 1, Description = $"The number of shards the manifest splits into, balanced by {DurationsTable}." };
         var testWindows = new Command(
-            description: "Run the archived test assemblies through the producer's manifest.",
+            description: "Run the archived test assemblies through the producer's manifest, or one shard of it.",
             name: "test-windows"
-        );
+        ) { shardOption, shardsOption };
         var testWorld = new Command(
             description: "Run the compiled world authentication and recovery tests (Linux).",
             name: "test-world"
         );
+        var reportsArgument = new Argument<string>(name: "directory") { Description = $"A directory holding every shard's {DurationsReport} from one test-windows run." };
+        var durations = new Command(
+            description: $"Record {DurationsTable} from one run's shard reports.",
+            name: "durations"
+        ) { reportsArgument };
         var command = new Command(
             description: "Capture, restore, and test the compiled Release outputs of one build.",
             name: "artifacts"
-        ) { capture, restore, testWindows, testWorld };
+        ) { capture, restore, testWindows, testWorld, durations };
 
         capture.SetAction(action: (_, _) => CaptureAsync());
         restore.SetAction(action: (_, _) => RestoreAsync());
-        testWindows.SetAction(action: (_, _) => TestWindowsAsync());
+        testWindows.SetAction(action: (parseResult, _) => TestWindowsAsync(
+            shard: parseResult.GetValue(option: shardOption),
+            shards: parseResult.GetValue(option: shardsOption)
+        ));
         testWorld.SetAction(action: (_, _) => TestWorldAsync());
+        durations.SetAction(action: parseResult => RecordDurations(directory: parseResult.GetValue(argument: reportsArgument)!));
         return command;
     }
 }

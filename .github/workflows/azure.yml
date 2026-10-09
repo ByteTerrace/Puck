@@ -32,6 +32,9 @@ jobs:
   artifacts:
     name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
+  browser:
+    name: Build the WebAssembly payload
+    uses: ./.github/workflows/browser.yml
   build:
     name: Test .NET artifacts
     needs: artifacts
@@ -96,7 +99,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main')
     name: Deploy and verify Azure production
-    needs: [build, verify, pack, infrastructure, applications, containers]
+    needs: [build, verify, pack, infrastructure, applications, containers, browser]
     permissions:
       contents: read
       id-token: write
@@ -226,15 +229,15 @@ jobs:
     timeout-minutes: 120
   applications:
     name: Assemble the application bundle
-    needs: artifacts
+    needs: [artifacts, browser]
     runs-on: windows-2025
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No NuGet cache: the solution-wide cache measured about three minutes to download and unpack here, where this job
+      # restores only the API documentation's projects and the docfx tool.
       - name: Install the pinned .NET SDK
         uses: ./.github/actions/setup-dotnet
-        with:
-          cache: "true"
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -245,11 +248,16 @@ jobs:
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
-      - name: Download Functions and browser payloads
+      - name: Download the Functions payload and its source identity
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: runtime-payloads
           path: artifacts/runtime
+      - name: Download the WebAssembly payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: browser-payload
+          path: artifacts/runtime/browser
       - name: Download the compiled Roslyn analyzers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

@@ -43,7 +43,9 @@ public static class AffectedSelection {
     // Changing any of these changes how every project builds, so it reaches every suite; it reaches the canaries only
     // when it is an input of the World build (worldInput), since a canary runs nothing but that build.
     private static readonly string[] BuildInfrastructure = ["build/", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", "global.json", "Puck.slnx", "NuGet.config"];
-    // Trees whose changes no suite or canary observes: prose, agent material, CI orchestration, editors, quarantine.
+    // Trees whose changes choose nothing: prose, agent material, CI orchestration, editors, quarantine. Only
+    // Puck.Cli.Release.Tests' workflow graph laws read CI orchestration, and CI's test job runs them on every change; a
+    // selection would also reach every suite of the CLI projects whose sources mention a workflow.
     private static readonly string[] Inert = ["docs/", ".claude/", ".github/", "editors/", "experimental/"];
 
     private static bool StartsWithAny(string path, string[] prefixes) => prefixes.Any(predicate: prefix => path.StartsWith(

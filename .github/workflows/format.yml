@@ -42,9 +42,13 @@ jobs:
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
-      # The cache the artifacts job saves; this job only reads it.
+      # The caches the artifacts job saves; this job only reads them.
       - name: Restore the shader compiler cache
         uses: ./.github/actions/shader-cache
+        with:
+          mode: restore
+      - name: Restore the creation bake cache
+        uses: ./.github/actions/bake-cache
         with:
           mode: restore
       - name: Restore locked dependencies

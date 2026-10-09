@@ -13,9 +13,10 @@ the pins; a version tag by itself prevents the workflow from starting.
 The composite actions under `.github/actions/` are the only steps that run before
 a CLI exists: `setup-dotnet` installs the SDK, `setup-dxc` and `setup-quic` the
 pinned native dependencies, `setup-puck` the run's candidate CLI,
-`shader-cache` restores, looks up and saves the shader compiler cache, and
+`shader-cache` restores, looks up and saves the shader compiler cache,
+`bake-cache` restores and saves the creation bake cache, and
 `azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, the
-shader cache key and the OIDC federation therefore each live in one place. Mapping keys in
+shader and bake cache keys and the OIDC federation therefore each live in one place. Mapping keys in
 workflow and action files are alphabetized, as in the bicep, and steps carry no
 blank lines between them. Release logic runs as `puck` verbs; a workflow step
 holds a shell script only to glue a container or a step summary.
@@ -29,8 +30,9 @@ also reinstall every workload the image ships. It restores
 the solution in locked mode and compiles Release with warnings as errors. The
 built candidate CLI runs `puck derivations --check` against the restored producer
 graph, so a stale bake fingerprint stops artifact production before packaging. It
-packages those assemblies with `puck nuget pack --no-build`, publishes the
-Functions and WebAssembly payloads without rebuilding managed assemblies, and
+packages those assemblies with `puck nuget pack --no-build`, which packs every
+project at once because a no-build pack only reads what the build wrote, publishes the
+Functions payload without rebuilding managed assemblies, and
 publishes `Puck.World` as a framework-dependent ReadyToRun artifact. World's
 restore prepares its desktop runtime graphs and precompiler. The publish step
 sets `AppendRuntimeIdentifierToOutputPath=false` to read the portable assemblies
@@ -41,8 +43,6 @@ The target hooks the pinned SDK's dependency selection, so an SDK update must
 verify a real launch of this no-build artifact, including its runtime libraries.
 CI boots chess headlessly from the published artifact and requires a clean
 console verdict before uploading it. This checks host packaging, not GPU rendering.
-WebAssembly native
-compilation and trimming remain part of its one publish operation.
 The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
@@ -56,13 +56,41 @@ The producer enables `PuckCaptureTestArtifacts`: MSBuild records each evaluated
 test project's output and optional run settings, and the archive carries that
 manifest alongside its source identity. Missing test outputs fail artifact production.
 The compiled archive stores SHA-256-identical files once and records their other
-destinations. Restore validates the complete path and copy map before writing,
+destinations. Capture hashes every output name on every core: most of them are
+hard links to one another, and the walk order alone decides which name is kept.
+Restore validates the complete path and copy map before writing,
 then recreates ordinary independent files; symbols and runtime layouts are preserved.
+
+**Build the WebAssembly payload** (`browser.yml`) is the browser engine's own
+producer. Its ahead-of-time publish (Mono AOT, Emscripten and `wasm-opt`) takes
+longer than all the other packaging together, so it runs beside the solution build
+rather than after it: it installs the SDK and `wasm-tools`, restores and compiles
+only `Puck.World.Browser`'s dependency closure, which declares no shader or world
+compile, publishes it once, and uploads the AppBundle as `browser-payload`. Its
+second job runs that exact payload under the Node harness. The Azure release and
+the NuGet release call it beside the artifact producer; a standalone
+`verify.yml` run calls it too. Native compilation and trimming remain part of its
+one publish operation. The solution build's own browser AppBundle, the one the
+compiled archive carries, is the build's rather than the AOT publish's.
+
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
-a fresh Windows checkout, verifies its commit and platform, and runs each test
-assembly of its manifest as `dotnet <assembly.dll>`, two assemblies at a time and largest first, so the
-longest suite runs alongside the others; each run's output is printed whole when it finishes. A failing assembly
-cancels nothing: every assembly runs, and the job ends by naming each one that failed. The job installs the
+a fresh Windows checkout on each of four runners, verifies its commit and
+platform, and runs one shard of its manifest's test assemblies there
+(`puck artifacts test-windows --shard <i> --shards <n>`, the matrix's size).
+The shards split the manifest by the measured run times recorded in
+`TestDurations.json`: each assembly, longest first, joins the shard with the
+least recorded time so far, so the shards hold every assembly exactly once and
+none ends more than the longest assembly's time past an even split
+(`ArtifactsShardLawTests`). An assembly the table does not name, such as a new
+test project, weighs the median. Each shard writes its measured times as
+`durations.json` beside its TRX reports in its `test-diagnostics-<i>` artifact;
+`puck artifacts durations <directory>` over one run's downloaded reports
+re-records the table when the times drift. A shard runs each assembly as
+`dotnet <assembly.dll>`, two at a time and longest first, so its longest suite
+runs alongside the others; each run's output is printed whole when it finishes.
+A failing assembly cancels nothing: every assembly in the shard runs, and the
+shard ends by naming each one that failed; one shard's failure cancels no other
+(`fail-fast: false`). The job installs the
 pinned DXC through `setup-dxc`, so shader laws that compile or reflect bytecode run here rather than skipping.
 The runner has no GPU, so every assembly runs with the CPU selection the gate's
 suites take (`--filter-not-trait Category=Gpu`): a device law is a GPU leg, and the
@@ -71,7 +99,7 @@ that read a build tree (`BuildTree`) are left out too, since a restored archive
 has no `obj` and writes each file on its own; the gate runs them where it built.
 This consumer does not evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
-producer's browser AppBundle inside that checkout.
+archive's browser AppBundle, the solution build's, inside that checkout.
 The deterministic SDF result-equivalence laws that need no device run here: the
 host interpreters held to each other and to their encodings
 (`Puck.SignedDistance.Tests`, `Puck.SdfVm.Tests`). The device laws that hold a
@@ -79,7 +107,8 @@ GPU's answers to those references (`SdfFieldDeviceLawTests` and the other `Gpu`
 classes) run in `puck gate --gpu` on a GPU machine. CLI process
 interop fixtures run without competing Roslyn/packaging test collections in the
 same assembly. Running two assemblies at a time keeps their independent thread
-pools from oversubscribing the runner and starving socket handshakes. Tests within each
+pools from oversubscribing the runner and starving socket handshakes; each shard
+prints its plan with the runner's processor count. Tests within each
 assembly retain their configured concurrency; production deadlines are unchanged.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
@@ -89,8 +118,11 @@ Explicit tests, including the Maths suite's Deep and Exhaustive tiers, stay out 
 direct assembly run exactly as they stay out of a plain `dotnet test`.
 
 Dependency caches accelerate locked NuGet restores in the producer, formatting,
-and documentation/application jobs. They use the active projects' lock files,
-SDK pin, and tool manifest as inputs. Candidate CLI installation retains its
+and documentation jobs. They use the active projects' lock files,
+SDK pin, and tool manifest as inputs. Application assembly and the WebAssembly
+producer restore only a few projects and take no NuGet cache: the solution-wide
+cache took about three minutes to download and unpack where the restore it
+replaces takes less. Candidate CLI installation retains its
 exclusive artifact feed and private package cache. Application assembly also
 caches npm downloads against its workspace lock file and still runs `npm ci`.
 Application assembly fails on high or critical npm advisories before building
@@ -119,9 +151,22 @@ The formatting job restores the same cache and saves nothing. Both jobs' timeout
 cover a cold run, which every output's key change forces (a DXC or compiler
 change): a run that timed out before saving would leave every later run cold.
 
+The creation bake cache, which `Puck.World`'s world compile reads and fills
+([`WorldAssets.targets`](../../build/WorldAssets.targets)), is restored and saved
+the same way by the `bake-cache` composite action. A bake's own key carries the
+bake code's fingerprint (`DerivationFingerprint.Bake`, which `puck derivations
+--check` holds to the bake code), so the action's key leads with a hash of that
+fingerprint and restores only caches of the same fingerprint, then a hash of the
+world sources under `src/Puck.World/Assets/worlds`, which decides when a run
+saves a new cache. A restored cache makes the world compile read every unchanged
+creation's bake rather than bake it; baking every creation measured four to six
+minutes of the hosted runner's solution build, one process on the build's
+critical path. The build prints `baked 0 creations` when every bake was a hit. The
+producer saves on a miss of its exact key; the formatting job only restores.
+
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries
-on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
+on Linux and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
 distribution checks, and for the two generated ledgers `puck formats --check`
 (`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
@@ -131,11 +176,11 @@ cost of the automatic and merge canary selections; a count must equal its plan).
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
 active asset copies, and source wiring recorded in the
-[branding manifest](../../branding/manifest.json). The
-browser job fails if its input bundle
-is missing. Its nightly frontier measures
-known failing or inconclusive HGB cases separately from release gates.
-The nightly frontier builds its own battery for that scheduled run. Test reports
+[branding manifest](../../branding/manifest.json). The WebAssembly producer's
+Node harness job fails if the payload it downloads has no entry module. The
+nightly frontier measures
+known failing or inconclusive HGB cases separately from release gates, and
+builds its own battery for that scheduled run. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
 Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader
@@ -188,7 +233,8 @@ a cache under the commit's key compiles no shader. The two pins change together.
 A cache from the previous shader inputs still answers every unchanged output.
 Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
-the producer's Functions and browser payloads, builds the dashboard and API docs,
+the artifact producer's Functions payload and the WebAssembly producer's browser
+payload, builds the dashboard and API docs,
 then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
 image. Artifact consumers download immutable artifacts from their own workflow
 run, and missing artifacts fail rather than starting a fallback build.
@@ -210,14 +256,17 @@ it does not compile Bicep again.
 ```mermaid
 flowchart LR
     source[Source commit] --> managed[Compile and publish .NET artifacts]
+    source --> browser[Publish and verify the WebAssembly payload]
     source --> images[Build Linux images]
-    managed --> tests[Solution tests]
+    managed --> tests[Solution tests, four shards]
     managed --> runtime[Runtime and package verification]
     managed --> bundle[Assemble application bundle]
+    browser --> bundle
     managed --> containers[Verify saved images]
     images --> containers
     tests --> deploy[Deploy verified artifacts]
     runtime --> deploy
+    browser --> deploy
     bundle --> deploy
     containers --> deploy
 ```
@@ -238,7 +287,7 @@ the step in the same change.
 | `puck derivations --check` | `artifacts.yml` | `derivations` |
 | `puck schema`, `registry`, `architecture`, `branding`, `formats` and `canary-ceilings --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
-| Every test assembly (`puck artifacts test-windows`, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
+| Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, Linux DXC
@@ -344,7 +393,9 @@ MSBuild, restores locked dependencies, and packs every opted-in library and the 
 then opens the actual packages to check their identities, symbol packages,
 README, licenses, icon, and internal dependency closure. CI adds `--no-build` to
 reuse the already compiled solution and its locked restore; this mode fails if
-required outputs are absent. Missing release
+required outputs are absent, and packs every project at once, since a no-build
+pack writes only its own package, where a building pack restores and compiles the
+shared project graph one project at a time. Missing release
 dependencies fail before the artifact can reach NuGet.org.
 
 For the full local build, install DXC on `PATH` and the workload first:

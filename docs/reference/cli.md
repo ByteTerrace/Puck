@@ -263,7 +263,9 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 ## Automation commands
 
 ```sh
-puck artifacts capture | restore | test-windows | test-world
+puck artifacts capture | restore | test-world
+puck artifacts test-windows [--shard <index> --shards <count>]
+puck artifacts durations <directory>
 puck docs build [--output <directory>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
@@ -288,7 +290,15 @@ that archive into place, and the two test sub-verbs run the archived assemblies
 through the producer's manifest. `test-windows` runs each with the CPU selection
 `puck affected` uses (`--filter-not-trait Category=Gpu`) and leaves out the laws
 that read a build tree (`--filter-not-trait Category=BuildTree`), which a
-restored archive is not. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
+restored archive is not. `--shard <index> --shards <count>` runs one zero-based
+shard of the manifest, one per CI runner: the shards split it by the run times
+`TestDurations.json` records, longest first into the shard with the least time
+so far, so together they run every assembly exactly once; an assembly the table
+does not name weighs the median. Without them the one shard is the whole
+manifest. Each run writes the times it measured to `durations.json` in
+`artifacts/test-results`, and `durations <directory>` records the table from
+every shard's `durations.json` under the directory, one run's, each rounded up to
+a whole second. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
 including hidden files.
