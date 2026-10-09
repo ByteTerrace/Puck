@@ -564,10 +564,23 @@ These are one-line cautions; the owning pages hold the derivations.
 - **A subtraction is exact only where its subject is nearest.** Inside the
   carved void the contact field reads phantom surfaces; extend a carve past
   every point a body can reach, or build the void from union geometry.
-- **An instance bound is an influence sphere tested per tile cone, never per
+- **An instance bound is an influence sphere, tested per tile cone and per
   sample.** It must cover the primitive's reach, its field ops, and its blend
-  halo; a short bound clips geometry at tile edges. `Xor` is maskable with a
-  union-margin bound; do not add it to the unmaskable gate.
+  halo; a short bound clips geometry at tile edges and, through mapCore's
+  whole-instance rejection (`sdfInstanceCannotWin`), at any sample. That
+  rejection divides the gap to the bound by the instance's field rescale, which
+  the part table's `.w` lane carries for every instance (compiled or not), and
+  runs for a compiled part always and for a generic instance only under the
+  root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
+  ambient group masks summarize each mask word as one sphere over its
+  ordinary-sized instances (`sdfSummarizeGroupMask`, oversized ones kept), so a
+  many-instance body is rejected once per word. The soft-shadow march queries
+  `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
+  which neither its stride nor its estimate moves; keep that ceiling exact when
+  changing the march. A skipped instance publishes no fold wall, as a skipped
+  segment does not, so march sample positions can move while staying sound.
+  `Xor` is maskable with a union-margin bound; do not add it to the unmaskable
+  gate.
 - **A field scope is a real per-sample cost.** Scoped segments skip the
   segment early-out and rigid planning. Never open a scope around one primitive
   for its Lipschitz factor; make the primitive's field 1-Lipschitz instead.
