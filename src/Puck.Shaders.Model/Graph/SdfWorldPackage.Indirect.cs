@@ -79,6 +79,9 @@ public static partial class SdfWorldPackage {
     public const string IndirectWritePublication = "indirectWritePublication";
     /// <summary>The finite solve's feedback gain, zero during its direct sweep.</summary>
     public const string IndirectFeedback = "indirectFeedback";
+    /// <summary>Whether transport past a level's near reach, and the coarsest level's, omits moving casters: one for a program
+    /// whose root operands are independently unioned (the static far field, SdfIndirectCache.MarkGeometry), zero otherwise.</summary>
+    public const string IndirectStaticFar = "indirectStaticFar";
     /// <summary>The maximum new receiver proofs admitted by all views this frame; zero freezes proof writes.</summary>
     public const string IndirectReceiverProofs = "indirectReceiverProofs";
     /// <summary>Whether this view has fenced the exact current source and may replace a High cache sample.</summary>
@@ -149,6 +152,7 @@ public static partial class SdfWorldPackage {
         Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
         Value(name: IndirectWritePublication, type: ShaderValueType.Uint),
         Value(name: IndirectFeedback, type: ShaderValueType.Float),
+        Value(name: IndirectStaticFar, type: ShaderValueType.Uint),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint4, name: IndirectUpdates),
         Read(element: ShaderValueType.Float4, name: IndirectDirections),

@@ -475,6 +475,49 @@ public sealed class FixedStepPumpStepGateTests {
         }
     }
     [Fact]
+    public void AHoldingPumpSpendsASlowFramesWholeIntervalNotOnlyItsClampedPart() {
+        var (pump, simulation, router) = NewPump(
+            beforeStep: null,
+            holdsClock: true,
+            mayStep: null
+        );
+
+        using (router) {
+            simulation.AwaitsFrameAfter = static steps => (steps == 1);
+
+            Assert.Equal(
+                expected: 1,
+                actual: pump.Advance(
+                    deltaTicks: StepTicks,
+                    maxFrameTicks: ulong.MaxValue,
+                    stepTicks: StepTicks
+                )
+            );
+
+            // Four host iterations of thirty steps each, clamped to eight steps: the hold is charged every withheld
+            // tick of host time, the dropped remainder included, so its budget runs out in host time.
+            for (var iteration = 0; (iteration < 4); iteration++) {
+                Assert.Equal(
+                    expected: 0,
+                    actual: pump.Advance(
+                        deltaTicks: (30UL * StepTicks),
+                        maxFrameTicks: (8UL * StepTicks),
+                        stepTicks: StepTicks
+                    )
+                );
+            }
+
+            Assert.Equal(
+                expected: (120UL * StepTicks),
+                actual: simulation.WithheldTicks
+            );
+            Assert.Equal(
+                expected: 1,
+                actual: simulation.Steps
+            );
+        }
+    }
+    [Fact]
     public void ControlAPumpThatDoesNotHoldStepsPastTheOwedFrameOnItsNextCall() {
         var (pump, simulation, router) = NewPump(
             beforeStep: null,

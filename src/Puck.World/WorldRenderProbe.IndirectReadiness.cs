@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 
 namespace Puck.World;
@@ -11,11 +12,25 @@ public sealed partial class WorldRenderProbe : IWorldIndirectReadiness {
             reason = "no active indirect residency — select medium or high and wait for the renderer";
             return false;
         }
-        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady);
+        var armed = m_indirectResidencies.Where(predicate: entry => entry.Value).Select(selector: entry =>
+            (Residency: entry.Key, Cache: entry.Key.Tables?.Indirect, Since: (entry.Key.Tables?.Indirect?.Invalidations ?? 0L))).ToArray();
+
+        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady, () => CannotFinish(armed: armed));
         reason = string.Empty;
         return true;
     }
 
+    // The first active cache, armed with the wait, whose solve cannot finish; a cache replaced since arming is judged
+    // from its own start.
+    private static string? CannotFinish((SdfWorldResidency Residency, SdfIndirectCache? Cache, long Since)[] armed) {
+        foreach (var (residency, cache, since) in armed) {
+            if ((residency.IndirectTier == SdfIndirectTier.Off) || residency.IsIndirectReady || (residency.Tables?.Indirect is not { } current)) { continue; }
+            if (current.CannotFinishReason(since: (ReferenceEquals(objA: current, objB: cache) ? since : 0L)) is { } reason) {
+                return $"residency={residency.Name} {reason}";
+            }
+        }
+        return null;
+    }
     private IReadOnlyList<WorldIndirectReadyIdentity>? CaptureIndirectReady() {
         // Check without copying mutable cache snapshots or inferring GPU classifications. The residency owns the
         // current-source comparison and existing completed readback fence for this exact shared publication.

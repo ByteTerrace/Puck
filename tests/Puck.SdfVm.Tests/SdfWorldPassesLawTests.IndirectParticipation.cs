@@ -37,6 +37,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Within(frames: 64, step: () => { cache.Plan(inputs: demand); cache.Submitted(); return cache.IsComplete; },
             building: () => false, reason: () => "The fixed transport demand has not completed.");
+        CompleteSolve(cache: cache);
         var certificate = cache.CertificateRevision;
 
         source = source with { DynamicTransforms = new[] { new DynamicTransform(Vector3.UnitX, Quaternion.Identity) } };
@@ -75,6 +76,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Within(frames: 64, step: () => { cache.Plan(inputs: demand); cache.Submitted(); return cache.IsComplete; },
             building: () => false, reason: () => "The fixed transport demand has not completed.");
+        CompleteSolve(cache: cache);
         var geometry = tables.LightGeometry;
         var certificate = cache.CertificateRevision;
 

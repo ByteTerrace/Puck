@@ -8,9 +8,10 @@ public sealed partial class WorldWaitReadyLawTests {
     private sealed class IndirectReadiness : IWorldIndirectReadiness {
         public IReadOnlyList<WorldIndirectReadyIdentity>? Captured { get; set; }
         public long Frame { get; set; } = 20;
+        public string? Refusal { get; set; }
 
         public bool TryBegin([NotNullWhen(true)] out IWorldIndirectWait? wait, out string reason) {
-            wait = new WorldIndirectWait(() => Frame, () => Captured);
+            wait = new WorldIndirectWait(() => Frame, () => Captured, () => Refusal);
             reason = string.Empty;
             return true;
         }
@@ -49,6 +50,33 @@ public sealed partial class WorldWaitReadyLawTests {
         Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "residency=world allocation=8 epoch=4 generation=0 stamp=29 source=31");
         Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "residency=observer allocation=9 epoch=4 generation=0 stamp=29 source=32");
         Assert.DoesNotContain(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "allocation=7");
+    }
+    [Fact]
+    public void AnIndirectWaitOnASolveThatCannotFinishReleasesAtOnceNamingWhy() {
+        using var row = HostRow.Build(definition: Fixtures.BuildDocument(), name: "boot");
+        var readiness = new IndirectReadiness();
+
+        var (source, session, answered) = Console(row, readiness: null, indirect: readiness);
+        session.Enqueue(line: "world.wait indirect 180");
+        session.Enqueue(line: "probe");
+        source.Collect();
+        readiness.Frame++;
+        source.Collect();
+        Assert.Single(collection: answered);
+        readiness.Refusal = "residency=world its solve still needs about 9000 produced frames at the measured prices, beyond the 4096-frame bound";
+        var original = System.Console.Error;
+        using var captured = new StringWriter();
+
+        try {
+            System.Console.SetError(newError: captured);
+            source.Collect();
+        } finally {
+            System.Console.SetError(newError: original);
+        }
+        Assert.Equal(["world.wait indirect 180", "probe"], answered.Select(selector: item => item.Line));
+        Assert.Contains(actualString: captured.ToString(), comparisonType: StringComparison.Ordinal,
+            expectedSubstring: ": residency=world its solve still needs about 9000 produced frames");
+        Assert.Contains(actualString: captured.ToString(), comparisonType: StringComparison.Ordinal, expectedSubstring: "[indirect: refused at tick ");
     }
     [Fact]
     public void ACompletedIndirectWaitRetainsItsCapturedIdentityWhenTheLiveSourceChanges() {

@@ -9,7 +9,6 @@
 
 static uint sdfIndirectLoads = 0u;
 static uint sdfIndirectHashes = 0u;
-static uint sdfIndirectProofOwner = 0xffffffffu;
 #include "sdf-indirect-bricks.hlsli"
 bool sdfIndirectRange(uint word, uint count) {
     uint length, stride;
@@ -24,6 +23,19 @@ uint sdfIndirectLoad(uint word) {
 #if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 void sdfIndirectStore(uint word, uint value) {
     if (sdfIndirectRange(word, 1u)) { indirectCacheRW[word] = value; }
+}
+// Adds the active lanes' field instruction visits and work units to one kind's monotonic cost counters
+// (SdfIndirectLayout.Cost*), one atomic pair per wave. The counters wrap; the host reads their differences between
+// its fenced readbacks and prices that kind's admission by the visits per unit the device counted.
+void sdfIndirectReportCost(uint kind, uint visits, uint units) {
+    uint totalVisits = WaveActiveSum(visits);
+    uint totalUnits = WaveActiveSum(units);
+    uint word = sdfIndirectCostWordOffset(passGroup.indirectTier) + 2u * kind;
+    if (WaveIsFirstLane() && (totalVisits | totalUnits) != 0u && kind < SdfIndirectCostKinds && sdfIndirectRange(word, 2u)) {
+        uint ignored;
+        InterlockedAdd(indirectCacheRW[word], totalVisits, ignored);
+        InterlockedAdd(indirectCacheRW[word + 1u], totalUnits, ignored);
+    }
 }
 #endif
 #ifdef SDF_INDIRECT_PASS
@@ -69,6 +81,12 @@ bool sdfIndirectCellAt(float3 position, float spacing, out int3 cell) {
 #ifdef SDF_RECEIVER_PASS
 static bool sdfIndirectReceiverPermit = false;
 static bool sdfIndirectReceiverDeferred = false;
+// Whether this receiver took one unit of the shared allowance, and the field visits its launch and proof spent.
+static bool sdfIndirectReceiverAdmitted = false;
+static uint sdfIndirectReceiverVisits = 0u;
+// The field visits of the receiver's approach, per-pixel work outside the allowance its price measures.
+static uint sdfIndirectApproachBefore = 0u;
+static uint sdfIndirectApproachVisits = 0u;
 // The finite CAS loop never overflows the counter. Contention may defer a receiver, but cannot admit past the limit.
 bool sdfIndirectAdmitReceiver() {
     uint word = sdfIndirectReceiverProofWordOffset(passGroup.indirectTier);
@@ -78,7 +96,7 @@ bool sdfIndirectAdmitReceiver() {
     [loop] for (uint attempt = 0u; attempt < 64u && observed < limit; attempt++) {
         uint previous;
         InterlockedCompareExchange(indirectCacheRW[word], observed, observed + 1u, previous);
-        if (previous == observed) { return true; }
+        if (previous == observed) { sdfIndirectReceiverAdmitted = true; return true; }
         observed = previous;
     }
     sdfIndirectReceiverDeferred = true;

@@ -335,6 +335,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// the frame is scheduled.</summary>
     public void BeginFrame() {
         IndirectFrameBudget.BeginFrame();
+        m_tables?.Indirect?.BeginFrame();
         m_receiverBudgetLogged = false;
         m_captured = false;
         m_packed = false;

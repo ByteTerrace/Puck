@@ -1,26 +1,25 @@
-// SdfIndirectApproach: a complete-field primary sample supplies the receiver's free-space certificate.
+// The receiver's approach: a sphere-traced chain of complete-field samples along its camera ray, from half the finest
+// spacing short of the surface, each sample's clear ball reaching the next. The chain joins the receiver when a
+// sample's ball reaches the surface point within its slack: the larger of the surface sample's own clearance and the
+// primary acceptance threshold the surface point was accepted within. Its first sample, the farthest and widest ball,
+// is then the receiver's certified launch. The receiver pass marches it (sdf-indirect-receiver.hlsli) before a shared
+// proof can read a canonical record; a receiver whose chain never joins launches along its normal under the shared
+// admission instead.
 #ifndef SDF_INDIRECT_APPROACH_HLSLI
 #define SDF_INDIRECT_APPROACH_HLSLI
-float3 sdfIndirectApproachPoint(float3 surfacePoint, float3 direction, uint packed) {
-    precise float3 retreat = direction * f16tof32(packed & 65535u);
-    precise float3 position = surfacePoint - retreat;
-    return position;
+// The chain starts this fraction of the finest spacing back along the camera ray and takes at most this many samples,
+// after the surface sample. A chain reaches the surface geometrically, at a rate set by the ray's incidence.
+static const float SdfIndirectApproachRetreat = 0.5;
+static const uint SdfIndirectApproachSteps = 8u;
+// The surface point's slack, or a negative value when the complete field puts it deeper inside than its acceptance
+// threshold allows, which no chain can join.
+float sdfIndirectApproachSlack(float surfaceClearance, float threshold) {
+    if (!isfinite(surfaceClearance) || !isfinite(threshold) || threshold < 0.0 || surfaceClearance < -threshold) { return -1.0; }
+    return max(max(surfaceClearance, 0.0), threshold);
 }
-float sdfIndirectApproachClearance(uint packed) { return f16tof32(packed >> 16u); }
-uint sdfIndirectPackApproach(float3 surfacePoint, float3 direction, float3 sample, float clearance,
-    float surfaceClearance, float spacing) {
-    float distance = dot(surfacePoint - sample, direction);
-    if (!isfinite(distance) || !isfinite(clearance) || !isfinite(surfaceClearance) || !isfinite(spacing)
-        || spacing <= 0.0 || clearance <= 0.0 || surfaceClearance < 0.0 || distance < 0.0
-        || distance > spacing * 0.5 || distance > 65504.0 || length(surfacePoint - sample) > clearance + surfaceClearance) { return 0u; }
-    uint offset = f32tof16(distance) & 65535u;
-    float3 reconstructed = sdfIndirectApproachPoint(surfacePoint, direction, offset);
-    float radius = clearance - length(sample - reconstructed);
-    if (!(radius > 0.0) || length(surfacePoint - reconstructed) > spacing * 0.5) { return 0u; }
-    uint rounded = f32tof16(min(radius, 65504.0)) & 65535u;
-    if (f16tof32(rounded) > radius) { rounded--; }
-    float stored = f16tof32(rounded);
-    if (!(stored > 0.0) || length(surfacePoint - reconstructed) > stored + surfaceClearance) { return 0u; }
-    return offset | (rounded << 16u);
+// Whether a chain sample's clear ball reaches the surface point within its slack.
+bool sdfIndirectApproachJoined(float3 surfacePoint, float3 sample, float clearance, float slack) {
+    float gap = length(surfacePoint - sample);
+    return isfinite(gap) && isfinite(clearance) && clearance > 0.0 && slack >= 0.0 && gap <= clearance + slack;
 }
 #endif

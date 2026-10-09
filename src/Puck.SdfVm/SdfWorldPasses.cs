@@ -245,6 +245,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
 
         entry.Convergence = convergence;
+        entry.ConvergenceInvalidations = (entry.Residency?.Tables?.Indirect?.Invalidations ?? 0L);
         // An ordinary capture observes the next normal temporal sample. Explicit convergence starts a new sequence,
         // and retained tainted history must be discarded before a filled source can serve any capture.
         if (convergence.IsActive || entry.HistoryTainted) {
@@ -630,6 +631,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // Whether the installed graph's passes run the temporal fragment, as the latest prepared render's recorders said.
         public bool InstalledTemporal { get; set; }
         public RenderGraphConvergence? Convergence { get; set; }
+        // The indirect cache's invalidation count when the capture began, against which it judges whether its solve can finish.
+        public long ConvergenceInvalidations { get; set; }
         // The residency last resolved.
         public SdfWorldResidency? Residency { get; set; }
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which
