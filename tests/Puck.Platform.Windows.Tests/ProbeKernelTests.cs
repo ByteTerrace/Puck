@@ -37,12 +37,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
@@ -91,12 +91,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             FinalizeEntry: "finalize",
             Constants: new byte[16],
@@ -150,12 +150,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+                kernel: "ir-blob"
             ),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
@@ -266,12 +266,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             FinalizeEntry: "finalize",
             Constants: FaerieRelightingConstants(),
@@ -385,12 +385,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             FinalizeEntry: "finalize",
             Constants: FaerieRelightingConstants(),
@@ -537,12 +537,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
@@ -662,12 +662,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+                kernel: "faerie"
             ),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
@@ -737,12 +737,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+                kernel: "ir-marker"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+                kernel: "ir-marker"
             ),
             FinalizeEntry: "finalize",
             Constants: IrMarkerConstants(),
@@ -825,12 +825,12 @@ public sealed partial class ProbeKernelTests {
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+                kernel: "ir-marker"
             ),
             AccumulateEntry: "accumulate",
             FinalizeBytecode: Bytecode(
                 entry: "finalize",
-                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+                kernel: "ir-marker"
             ),
             FinalizeEntry: "finalize",
             Constants: IrMarkerConstants(),
@@ -881,8 +881,8 @@ public sealed partial class ProbeKernelTests {
 
     // A minimal puck.probe.manifest.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
     // straight into Channels[0], so a test can assert the bit a run was given without a real texture. The build compiles
-    // it beside its source, as it compiles every shipped kernel.
-    private const string BoundMaskKernel = "tests/Puck.Platform.Windows.Tests/Assets/Probes/bound-mask";
+    // it and ships it to this suite's output, as it ships every kernel.
+    private const string BoundMaskKernel = "bound-mask";
 
     private static void AssertBlobCentroid(in ProbeReading reading) {
         // Centroid of the square: u = (48 + 4) / 64, v = (8 + 4) / 64 → x = 2u - 1, y = 1 - 2v (y-up).
@@ -1017,9 +1017,11 @@ public sealed partial class ProbeKernelTests {
 
         return block;
     }
-    // One entry point's bytecode, which the build compiled beside the kernel's source as <source>.<entry>.dxbc.
+    // One entry point's bytecode, <kernel>.<entry>.dxbc, as the build ships it to this suite's output under
+    // Assets/Probes: the deployed bytecode a camera graph reads, present wherever the compiled suite is, a restored
+    // archive included, which holds no build output under the source tree.
     private static byte[] Bytecode(string kernel, string entry) =>
-        File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"{kernel}.{entry}.dxbc"));
+        File.ReadAllBytes(path: Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Probes", $"{kernel}.{entry}.dxbc"]));
     private static int Luminance(byte[] pixels, int x, int y) {
         var offset = (((y * FrameWidth) + x) * 4);
 
