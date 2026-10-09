@@ -67,7 +67,7 @@ public sealed class HostGpuWorkLawTests {
         foreach (var (suite, selection) in GatePlan.DeviceSuites) {
             foreach (var (name, prefix) in new[] { (suite, $"{suite}.exe"), ("dotnet", $"dotnet exec {suite}.dll") }) {
                 Assert.True(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: selection)}", grammars: Grammars, name: name));
-                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: AffectedCommand.CpuSelection)}", grammars: Grammars, name: name));
+                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: CliTestRun.CpuSelection)}", grammars: Grammars, name: name));
             }
         }
     }

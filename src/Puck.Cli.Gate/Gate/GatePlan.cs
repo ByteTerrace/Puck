@@ -11,7 +11,7 @@ public sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments
 /// <summary>The ordered batch qualification, shared by execution, help and the documentation laws.</summary>
 public static class GatePlan {
     // The test selection of every device suite: the test classes that carry the Gpu trait, which GPU001 holds every
-    // class that opens a device to. The CPU runs take the complement (AffectedCommand.CpuSelection); nothing else spells
+    // class that opens a device to. The CPU runs take the complement (CliTestRun.CpuSelection); nothing else spells
     // either selection. Each suite holds only one device law on the GPU at a time by itself: every Gpu class joins one
     // serial collection (tests/Shared/GpuDeviceCollection.cs). The solution build runs first, so each suite runs its
     // built binaries.

@@ -285,7 +285,10 @@ puck wasm build
 `artifacts capture` archives one build's compiled Release outputs with their
 source identity so consumer jobs restore rather than recompile; `restore` extracts
 that archive into place, and the two test sub-verbs run the archived assemblies
-through the producer's manifest. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
+through the producer's manifest. `test-windows` runs each with the CPU selection
+`puck affected` uses (`--filter-not-trait Category=Gpu`) and leaves out the laws
+that read a build tree (`--filter-not-trait Category=BuildTree`), which a
+restored archive is not. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
 including hidden files.

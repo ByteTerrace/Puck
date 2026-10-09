@@ -75,7 +75,7 @@ public sealed class GateBatchLawTests : GateBatchLaws {
     [Fact]
     public void EveryDeviceSuiteRunsTheGpuTraitAndTheCpuRunsItsComplement() {
         Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu"]));
-        Assert.Equal(actual: AffectedCommand.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
+        Assert.Equal(actual: CliTestRun.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
     }
     [InlineData(false)]
     [InlineData(true)]

@@ -1,7 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 
-using Puck.Cli.Affected;
 using Puck.Cli.Gate;
 
 namespace Puck.Cli.Host;
@@ -17,7 +16,7 @@ namespace Puck.Cli.Host;
 /// whose grammar the composing root names (<see cref="GateComposition.GpuVerbGrammars"/>: <c>parity</c> and
 /// <c>counters</c>) parsed as its root action, or a test host running the device-law assemblies (<c>Puck.DirectX.Tests</c>,
 /// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>) whose arguments can select a
-/// <c>Gpu</c>-trait test: a run carrying the CPU selection (<see cref="AffectedCommand.CpuSelection"/>) opens no
+/// <c>Gpu</c>-trait test: a run carrying the CPU selection (<see cref="CliTestRun.CpuSelection"/>) opens no
 /// device.</item>
 /// </list>
 /// </summary>
@@ -85,7 +84,7 @@ public static class HostProcesses {
     // framework's simple filters narrow one another, so the CPU selection leaves every device law out whatever else the
     // run names. A response file's arguments are not on the command line, so a run naming one can select them.
     private static bool SelectsGpuTests(string[] arguments, int start) {
-        var (option, value) = (AffectedCommand.CpuSelection[0], AffectedCommand.CpuSelection[1]);
+        var (option, value) = (CliTestRun.CpuSelection[0], CliTestRun.CpuSelection[1]);
         var excluded = false;
 
         for (var index = start; (index < arguments.Length); index++) {

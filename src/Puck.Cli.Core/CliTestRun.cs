@@ -9,6 +9,17 @@ public static class CliTestRun {
     /// <summary>The exit code of a run in which at least one test failed; any other nonzero code means the run itself
     /// did not finish or selected nothing.</summary>
     public const int TestsFailed = 2;
+    /// <summary>The <c>Category</c> trait of a law that reads the build tree itself: the <c>bin</c> and <c>obj</c> files a
+    /// build of this checkout laid out, and how they share storage. Only a build's own checkout holds one; a restored
+    /// archive of compiled outputs carries no <c>obj</c> and writes each file on its own.</summary>
+    public const string BuildTreeCategory = "BuildTree";
+
+    /// <summary>Leaves out every test that opens a hardware GPU device (<c>[Trait("Category", "Gpu")]</c>, which GPU001
+    /// requires of each such class): the selection of every run beside a GPU leg or on a host without a GPU.</summary>
+    public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
+    /// <summary>Leaves out every law that reads the build tree (<see cref="BuildTreeCategory"/>): the selection of a run
+    /// over a restored archive rather than a build.</summary>
+    public static readonly string[] WithoutBuildTree = ["--filter-not-trait", $"Category={BuildTreeCategory}"];
 
     /// <summary>Selects every test whose fully qualified method name contains <paramref name="name"/>, such as a class
     /// (<c>Class</c>) or one of its methods (<c>Class.Method</c>).</summary>

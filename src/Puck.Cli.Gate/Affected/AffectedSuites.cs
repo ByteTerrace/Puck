@@ -203,7 +203,7 @@ public static class AffectedSuites {
     // Microsoft.Testing.Platform hands every option it does not own to the test application, which refuses MSBuild
     // switches, so the run builds nothing and takes none (AffectedCommand.TestArguments). A plain run selects exactly
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
-    // laws out (AffectedCommand.CpuSelection). The platform prints each failure with its message and stack.
+    // laws out (CliTestRun.CpuSelection). The platform prints each failure with its message and stack.
     private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
         if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite.Name)) {
             return new AffectedSuiteResult(
@@ -213,7 +213,7 @@ public static class AffectedSuites {
         }
 
         var run = CliProcess.RunCaptured(
-            arguments: [.. AffectedCommand.TestArguments(suite: suite.Name), .. AffectedCommand.CpuSelection],
+            arguments: [.. AffectedCommand.TestArguments(suite: suite.Name), .. CliTestRun.CpuSelection],
             fileName: "dotnet",
             input: string.Empty,
             timeout: Ceiling,

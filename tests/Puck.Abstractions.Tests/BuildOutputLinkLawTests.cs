@@ -8,7 +8,10 @@ namespace Puck.Abstractions.Tests;
 /// link, so it shares its file with the referenced project's bin; and no file in it shares its file with a compiler
 /// output under any project's <c>obj</c>, because the compiler truncates and rewrites those in place, which would
 /// rewrite every linked copy, a kept World build included. Windows reports a file's identity through its handle; other
-/// platforms skip.</summary>
+/// platforms skip. They read the build tree itself, so they carry the <c>BuildTree</c> trait: the gate runs them in the
+/// checkout it built, and CI's test job, which restores an archive of <c>bin</c> outputs with no <c>obj</c> and writes
+/// each file on its own, leaves them out (<c>CliTestRun.WithoutBuildTree</c>).</summary>
+[Trait("Category", "BuildTree")]
 public sealed partial class BuildOutputLinkLawTests {
     private static readonly string Bin = AppContext.BaseDirectory;
 

@@ -356,9 +356,6 @@ public static class AffectedCommand {
     /// and takes none.</summary>
     public static string[] TestArguments(string suite) => ["test", "--project", $"tests/{suite}/{suite}.csproj", "-c", "Release", "--no-build"];
 
-    /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
-    public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
-
     // A heavy suite waits while another process runs one, machine-wide, and for memory and disk headroom: two at once
     // exhaust the memory. The waiting process's own runs never hold it back.
     internal static bool AdmitHeavySuite(string repositoryRoot, string suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
