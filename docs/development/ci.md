@@ -251,6 +251,10 @@ their sources, which compiles no shader, and `docs/api/docfx.json` sets
 compiled output. Having no CLI, the producer runs DocFX with exactly the
 arguments `puck docs build` runs, a law holds the two equal, and application
 assembly stages the uploaded site with `puck azure build --documentation`.
+It downloads the site as its zip, unextracted (`skip-decompress`), and the verb
+extracts it: the download action's streaming extraction of the site's 12,600
+files fails on the Windows runner every time, and a law holds every download of
+the site to the archive.
 Infrastructure compilation likewise runs once, after it has linted and
 format-checked every Bicep source; any diagnostic fails it
 ([Bicep conventions](../../src/Puck.Azure.Resources/README.md#bicep-sources)).
