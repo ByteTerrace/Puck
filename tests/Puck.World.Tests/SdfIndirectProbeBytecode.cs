@@ -10,7 +10,7 @@ internal static class SdfIndirectProbeBytecode {
 
         "sdf-indirect-receiver-proof.comp" => (64 * 1024),
         "sdf-indirect-bricks-proof.comp" => (64 * 1024),
-        "sdf-indirect-proof-ownership.comp" => (64 * 1024),
+        "sdf-indirect-proof-ownership.comp" => (96 * 1024),
         "sdf-indirect-proof-trace-owner.comp" => (64 * 1024),
         "sdf-indirect-admission-proof.comp" => (64 * 1024),
 

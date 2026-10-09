@@ -42,6 +42,7 @@ public sealed partial class SdfIndirectCache {
         SdfWorldPackage.IndirectTrace => m_step?.Trace,
         _ => null,
     };
+
     private void BeginTransportChunks(IrradianceFramePlan plan, int instructionCount) {
         ClearTransportChunks();
         m_transportPrices = PriceRevision;

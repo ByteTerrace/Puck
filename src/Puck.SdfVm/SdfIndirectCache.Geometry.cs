@@ -27,6 +27,7 @@ public sealed partial class SdfIndirectCache {
         ArgumentNullException.ThrowIfNull(program);
         return program.IndirectInstancesComposable;
     }
+
     /// <summary>Gets whether geometry changes are queued for the next plan.</summary>
     public bool HasQueuedGeometry => (m_changedGeometry.Count != 0);
 
@@ -36,8 +37,8 @@ public sealed partial class SdfIndirectCache {
     /// <param name="current">The complete geometry bound after the change.</param>
     /// <param name="near">Whether only near transport can see the change: a moving caster under the static far field.</param>
     public void MarkGeometry(IrradianceSphere previous, IrradianceSphere current, bool near = false) {
-        Queue(sphere: previous, near: near);
-        Queue(sphere: current, near: near);
+        Queue(near: near, sphere: previous);
+        Queue(near: near, sphere: current);
     }
 
     private void Queue(IrradianceSphere sphere, bool near) {

@@ -96,6 +96,7 @@ public sealed partial class SdfIndirectCache {
     public void PlanLighting() {
         if ((m_shade is not null) || Frozen || (m_solve is null)) { return; }
         var pinned = Lighting?.Frame;
+
         m_shade = m_solve.Plan(probeBudget: ((pinned is null) ? null : SdfIndirectWork.ShadeProbeBudget(frame: pinned, layout: Layout, measuredFieldCost: MeasuredFieldCost(kind: SdfIndirectLayout.CostShade))));
         if (m_shade is not { } batch) { return; }
         var source = Lighting?.Frame;

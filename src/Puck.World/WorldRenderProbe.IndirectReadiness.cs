@@ -31,7 +31,6 @@ public sealed partial class WorldRenderProbe : IWorldIndirectReadiness {
         }
         return null;
     }
-
     private IReadOnlyList<WorldIndirectReadyIdentity>? CaptureIndirectReady() {
         // Check without copying mutable cache snapshots or inferring GPU classifications. The residency owns the
         // current-source comparison and existing completed readback fence for this exact shared publication.

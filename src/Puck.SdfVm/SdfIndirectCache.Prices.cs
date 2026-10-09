@@ -19,8 +19,8 @@ public sealed partial class SdfIndirectCache {
     private readonly int[] m_priceCursor = new int[SdfIndirectLayout.CostKinds];
     private readonly uint[] m_costBaseline = new uint[SdfIndirectLayout.CostWords];
     private readonly List<SdfIndirectCostReadback> m_costReadbacks = [];
-
     private long m_costGeneration = 1;
+
     private long m_baselineGeneration;
     private long m_baselineSequence;
     private long m_transportPrices;
@@ -49,8 +49,10 @@ public sealed partial class SdfIndirectCache {
         SdfWorldPackage.IndirectClassify => UnitsOf(kind: ClassifyKind),
         _ => UnitsOf(kind: TraceKind),
     };
+
     /// <summary>Gets one admitted receiver's unit at the current prices.</summary>
     public SdfIndirectUnits ReceiverUnits => (SdfIndirectCost.ReceiverUnits with { MeasuredFieldCost = MeasuredFieldCost(kind: SdfIndirectLayout.CostReceiver) });
+
     /// <summary>Prices one plan: one submission's allowance, and never less than one whole item of each kind, so a field
     /// too heavy for a whole item still makes progress in chunks.</summary>
     /// <param name="instructionCount">The complete field's instruction count.</param>
@@ -71,6 +73,7 @@ public sealed partial class SdfIndirectCache {
 
     internal void AttachCostReadback(SdfIndirectCostReadback readback) => m_costReadbacks.Add(item: readback);
     internal void DetachCostReadback(SdfIndirectCostReadback readback) => m_costReadbacks.Remove(item: readback);
+
     /// <summary>Records one completed copy of the device's cost counters. Copies of a cleared buffer's earlier generation
     /// and copies older than the baseline are discarded; the first copy of a generation is its baseline, and each later
     /// copy prices every kind whose units advanced at the visits per unit since the previous copy.</summary>
@@ -83,11 +86,11 @@ public sealed partial class SdfIndirectCache {
             var changed = false;
 
             for (var kind = 0; (kind < SdfIndirectLayout.CostKinds); kind++) {
-                var visits = unchecked(counters[(2 * kind)] - m_costBaseline[(2 * kind)]);
-                var units = unchecked(counters[((2 * kind) + 1)] - m_costBaseline[((2 * kind) + 1)]);
+                var visits = unchecked((counters[(2 * kind)] - m_costBaseline[(2 * kind)]));
+                var units = unchecked((counters[((2 * kind) + 1)] - m_costBaseline[((2 * kind) + 1)]));
 
                 if (units == 0) { continue; }
-                var price = Math.Max(val1: 1L, val2: ((((long)visits) + units) - 1) / units);
+                var price = Math.Max(val1: 1L, val2: (((((long)visits) + units) - 1) / units));
                 var slot = ((kind * PriceWindow) + m_priceCursor[kind]);
 
                 changed |= (m_prices[slot] != price);

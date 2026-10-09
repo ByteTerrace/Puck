@@ -54,7 +54,7 @@ public readonly record struct IrradiancePlanPrices(long Allowance, long Place, l
     /// <param name="allowance">The evaluation allowance.</param>
     /// <returns>The prices.</returns>
     public static IrradiancePlanPrices Evaluations(long allowance) =>
-        new(allowance, IrradianceSchedule.PlaceEvaluations, IrradianceSchedule.ClassifyEvaluations, IrradianceSchedule.TraceEvaluations);
+        new(Allowance: allowance, Classify: IrradianceSchedule.ClassifyEvaluations, Place: IrradianceSchedule.PlaceEvaluations, Trace: IrradianceSchedule.TraceEvaluations);
 }
 /// <summary>
 /// The host's schedule for a residency's cache: which bricks each level allocates from its pool, which it classifies and

@@ -142,7 +142,9 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder, IRender
         if (m_context.Part == SdfWorldPackage.IndirectTrace) { m_built.Cache.Submitted(); }
         if (IsShade) { m_built.Cache.SubmittedLighting(); }
     }
+
     public ulong ReadbackBytes => (m_costs?.ReadbackBytes ?? 0UL);
+
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
         if (m_costs is { } costs) { return costs.Take(index: index, readback: out readback, slot: slot); }
         readback = default;

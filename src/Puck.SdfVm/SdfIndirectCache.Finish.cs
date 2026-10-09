@@ -14,7 +14,6 @@ public sealed partial class SdfIndirectCache {
 
     /// <summary>Gets the geometry invalidations that withdrew admitted transport, a reset included.</summary>
     public long Invalidations { get; private set; }
-
     /// <summary>Gets the produced frames the current transport and finite lighting solve still need at the measured
     /// prices, or null while a kind with work left has no measurement. Each frame submits at most one submission's
     /// allowance and one plan's item budgets of transport, and one shade batch.</summary>
@@ -58,9 +57,9 @@ public sealed partial class SdfIndirectCache {
         if (invalidated > 1) {
             return System.FormattableString.Invariant(formattable: $"the scene withdrew its admitted transport {invalidated} times since the wait began, so its solve never stands still long enough to finish");
         }
-        return ((RemainingFrames is { } frames) && (frames > FinishFrameBound))
+        return (((RemainingFrames is { } frames) && (frames > FinishFrameBound))
             ? System.FormattableString.Invariant(formattable: $"its solve still needs about {frames} produced frames at the measured prices, beyond the {FinishFrameBound}-frame bound")
-            : null;
+            : null);
     }
 
     private static long Frames(long cost) => (((cost + SdfIndirectCost.SubmissionCostLimit) - 1) / SdfIndirectCost.SubmissionCostLimit);

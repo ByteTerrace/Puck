@@ -13,6 +13,7 @@ internal sealed class SdfIndirectCostReadback : IDisposable {
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly Slot[] m_slots;
+
     private readonly uint[] m_words = new uint[SdfIndirectLayout.CostWords];
     private readonly List<Slot> m_signaled = [];
 

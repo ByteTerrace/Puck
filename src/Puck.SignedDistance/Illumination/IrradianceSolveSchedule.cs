@@ -59,7 +59,7 @@ public sealed class IrradianceSolveSchedule {
         get {
             if (IsComplete) { return 0; }
             var total = 0L;
-            var done = (long)m_offset;
+            var done = ((long)m_offset);
 
             for (var level = 0; (level < m_levels.Length); level++) {
                 total += m_levels[level].Length;
@@ -78,7 +78,7 @@ public sealed class IrradianceSolveSchedule {
     public IrradianceSolveBatch? Plan(int? probeBudget = null) {
         if (IsComplete || (m_pending is not null)) { return m_pending; }
         while ((m_level > 0) && (m_offset == m_levels[m_level].Length)) { m_level--; m_offset = 0; }
-        var budget = Math.Clamp(value: (probeBudget ?? m_budget), min: 1, max: m_budget);
+        var budget = Math.Clamp(max: m_budget, min: 1, value: (probeBudget ?? m_budget));
         var count = Math.Min(val1: budget, val2: (m_levels[m_level].Length - m_offset));
         var probes = Array.AsReadOnly(array: m_levels[m_level].AsSpan(length: count, start: m_offset).ToArray());
         var last = ((m_offset + count) == m_levels[m_level].Length);
