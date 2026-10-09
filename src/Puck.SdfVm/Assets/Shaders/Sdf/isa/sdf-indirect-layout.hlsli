@@ -120,6 +120,7 @@ uint sdfIndirectTraceBudget(uint tier) { return tier == SdfIndirectTierHigh ? 51
 uint sdfIndirectClassifyBudget(uint tier) { return tier == SdfIndirectTierHigh ? 8u : (tier == SdfIndirectTierMedium ? 4u : 0u); }
 uint sdfIndirectShadeBudget(uint tier) { return tier == SdfIndirectTierHigh ? 8192u : (tier == SdfIndirectTierMedium ? 4096u : 0u); }
 uint sdfIndirectReceiverProofBudget(uint tier) { return tier == SdfIndirectTierHigh ? 65536u : (tier == SdfIndirectTierMedium ? 32768u : 0u); }
+uint sdfIndirectFrameMicroseconds(uint tier) { return tier == SdfIndirectTierHigh ? 4000u : (tier == SdfIndirectTierMedium ? 2000u : 0u); }
 uint sdfIndirectBounceLimit(uint tier) { return tier == SdfIndirectTierHigh ? 4u : (tier == SdfIndirectTierMedium ? 2u : 0u); }
 uint sdfIndirectProofCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 262144u : (tier == SdfIndirectTierMedium ? 131072u : 0u); }
 uint sdfIndirectProbeWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 0u : (tier == SdfIndirectTierMedium ? 0u : 0u); }

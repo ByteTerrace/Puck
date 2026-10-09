@@ -15,8 +15,8 @@ public sealed partial class SdfIndirectCache {
     /// <summary>Gets the geometry invalidations that withdrew admitted transport, a reset included.</summary>
     public long Invalidations { get; private set; }
     /// <summary>Gets the produced frames the current transport and finite lighting solve still need at the measured
-    /// prices, or null while a kind with work left has no measurement. Each frame submits at most one submission's
-    /// allowance and one plan's item budgets of transport, and one shade batch.</summary>
+    /// prices, or null while a kind with work left has no measurement. Each frame submits at most its device slice
+    /// (<see cref="FrameCost"/>) and one plan's item budgets of transport, and one shade batch.</summary>
     public long? RemainingFrames {
         get {
             var remaining = m_schedule.Remaining;
@@ -62,7 +62,8 @@ public sealed partial class SdfIndirectCache {
             : null);
     }
 
-    private static long Frames(long cost) => (((cost + SdfIndirectCost.SubmissionCostLimit) - 1) / SdfIndirectCost.SubmissionCostLimit);
+    // Each produced frame admits its device slice of transport and lighting.
+    private long Frames(long cost) => (((cost + FrameCost) - 1) / FrameCost);
     private static long Batches(long count, int budget) => ((budget <= 0) ? 0 : (((count + budget) - 1) / budget));
     private void CountInvalidation() => Invalidations++;
 }

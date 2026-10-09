@@ -11,5 +11,6 @@ public sealed partial class SdfWorldResidency {
     /// <param name="frame">The indirect cache generation, separate from the produced frame.</param>
     /// <param name="fixedCost">Bounded cache-record traversal work independent of the field interpreter.</param>
     public void LogIndirectSubmission(string kind, long queries, int instructionCount, uint frame, long fixedCost = 0) =>
-        SdfIndirectSubmissionLog.Write(IndirectSubmissionLog, Name, IndirectFrameBudget.Frame, kind, queries, instructionCount, fixedCost, frame, IndirectFrameBudget.Cost);
+        SdfIndirectSubmissionLog.Write(IndirectSubmissionLog, Name, IndirectFrameBudget.Frame, kind, queries, instructionCount, fixedCost, frame, IndirectFrameBudget.Cost,
+            (IndirectFrameBudget.DeviceLimit + SdfIndirectFrameBudget.AuxiliaryLimit));
 }

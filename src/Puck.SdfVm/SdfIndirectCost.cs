@@ -89,6 +89,20 @@ public static class SdfIndirectCost {
     /// <summary>The conservative instruction-visit allowance per indirect submission. This is an admission estimate,
     /// not a device-independent time guarantee; GPU qualification measures its watchdog margin.</summary>
     public const long SubmissionCostLimit = 67_108_864;
+    /// <summary>The calibrated device rate that turns a frame's indirect device time into counted field visits. The
+    /// slowest measured kind sets it: on the RTX 2060 floor desktop, puck.world's classification admitted a full
+    /// <see cref="SubmissionCostLimit"/> of measured visits per produced frame and took 447 to 517 ms of device time,
+    /// about 130 visits per microsecond. Faster kinds and devices finish their slice early.</summary>
+    public const long DeviceVisitsPerMicrosecond = 128;
+
+    /// <summary>Gets the counted field visits one produced frame admits for a tier's transport and lighting solve:
+    /// its device-time slice (<see cref="SdfIndirectLayout.FrameMicroseconds"/>) at the calibrated device rate.</summary>
+    /// <param name="layout">The cache tier.</param>
+    /// <returns>The frame's visit budget; zero for the disabled tier.</returns>
+    public static long FrameCost(SdfIndirectLayout layout) {
+        ArgumentNullException.ThrowIfNull(layout);
+        return checked((layout.FrameMicroseconds * DeviceVisitsPerMicrosecond));
+    }
     /// <summary>One stratum's counted field evaluations, including its hit gradient and feedback proof.</summary>
     public const int TraceQueries = IrradianceSchedule.TraceEvaluations;
     /// <summary>One brick's partition evaluations, including every directed cell segment.</summary>
@@ -123,9 +137,14 @@ public static class SdfIndirectCost {
     /// <param name="units">The kind's admission unit and price.</param>
     /// <param name="instructionCount">The complete field program's instruction count.</param>
     /// <param name="firstUnit">The first unit still to admit, counted across items; zero admits every item.</param>
+    /// <param name="limit">The visits one chunk may take: a submission's cap, or a frame's device-time slice
+    /// (<see cref="FrameCost"/>). A unit over it still forms a chunk of its own; only a unit over the submission cap is
+    /// refused.</param>
     /// <returns>The chunks in submission order; empty when there is nothing to admit.</returns>
-    /// <exception cref="SdfIndirectCostRefusedException">A single field query or indivisible unit exceeds the cap.</exception>
-    public static IReadOnlyList<SdfIndirectChunk> Admit(int count, SdfIndirectUnits units, int instructionCount, int firstUnit = 0) {
+    /// <exception cref="SdfIndirectCostRefusedException">A single field query or indivisible unit exceeds the submission cap.</exception>
+    public static IReadOnlyList<SdfIndirectChunk> Admit(int count, SdfIndirectUnits units, int instructionCount, int firstUnit = 0, long limit = SubmissionCostLimit) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, SubmissionCostLimit);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(units.UnitsPerItem);
         ArgumentOutOfRangeException.ThrowIfNegative(units.QueriesPerUnit);
@@ -146,8 +165,8 @@ public static class SdfIndirectCost {
         if (itemCost == 0) { return [new SdfIndirectChunk(ItemFirst: (position / size), UnitCount: (total - position), UnitFirst: (position % size))]; }
         var rest = (((position % size) == 0) ? null : new SdfIndirectChunk(ItemFirst: (position / size), UnitCount: (size - (position % size)), UnitFirst: (position % size)));
 
-        if ((itemCost <= SubmissionCostLimit) && ((rest is null) || (units.CostOf(chunk: rest, instructionCount: instructionCount) <= SubmissionCostLimit))) {
-            var whole = ((int)(SubmissionCostLimit / itemCost));
+        if ((itemCost <= limit) && ((rest is null) || (units.CostOf(chunk: rest, instructionCount: instructionCount) <= limit))) {
+            var whole = ((int)(limit / itemCost));
 
             if (rest is not null) {
                 chunks.Add(item: rest);
@@ -159,15 +178,16 @@ public static class SdfIndirectCost {
             return chunks;
         }
         if (units.RefusalOf(instructionCount: instructionCount) is { } refusal) { throw new SdfIndirectCostRefusedException(message: $"Indirect admission refused: {refusal}."); }
-        // An item over the cap never fits whole, so a run touches at most its own item and the start of the next.
+        // An item over the cap never fits whole, so a run touches at most its own item and the start of the next. A run
+        // holds at least one unit, so a unit over a frame's slice still advances, one unit a chunk.
         while (position < total) {
             var item = (position / size);
             var local = (position % size);
             var room = (size - local);
             var leading = ((local != 0) ? units.SplitItemCost : 0);
-            var within = ((((SubmissionCostLimit - units.FixedItemCost) - units.SplitItemCost)) / unitCost);
+            var within = Math.Max(val1: 1L, val2: ((((limit - units.FixedItemCost) - units.SplitItemCost)) / unitCost));
             var length = ((within < room) ? within
-                : Math.Max(val1: room, val2: Math.Min(val1: ((((SubmissionCostLimit - (2 * units.FixedItemCost)) - leading) - units.SplitItemCost) / unitCost), val2: ((room + size) - 1))));
+                : Math.Max(val1: room, val2: Math.Min(val1: ((((limit - (2 * units.FixedItemCost)) - leading) - units.SplitItemCost) / unitCost), val2: ((room + size) - 1))));
             var admitted = ((int)Math.Min(val1: length, val2: (total - position)));
 
             chunks.Add(item: new SdfIndirectChunk(ItemFirst: item, UnitCount: admitted, UnitFirst: local));
@@ -180,13 +200,14 @@ public static class SdfIndirectCost {
     /// <param name="count">The scheduled items.</param>
     /// <param name="units">The kind's admission unit and price.</param>
     /// <param name="instructionCount">The complete field program's instruction count.</param>
+    /// <param name="limit">The visits one chunk may take, as <see cref="Admit"/> takes it.</param>
     /// <returns>The whole items per chunk, or zero when one item exceeds the cap and is split.</returns>
-    public static int WholeItems(int count, SdfIndirectUnits units, int instructionCount) {
+    public static int WholeItems(int count, SdfIndirectUnits units, int instructionCount, long limit = SubmissionCostLimit) {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var itemCost = units.ItemCost(instructionCount: instructionCount);
 
         if (itemCost == 0) { return count; }
-        return ((itemCost <= SubmissionCostLimit) ? ((int)Math.Min(val1: count, val2: (SubmissionCostLimit / itemCost))) : 0);
+        return ((itemCost <= limit) ? ((int)Math.Min(val1: count, val2: (limit / itemCost))) : 0);
     }
     /// <summary>Names why the cache cannot run its tier against this frame's field within one submission, or returns
     /// null. Every kind's chunks are admitted only while a single field query and each indivisible unit fit the cap.</summary>

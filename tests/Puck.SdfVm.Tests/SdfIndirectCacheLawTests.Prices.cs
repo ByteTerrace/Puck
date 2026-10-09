@@ -113,6 +113,44 @@ public sealed partial class SdfIndirectCacheLawTests {
             return counters;
         }
     }
+    [InlineData(10u)]
+    [InlineData(400_000u)]
+    [Theory]
+    public void AMeasuredTransportStepTakesTheTiersDeviceSliceOrOneIndivisibleUnit(uint visitsPerUnit) {
+        using var rig = new Rig();
+        var cache = rig.Cache;
+        var slice = SdfIndirectCost.FrameCost(layout: cache.Layout);
+
+        // Medium's 2 ms at the calibrated device rate.
+        Assert.Equal(256_000L, slice);
+        Assert.Equal(SdfIndirectCost.SubmissionCostLimit, cache.FrameDeviceLimit);
+        cache.ObserveCost(counters: Uniform(visits: 0, units: 0), generation: cache.CostGeneration, sequence: 1);
+        cache.ObserveCost(counters: Uniform(visits: (visitsPerUnit * 4u), units: 4), generation: cache.CostGeneration, sequence: 2);
+        Assert.Equal(slice, cache.FrameDeviceLimit);
+        var steps = 0;
+
+        do {
+            cache.Plan(inputs: Inputs, instructionCount: Instructions);
+            var units = new[] { SdfWorldPackage.IndirectPlace, SdfWorldPackage.IndirectClassify, SdfWorldPackage.IndirectTrace }
+                .Sum(selector: part => (cache.TransportChunk(part: part)?.UnitCount ?? 0));
+
+            Assert.True(condition: ((cache.TransportStepCost <= slice) || (units == 1)),
+                userMessage: $"A step of {units} units costs {cache.TransportStepCost} visits past the {slice}-visit slice.");
+            cache.Submitted();
+            steps++;
+        } while (!cache.TransportComplete && (steps < 100_000));
+        Assert.True(condition: cache.TransportComplete);
+
+        static uint[] Uniform(uint visits, uint units) {
+            var counters = new uint[SdfIndirectLayout.CostWords];
+
+            for (var kind = 0; (kind < SdfIndirectLayout.CostKinds); kind++) {
+                counters[(2 * kind)] = visits;
+                counters[((2 * kind) + 1)] = units;
+            }
+            return counters;
+        }
+    }
     [Fact]
     public void QueuedGeometryWaitsForTheRunningSolveThenWithdrawsItsTransport() {
         using var rig = new Rig();

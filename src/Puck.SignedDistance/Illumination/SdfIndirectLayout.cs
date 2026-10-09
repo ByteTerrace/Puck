@@ -118,6 +118,7 @@ public sealed class SdfIndirectLayout {
         ClassifyBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4, _ => 8 };
         ShadeBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4096, _ => 8192 };
         ReceiverProofBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 32768, _ => 65536 };
+        FrameMicroseconds = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2000, _ => 4000 };
         BounceLimit = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2, _ => MaximumBounces };
         ProofCapacity = (ProbeCapacity * ProofsPerCell);
         CellWordOffset = (ProbeCapacity * ProbeWords);
@@ -156,6 +157,10 @@ public sealed class SdfIndirectLayout {
     public int ShadeBudget { get; }
     /// <summary>Gets the new receiver proofs all views may request in one frame.</summary>
     public int ReceiverProofBudget { get; }
+    /// <summary>Gets the device time, in microseconds, one produced frame gives the cache's transport and lighting solve:
+    /// an eighth of a 60 FPS frame at Medium (2 ms of 16.7) and twice that at High. The renderer holds it in counted
+    /// field visits at a calibrated device rate, so admission stays load-independent.</summary>
+    public int FrameMicroseconds { get; }
     /// <summary>Gets the maximum feedback sweeps after the direct sweep.</summary>
     public int BounceLimit { get; }
     /// <summary>Gets the proof hash slots.</summary>

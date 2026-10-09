@@ -15,8 +15,16 @@ public sealed partial class SdfWorldPassesLawTests {
     [Theory]
     public async Task AProducedFrameBoundsAllChunksIncludingTheObservedParityProofAllowanceAsync(SdfIndirectTier tier) {
         var result = await RunFrameBudgetSolve(tier, budgeted: true);
+        var slice = SdfIndirectCost.FrameCost(layout: new SdfIndirectLayout(tier: tier));
 
-        Assert.All(result.FrameCosts, cost => Assert.InRange(actual: cost, high: SdfIndirectFrameBudget.CostLimit, low: 0));
+        // The auxiliary allowance holds the receivers; the device allowance holds every shade chunk after a frame's first.
+        // This fake device measures nothing, so the allowance stays one submission's cap rather than the tier's slice.
+        Assert.All(result.FrameBudgets, frame => {
+            Assert.InRange(actual: frame.Auxiliary, high: SdfIndirectFrameBudget.AuxiliaryLimit, low: 0);
+            Assert.Contains(expected: frame.Limit, collection: new[] { slice, SdfIndirectCost.SubmissionCostLimit });
+            Assert.True(condition: ((frame.Device <= frame.Limit) || (frame.Chunks == 1)),
+                userMessage: $"A frame of {frame.Chunks} chunks reserved {frame.Device} visits past its {frame.Limit}-visit slice.");
+        });
         Assert.True(condition: (result.Frames > 1), userMessage: "A large solve must leave whole chunks for later produced frames.");
     }
     [Fact]
@@ -84,7 +92,7 @@ public sealed partial class SdfWorldPassesLawTests {
             while (model.PlanSolve() is { } batch) {
                 var cost = SdfIndirectCost.SubmissionCostLimit;
 
-                if (budgeted && !budget.TryAdmit(chunk: batch, cost: cost)) { break; }
+                if (budgeted && !budget.TryAdmitDevice(chunk: batch, cost: cost)) { break; }
                 chunks.AddRange(collection: batch.Probes);
                 probes.UnionWith(other: batch.Probes);
                 model.SubmittedSolve();
@@ -96,7 +104,7 @@ public sealed partial class SdfWorldPassesLawTests {
         return (frames, chunks, radiance, irradiance);
     }
 
-    private sealed record FrameBudgetSolve(int Frames, int Sweeps, int Generation, uint Publication, List<long> FrameCosts, List<byte[]> Chunks);
+    private sealed record FrameBudgetSolve(int Frames, int Sweeps, int Generation, uint Publication, List<(long Device, long Auxiliary, long Limit, int Chunks)> FrameBudgets, List<byte[]> Chunks);
 
     private static async Task<FrameBudgetSolve> RunFrameBudgetSolve(SdfIndirectTier tier, bool budgeted) {
         var source = CostFrame(shapes: 168) with { IndirectTier = tier };
@@ -135,7 +143,7 @@ public sealed partial class SdfWorldPassesLawTests {
             using var recorder = factory.Create(recorderContext, built, new RenderGraphPackageGroups(DescriptorPool: pool, FrameBlocks: [block], OutputImages: [], PassBlocks: [block], Regions: []));
             using var counters = new GpuKernelCounters(gpu.Services.BufferFactory, 1, 1, "frame-budget", "counters");
             using var commands = gpu.Services.CommandPoolFactory.Create(name: default);
-            var costs = new List<long>();
+            var budgets = new List<(long Device, long Auxiliary, long Limit, int Chunks)>();
             var chunks = new List<byte[]>();
             var frames = 0;
             var receiver = new object();
@@ -149,6 +157,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 var cost = SdfIndirectCost.EstimateCost(instructionCount: 168, queries: 399_440);
 
                 Assert.True(condition: residency.IndirectFrameBudget.TryAdmit(chunk: receiver, cost: cost));
+                var drawn = 0;
+
                 while (!cache.LightingComplete) {
                     var skips = recorder.Skips(context: context);
 
@@ -171,16 +181,15 @@ public sealed partial class SdfWorldPassesLawTests {
                     }
                     cache.Regions[4].Contents[..(count * 16)].CopyTo(destination: chunk.AsSpan(start: 16));
                     chunks.Add(item: chunk);
-                    cost += (SdfIndirectCost.EstimateCost((((long)count) * SdfIndirectCost.ShadeQueries(cache.Layout, source)), 168)
-                        + (count * SdfIndirectCost.ShadeCacheCost(layout: cache.Layout)));
+                    drawn++;
                     recorder.Submitted();
                 }
-                costs.Add(item: cost);
+                budgets.Add(item: (residency.IndirectFrameBudget.DeviceCost, residency.IndirectFrameBudget.AuxiliaryCost, residency.IndirectFrameBudget.DeviceLimit, drawn));
                 Assert.False(condition: residency.IsIndirectReady);
                 return cache.LightingComplete;
             }, () => false, () => "The deferred finite solve must complete after a bounded number of produced frames.");
             Assert.Equal((cache.Layout.BounceLimit + 1), cache.CompletedSweeps);
-            return new(frames, cache.CompletedSweeps, cache.PublishedGeneration, cache.PublishedStamp, costs, chunks);
+            return new(frames, cache.CompletedSweeps, cache.PublishedGeneration, cache.PublishedStamp, budgets, chunks);
         } finally { gpu.Services.Bindings.DestroyPool(poolHandle: pool); }
 
         ShaderPipelineResource[] Declarations(IReadOnlyList<ResourceReference> ports) => [.. ports.Select(selector: port => fragment.Resources.Single(predicate: resource => (resource.Name == port.Name)))];

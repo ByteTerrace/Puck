@@ -12,8 +12,10 @@ public static class SdfIndirectSubmissionLog {
     /// <param name="fixedCost">Bounded cache-record traversal work independent of the field interpreter.</param>
     /// <param name="cacheFrame">The transport and receiver submission generation.</param>
     /// <param name="frameCost">The aggregate reserved cost in the produced frame.</param>
-    public static void Write(Action<string>? write, string residency, long frame, string kind, long queries, int instructionCount, long fixedCost = 0, uint cacheFrame = 0, long frameCost = 0) {
+    /// <param name="frameBudget">The produced frame's device slice plus its auxiliary allowance.</param>
+    public static void Write(Action<string>? write, string residency, long frame, string kind, long queries, int instructionCount, long fixedCost = 0, uint cacheFrame = 0, long frameCost = 0,
+        long frameBudget = (SdfIndirectCost.SubmissionCostLimit + SdfIndirectFrameBudget.AuxiliaryLimit)) {
         if (write is null) { return; }
-        write(System.FormattableString.Invariant(formattable: $"[sdf-indirect] residency={residency} frame={frame} cache-frame={cacheFrame} kind={kind} queries={queries} instructions={instructionCount} estimated-cost={checked((SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: queries) + fixedCost))} frame-cost={frameCost} frame-budget={SdfIndirectFrameBudget.CostLimit}"));
+        write(System.FormattableString.Invariant(formattable: $"[sdf-indirect] residency={residency} frame={frame} cache-frame={cacheFrame} kind={kind} queries={queries} instructions={instructionCount} estimated-cost={checked((SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: queries) + fixedCost))} frame-cost={frameCost} frame-budget={frameBudget}"));
     }
 }

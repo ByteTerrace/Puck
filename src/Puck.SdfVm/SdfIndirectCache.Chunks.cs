@@ -10,7 +10,8 @@ namespace Puck.SdfVm;
 /// <param name="Place">The placement chunk, or null.</param>
 /// <param name="Classify">The partition chunk, or null.</param>
 /// <param name="Trace">The trace chunk, or null.</param>
-/// <param name="Cost">The step's instruction-visit estimate, at most one submission's cap.</param>
+/// <param name="Cost">The step's instruction-visit estimate, at most the frame's device-time slice unless its first chunk
+/// alone exceeds it.</param>
 /// <param name="End">The plan's chunk index following the step's last chunk.</param>
 internal sealed record SdfIndirectTransportStep(SdfIndirectChunk? Place, SdfIndirectChunk? Classify, SdfIndirectChunk? Trace, long Cost, int End);
 
@@ -77,7 +78,7 @@ public sealed partial class SdfIndirectCache {
         _ = Add(kind: TraceKind, count: plan.Traces.Count);
 
         bool Add(int kind, int count) {
-            var chunks = SdfIndirectCost.Admit(count: count, firstUnit: firstUnits[kind], instructionCount: instructionCount, units: UnitsOf(kind: kind));
+            var chunks = SdfIndirectCost.Admit(count: count, firstUnit: firstUnits[kind], instructionCount: instructionCount, units: UnitsOf(kind: kind), limit: ChunkLimit(costKind: kind));
 
             foreach (var chunk in chunks) { m_transportChunks.Add(item: (kind, chunk)); }
             return (chunks.Count != 0);
@@ -98,7 +99,7 @@ public sealed partial class SdfIndirectCache {
             var (next, chunk) = m_transportChunks[end];
             var price = UnitsOf(kind: next).CostOf(chunk: chunk, instructionCount: InstructionCount);
 
-            if ((next <= kind) || ((end > m_transportCursor) && (price > (SdfIndirectCost.SubmissionCostLimit - cost)))) { break; }
+            if ((next <= kind) || ((end > m_transportCursor) && (price > (FrameDeviceLimit - cost)))) { break; }
             picks[next] = chunk;
             cost += price;
             kind = next;

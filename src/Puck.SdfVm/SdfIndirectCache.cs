@@ -77,6 +77,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public int InstructionCount { get; private set; } = 1;
     /// <summary>Gets the shared receiver admission for this field across all views in one frame.</summary>
     public int ReceiverProofBudget => SdfIndirectCost.WholeItems(count: Layout.ReceiverProofBudget, instructionCount: InstructionCount, units: ReceiverUnits);
+    /// <summary>Gets the counted visits one produced frame admits for transport and the lighting solve: the tier's
+    /// device-time slice (<see cref="SdfIndirectCost.FrameCost"/>).</summary>
+    public long FrameCost => Math.Max(val1: 1L, val2: SdfIndirectCost.FrameCost(layout: Layout));
     /// <summary>Gets the residency-owned allocation published by the graph.</summary>
     public IGpuBuffer Buffer { get; }
     /// <summary>Gets the brick, transport-update, direction, submitted-strata and shade-update regions.</summary>

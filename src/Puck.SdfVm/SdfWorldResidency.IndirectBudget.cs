@@ -13,9 +13,9 @@ public sealed partial class SdfWorldResidency {
 
     internal bool AdmitIndirect(string part, SdfIndirectCache cache) {
         if (part == SdfWorldPackage.IndirectShade) {
-            return ((cache.ShadeChunk is not { } shade) || IndirectFrameBudget.TryAdmit(chunk: shade, cost: cache.ShadeChunkCost));
+            return ((cache.ShadeChunk is not { } shade) || IndirectFrameBudget.TryAdmitDevice(chunk: shade, cost: cache.ShadeChunkCost));
         }
-        return IndirectFrameBudget.TryAdmit(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: cache.TransportStepCost);
+        return IndirectFrameBudget.TryAdmitDevice(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: cache.TransportStepCost);
     }
     internal bool AdmitLightView() => IndirectFrameBudget.TryAdmit(chunk: IndirectLightViews,
         cost: SdfIndirectCost.EstimateCost(IndirectLightViews.EstimatedQueries, Frame!.Program.InstructionCount));

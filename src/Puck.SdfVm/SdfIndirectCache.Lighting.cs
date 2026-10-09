@@ -104,7 +104,7 @@ public sealed partial class SdfIndirectCache {
         m_shadeUnits = ((source is null) ? new SdfIndirectUnits(UnitsPerItem: Math.Max(val1: 1, val2: Layout.RaysPerProbe), QueriesPerUnit: 0)
             : ShadeUnitsOf(frame: source));
         m_shadeInstructions = (source?.Program.InstructionCount ?? 1);
-        m_shadeChunks = SdfIndirectCost.Admit(count: batch.Probes.Count, instructionCount: m_shadeInstructions, units: m_shadeUnits);
+        m_shadeChunks = SdfIndirectCost.Admit(count: batch.Probes.Count, instructionCount: m_shadeInstructions, units: m_shadeUnits, limit: ChunkLimit(costKind: SdfIndirectLayout.CostShade));
         m_shadeChunk = 0;
         for (var row = 0; (row < batch.Probes.Count); row++) {
             Write(m_shadeUpdates, row, ProbeSlot(probe: batch.Probes[row]), 0, batch.Level, 0);

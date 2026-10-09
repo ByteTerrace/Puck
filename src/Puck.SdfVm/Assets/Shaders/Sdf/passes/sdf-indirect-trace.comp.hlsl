@@ -160,7 +160,12 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     SdfIndirectPlacement probe = sdfIndirectReadProbe((int)index);
     float reach = sdfIndirectReach(passGroup.indirectTier, level);
     uint gather = sdfIndirectGather(probe.position, reach, lane);
-    if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) { return; }
+    if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) {
+        // A dormant or inactive probe's stratum is still an admitted unit: the host cannot see the classification, so the
+        // measured price averages the rays it schedules, the ones that trace nothing included.
+        sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits, active ? 1u : 0u);
+        return;
+    }
     SdfIndirectRay ray = (SdfIndirectRay)0;
     ray.kind = SdfIndirectKindUnresolved;
     if (active) {
