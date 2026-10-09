@@ -3785,7 +3785,7 @@ entry without writing the ledger.
 
 Each source compiles with the usings its own project compiles it with. Both forms evaluate every tracked or unignored
 new project under `src/` with MSBuild (one `dotnet msbuild` run that reads items and builds nothing, with the
-package-restore imports under `obj/` switched off), so the project's `Using` items, implicit usings included, come from
+package-restore imports under `obj/` and the workload imports switched off), so the project's `Using` items, implicit usings included, come from
 its project file, the `Directory.Build` files and the SDK that `global.json` pins, never from a build or restore. The
 `global using` directives a project's files state belong to that project. The closure is one compilation, so each file
 receives its own project's usings as file-scoped directives and no project's usings reach another's files. The files a

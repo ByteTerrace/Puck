@@ -80,8 +80,9 @@ public sealed record FormatShapeSources(
     /// <summary>
     /// Evaluates every project under <c>src/</c> for the usings and linked files its sources compile with. MSBuild
     /// evaluates each project and runs one target that only reads items, so nothing is built or restored, and the
-    /// package-restore imports under <c>obj/</c> are switched off: the result is a function of the project files and the
-    /// SDK <c>global.json</c> pins, never of what a build or restore left on disk.
+    /// package-restore imports under <c>obj/</c> and the workload imports are switched off: the result is a function of the
+    /// project files and the SDK <c>global.json</c> pins, never of what a build or restore left on disk or which workloads
+    /// the machine installed.
     /// </summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="files">Every source the closure can cover, by repository-relative path with forward slashes.</param>
@@ -109,7 +110,7 @@ public sealed record FormatShapeSources(
                       <ItemGroup>
                     {string.Concat(values: projects.Select(selector: project => $"    <FormatProject Include=\"{Escape(text: Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: project)))}\" />\n"))}  </ItemGroup>
                       <Target Name="Projects">
-                        <MSBuild Projects="@(FormatProject)" Targets="{Item}" BuildInParallel="false" SkipNonexistentTargets="true" Properties="ImportProjectExtensionProps=false;ImportProjectExtensionTargets=false;CustomAfterMicrosoftCommonTargets={Escape(text: targets)}">
+                        <MSBuild Projects="@(FormatProject)" Targets="{Item}" BuildInParallel="false" SkipNonexistentTargets="true" Properties="ImportProjectExtensionProps=false;ImportProjectExtensionTargets=false;MSBuildEnableWorkloadResolver=false;CustomAfterMicrosoftCommonTargets={Escape(text: targets)}">
                           <Output TaskParameter="TargetOutputs" ItemName="{Item}" />
                         </MSBuild>
                       </Target>
@@ -135,7 +136,12 @@ public sealed record FormatShapeSources(
 
             using var document = JsonDocument.Parse(json: result.Stdout);
 
-            foreach (var item in document.RootElement.GetProperty(propertyName: "Items").GetProperty(propertyName: Item).EnumerateArray()) {
+            // No project that imports the common targets reports nothing, and MSBuild then names no item list at all.
+            var reported = ((document.RootElement.TryGetProperty(propertyName: "Items", value: out var items) && items.TryGetProperty(propertyName: Item, value: out var list))
+                ? list.EnumerateArray().ToArray()
+                : []);
+
+            foreach (var item in reported) {
                 var project = Relative(path: item.GetProperty(propertyName: "PuckProject").GetString()!, root: root);
                 var directory = project[..(project.LastIndexOf(value: '/') + 1)];
                 var identity = item.GetProperty(propertyName: "Identity").GetString()!;
