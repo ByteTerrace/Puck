@@ -62,7 +62,7 @@ public sealed partial class SdfWorldPassesLawTests {
         }, building: () => (graph.Node(instance: 0).IsBuildingCandidate || graph.Node(instance: 1).IsBuildingCandidate), reason: () => graph.Render.Reason);
         var convergence = new RenderGraphConvergence(request: new FrameCaptureRequest("unused-converging-sample.png", converge: 9));
 
-        views.BeginConvergence(instance: "world", convergence: convergence);
+        views.BeginConvergence(convergence: convergence, instance: "world");
         TestLiveness.Within(frames: 16, step: () => {
             Produce();
             return views.CaptureReadinessOf(instance: "world").IsRendered;
@@ -75,6 +75,6 @@ public sealed partial class SdfWorldPassesLawTests {
         TestLiveness.Within(frames: 16, step: () => {
             Produce();
             return views.CaptureReadinessOf(instance: "world").IsRendered;
-        }, building: () => false, reason: () => views.CaptureReadinessOf(instance: "world").Reason ?? graph.Render.Reason);
+        }, building: () => false, reason: () => (views.CaptureReadinessOf(instance: "world").Reason ?? graph.Render.Reason));
     }
 }

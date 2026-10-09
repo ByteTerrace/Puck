@@ -8,6 +8,7 @@ public interface IWorldIndirectReadiness {
     /// <summary>Gets the produced frames a wait holds for at most: past it, a solve the caches still presume finishable
     /// has not finished, and the wait releases naming the count.</summary>
     long FrameBound { get; }
+
     /// <summary>Captures the current produced-frame boundary and starts a wait, or refuses when no renderer exists. A
     /// cache the renderer has not activated yet (a tier just selected) is awaited like any other.</summary>
     /// <param name="wait">The owner-thread wait, or null on refusal.</param>

@@ -8,8 +8,8 @@ public sealed partial class WorldWaitReadyLawTests {
     private sealed class IndirectReadiness : IWorldIndirectReadiness {
         public IReadOnlyList<WorldIndirectReadyIdentity>? Captured { get; set; }
         public long Frame { get; set; } = 20;
-        public string? Refusal { get; set; }
         public long FrameBound { get; set; } = 16;
+        public string? Refusal { get; set; }
 
         public bool TryBegin([NotNullWhen(true)] out IWorldIndirectWait? wait, out string reason) {
             wait = new WorldIndirectWait(() => Frame, () => Captured, () => Refusal);

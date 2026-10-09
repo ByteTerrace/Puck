@@ -17,13 +17,13 @@ public sealed class SdfInstanceGridPointQueryLawTests {
 
         for (var index = 0; (index < inputs.Length); index++) {
             // Mostly small bounds with a few large ones, so the largest binned radius pads every face.
-            var radius = ((index % 37) == 0) ? Next(random, 0.5f, 2.5f) : Next(random, 0.02f, 0.4f);
+            var radius = (((index % 37) == 0) ? Next(high: 2.5f, low: 0.5f, random: random) : Next(high: 0.4f, low: 0.02f, random: random));
 
-            inputs[index] = new SdfInstanceGridInput(Binnable: true, Center: new Vector3(Next(random, -20f, 20f), Next(random, -4f, 4f), Next(random, -20f, 20f)),
+            inputs[index] = new SdfInstanceGridInput(Binnable: true, Center: new Vector3(x: Next(high: 20f, low: -20f, random: random), y: Next(high: 4f, low: -4f, random: random), z: Next(high: 20f, low: -20f, random: random)),
                 FrameBinnable: true, Radius: radius);
         }
         var workspace = new SdfInstanceGrid.Workspace(maxInstances: inputs.Length);
-        var block = workspace.Build(instances: inputs, enabled: true).ToArray();
+        var block = workspace.Build(enabled: true, instances: inputs).ToArray();
 
         Assert.NotEqual(0u, block[0]);
         var dimensions = (X: ((int)block[1]), Y: ((int)block[2]), Z: ((int)block[3]));
@@ -32,7 +32,7 @@ public sealed class SdfInstanceGridPointQueryLawTests {
         var skipped = 0;
 
         for (var sample = 0; (sample < 4096); sample++) {
-            var point = new Vector3(Next(random, -22f, 22f), Next(random, -6f, 6f), Next(random, -22f, 22f));
+            var point = new Vector3(x: Next(high: 22f, low: -22f, random: random), y: Next(high: 6f, low: -6f, random: random), z: Next(high: 22f, low: -22f, random: random));
 
             if (!SdfInstanceGridPointQuery.TryBlock(block: block, point: point, result: out var query)) { continue; }
             answered++;
@@ -60,7 +60,7 @@ public sealed class SdfInstanceGridPointQueryLawTests {
 
         for (var cell = 0; (cell < cells); cell++) {
             for (var entry = ((int)block[(cellStart + cell)]); (entry < ((int)block[((cellStart + cell) + 1)])); entry++) {
-                result.Add(((int)block[(entries + entry)], ((cell % dimensions.X), ((cell / dimensions.X) % dimensions.Y), (cell / (dimensions.X * dimensions.Y)))));
+                result.Add(item: (((int)block[(entries + entry)]), ((cell % dimensions.X), ((cell / dimensions.X) % dimensions.Y), (cell / (dimensions.X * dimensions.Y)))));
             }
         }
         return result;

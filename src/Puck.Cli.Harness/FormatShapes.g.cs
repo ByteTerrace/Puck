@@ -17,6 +17,6 @@ namespace Puck.Cli.Counters {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CountersBatchManifest.SchemaVersion</c>, declared in <c>src/Puck.Cli.Harness/Counters/CountersBatchManifest.cs</c>.</summary>
-        public const string CountersBatchManifestSchemaVersion = "a9b8d4156d7197c9";
+        public const string CountersBatchManifestSchemaVersion = "520ca8438e505170";
     }
 }

@@ -14,7 +14,6 @@ namespace Puck.SignedDistance;
 /// <param name="Bound">The field every binned instance outside the block keeps from the point; positive infinity when
 /// the block reaches every cell.</param>
 public readonly record struct SdfInstanceGridPointBlock((int X, int Y, int Z) Min, (int X, int Y, int Z) Max, float Bound);
-
 /// <summary>Point queries of the packed instance grid: the block of cells a query evaluates.</summary>
 public static class SdfInstanceGridPointQuery {
     /// <summary>The block's half-width in cells: a point query evaluates the cells within this many of its own on each
@@ -31,28 +30,28 @@ public static class SdfInstanceGridPointQuery {
         result = default;
         if ((block.Length < SdfInstanceGrid.HeaderWords) || (block[0] == 0u)) { return false; }
         var dimensions = (X: ((int)block[1]), Y: ((int)block[2]), Z: ((int)block[3]));
-        var origin = new Vector3(x: Float(block[4]), y: Float(block[5]), z: Float(block[6]));
-        var inverse = Float(block[7]);
-        var cellSize = Float(block[8]);
-        var pad = Float(block[9]);
+        var origin = new Vector3(x: Float(word: block[4]), y: Float(word: block[5]), z: Float(word: block[6]));
+        var inverse = Float(word: block[7]);
+        var cellSize = Float(word: block[8]);
+        var pad = Float(word: block[9]);
         var local = ((point - origin) * inverse);
 
-        if (!float.IsFinite(local.X) || !float.IsFinite(local.Y) || !float.IsFinite(local.Z) ||
+        if (!float.IsFinite(f: local.X) || !float.IsFinite(f: local.Y) || !float.IsFinite(f: local.Z) ||
             (local.X < 0f) || (local.Y < 0f) || (local.Z < 0f) ||
             (local.X >= dimensions.X) || (local.Y >= dimensions.Y) || (local.Z >= dimensions.Z)) { return false; }
-        var cell = (X: ((int)MathF.Floor(local.X)), Y: ((int)MathF.Floor(local.Y)), Z: ((int)MathF.Floor(local.Z)));
-        var min = (X: Math.Max(0, (cell.X - BlockRadius)), Y: Math.Max(0, (cell.Y - BlockRadius)), Z: Math.Max(0, (cell.Z - BlockRadius)));
-        var max = (X: Math.Min((dimensions.X - 1), (cell.X + BlockRadius)), Y: Math.Min((dimensions.Y - 1), (cell.Y + BlockRadius)),
-            Z: Math.Min((dimensions.Z - 1), (cell.Z + BlockRadius)));
+        var cell = (X: ((int)MathF.Floor(x: local.X)), Y: ((int)MathF.Floor(x: local.Y)), Z: ((int)MathF.Floor(x: local.Z)));
+        var min = (X: Math.Max(val1: 0, val2: (cell.X - BlockRadius)), Y: Math.Max(val1: 0, val2: (cell.Y - BlockRadius)), Z: Math.Max(val1: 0, val2: (cell.Z - BlockRadius)));
+        var max = (X: Math.Min(val1: (dimensions.X - 1), val2: (cell.X + BlockRadius)), Y: Math.Min(val1: (dimensions.Y - 1), val2: (cell.Y + BlockRadius)),
+            Z: Math.Min(val1: (dimensions.Z - 1), val2: (cell.Z + BlockRadius)));
         var reach = float.PositiveInfinity;
 
         // Only a face with cells beyond it can have an unvisited center past it.
-        if (min.X > 0) { reach = MathF.Min(reach, (point.X - (origin.X + (min.X * cellSize)))); }
-        if (min.Y > 0) { reach = MathF.Min(reach, (point.Y - (origin.Y + (min.Y * cellSize)))); }
-        if (min.Z > 0) { reach = MathF.Min(reach, (point.Z - (origin.Z + (min.Z * cellSize)))); }
-        if (max.X < (dimensions.X - 1)) { reach = MathF.Min(reach, ((origin.X + ((max.X + 1) * cellSize)) - point.X)); }
-        if (max.Y < (dimensions.Y - 1)) { reach = MathF.Min(reach, ((origin.Y + ((max.Y + 1) * cellSize)) - point.Y)); }
-        if (max.Z < (dimensions.Z - 1)) { reach = MathF.Min(reach, ((origin.Z + ((max.Z + 1) * cellSize)) - point.Z)); }
+        if (min.X > 0) { reach = MathF.Min(x: reach, y: (point.X - (origin.X + (min.X * cellSize)))); }
+        if (min.Y > 0) { reach = MathF.Min(x: reach, y: (point.Y - (origin.Y + (min.Y * cellSize)))); }
+        if (min.Z > 0) { reach = MathF.Min(x: reach, y: (point.Z - (origin.Z + (min.Z * cellSize)))); }
+        if (max.X < (dimensions.X - 1)) { reach = MathF.Min(x: reach, y: ((origin.X + ((max.X + 1) * cellSize)) - point.X)); }
+        if (max.Y < (dimensions.Y - 1)) { reach = MathF.Min(x: reach, y: ((origin.Y + ((max.Y + 1) * cellSize)) - point.Y)); }
+        if (max.Z < (dimensions.Z - 1)) { reach = MathF.Min(x: reach, y: ((origin.Z + ((max.Z + 1) * cellSize)) - point.Z)); }
         result = new SdfInstanceGridPointBlock(Bound: (reach - pad), Max: max, Min: min);
         return true;
     }

@@ -14,8 +14,10 @@ public sealed class SdfIndirectFrameBudget {
     public long Frame { get; private set; }
     /// <summary>Gets the total reserved instruction-visit estimate in this frame, both allowances together.</summary>
     public long Cost => (DeviceCost + AuxiliaryCost);
+
     /// <summary>Gets the device slice this frame admits transport and lighting chunks within.</summary>
     public long DeviceLimit { get; private set; } = SdfIndirectCost.SubmissionCostLimit;
+
     /// <summary>Gets the transport and lighting visits reserved in this frame.</summary>
     public long DeviceCost { get; private set; }
     /// <summary>Gets the light-view and receiver visits reserved in this frame.</summary>

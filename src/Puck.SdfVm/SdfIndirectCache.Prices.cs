@@ -109,6 +109,7 @@ public sealed partial class SdfIndirectCache {
     /// while conservative prices overstate the work and the first measurements arrive.</summary>
     public long FrameDeviceLimit => (((MeasuredFieldCost(kind: SdfIndirectLayout.CostPlace) is null) || (MeasuredFieldCost(kind: SdfIndirectLayout.CostClassify) is null) ||
         (MeasuredFieldCost(kind: SdfIndirectLayout.CostTrace) is null)) ? SdfIndirectCost.SubmissionCostLimit : FrameCost);
+
     // A kind's chunks fill the frame's slice once the device has measured it; before, its conservative price admits within
     // one submission's cap.
     private long ChunkLimit(int costKind) => ((MeasuredFieldCost(kind: costKind) is null) ? SdfIndirectCost.SubmissionCostLimit : FrameCost);

@@ -122,10 +122,10 @@ public sealed partial class SdfIndirectCacheLawTests {
         var slice = SdfIndirectCost.FrameCost(layout: cache.Layout);
 
         // Medium's 2 ms at the calibrated device rate.
-        Assert.Equal(256_000L, slice);
+        Assert.Equal(actual: slice, expected: 256_000L);
         Assert.Equal(SdfIndirectCost.SubmissionCostLimit, cache.FrameDeviceLimit);
-        cache.ObserveCost(counters: Uniform(visits: 0, units: 0), generation: cache.CostGeneration, sequence: 1);
-        cache.ObserveCost(counters: Uniform(visits: (visitsPerUnit * 4u), units: 4), generation: cache.CostGeneration, sequence: 2);
+        cache.ObserveCost(counters: Uniform(units: 0, visits: 0), generation: cache.CostGeneration, sequence: 1);
+        cache.ObserveCost(counters: Uniform(units: 4, visits: (visitsPerUnit * 4u)), generation: cache.CostGeneration, sequence: 2);
         Assert.Equal(slice, cache.FrameDeviceLimit);
         var steps = 0;
 

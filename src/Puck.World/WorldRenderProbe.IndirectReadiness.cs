@@ -24,7 +24,7 @@ public sealed partial class WorldRenderProbe : IWorldIndirectReadiness {
         }
         var armed = Root.FramesProduced;
 
-        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady, () => CannotFinish(since: since, armed: armed));
+        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady, () => CannotFinish(armed: armed, since: since));
         reason = string.Empty;
         return true;
     }

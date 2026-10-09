@@ -371,7 +371,7 @@
             "open": [
                 "M:Puck.Abstractions.PuckPaths.Normalize(System.String)"
             ],
-            "shape": "a9b8d4156d7197c9",
+            "shape": "520ca8438e505170",
             "source": "src/Puck.Cli.Harness/Counters/CountersBatchManifest.cs",
             "token": "puck.counters.batch.v1"
         },

@@ -21,7 +21,7 @@ public sealed partial class SdfWorldPassesLawTests {
         // This fake device measures nothing, so the allowance stays one submission's cap rather than the tier's slice.
         Assert.All(result.FrameBudgets, frame => {
             Assert.InRange(actual: frame.Auxiliary, high: SdfIndirectFrameBudget.AuxiliaryLimit, low: 0);
-            Assert.Contains(expected: frame.Limit, collection: new[] { slice, SdfIndirectCost.SubmissionCostLimit });
+            Assert.Contains(collection: new[] { slice, SdfIndirectCost.SubmissionCostLimit }, expected: frame.Limit);
             Assert.True(condition: ((frame.Device <= frame.Limit) || (frame.Chunks == 1)),
                 userMessage: $"A frame of {frame.Chunks} chunks reserved {frame.Device} visits past its {frame.Limit}-visit slice.");
         });

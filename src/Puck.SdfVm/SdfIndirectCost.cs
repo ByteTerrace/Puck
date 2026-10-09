@@ -103,6 +103,7 @@ public static class SdfIndirectCost {
         ArgumentNullException.ThrowIfNull(layout);
         return checked((layout.FrameMicroseconds * DeviceVisitsPerMicrosecond));
     }
+
     /// <summary>One stratum's counted field evaluations, including its hit gradient and feedback proof.</summary>
     public const int TraceQueries = IrradianceSchedule.TraceEvaluations;
     /// <summary>One brick's partition evaluations, including every directed cell segment.</summary>
