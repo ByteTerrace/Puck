@@ -28,8 +28,9 @@ same change. The user's current instruction outranks it.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
   The affected map selects committed baseline checks from their owning projects
   and declared data inputs. Each runs after the repository checks and before GPU
-  steps; `affected --run` leaves them to the gate. Admission uses host load's
-  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  steps; `affected --run` leaves them to the gate. Admission uses the machine's host-load
+  thresholds, which scale with its installed memory and cores, before heavy
+  steps; `gate.log` and `gate.steps` retain output and the
   flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an

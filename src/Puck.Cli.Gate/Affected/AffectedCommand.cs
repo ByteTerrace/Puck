@@ -361,7 +361,7 @@ public static class AffectedCommand {
     internal static bool AdmitHeavySuite(string repositoryRoot, string suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars);
 
-        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite);
+        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite, thresholds: HostLoadThresholds.ThisMachine);
     }
 
     // Every other verb a run takes runs through the root that invoked this one.

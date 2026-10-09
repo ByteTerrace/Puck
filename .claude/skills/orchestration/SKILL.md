@@ -153,17 +153,23 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
 `LOADED` when capacity ends without pressure, `PRESSURE`, `GPU busy` and
 `GPU idle`), so each change arrives once:
 
-- Size admission by the job's measured peak. On capacity, admit light work only.
-  A heavy job (a solution build plus a full suite, about 7 GB at its peak) needs
-  more than 14 GB free on a 32 GB machine, and a full `Puck.World.Tests` or
-  `Puck.World.Presentation.Tests` run is one: never run two at once.
-- On pressure, admit nothing. Running agents gate their heavy steps on more than
-  8 GB of free memory rather than being killed.
+- On capacity, admit the next job. A heavy job (a solution build plus a full
+  suite, about 7 GB at its peak) is one at a time per machine: a full
+  `Puck.World.Tests` or `Puck.World.Presentation.Tests` run never runs beside
+  another, and `puck gate` and `puck affected` already wait for one another's
+  heavy suites machine-wide.
+- On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
+  step only with more free memory than the capacity threshold and more free
+  disk than the pressure threshold, so a running agent waits rather than being
+  killed.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.
-- Thresholds follow the machine class. A 32 GB, 16-thread machine has capacity
-  while CPU is under 60% and free RAM over 10 GB, and is under pressure below
-  4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
-  free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
+- The thresholds scale with the machine, and the code is their source of truth
+  (`HostLoadThresholds.For`, [CLI reference](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  A 16 GB, six-thread machine has capacity while CPU is under 50% and free RAM
+  over 5 GB, and is under pressure below 2 GB free; a 32 GB, 16-thread machine
+  has capacity while CPU is under 60% and free RAM over 10 GB, and is under
+  pressure below 4 GB free. Below 10 GB of free disk every machine is under
+  pressure.
 
 Deliberate CPU contention, such as a burner for a flake proof, is CPU work like
 any other and may run beside another lane's GPU leg. A leg of that lane that

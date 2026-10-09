@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace Puck.Cli.Host;
 
-/// <summary>Bounded admission by host load's default thresholds. Memory and disk decide whether a step can run, since
+/// <summary>Bounded admission by the machine's host-load thresholds (<see cref="HostLoadThresholds.For"/>). Memory and disk decide whether a step can run, since
 /// running out of either is what fails a build or a heavy suite: a step waits for free memory over the capacity
 /// threshold and free disk over the pressure threshold. A busy CPU only slows a step, so the CPU is advisory: a step
 /// admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that opens a device also
@@ -20,15 +20,13 @@ public static class HostAdmission {
     /// <summary>How long a wait goes without printing before it prints that it is still waiting.</summary>
     public static readonly TimeSpan Heartbeat = TimeSpan.FromMinutes(minutes: 10);
 
-    private static HostLoadThresholds Thresholds => HostLoadThresholds.Default;
-
-    private static bool HasHeadroom(HostSample reading) => ((reading.FreeRamGb > (Thresholds.CapacityRamGb ?? 0)) && (reading.FreeDiskGb >= (Thresholds.PressureDiskGb ?? 0)));
+    private static bool HasHeadroom(HostSample reading, HostLoadThresholds thresholds) => ((reading.FreeRamGb > (thresholds.CapacityRamGb ?? 0)) && (reading.FreeDiskGb >= (thresholds.PressureDiskGb ?? 0)));
     // What holds the step back, named so a wait that lasts can be traced to a process or a threshold.
-    private static string Reason(string? gpu, string? heavy, HostSample reading) => ((gpu is not null)
+    private static string Reason(string? gpu, string? heavy, HostSample reading, HostLoadThresholds thresholds) => ((gpu is not null)
         ? $"the GPU is held by {gpu}"
         : ((heavy is not null)
             ? $"a heavy test run is held by {heavy}"
-            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"no memory headroom: freeRAM={reading.FreeRamGb:0.0}GB freeDisk={reading.FreeDiskGb:0.0}GB (admission needs freeRAM>{Thresholds.CapacityRamGb}GB and freeDisk>={Thresholds.PressureDiskGb}GB)")));
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"no memory headroom: freeRAM={reading.FreeRamGb:0.0}GB freeDisk={reading.FreeDiskGb:0.0}GB (admission needs freeRAM>{thresholds.CapacityRamGb:0.0}GB and freeDisk>={thresholds.PressureDiskGb:0.0}GB)")));
 
     /// <summary>Waits until the host can take <paramref name="step"/>, at most <see cref="Timeout"/>, or
     /// <see cref="HeavyTimeout"/> for a heavy suite. CPU load never holds a step back.</summary>
@@ -41,9 +39,11 @@ public static class HostAdmission {
     /// <param name="delay">Waits one interval.</param>
     /// <param name="error">Receives the wait lines and the advisory CPU line.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
+    /// <param name="thresholds">The thresholds a reading is judged by; a run on this machine passes
+    /// <see cref="HostLoadThresholds.ThisMachine"/>.</param>
     /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed
     /// first.</returns>
-    public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken) {
+    public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken, HostLoadThresholds thresholds) {
         var started = clock.GetTimestamp();
         var bound = (heavySuite ? HeavyTimeout : Timeout);
         var printed = started;
@@ -55,14 +55,14 @@ public static class HostAdmission {
             var gpu = (device ? reading.GpuHolder : null);
             var heavy = (heavySuite ? reading.HeavyTestHolder : null);
 
-            if (HasHeadroom(reading: reading) && (gpu is null) && (heavy is null)) {
+            if (HasHeadroom(reading: reading, thresholds: thresholds) && (gpu is null) && (heavy is null)) {
                 if (reason is not null) { error.WriteLine(value: $"gate: capacity returned for {step}."); }
-                if (reading.CpuPercent >= (Thresholds.CapacityCpuPercent ?? 100)) {
-                    error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"gate: {step} runs under cpu={reading.CpuPercent:0}% (over {Thresholds.CapacityCpuPercent}%; CPU load is advisory and only slows the step)."));
+                if (reading.CpuPercent >= (thresholds.CapacityCpuPercent ?? 100)) {
+                    error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"gate: {step} runs under cpu={reading.CpuPercent:0}% (over {thresholds.CapacityCpuPercent}%; CPU load is advisory and only slows the step)."));
                 }
                 return true;
             }
-            var now = Reason(gpu: gpu, heavy: heavy, reading: reading);
+            var now = Reason(gpu: gpu, heavy: heavy, reading: reading, thresholds: thresholds);
             var waited = clock.GetElapsedTime(startingTimestamp: started);
 
             // A holder is named again whenever it changes; a memory reading prints once per wait, not per sample. A wait

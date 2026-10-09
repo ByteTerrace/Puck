@@ -5,12 +5,15 @@ using Xunit;
 namespace Puck.Cli.Gate.Tests;
 
 public sealed class HostAdmissionLawTests {
+    // The 16 GB, six-thread developer machine: capacity above 5 GB free, pressure below 2 GB, disk pressure below 10 GB.
+    private static readonly HostLoadThresholds Thresholds = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+
     private static HostSample Sample(double cpu = 0, double ram = 8, double disk = 100, string? gpu = null, string? heavy = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42);
 
     [Fact]
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
         var load = HostCommand.Create(composition: SuiteRoot.Composition).Subcommands.Single(predicate: command => (command.Name == "load"));
-        var defaults = HostLoadThresholds.Default;
+        var defaults = HostLoadThresholds.ThisMachine;
         (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--capacity-ram", defaults.CapacityRamGb), ("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
 
         foreach (var (name, value) in thresholds) {
@@ -19,13 +22,26 @@ public sealed class HostAdmissionLawTests {
             Assert.Equal(value, load.Parse([]).GetValue(option: option));
             Assert.Equal(1, load.Parse([name, "1"]).GetValue(option: option));
         }
-        Assert.Contains("Defaults:", CliHelp.DetailOf(command: load));
+        Assert.Contains("Defaults scale with the machine", CliHelp.DetailOf(command: load));
+    }
+    [Fact]
+    public void AdmissionJudgesFreeMemoryAgainstTheMachinesOwnSize() {
+        var clock = new GateClock();
+        var calls = 0;
+        using var small = new StringWriter();
+        using var large = new StringWriter();
+
+        // 8 GB free is headroom on a 16 GB machine and not on a 32 GB one, which waits until 12 GB are free.
+        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: 8), clock, _ => Assert.Fail(message: "8 GB free must admit on a 16 GB machine"), small, CancellationToken.None, Thresholds));
+        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: ((calls++ == 0) ? 8 : 12)), clock, clock.Advance, large, CancellationToken.None, HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16)));
+        Assert.Equal(actual: calls, expected: 2);
+        Assert.Contains(actualString: large.ToString(), expectedSubstring: "admission needs freeRAM>10.0GB");
     }
     [Fact]
     public void IdleAdmissionHasNoWaitOrRefusalEvenWithReuseNodes() {
         using var error = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(), new GateClock(), _ => Assert.Fail(message: "idle must not wait"), error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(), new GateClock(), _ => Assert.Fail(message: "idle must not wait"), error, CancellationToken.None, Thresholds));
         Assert.Equal("", error.ToString());
     }
     [InlineData("ram")]
@@ -42,7 +58,7 @@ public sealed class HostAdmissionLawTests {
             _ => Sample(gpu: "Puck.World 42"),
         };
 
-        Assert.True(condition: HostAdmission.Wait("step", true, false, () => ((++calls <= 2) ? busy : Sample()), clock, clock.Advance, error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("step", true, false, () => ((++calls <= 2) ? busy : Sample()), clock, clock.Advance, error, CancellationToken.None, Thresholds));
         Assert.Equal(actual: calls, expected: 3);
         Assert.Equal(TimeSpan.FromSeconds(seconds: 20), clock.GetElapsedTime(startingTimestamp: 0));
         Assert.Contains("waiting for host capacity before step", error.ToString());
@@ -56,7 +72,7 @@ public sealed class HostAdmissionLawTests {
         using var error = new StringWriter();
         HostSample[] readings = [Sample(gpu: "testhost 77"), Sample(gpu: "testhost 77"), Sample(gpu: "Puck.World 9"), Sample(ram: 1), Sample()];
 
-        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, false, () => readings[calls++], clock, clock.Advance, error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, false, () => readings[calls++], clock, clock.Advance, error, CancellationToken.None, Thresholds));
         var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
 
         Assert.Equal(expected: 3, actual: lines.Length);
@@ -70,19 +86,19 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("baselines corpus-inventory", false, false, () => Sample(gpu: "Puck.World.Tests 7"), clock, _ => Assert.Fail(message: "a CPU step must not wait on the GPU"), error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("baselines corpus-inventory", false, false, () => Sample(gpu: "Puck.World.Tests 7"), clock, _ => Assert.Fail(message: "a CPU step must not wait on the GPU"), error, CancellationToken.None, Thresholds));
         Assert.Equal(expected: "", actual: error.ToString());
 
         var calls = 0;
 
-        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, false, () => ((calls++ == 0) ? Sample(gpu: "Puck.World 9") : Sample()), clock, clock.Advance, error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, false, () => ((calls++ == 0) ? Sample(gpu: "Puck.World 9") : Sample()), clock, clock.Advance, error, CancellationToken.None, Thresholds));
         Assert.Contains(actualString: error.ToString(), expectedSubstring: "the GPU is held by Puck.World 9");
 
         // A CPU step still waits for memory headroom, and names it rather than a GPU holder.
         using var busy = new StringWriter();
 
         calls = 0;
-        Assert.True(condition: HostAdmission.Wait("affected", false, false, () => ((calls++ == 0) ? Sample(ram: 1, gpu: "Puck.World 9") : Sample(gpu: "Puck.World 9")), clock, clock.Advance, busy, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("affected", false, false, () => ((calls++ == 0) ? Sample(ram: 1, gpu: "Puck.World 9") : Sample(gpu: "Puck.World 9")), clock, clock.Advance, busy, CancellationToken.None, Thresholds));
         Assert.Contains(actualString: busy.ToString(), expectedSubstring: "no memory headroom: freeRAM=1.0GB");
         Assert.DoesNotContain(expectedSubstring: "GPU", actualString: busy.ToString());
     }
@@ -94,7 +110,7 @@ public sealed class HostAdmissionLawTests {
         using var error = new StringWriter();
 
         // A CPU that never falls under the threshold, with memory, disk and the GPU free.
-        Assert.True(condition: HostAdmission.Wait("build", device, false, () => Sample(cpu: 99), clock, _ => Assert.Fail(message: "CPU load must not hold a step back"), error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("build", device, false, () => Sample(cpu: 99), clock, _ => Assert.Fail(message: "CPU load must not hold a step back"), error, CancellationToken.None, Thresholds));
         var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
 
         Assert.Single(collection: lines);
@@ -113,7 +129,7 @@ public sealed class HostAdmissionLawTests {
             _ => Sample(),
         };
 
-        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", false, true, Reading, clock, clock.Advance, error, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", false, true, Reading, clock, clock.Advance, error, CancellationToken.None, Thresholds));
         var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n').Select(selector: static line => line.TrimEnd()).ToArray();
 
         Assert.Equal(actual: lines, expected: [
@@ -130,7 +146,7 @@ public sealed class HostAdmissionLawTests {
         // A step that runs no heavy suite never waits on one.
         using var light = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("baselines state", false, false, () => Sample(heavy: "Puck.World.Tests 11"), clock, _ => Assert.Fail(message: "a light step must not wait on a heavy run"), light, CancellationToken.None));
+        Assert.True(condition: HostAdmission.Wait("baselines state", false, false, () => Sample(heavy: "Puck.World.Tests 11"), clock, _ => Assert.Fail(message: "a light step must not wait on a heavy run"), light, CancellationToken.None, Thresholds));
         Assert.Equal(expected: "", actual: light.ToString());
     }
     [Fact]
@@ -138,7 +154,7 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.False(condition: HostAdmission.Wait("Puck.World.Tests", false, true, () => Sample(heavy: "Puck.World.Tests 11"), clock, clock.Advance, error, CancellationToken.None));
+        Assert.False(condition: HostAdmission.Wait("Puck.World.Tests", false, true, () => Sample(heavy: "Puck.World.Tests 11"), clock, clock.Advance, error, CancellationToken.None, Thresholds));
         Assert.Equal(expected: TimeSpan.FromHours(hours: 2), actual: clock.GetElapsedTime(startingTimestamp: 0));
         Assert.Equal(expected: HostAdmission.HeavyTimeout, actual: TimeSpan.FromHours(hours: 2));
     }
@@ -149,7 +165,7 @@ public sealed class HostAdmissionLawTests {
         using var error = new StringWriter();
 
         // Too little memory first, then headroom.
-        _ = HostAdmission.Wait("x", true, false, () => ((calls++ == 0) ? Sample(ram: ram) : Sample()), clock, clock.Advance, error, CancellationToken.None);
+        _ = HostAdmission.Wait("x", true, false, () => ((calls++ == 0) ? Sample(ram: ram) : Sample()), clock, clock.Advance, error, CancellationToken.None, Thresholds);
         return error.ToString();
     }
 
@@ -158,9 +174,9 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.False(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: 0), clock, clock.Advance, error, CancellationToken.None));
+        Assert.False(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: 0), clock, clock.Advance, error, CancellationToken.None, Thresholds));
         Assert.Equal(HostAdmission.Timeout, clock.GetElapsedTime(startingTimestamp: 0));
         Assert.DoesNotContain("capacity returned", error.ToString());
-        Assert.Throws<OperationCanceledException>(testCode: () => HostAdmission.Wait("build", false, false, () => throw new Exception(message: "must not sample"), clock, clock.Advance, error, new CancellationToken(canceled: true)));
+        Assert.Throws<OperationCanceledException>(testCode: () => HostAdmission.Wait("build", false, false, () => throw new Exception(message: "must not sample"), clock, clock.Advance, error, new CancellationToken(canceled: true), Thresholds));
     }
 }

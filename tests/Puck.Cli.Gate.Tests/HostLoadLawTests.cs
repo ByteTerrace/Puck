@@ -15,6 +15,26 @@ public sealed class HostLoadLawTests {
         new(At: Start.AddSeconds(seconds: seconds), CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, ReuseNodes: reuse);
     private static string[] Kinds(IReadOnlyList<string> lines) => [.. lines.Select(selector: static line => (line.Split(separator: ' ')[0] + ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "GPU ")) ? $" {line.Split(separator: ' ')[1]}" : string.Empty)))];
 
+    // Installed memory and logical processors, then the expected CPU, capacity RAM and pressure RAM thresholds.
+    [InlineData(16, 6, 50, 5, 2)]
+    [InlineData(15.7, 6, 50, 5, 2)]
+    [InlineData(32, 16, 60, 10, 4)]
+    [InlineData(64, 32, 60, 20, 8)]
+    [InlineData(8, 4, 50, 2.5, 1)]
+    [InlineData(4, 2, 50, 1.25, 0.5)]
+    [InlineData(24, 8, 60, 7.5, 3)]
+    [Theory]
+    public void ThresholdsScaleWithTheInstalledMemoryAndTheLogicalProcessors(double installedRamGb, int logicalProcessors, double cpu, double capacityRam, double pressureRam) {
+        var thresholds = HostLoadThresholds.For(installedRamGb: installedRamGb, logicalProcessors: logicalProcessors);
+
+        Assert.Equal(actual: thresholds, expected: new HostLoadThresholds(CapacityCpuPercent: cpu, CapacityRamGb: capacityRam, PressureDiskGb: HostLoadThresholds.DiskPressureGb, PressureRamGb: pressureRam));
+    }
+    [Fact]
+    public void ThresholdsRefuseAMachineWithNoMemoryOrNoProcessors() {
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => HostLoadThresholds.For(installedRamGb: 0, logicalProcessors: 6));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => HostLoadThresholds.For(installedRamGb: double.NaN, logicalProcessors: 6));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 0));
+    }
     [Fact]
     public void TheGpuStateIsReportedOnceAtTheStartAndOnEveryChangeAfter() {
         var monitor = new HostLoadMonitor(cpuSamples: 6, thresholds: new HostLoadThresholds(CapacityCpuPercent: null, CapacityRamGb: null, PressureDiskGb: null, PressureRamGb: null));
