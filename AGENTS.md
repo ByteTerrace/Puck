@@ -171,9 +171,11 @@ verb out. Its rules in brief:
   binaries a failed build left behind.
 - Prove every new or changed law red by withholding the fix
   (`puck laws prove`), never by reverting files in a shared tree.
-- GPU legs run one at a time per GPU, under a grant the lead issues. A failed
-  leg is re-run once alone: a timeout or wait that passes alone is a flake to
-  report, and a wrong value is a failure to fix.
+- GPU legs run one at a time per GPU, under a grant the lead issues, and CPU
+  work runs beside them: a correctness leg's verdict does not depend on load,
+  and two GPU-bound jobs never overlap. A failed leg is re-run once alone: a
+  timeout or wait that passes alone is a flake to report, and a wrong value is
+  a failure to fix.
 - Judge performance by code, disassembly and load-independent counts. A
   wall-clock timing runs only when the owner asks, once, serially, on an idle
   machine, through `puck bench`.

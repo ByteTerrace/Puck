@@ -241,13 +241,17 @@ World run with effective `host.presentation: none` uses no GPU; the
   owed. Every class that opens a hardware GPU device carries
   `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
   that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
-  Keep the CPU-heavy work restriction below.
+- CPU work runs beside a GPU leg. A correctness leg (device laws, parity,
+  canaries, counted performance work) judges values that do not depend on load,
+  so solution builds, large CPU suites and other lanes' work keep running while
+  it does. Two GPU-bound jobs never overlap. Only wall-clock work (`puck bench`,
+  a timing spike) needs a quiet machine.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.
-- With a grant, run the granted legs serially, nothing else GPU-bound beside
-  them, and keep CPU-heavy work (solution builds, large suites) off the machine
-  while they run.
+- With a grant, run the granted legs serially, with nothing else GPU-bound
+  beside them, and start them as soon as the GPU is idle rather than waiting
+  for your CPU work to finish.
 - Qualify the merged head. Before a lane's GPU run, merge the current
   integration head into it: a stale lane can fail or pass because it lacks
   changes already on the integration branch.
@@ -287,7 +291,8 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
 
 - **Flake:** the first failure was a timeout, a bind, listener or port wait, a
   readiness wait, or a temporary-directory teardown error, and the leg passes
-  alone. Report it with the original message and the passing re-run.
+  alone. A leg that timed out because CPU work ran beside it is this case.
+  Report it with the original message and the passing re-run.
 - **Failure:** the leg fails again, or the first failure was a wrong value: a
   pixel or tile verdict, a state hash, a counted work line, a refusal reason, a
   content assertion, or a validation-layer message. Fix it. Never re-run a

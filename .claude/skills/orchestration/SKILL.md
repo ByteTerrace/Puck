@@ -135,9 +135,12 @@ complete milestones, only when the owner asks, under
 Allocate by each machine's fixed capability (CPU class, GPU, RAM, OS, network),
 mapped once and checked every turn. Free-memory and free-disk snapshots
 fluctuate with what else is open and do not define a machine's capability.
-Allocate one GPU leg per GPU at a time and keep heavy builds off its machine
-while the leg runs. Use [`verification`](../verification/SKILL.md#gpu-legs) for
-grants, GPU work classification and execution.
+Allocate one GPU leg per GPU at a time, and let CPU work, builds included, run
+beside it: a correctness leg's verdict does not depend on load, and a leg that
+times out under load is re-run once alone and reported as a flake. Only
+wall-clock work needs a quiet machine. Use
+[`verification`](../verification/SKILL.md#gpu-legs) for grants, GPU work
+classification and execution.
 
 Run a load governor on any machine that hosts many agents, through
 `puck host load`, which samples the machine's load and names its state. Under a
@@ -157,12 +160,11 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
   free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
 
-A brief that asks an agent for deliberate CPU contention, such as a burner for a
-flake proof, gates it on GPU idle on the same box: no canary, parity, `Puck.World`
-run or device test host is running, checked just before the burner starts and
-again while it runs, and the burner stops when a GPU leg starts. Contention that
-overlaps another lane's GPU leg makes that lane's timeouts untrustworthy, so the
-brief names the check and the stop.
+Deliberate CPU contention, such as a burner for a flake proof, is CPU work like
+any other and may run beside another lane's GPU leg. A leg of that lane that
+times out under it is re-run once alone and reported as a flake
+([`verification`](../verification/SKILL.md#flake-or-failure)); a wrong value
+under load is a failure whatever ran beside it.
 
 An agent stops only the processes it started, by the PIDs it recorded at launch,
 and never kills by a command-line pattern. On a shared box a filter on a common
