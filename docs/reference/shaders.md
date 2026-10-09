@@ -2938,7 +2938,7 @@ compiler. An edited source misses its stored package: it compiles while the
 compiler exists and is refused by `SHADERPKG_ABSENT` once it does not. A
 one-off shader is stored under the name it plans with, so another name misses.
 A damaged stored package is refused by its pin and nothing compiles in its
-place. In `tests/Puck.Cli.Tests`, `NoDeviceShaderCompileLawTests` hold every
+place. In `tests/Puck.Cli.Shaders.Tests`, `NoDeviceShaderCompileLawTests` hold every
 Puck assembly in the World's Release output to importing nothing from the
 Direct3D HLSL compiler. In `tests/Puck.World.Presentation.Tests`, `PipelineOverrideLawTests`
 also check that a

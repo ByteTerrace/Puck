@@ -60,7 +60,10 @@ jobs:
       - name: Build semantic context
         run: dotnet build Puck.slnx -c Release --no-restore
       - name: Test formatter safety
-        run: dotnet test --project tests/Puck.Cli.Tests -c Release --no-build --filter-method "*Format*"
+        run: dotnet test --project tests/Puck.Cli.Format.Tests -c Release --no-build
+      # Formatting every tracked .puck source leaves its compiled document unchanged; the law needs the compiler.
+      - name: Test formatter projection
+        run: dotnet test --project tests/Puck.Cli.Worlds.Tests -c Release --no-build --filter-class "*FormatProjectionLawTests"
       - env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

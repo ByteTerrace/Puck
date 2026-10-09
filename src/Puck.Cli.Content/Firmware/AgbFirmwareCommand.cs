@@ -1,0 +1,142 @@
+using System.CommandLine;
+using System.ComponentModel;
+
+namespace Puck.Cli.Firmware;
+
+public static class AgbFirmwareCommand {
+    private const int BiosLength = 16_384;
+
+    private static readonly string[] Sources = ["entrypoint.s", "boot.c", "services.c", "codec.c", "math.c", "sound.c", "multiboot.c"];
+
+    public static async Task<int> RunAsync(string source, string output, string clang, string linker, bool verify) {
+        try {
+            source = Path.GetFullPath(path: source);
+            output = Path.GetFullPath(path: output);
+            clang = RequiredFile(path: clang);
+            linker = RequiredFile(path: linker);
+
+            foreach (var name in Sources.Concat(second: ["puck.h", "firmware.ld"])) {
+                _ = RequiredFile(path: Path.Combine(
+                    path1: source,
+                    path2: name
+                ));
+            }
+
+            var bytes = await BuildAsync(
+                clang: clang,
+                linker: linker,
+                source: source
+            );
+
+            return (FirmwareArtifact.WriteOrVerify(
+                bytes: bytes,
+                machine: "agb",
+                path: output,
+                verify: verify
+            )
+                ? 0
+                : 1
+            );
+        } catch (Exception exception) when ((exception is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or Win32Exception)) {
+            Console.Error.WriteLine(value: $"firmware agb: {exception.Message}");
+            return 1;
+        }
+    }
+
+    private static async Task<byte[]> BuildAsync(string source, string clang, string linker) {
+        // A build that fails keeps its objects and linker inputs, named.
+        using var run = RunDirectory.Create(prefix: "puck-firmware-agb-");
+        var temporary = run.Path;
+
+        var objects = new List<string>();
+
+        foreach (var name in Sources) {
+            var path = Path.Combine(
+                path1: temporary,
+                path2: Path.ChangeExtension(
+                    extension: ".o",
+                    path: name
+                )
+            );
+            var arguments = new List<string> { "--target=armv4t-none-eabi", "-mcpu=arm7tdmi" };
+
+            if (name.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".s"
+            )) {
+                arguments.AddRange(collection: ["-marm", "-x", "assembler"]);
+            } else {
+                arguments.AddRange(collection: ["-mthumb", "-Oz", "-ffreestanding", "-fno-builtin", "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fomit-frame-pointer", "-Wall", "-Wextra", "-Werror", "-std=c11"]);
+            }
+
+            arguments.AddRange(collection: ["-I", source, "-c", Path.Combine(
+                    path1: source,
+                    path2: name
+                ), "-o", path]);
+            _ = await CliProcess.RunCheckedAsync(
+                workingDirectory: temporary,
+                fileName: clang,
+                arguments: arguments,
+                capture: true
+            );
+            objects.Add(item: path);
+        }
+
+        var image = Path.Combine(
+            path1: temporary,
+            path2: "firmware.bin"
+        );
+
+        _ = await CliProcess.RunCheckedAsync(
+            workingDirectory: temporary,
+            fileName: linker,
+            arguments: ["-T", Path.Combine(
+                    path1: source,
+                    path2: "firmware.ld"
+                ), "--oformat=binary", .. objects, "-o", image],
+            capture: true
+        );
+        var bytes = File.ReadAllBytes(path: image);
+
+        if (bytes.Length != BiosLength) {
+            throw new InvalidDataException(message: $"AGB BIOS must contain exactly {BiosLength} bytes; linked image contains {bytes.Length}.");
+        }
+
+        run.Conclude(passed: true);
+
+        return bytes;
+    }
+    private static string RequiredFile(string path) {
+        path = Path.GetFullPath(path: path);
+
+        if (!File.Exists(path: path)) {
+            throw new FileNotFoundException(
+                fileName: path,
+                message: $"Required firmware input is missing: {path}."
+            );
+        }
+
+        return path;
+    }
+
+    public static Command Create() {
+        var source = new Option<string>(name: "--source") { Description = "Directory containing the maintained C/ARM sources, puck.h, and firmware.ld.", Required = true };
+        var output = new Option<string>(name: "--output") { Description = "Destination 16 KiB BIOS image.", Required = true };
+        var clang = new Option<string>(name: "--clang") { Description = "Path to the native Clang executable with the ARM target.", Required = true };
+        var linker = new Option<string>(name: "--linker") { Description = "Path to the native ld.lld ELF linker executable.", Required = true };
+        var verify = new Option<bool>(name: "--verify") { Description = "Rebuild in temporary storage and compare the existing image without writing it." };
+        var command = new Command(
+            description: "Build the Puck AGB BIOS from its freestanding C and ARM sources.",
+            name: "agb"
+        ) { source, output, clang, linker, verify };
+
+        command.SetAction(action: (result, _) => RunAsync(
+            source: result.GetRequiredValue(option: source),
+            output: result.GetRequiredValue(option: output),
+            clang: result.GetRequiredValue(option: clang),
+            linker: result.GetRequiredValue(option: linker),
+            verify: result.GetValue(option: verify)
+        ));
+        return command;
+    }
+}

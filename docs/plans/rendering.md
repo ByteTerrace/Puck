@@ -53,7 +53,7 @@ beside the package that owns it. The open parts are:
   near field and comparison methods are implemented. Their remaining physical
   qualification and the counted choice of defaults keep G2 to G10 open.
 - **P7:** every step of P7b has landed; the Linux and Windows shader-bytecode
-  comparison has not run.
+  comparison has run once and failed on 7 DXIL outputs (see P7's gate).
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
   floor hardware have not run.
 - **P12:** every step of P12b has landed; P12b-4's recorded camera run on both
@@ -1597,7 +1597,7 @@ the first observable. Source entry points: planning and loading in
 `RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
-`src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
+`src/Puck.Cli.Harness/Canary` and `src/Puck.Cli.Runs/Canary`; authoring in `WorldPipelineCommandModule`,
 `WorldViewGraphHost`, `WorldViewGraph`; work counting in
 `src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
 graphics in `src/Puck.Abstractions/Gpu`,
@@ -3485,7 +3485,16 @@ compares only when its shader inputs or a DXC pin differ from the last passing
 comparison, whose saved Linux shader cache records it. The leg
 is proven when that job passes; a difference it names, such as DXIL the Linux
 compiler hashes or signs differently, is the gate's failure toward Slang. The
-leg's run is listed under [deferred to the end](#deferred-to-the-end).
+job has run once and failed: every SPIR-V output matched, and 7 of the DXIL
+outputs differed, all of them large SDF passes (`sdf-light-primary`, both
+`sdf-world-receiver` passes, and four of `Puck.World.Tests`' indirect proof
+kernels), some by four bytes of length. Both hosts ran the same DXC source
+revision (`1.9.2609.5`). The three engine passes that differ
+include `sdf-world-views.comp.hlsl` exactly as the passes that matched do and
+differ from them only in a define, so include spelling does not explain it. Which
+container chunks differ is not yet read: the job now names them and uploads the
+Linux bytes as `shader-bytecode-linux` when it fails. The leg's run is listed
+under [deferred to the end](#deferred-to-the-end).
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC output is not byte-stable across hosts, or when the second group
@@ -6041,7 +6050,7 @@ counted rows recorded in the same change.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
-     `src/Puck.Cli/Counters`,
+     `src/Puck.Cli.Runs/Counters`,
      `tests/Puck.Counters`, `SdfPassPlanLawTests`, `SdfWorldResidencyWorkLawTests`.
    - Done when: a law over the fake device holds the readback's placement in the
      plan and the kinds' classes; the ceilings file states, for every pass, what
@@ -8632,7 +8641,8 @@ programme is done.
   injected loss does.
 - **Environment: P7's shader-bytecode comparison.** Keeps P7 open. CI's
   `shader-bytecode` job passes, holding a Linux build's SPIR-V and DXIL byte for
-  byte to the Windows build of the same commit.
+  byte to the Windows build of the same commit. Its one run failed on 7 DXIL
+  outputs; their differing chunks are read first (see P7's gate).
 - **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
   run at `low` on floor hardware.
 - **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14

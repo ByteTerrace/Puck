@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Bench.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The benchmark verbs. -->
+        <ProjectReference Include="../../src/Puck.Cli.Bench/Puck.Cli.Bench.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+</Project>

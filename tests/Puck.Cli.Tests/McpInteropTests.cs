@@ -20,7 +20,7 @@ public sealed class McpInteropTests {
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(seconds: 30);
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
-    private static string Cli => typeof(CliPaths).Assembly.Location;
+    private static string Cli => CliPaths.Tool;
 
     // The handshake revisions are what an editor or an agent harness opens with; the last is per-request metadata.
     [InlineData("2025-06-18", false)]

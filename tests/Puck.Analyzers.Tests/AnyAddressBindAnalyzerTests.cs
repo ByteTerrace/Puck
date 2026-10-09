@@ -190,11 +190,11 @@ public sealed class AnyAddressBindAnalyzerTests {
             }
 
             """;
-        const string Site = "C:/repo/src/Puck.Cli/Azure/AzureWorld.cs";
+        const string Site = "C:/repo/src/Puck.Cli.Release/Azure/AzureWorld.cs";
 
         Assert.Contains(
             actualString: Assert.Single(collection: Messages(result: Run(
-                assemblyName: "Puck.Cli",
+                assemblyName: "Puck.Cli.Release",
                 body: Body,
                 fileName: Site
             ))),
@@ -203,9 +203,9 @@ public sealed class AnyAddressBindAnalyzerTests {
         );
         Assert.Equal(
             actual: Messages(result: Run(
-                assemblyName: "Puck.Cli",
+                assemblyName: "Puck.Cli.Release",
                 body: Body,
-                fileName: "C:/repo/src/Puck.Cli/Azure/AzureVerification.cs"
+                fileName: "C:/repo/src/Puck.Cli.Release/Azure/AzureVerification.cs"
             )).Length,
             expected: 2
         );
@@ -220,14 +220,14 @@ public sealed class AnyAddressBindAnalyzerTests {
     [Fact]
     public void AnAllowlistedMemberCoversTheLambdasInsideIt() {
         var result = Run(
-            assemblyName: "Puck.Cli.Tests",
+            assemblyName: "Puck.Mcp.Tests",
             body: """
                 public static class RemoteMcpTests {
                     public static System.Func<string> UnsafeDeploymentConfigurationFailsBeforeListening() => () => "http://0.0.0.0:8080";
                 }
 
                 """,
-            fileName: "tests/Puck.Cli.Tests/RemoteMcpTests.cs"
+            fileName: "tests/Puck.Mcp.Tests/RemoteMcpTests.cs"
         );
 
         Assert.Empty(collection: result.Analyzer);

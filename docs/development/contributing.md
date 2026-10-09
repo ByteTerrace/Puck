@@ -468,13 +468,13 @@ one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
 
-`tests/Puck.Cli.Tests/Official/OfficialBuildCommandTests.cs` builds a real
+`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real
 `puck.official.manifest.v1` tree from this checkout's own worlds and the
 browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
@@ -695,6 +695,13 @@ meant to establish.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
+- xUnit runs the laws of one class one after another and runs classes side by
+  side, so a suite takes at least as long as its slowest class. When a class's
+  laws each start processes, builds or scratch repositories, put its fixtures
+  and helpers in an abstract base and its laws in sealed classes over it
+  (`GateRunLaws`, `ShaderBuildTargetsLaws`). A law that proves a real process
+  boundary keeps the process; share its cost instead, for example by planning a
+  gate's change once and executing it under each runner.
 
 ## Code and documentation conventions
 

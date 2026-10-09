@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Release.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The release and automation verbs. -->
+        <ProjectReference Include="../../src/Puck.Cli.Release/Puck.Cli.Release.csproj" />
+        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
+        <ProjectReference Include="../../src/Puck.Actors/Puck.Actors.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
+        <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" ReferenceOutputAssembly="false" Private="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+</Project>

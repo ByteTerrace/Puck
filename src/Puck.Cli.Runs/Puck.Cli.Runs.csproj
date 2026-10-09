@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The verbs that boot a World and judge it: canary, canary-ceilings, counters, parity, qualify, landing, determinism, publish and schema. -->
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Runs</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
+        <ProjectReference Include="../Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
+        <ProjectReference Include="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
+        <ProjectReference Include="../Puck.Attestation/Puck.Attestation.csproj" />
+        <ProjectReference Include="../Puck.World.Console/Puck.World.Console.csproj" />
+    </ItemGroup>
+    <PropertyGroup Condition="'$(PuckSchemaBootstrap)' == 'true'">
+        <DefineConstants>$(DefineConstants);PUCK_SCHEMA_BOOTSTRAP</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>

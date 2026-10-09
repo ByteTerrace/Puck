@@ -34,7 +34,7 @@ const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
 const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
-const { officialTreeMissing, officialDocument, officialSources, officialIslandRootSource } = require('./support/officialTree.cjs');
+const { officialTreeMissing, officialDocument, officialSources, officialIslandRootSource, STANDARD_SOURCE } =require('./support/officialTree.cjs');
 
 if (!fs.existsSync(mainMjs)) {
   test(`engine-timing (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release -r browser-wasm')`, { skip: true }, () => {});
@@ -59,15 +59,8 @@ if (!fs.existsSync(mainMjs)) {
       const version = await time('Version()', () => engine.version());
       assert.equal(version.engine, 'Puck.World.Browser');
 
-      // Parse: the tictactoe fragment under the standard basis (ParseFragment) — the cheap, single-fragment call,
-      // timed separately from the expensive full-island ComposeSource below.
-      const basisJson = officialDocument('standard');
-      const fragmentJson = officialDocument('games/tictactoe');
-      const parsed = await time('Parse (tictactoe fragment under the standard basis)', () => engine.parseFragment(fragmentJson, basisJson, 'a'));
-      assert.equal(parsed.ok, true, JSON.stringify(parsed));
-
-      // ComposeSource: the real shipped island, composed from the official tree's sources[] mounted the way the studio
-      // mounts them.
+      // The official tree's sources[], mounted the way the studio mounts them: the workspace every composition below
+      // reads.
       const sources = officialSources();
       sizes.push({ label: 'sources payload (MountSources input, JSON.stringify(sources))', bytes: Buffer.byteLength(JSON.stringify(sources), 'utf8') });
       try {
@@ -77,6 +70,17 @@ if (!fs.existsSync(mainMjs)) {
         t.skip(`this AppBundle predates the source exports: ${error.message}`);
         return;
       }
+
+      // Parse: the tictactoe fragment under the standard basis (ParseFragment) — the cheap, single-fragment call,
+      // timed separately from the expensive full-island ComposeSource below. The basis imports what it builds on, so
+      // the host ParseFragment takes is the basis composed through those imports, timed as its own row.
+      const basis = await time('ComposeSource (standard basis)', () => engine.composeSource(STANDARD_SOURCE));
+      assert.equal(typeof basis.composed, 'string', JSON.stringify(basis.diagnostics));
+      const fragmentJson = officialDocument('games/tictactoe');
+      const parsed = await time('Parse (tictactoe fragment under the standard basis)', () => engine.parseFragment(fragmentJson, basis.composed, 'a'));
+      assert.equal(parsed.ok, true, JSON.stringify(parsed));
+
+      // ComposeSource: the real shipped island, composed from the same mounted sources.
 
       const composed = await time('ComposeSource (full island)', () => engine.composeSource(officialIslandRootSource()));
       assert.equal(composed.ok, true, JSON.stringify(composed.diagnostics));

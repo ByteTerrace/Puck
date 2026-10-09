@@ -348,7 +348,7 @@ has been tested. The protocol contract is the
 Render writer boundary tests are in Commands, Abstractions and Shaders. No
 automated check covers a physical device-loss event or a live Entra deployment.
 
-Run `dotnet test tests/Puck.Cli.Tests -c Release` for SDK interop and the
+Run `dotnet test --project tests/Puck.Mcp.Tests -c Release` and the `McpInteropTests` in `tests/Puck.Cli.Tests` for SDK interop and the
 [Hosting tests](../../tests/Puck.Hosting.Tests/README.md) for engine attachment contracts.
 For a live smoke, edit a parameter through MCP and decode the captured PNG; hold
 this attachment with `world.wait` and confirm human input still answers. Close

@@ -62,7 +62,7 @@ public enum WorldScheduleExpectation {
 /// predicate answers whether a verb's verdict arrives at apply time, and <c>world.grant</c>, <c>world.revoke</c>,
 /// <c>world.load</c> and <c>world.reload</c> all satisfy it while reaching outside the simulation — the grant
 /// table, the filesystem. KEEP IN SYNC with the live registry through
-/// <c>tests/Puck.Cli.Tests</c>'s <c>ScheduledStepVocabularyLawTests</c>, which reads the running host's own
+/// <c>tests/Puck.Cli.Worlds.Tests</c>'s <c>ScheduledStepVocabularyLawTests</c>, which reads the running host's own
 /// affordance manifest: every step here must exist there and route to the simulation, every read must exist there and
 /// run immediately, and every simulation-routed verb there must be a step here or in that law's exclusion table with a
 /// reason.</para>

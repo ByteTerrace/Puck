@@ -124,7 +124,7 @@ public sealed partial class CliConventionLawTests {
         ));
         var commandLine = context.LoadFromAssemblyName(assemblyName: new AssemblyName(assemblyName: "System.CommandLine"));
         var root = cli.GetType(name: "Puck.Cli.PuckRootCommand", throwOnError: true)!
-            .GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Static, name: "Create")!
+            .GetMethod(bindingAttr: BindingFlags.Public | BindingFlags.Static, name: "Create", types: [typeof(TimeProvider)])!
             .Invoke(obj: null, parameters: [TimeProvider.System])!;
         var commandType = commandLine.GetType(name: "System.CommandLine.Command", throwOnError: true)!;
         var configurationType = commandLine.GetType(name: "System.CommandLine.InvocationConfiguration", throwOnError: true)!;

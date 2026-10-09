@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Mcp.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The MCP server, its remote proxy and its hosting, over a fixture World server. -->
+        <ProjectReference Include="../../src/Puck.Mcp/Puck.Mcp.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Server/Puck.World.Server.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,102 @@
+using Puck.World;
+
+namespace Puck.Cli.Test;
+
+/// <summary>Which host a <c>puck test</c> leg boots a test world through.</summary>
+internal enum TestHost {
+    /// <summary>The real <c>Puck.World</c> executable, headless.</summary>
+    Server,
+    /// <summary>The browser-wasm engine host.</summary>
+    Browser,
+}
+
+/// <summary>One verdict row as the export declares and resolves it.</summary>
+/// <param name="Name">The verdict row's name.</param>
+/// <param name="Gate">The expectation the row's <c>verdict.gate</c> claims.</param>
+/// <param name="Status">The status cell's value at the export tick.</param>
+/// <param name="FiredTick">The tick of the rule firing that last wrote the row, or <see langword="null"/> when the
+/// export carries no firing stamp — a status that moved through some door other than a rule's own effect.</param>
+/// <param name="Saw">Every other cell of the row, in declaration order, as <c>key=value</c>. The firing stamp is not
+/// one of them: it is the engine's, not a value the gate saw.</param>
+public sealed record TestVerdict(string Name, string Gate, long Status, ulong? FiredTick, IReadOnlyList<string> Saw) {
+    /// <summary>Gets a value indicating whether a rule firing ever wrote this row.</summary>
+    public bool Fired => ((FiredTick is { } tick) && (tick > 0UL));
+    /// <summary>Gets the status the runner judges: the cell's own value only when a rule firing wrote the row, and
+    /// <see cref="WorldVerdict.NotEvaluated"/> otherwise.</summary>
+    public long Judged => (Fired
+        ? Status
+        : WorldVerdict.NotEvaluated
+    );
+}
+/// <summary>One local edit verdict the run's schedule manifest recorded.</summary>
+/// <param name="Rejected">Whether the edit was refused.</param>
+/// <param name="Message">The server's own reason or confirmation.</param>
+public sealed record TestEcho(bool Rejected, string Message);
+/// <summary>One scheduled command as the run's manifest recorded its submission.</summary>
+/// <param name="Tick">The tick the command was submitted at.</param>
+/// <param name="Principal">The acting identity's label.</param>
+/// <param name="Command">The command line.</param>
+/// <param name="Outcome">What the ingress answered.</param>
+/// <param name="Detail">The refusal reason or the handler's own output, when there was one.</param>
+public sealed record TestSubmission(ulong Tick, string Principal, string Command, string Outcome, string? Detail);
+/// <summary>One world's export inside a leg: the world this run booted with, or a sibling it armed beside it.</summary>
+/// <param name="World">The world's name — <c>boot</c> for the world the leg booted with.</param>
+/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
+/// qualification.</param>
+/// <param name="ExportTick">The tick this world's export was taken at.</param>
+/// <param name="Verdicts">Every verdict row this world's export declares.</param>
+public sealed record TestWorldExport(string World, byte[] ExportBytes, ulong ExportTick, IReadOnlyList<TestVerdict> Verdicts) {
+    /// <summary>Gets a value indicating whether this world is the one the leg booted with.</summary>
+    public bool IsBoot => (World == WorldScheduleSection.BootWorldName);
+    /// <summary>Gets the prefix a verdict of this world is reported under: nothing for the booted world, and the
+    /// world's own name for a sibling, so one report names which world answered.</summary>
+    public string Label => (IsBoot
+        ? string.Empty
+        : $"{World}/"
+    );
+}
+/// <summary>One leg's whole reading of a world: the export bytes the run wrote and what they say.</summary>
+/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
+/// qualification.</param>
+/// <param name="ManifestBytes">The submission-manifest bytes, compared across runs during reproduction
+/// qualification.</param>
+/// <param name="ExportTick">The tick the export was taken at, as the manifest recorded it.</param>
+/// <param name="Truncated">Whether the run ended before the tick the document declared.</param>
+/// <param name="Worlds">Every world this leg exported: the booted one first, then each armed sibling in the order
+/// the document declared it.</param>
+/// <param name="Submissions">One entry per declared scheduled row, in declaration order.</param>
+/// <param name="Echoes">Every local edit verdict the run recorded.</param>
+public sealed record TestReading(
+    byte[] ExportBytes,
+    byte[] ManifestBytes,
+    ulong ExportTick,
+    bool Truncated,
+    IReadOnlyList<TestWorldExport> Worlds,
+    IReadOnlyList<TestSubmission> Submissions,
+    IReadOnlyList<TestEcho> Echoes
+) {
+    /// <summary>Gets every verdict row across every world this leg exported.</summary>
+    public IEnumerable<(TestWorldExport World, TestVerdict Verdict)> Verdicts =>
+        Worlds.SelectMany(selector: static world => world.Verdicts.Select(selector: verdict => (world, verdict)));
+}
+/// <summary>One scheduled row as the world document declares it.</summary>
+/// <param name="Tick">The tick the row is submitted at.</param>
+/// <param name="Principal">The acting seat's label.</param>
+/// <param name="Command">The command line.</param>
+/// <param name="Expect">The outcome the row declares its ingress will answer.</param>
+/// <param name="Refusal">Text the recorded refusal detail must contain, or <see langword="null"/> to accept
+/// any.</param>
+public sealed record TestScheduleRow(ulong Tick, string Principal, string Command, WorldScheduleExpectation Expect, string? Refusal) {
+    /// <summary>Gets the manifest outcome this row declares.</summary>
+    public string Outcome => (Expect switch {
+        WorldScheduleExpectation.Refused => WorldScheduleSection.OutcomeRefused,
+        _ => WorldScheduleSection.OutcomeSubmitted,
+    });
+}
+/// <summary>A test world's <c>schedule</c> section as the runner reads it out of the document's own text.</summary>
+/// <param name="ExportTick">The tick the document declares its export at — the last row's tick plus the settle
+/// margin.</param>
+/// <param name="RateHz">The document's simulation rate, used to bound a failed or stalled leg.</param>
+/// <param name="Rows">Every declared row, in declaration order, reconciled against the manifest the run
+/// wrote.</param>
+public sealed record TestSchedule(ulong ExportTick, int RateHz, IReadOnlyList<TestScheduleRow> Rows);

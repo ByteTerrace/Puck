@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Invocation;
-using System.CommandLine.Parsing;
 
 using Puck.Cli.Analysis;
 using Puck.Cli.Affected;
@@ -13,7 +11,6 @@ using Puck.Cli.Bench;
 using Puck.Cli.Canary;
 using Puck.Cli.CartridgeCost;
 using Puck.Cli.Counters;
-using Puck.Cli.Creation;
 using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
@@ -34,14 +31,10 @@ using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
 using Puck.Cli.Ratchets;
 using Puck.Cli.Refusals;
-using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
 using Puck.Cli.Shaders;
-using Puck.Cli.Test;
-using Puck.Cli.Transpiler;
-using Puck.Cli.Vocabulary;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
 using Puck.Cli.WorktreeReport;
@@ -49,65 +42,20 @@ using Puck.Cli.WorktreeReport;
 namespace Puck.Cli;
 
 /// <summary>
-/// The <c>puck</c> command tree: every verb hangs off one root, and the process entry point and
+/// The <c>puck</c> command tree: one root composes every verb assembly's verbs, and the process entry point and
 /// in-process self-invocations both go through <see cref="InvokeAsync(string[])"/>.
 /// </summary>
-internal static class PuckRootCommand {
-    internal static int Invoke(string[] args, RootCommand root) => (Parse(
-        args: args,
-        root: root
-    )?.Invoke(configuration: Invocation()) ?? CliExit.Refused);
-    internal static async Task<int> InvokeAsync(string[] args, RootCommand root) => ((Parse(
-        args: args,
-        root: root
-    ) is { } result)
-        ? await result.InvokeAsync(configuration: Invocation())
-        : CliExit.Refused
+public static class PuckRootCommand {
+    /// <summary>What the gate's verbs read from the verbs composed beside them: the source types behind each generated
+    /// schema (<c>puck schema</c>) and the grammar of each verb whose own arguments decide whether a run is GPU work
+    /// (<c>puck parity</c>, <c>puck counters</c>).</summary>
+    public static GateComposition Gate { get; } = new(
+        GpuVerbGrammars: new Dictionary<string, Func<Command>>(comparer: StringComparer.Ordinal) {
+            ["counters"] = CountersCommand.Create,
+            ["parity"] = ParityCommand.Create,
+        },
+        SchemaSourceTypes: SchemaCommand.SourceTypesOf
     );
-    // Ctrl+C and SIGTERM cancel the verb's token and the process waits for the verb: a host's own shutdown
-    // lifecycle (the silo allows ShutdownSeconds + 5) is the only deadline, never the parser's two-second default.
-    // CliExit.Guard maps every exception an action throws, so the parser's own handler never sees one.
-    internal static InvocationConfiguration Invocation() => new() { EnableDefaultExceptionHandler = false, ProcessTerminationTimeout = Timeout.InfiniteTimeSpan };
-
-    // The parser hands a misspelled option to whichever value slot is still open, so a token that
-    // looks like an option is refused unless it follows "--", is a number, or reaches an argument
-    // that forwards its tokens to another tool (CliOptions.Forwarded).
-    private static IEnumerable<string> OptionLikeValues(ParseResult result) {
-        var escaped = result.Tokens.SkipWhile(predicate: token => (token.Type != TokenType.DoubleDash)).Skip(count: 1).Select(selector: token => token.Value).ToList();
-        var values = result.CommandResult.Children.Where(predicate: static child => (child is not ArgumentResult { Argument: CliForwardedArgument })).SelectMany(selector: child => child.Tokens).Select(selector: token => token.Value)
-            .Where(predicate: value => (value.StartsWith(value: '-') && (value.Length > 1) && !double.TryParse(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out _,
-            s: value,
-            style: System.Globalization.NumberStyles.Float
-        )));
-
-        foreach (var value in values) {
-            if (!escaped.Remove(item: value)) { yield return value; }
-        }
-    }
-
-    // A usage error exits 2, so verbs keep 1 for a failed check and 0 for success.
-    internal static ParseResult? Parse(string[] args, RootCommand root) {
-        var result = root.Parse(args: args);
-        var errors = result.Errors.Select(selector: error => error.Message).Concat(second: OptionLikeValues(result: result).Select(selector: token => $"Unrecognized option '{token}'.")).ToArray();
-
-        if (
-            (result.Action is not ParseErrorAction) &&
-            (errors.Length == 0)
-        ) { return result; }
-        foreach (var error in errors) { Console.Error.WriteLine(value: error); }
-        var path = new List<string>();
-
-        for (var command = result.CommandResult; (command.Parent is CommandResult parent); command = parent) {
-            path.Insert(
-                index: 0,
-                item: command.Command.Name
-            );
-        }
-        Console.Error.WriteLine(value: $"Run '{CliHelp.ToolName} {string.Concat(values: path.Select(selector: name => (name + " ")))}--help' for usage.");
-        return null;
-    }
 
     /// <summary>Creates the root command. <paramref name="clock"/> is the CLI host's one clock: every deadline a verb
     /// puts on a process, a connection, a lease, or a request runs on it.</summary>
@@ -115,11 +63,10 @@ internal static class PuckRootCommand {
     /// <returns>The root command: its verbs in ordinal name order, its help naming the tool <see cref="CliHelp.ToolName"/>,
     /// and every action guarded by <see cref="CliExit.Guard"/>.</returns>
     public static RootCommand Create(TimeProvider clock) => Create(clock: clock, schemaBootstrap: SchemaBootstrap.IsBootstrap);
-
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
-    internal static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
+    public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
-            AffectedCommand.Create(),
+            AffectedCommand.Create(composition: Gate),
             ArchitectureCommand.Create(),
             ArtifactsCommand.Create(),
             AzureCommand.Create(clock: clock),
@@ -131,71 +78,52 @@ internal static class PuckRootCommand {
             CanaryCeilingsCommand.Create(),
             CartridgeCostCommand.Create(),
             RatchetCommand.CreateCommentSmells(),
-            CompileCommand.Create(),
             CountersCommand.Create(),
-            CreationCommand.Create(),
-            DecompileCommand.Create(),
             DeclarationsCommand.Create(),
             DerivationsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
-            EmbedCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
             FormatsCommand.Create(),
-            GateCommand.Create(clock: clock),
-            HostCommand.Create(),
+            GateCommand.Create(clock: clock, composition: Gate),
+            HostCommand.Create(composition: Gate),
             LandingCommand.Create(),
             LawsCommand.Create(),
             RatchetCommand.CreateLengths(),
-            LintCommand.Create(),
-            LspCommand.Create(),
             McpCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),
             PackagesCommand.Create(),
             ParityCommand.Create(),
-            PuckMigrateCommand.Create(),
             PublishCommand.Create(),
             PullRequestCommand.Create(),
             QualifyCommand.Create(),
             ReferencesCommand.Create(),
             RefusalsCommand.Create(),
-            RegistryCommand.Create(),
             ScanCommand.Create(),
             SchemaCommand.Create(clock: clock),
             SearchCommand.Create(),
             ShadersCommand.Create(),
-            TestCommand.Create(),
-            VocabularyCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
             WorktreeBaseCommand.Create(),
             WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
+            .. WorldsRoot.Verbs(),
         ]);
-        var root = new RootCommand(description: "The Puck developer CLI: every repository operation is a verb here.");
 
-        // The listing reads in name order however the list above is kept.
-        foreach (var verb in verbs.OrderBy(
-            comparer: StringComparer.Ordinal,
-            keySelector: static verb => verb.Name
-        )) {
-            root.Subcommands.Add(item: verb);
-        }
-
-        CliHelp.Install(root: root);
-        CliExit.Guard(command: root);
-
-        return root;
+        return CliRoot.Compose(
+            description: "The Puck developer CLI: every repository operation is a verb here.",
+            verbs: verbs
+        );
     }
-
-    public static int Invoke(string[] args) => Invoke(
+    public static int Invoke(string[] args) => CliRoot.Invoke(
         args: args,
         root: Create(clock: TimeProvider.System)
     );
-    public static Task<int> InvokeAsync(string[] args) => InvokeAsync(
+    public static Task<int> InvokeAsync(string[] args) => CliRoot.InvokeAsync(
         args: args,
         root: Create(clock: TimeProvider.System)
     );

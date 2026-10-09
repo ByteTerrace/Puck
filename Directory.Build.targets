@@ -1,9 +1,9 @@
 <Project>
-    <ItemGroup Condition="('$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR '$(MSBuildProjectName)' == 'Puck.Cli') AND '$(MSBuildProjectName)' != 'Puck.Cli.Tests'">
+    <ItemGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR ('$(PuckKind)' == 'Tool' AND $(MSBuildProjectName.StartsWith('Puck.Cli')))">
         <!-- Repository-only executables resolve live files from their checkout,
              independently of deterministic compiler source-path mapping, and create every per-run directory
-             through the one run-directory policy. Puck.Cli.Tests reads the CLI's own copies, which its subject's
-             internals already expose; a second copy there is a type conflict. -->
+             through the one run-directory policy. Each puck verb assembly and each suite compiles its own internal copy:
+             no assembly grants another its internals. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="Properties/RepositoryPaths.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="Properties/RunDirectory.cs" />
     </ItemGroup>

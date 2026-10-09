@@ -137,7 +137,10 @@ artifact rather than a second build. The Windows build compiles the whole
 solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
-projects included, is in the compare.
+projects included, is in the compare. A DXIL difference names the container
+chunks that differ, and a failed comparison collects the Linux build's shaders
+into the `shader-bytecode-linux` artifact, so either host's `dxc -dumpbin` can
+disassemble both sides.
 The comparison compiles into `.tmp/shader-cache` (`--cache`), and once it passes
 the job saves that directory as the Linux shader cache under the shader inputs'
 key. A run whose key already has a Linux cache has nothing new to compare: the
@@ -235,8 +238,8 @@ out the default branch, installs the CLI packed from that checkout through
 `setup-puck`, and runs `puck pull-request submit-format`, which reads the artifact
 as data.
 Only default-branch code ever runs with the write token. Its
-`src/Puck.Cli/PullRequest/FormatSubmission.cs` policy is covered by
-`tests/Puck.Cli.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
+`src/Puck.Cli.Format/PullRequest/FormatSubmission.cs` policy is covered by
+`tests/Puck.Cli.Format.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
 and successful build job, limits artifact size and file count, and accepts only
 ordinary C# and `.puck` sources already changed by that PR. The write token never reaches the
 PR's build or formatter.
@@ -410,10 +413,10 @@ artifact contains only those `.nupkg` and `.snupkg` files and a `release.json`
 manifest recording the version, source commit, file checksums, and dependencies
 already on NuGet.org. The publisher checks those checksums and uploads these
 files in dependency order after all gates succeed. It does not rebuild them.
-Selection and failure paths have offline tests in `tests/Puck.Cli.Tests`:
+Selection and failure paths have offline tests in `tests/Puck.Cli.Release.Tests`:
 
 ```sh
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*NuGetCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*NuGetCommandTests"
 ```
 
 `puck nuget --help` lists the release commands. The tests construct package

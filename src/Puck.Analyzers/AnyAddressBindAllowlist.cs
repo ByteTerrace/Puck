@@ -10,21 +10,21 @@ public static class AnyAddressBindAllowlist {
     /// <summary>Gets every allowlisted site.</summary>
     public static IReadOnlyList<AnyAddressBindEntry> Entries { get; } = [
         new(
-            Assembly: "Puck.Cli",
+            Assembly: "Puck.Cli.Release",
             Member: "DeploymentListenAddress",
-            Path: "src/Puck.Cli/Azure/AzureWorld.cs",
+            Path: "src/Puck.Cli.Release/Azure/AzureWorld.cs",
             Reason: "The address an Azure world deployment and its container smoke test write into the world's host.listen and the silo's lifecycle.healthAddress: the load balancer probes and forwards to the virtual machine's interface, and Docker forwards a published port to the container's interface, so neither reaches a loopback listener."
         ),
         new(
-            Assembly: "Puck.Cli.Tests",
+            Assembly: "Puck.Mcp.Tests",
             Member: "UnsafeDeploymentConfigurationFailsBeforeListening",
-            Path: "tests/Puck.Cli.Tests/RemoteMcpTests.cs",
+            Path: "tests/Puck.Mcp.Tests/RemoteMcpTests.cs",
             Reason: "Asserts that a plaintext MCP listenUrl naming the any-address is refused before anything listens; nothing binds."
         ),
         new(
-            Assembly: "Puck.Cli.Tests",
+            Assembly: "Puck.Cli.Release.Tests",
             Member: "BlobLeaseExcludesCompetitorsAndAStaleOwnerCannotReleaseItsSuccessor",
-            Path: "tests/Puck.Cli.Tests/WorldReleaseAzureLeaseTests.cs",
+            Path: "tests/Puck.Cli.Release.Tests/WorldReleaseAzureLeaseTests.cs",
             Reason: "Azurite binds every interface inside its own container so Docker can forward to it; the test publishes that port on the host's loopback only."
         ),
     ];
