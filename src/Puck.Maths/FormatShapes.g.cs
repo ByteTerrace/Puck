@@ -8,6 +8,6 @@ namespace Puck.Maths {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CompiledCurvatureSpline.Magic</c>, declared in <c>src/Puck.Maths/FixedPoint/CompiledCurvatureSpline.Binary.cs</c>.</summary>
-        public const string CompiledCurvatureSplineMagic = "bb8bac14778309fd";
+        public const string CompiledCurvatureSplineMagic = "1cfcf4e8f8d96f85";
     }
 }
