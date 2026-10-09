@@ -181,9 +181,16 @@ Every build, a Codex brief's included, passes `-nodeReuse:false`
 
 Codex and Claude both implement, and no model in either family is restricted or
 reserved. Choose the model and effort per lane by fit: put the strongest available
-model on subtle or correctness-heavy work. Keep every Codex slot
-implementing; a review takes a slot only under the narrow rule in
+model on subtle or correctness-heavy work. Codex's two models, Astra
+(`gpt-6-astra`, the frontier model) and Sol (`gpt-6-sol`, the workhorse), are
+both free to use and encouraged, for implementation and for review-and-fix
+passes; pass `--model` and `--effort` on every launch
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Keep every
+Codex slot implementing; a review takes a slot only under the narrow rule in
 [`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review).
+Delegating to subagents needs no one's permission. A follow-on wave much larger
+than the last (dozens of agents, or a second full fan-out) is a spend decision:
+state its plan and cost to the owner in one sentence before launching it.
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
