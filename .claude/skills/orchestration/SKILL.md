@@ -236,8 +236,10 @@ Keep messages short, with a self-contained first line:
 [<brief id>] <started|progress|done|blocked|question>: <sentence>
 ```
 
-Put large content on a branch and carry its path in the message. Silence is
-not agreement.
+Put large content in a lane-named file in the session scratchpad or the lane's
+own worktree, and carry its path in the message. Large content never goes on a
+pushed branch: a branch carries the lane's commits, not its analyses, logs or
+notes. Silence is not agreement.
 
 ## Route adjacent work
 
