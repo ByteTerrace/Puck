@@ -89,6 +89,11 @@ public sealed record WorldSiloLifecycle(
 /// <param name="Clustering">Orleans cluster membership.</param>
 /// <param name="Lifecycle">Optional deployment-owned host lifecycle adapter.</param>
 /// <param name="Release">Optional managed release identity and private deployment-group admission binding.</param>
+/// <param name="DocumentDirectory">The directory every hosted world document's relative paths (machine content, assets)
+/// resolve beside, as a local World resolves them beside its document's file: the directory
+/// <c>puck world prepare</c> wrote the composed documents into, inside the authored asset layout the image ships. A
+/// relative value resolves against the silo's working directory. <see langword="null"/> gives hosted documents no
+/// directory, and a relative path one authors is refused by name.</param>
 public sealed record WorldSiloDefinition(
     IReadOnlyList<WorldSiloWorldRow> Worlds,
     WorldSiloDoors Doors,
@@ -96,7 +101,8 @@ public sealed record WorldSiloDefinition(
     string StateDir,
     WorldSiloClustering Clustering,
     WorldSiloLifecycle? Lifecycle = null,
-    WorldSiloReleaseManagement? Release = null
+    WorldSiloReleaseManagement? Release = null,
+    string? DocumentDirectory = null
 ) {
     /// <summary>The document schema tag every well-formed <c>puck.silo.configuration.v1</c> document carries.</summary>
     public const string SchemaVersion = "puck.silo.configuration.v1";

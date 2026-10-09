@@ -557,6 +557,7 @@ public static partial class AzureCommand {
             }
         }
         var silo = SiloDocument(
+            documentDirectory: ImageWorldsDirectory,
             keyFile: "/fixture/federation.pk8",
             owner: Owner,
             store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } },

@@ -181,11 +181,14 @@ public static partial class WorldDefinitionLoader {
     /// <param name="cancellationToken">Cancels the load and neighbour reads.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
+    /// <param name="documentDirectory">The directory the document's relative paths resolve beside
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), which bytes carry no trace of; <see langword="null"/> for a
+    /// document that has none.</param>
     /// <returns>The admitted document with its retained programs, or its named refusal.</returns>
     public static async ValueTask<(WorldDefinitionAdmission? Admission, string Reason)> LoadAsync(
         ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
         Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? documentDirectory = null
     ) {
         cancellationToken.ThrowIfCancellationRequested();
         if (
@@ -202,7 +205,7 @@ public static partial class WorldDefinitionLoader {
             sourceName: sourceName
         )
         ) { return (null, reason); }
-        if (!TryPrepareBootValues(definition: parsed!, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
+        if (!TryPrepareBootValues(definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
         var neighbours = new ResolvedNeighbours();
 
         foreach (var reference in (prepared!.References ?? [])) {

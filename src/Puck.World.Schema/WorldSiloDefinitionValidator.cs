@@ -74,6 +74,12 @@ public static class WorldSiloDefinitionValidator {
             return false;
         }
 
+        if ((definition.DocumentDirectory is { } documentDirectory) && string.IsNullOrWhiteSpace(value: documentDirectory)) {
+            reason = "documentDirectory, when present, names a directory";
+
+            return false;
+        }
+
         if (
             string.IsNullOrWhiteSpace(value: definition.Store.Type) ||
             (definition.Store.Settings.ValueKind != JsonValueKind.Object)

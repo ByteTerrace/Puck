@@ -40,7 +40,8 @@ public sealed partial class WorldSiloHost {
                 world: identity.World,
                 store: m_blobStore,
                 target: m_storageTarget,
-                timeProvider: m_clock
+                timeProvider: m_clock,
+                documentDirectory: m_documentDirectory
             );
 
             var (definition, reason) = await origin.LoadAsync(

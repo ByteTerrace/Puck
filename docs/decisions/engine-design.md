@@ -48,7 +48,10 @@ than found by accident in the executable's directory.
 
 A document read from somewhere other than a file, such as standard input, an
 in-memory build or a wire delivery, has no directory. It can still name
-absolute paths, but a relative one is refused by name at validation.
+absolute paths, but a relative one is refused by name at validation. A hosted
+document a silo reads from its store takes the directory its host lays the
+hosted documents out in, the silo document's `documentDirectory`, when the
+silo names one; the same resolver then reads its relative paths beside it.
 
 ## Simulation and presentation have different contracts
 

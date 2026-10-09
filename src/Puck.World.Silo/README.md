@@ -77,6 +77,17 @@ Orleans clustering stays on loopback. A row's QUIC door listens on its world's
 [msquic limitation on Windows](../Puck.World/README.md#usage) that the
 address does not narrow the sockets it opens.
 
+A hosted world document arrives from the store as bytes, so it has no file to
+sit beside. The silo document's optional `documentDirectory` names the
+directory its relative paths resolve against instead: a machine's cartridge,
+an asset row's source, a pipeline. It is the directory `puck world prepare`
+wrote the composed documents into, inside the authored layout the image ships
+beside them, so the official image's silo documents name `/app/worlds`, and a
+prepared document's `../cartridges/...` reads the image's
+`/app/cartridges`. The first activation, a recovery from a checkpoint and a
+reload of published content all read the same directory. Without
+`documentDirectory`, a relative path in a hosted document is refused by name.
+
 A `worlds[]` row may add `extensions`, the path of its own host-approved
 extension configuration: the same `puck.world.extensions.v1` document a local
 World reads through `--extensions-config-file`, attached through the same

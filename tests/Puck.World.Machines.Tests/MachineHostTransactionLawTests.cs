@@ -184,8 +184,7 @@ public sealed class MachineHostTransactionLawTests {
         );
         var host = new WorldMachineHost(
             screens: [],
-            catalog: TestMachines.Catalog(),
-            documentPath: path
+            catalog: TestMachines.Catalog()
         );
 
         Assert.Null(value: host.InstanceState(name: "cabinet"));
@@ -230,8 +229,7 @@ public sealed class MachineHostTransactionLawTests {
         );
         var host = new WorldMachineHost(
             screens: [],
-            catalog: TestMachines.Catalog(),
-            documentPath: path
+            catalog: TestMachines.Catalog()
         );
 
         Assert.True(

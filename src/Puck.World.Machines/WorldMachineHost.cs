@@ -51,18 +51,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <param name="screens">The world's diegetic screens, retained for temporary screen-operation forwarding.</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
-    /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
     /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
     /// <see langword="null"/> to use the local open policy.</param>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null,
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, WorldOutputHub? narrationHub = null,
         IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
         : this(
         screens: screens,
         engines: engines,
         compilers: null,
-        documentPath: documentPath,
         narrationHub: narrationHub,
         contentAdmissionPolicy: contentAdmissionPolicy
     ) { }
@@ -72,7 +70,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
     /// <param name="compilers">The content providers selected for this host, or null for none.</param>
-    /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
     /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
@@ -80,7 +77,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two engines register one id — a composition-root error, thrown at boot
     /// rather than resolved last-writer-wins.</exception>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null,
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, WorldOutputHub? narrationHub = null,
         IMachineContentAdmissionPolicy? contentAdmissionPolicy = null)
         : this(
         screens,
@@ -88,18 +85,16 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             contentProviders: compilers,
             engines: engines
         ),
-        documentPath,
         narrationHub,
         contentAdmissionPolicy
     ) { }
     /// <summary>Initializes a host with the exact catalog selected by its composition root.</summary>
     /// <param name="screens">The authored screen declarations.</param>
     /// <param name="catalog">The immutable engine and content-provider registrations.</param>
-    /// <param name="documentPath">The document origin for relative content paths.</param>
     /// <param name="narrationHub">The optional diagnostic output hub.</param>
     /// <param name="contentAdmissionPolicy">The host-selected policy for prepared content and auxiliary assets, or
     /// <see langword="null"/> to use the local open policy.</param>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, WorldMachineCatalog catalog, string? documentPath = null, WorldOutputHub? narrationHub = null,
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, WorldMachineCatalog catalog, WorldOutputHub? narrationHub = null,
         IMachineContentAdmissionPolicy? contentAdmissionPolicy = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: catalog);
@@ -107,8 +102,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         Catalog = catalog;
         m_narrationHub = narrationHub;
         m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
-
-        m_documentDirectory = DocumentDirectory(documentPath: documentPath);
 
         foreach (var screen in screens) {
             var slot = new MachineSlot { DeclaredSource = screen.Source, Index = screen.Index, Magazine = screen.Magazine, SelectedEntry = (screen.Magazine?.Selected ?? 0) };
@@ -137,10 +130,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             : $"{entry.Name} {members} dormant ({(entry.DormantReason ?? "unestablishable")})"
         );
     }
-    private static string? DocumentDirectory(string? documentPath) => ((documentPath is { Length: > 0 } path)
-        ? WorldDocumentPaths.DirectoryOf(documentPath: path)
-        : null
-    );
     // The sparse pad lookup: WorldEngagement.BuildPadSnapshot() carries one entry per screen with at least one
     // player engaged, so a linear scan over the (typically tiny) active set costs nothing — the same shape the
     // pre-inversion WorldClient.EngagedPad used over the wire lane.
@@ -265,11 +254,12 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // still pins whatever it would have read — engine resolution failing is not a file-state exemption) ->
     // construct the machine, still reporting the signature even if construction itself throws (bad options) so a
     // content change between record and replay is caught even when the failure reason is downstream of the read.
-    private (bool Ok, string Message, string? ContentHash) TryBootMachine(int index, MachineSlot slot, string contentPath, string? engineId, string? options, string? expectedContentHash, bool documentRelative) {
+    private (bool Ok, string Message, string? ContentHash) TryBootMachine(int index, MachineSlot slot, string contentPath, string? engineId, string? options, string? expectedContentHash) {
         if (!TryReadContent(
             content: out var content,
             contentPath: contentPath,
-            documentRelative: documentRelative,
+            documentDirectory: null,
+            documentRelative: false,
             fault: out var fault
         )) {
             const string Signature = ContentAbsentSignature;
@@ -597,7 +587,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
         return (true, string.Empty);
     }
-    private bool TryReadContent(string contentPath, bool documentRelative, out byte[] content, out string? fault) {
+    // A document-relative path resolves beside documentDirectory: the directory of the document that declares it.
+    private static bool TryReadContent(string contentPath, string? documentDirectory, bool documentRelative, out byte[] content, out string? fault) {
         if (string.IsNullOrEmpty(value: contentPath)) {
             content = [];
             fault = "no content configured";
@@ -609,7 +600,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         if (documentRelative) {
             if (!WorldDocumentPaths.TryResolve(
-                documentDirectory: m_documentDirectory,
+                documentDirectory: documentDirectory,
                 path: contentPath,
                 reason: out var unresolved,
                 resolved: out resolvedPath
@@ -1081,19 +1072,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         return [.. m_reconcileRemovals];
     }
     /// <inheritdoc/>
-    public void SetDocumentPath(string? documentPath) {
-        var directory = DocumentDirectory(documentPath: documentPath);
-
-        if (!string.Equals(
-            a: directory,
-            b: m_documentDirectory,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            m_documentDirectory = directory;
-            m_documentDirectoryChanged = true;
-        }
-    }
-    /// <inheritdoc/>
     public WorldMachineState? State(int index) {
         if (m_slots.TryGetValue(
             key: index,
@@ -1182,7 +1160,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return TryBootMachine(
             contentPath: contentPath,
-            documentRelative: false,
             engineId: engineId,
             expectedContentHash: expectedContentHash,
             index: index,

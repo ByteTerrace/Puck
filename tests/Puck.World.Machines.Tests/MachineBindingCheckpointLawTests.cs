@@ -218,7 +218,7 @@ public sealed partial class MachineBindingCheckpointLawTests {
             userMessage: reason
         );
 
-        using var machines = Fixtures.MachineHostFactory(definition.Screens, catalog.Engines.Values, null, null);
+        using var machines = Fixtures.MachineHostFactory(definition.Screens, catalog.Engines.Values, null);
 
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded!,

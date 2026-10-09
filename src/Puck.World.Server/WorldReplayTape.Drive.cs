@@ -319,7 +319,6 @@ public sealed partial class WorldReplayTape {
             using var machines = m_machineHostFactory(
                 definition.Screens,
                 m_engines,
-                documentPath,
                 null
             );
             var shadow = new WorldServer(

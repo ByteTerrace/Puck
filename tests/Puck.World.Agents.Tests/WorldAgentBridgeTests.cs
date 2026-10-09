@@ -308,7 +308,7 @@ public sealed class WorldAgentBridgeTests {
         var population = new WorldPopulation(definition: definition);
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-agents-test-");
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory.RootPath, machineId: Guid.NewGuid());
-        using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]), documentPath: null);
+        using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]));
         var server = new WorldServer(
             definition: definition,
             population: population,

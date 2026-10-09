@@ -178,7 +178,9 @@ unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
 Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived
 bytes, never `LoadDefinitionAsync`'s initialized result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds
-directory, preserving the image's asset layout. Colocated silo rows with neither
+directory, preserving the image's asset layout; the silo resolves those paths beside its document's
+`documentDirectory` (the image's `/app/worlds`), which becomes every hosted definition's `DocumentDirectory`,
+and the machine host reads content beside the directory of the definition it prepares. Colocated silo rows with neither
 authority nor listen endpoint sign with the stable instance name, matching the
 server's authority identity; listening rows still require an advertised endpoint.
 Run release bootstrap/preparation/publication and silo lifecycle controls for these seams.

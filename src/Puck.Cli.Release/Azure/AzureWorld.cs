@@ -13,8 +13,13 @@ public static partial class AzureCommand {
     /// published port to the container's interface, so neither reaches a loopback bind. Only these deployment documents
     /// name it; a local World or silo listens on loopback.</summary>
     public const string DeploymentListenAddress = "0.0.0.0";
+    /// <summary>The directory the world-silo image keeps its composed hosted documents in, inside the authored asset
+    /// layout it ships beside them (<c>src/Puck.World.Silo/Dockerfile</c>): the directory a hosted document's relative
+    /// machine content and assets resolve beside, which a silo document in the image names as its
+    /// <c>documentDirectory</c>.</summary>
+    public const string ImageWorldsDirectory = "/app/worlds";
 
-    private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null) {
+    private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null, string? documentDirectory = null) {
         var result = new JsonObject {
             ["schema"] = "puck.silo.configuration.v1",
             ["worlds"] = new JsonArray(new JsonObject { ["owner"] = owner, ["world"] = world, ["pinned"] = true, ["federation"] = new JsonObject { ["keyFile"] = keyFile } }),
@@ -25,6 +30,7 @@ public static partial class AzureCommand {
         };
 
         if (lifecycle is not null) { result["lifecycle"] = lifecycle.DeepClone(); }
+        if (documentDirectory is not null) { result["documentDirectory"] = documentDirectory; }
         return result;
     }
     private static JsonNode McpTlsConfiguration(string hostname) {
@@ -142,6 +148,7 @@ public static partial class AzureCommand {
                 };
             }
             var silo = SiloDocument(
+                documentDirectory: ImageWorldsDirectory,
                 keyFile: "/configuration/federation.pk8",
                 lifecycle: lifecycle,
                 owner: owner,

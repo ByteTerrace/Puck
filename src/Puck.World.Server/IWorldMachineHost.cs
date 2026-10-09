@@ -158,7 +158,9 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links);
     /// <summary>Prepares the machine-runtime delta between <paramref name="current"/> and <paramref name="candidate"/>.</summary>
     /// <param name="current">The current live definition, or <see langword="null"/> at boot.</param>
-    /// <param name="candidate">The candidate definition to prepare against.</param>
+    /// <param name="candidate">The candidate definition to prepare against. A machine's relative content path
+    /// resolves beside its <see cref="WorldDefinition.DocumentDirectory"/>, the one directory a document's relative
+    /// paths resolve against, and a committed plan keeps that directory for the machines' later operations.</param>
     /// <param name="plan">The prepared plan on success; must be disposed if not committed.</param>
     /// <param name="reason">A refusal reason on failure.</param>
     /// <param name="admission">The unchanged candidate's validation result from this preparation operation,
@@ -184,9 +186,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="address">The resolved bus address.</param>
     /// <returns><see langword="true"/> when the symbol was found on the booted machine's cartridge.</returns>
     bool TryResolveSymbol(int index, string symbol, out int address);
-    /// <summary>Moves declared relative machine content resolution to a new world document.</summary>
-    /// <param name="documentPath">The installed world document path.</param>
-    void SetDocumentPath(string? documentPath);
     /// <summary>Returns the live state of a declared screen's machine for <c>screen.state</c>, or <see langword="null"/> when
     /// the index is not a declared screen.</summary>
     /// <param name="index">The engine screen-surface index.</param>

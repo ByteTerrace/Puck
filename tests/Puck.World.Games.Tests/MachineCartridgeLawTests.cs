@@ -446,8 +446,7 @@ public sealed class MachineCartridgeLawTests {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: TestMachines.Catalog(),
-            documentPath: hostPath
+            catalog: TestMachines.Catalog()
         );
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-world-tests-");
         var profiles = new WorldOwnedWorlds(

@@ -70,6 +70,8 @@ internal static partial class AuthoredGameFixtures {
             userMessage: reason
         );
 
-        return definition!;
+        // The host's boot reads the document from its file, so its relative paths (a cabinet's cartridge among them)
+        // resolve beside that file.
+        return (definition! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
     }
 }

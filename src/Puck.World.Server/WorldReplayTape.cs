@@ -71,7 +71,7 @@ public sealed partial class WorldReplayTape {
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
     private readonly IReadOnlyList<IMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly WorldStateRoot m_stateRoot;
@@ -130,7 +130,7 @@ public sealed partial class WorldReplayTape {
     /// that proves nothing.</param>
     /// <param name="stateRoot">The host's state root; recordings persist in its <c>Replays</c> directory.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, WorldStateRoot stateRoot) {
+    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, WorldStateRoot stateRoot) {
         ArgumentNullException.ThrowIfNull(argument: liveServer);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: transport);

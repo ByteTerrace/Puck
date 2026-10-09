@@ -154,7 +154,8 @@ public sealed partial class WorldMachineHost {
                 case MachineOperationPreparation.Replacement replacement: {
                         var requestForReplacement = PrepareCreation(
                             engine: engine,
-                            configuration: replacement.Configuration
+                            configuration: replacement.Configuration,
+                            documentDirectory: m_documentDirectory
                         );
                         var runtime = engine.CreateMachine(request: requestForReplacement);
 
@@ -492,11 +493,19 @@ public sealed partial class WorldMachineHost {
     private bool TryPrepareInstances(WorldDefinition? current, WorldDefinition candidate,
         out PreparedInstances? prepared, out string? reason) {
         var plan = new PreparedInstances(
+            documentDirectory: candidate.DocumentDirectory,
             nextGeneration: m_nextInstanceGeneration,
             owner: this,
             revision: m_instanceRevision
         );
         var preparing = string.Empty;
+        // A machine whose declaration is unchanged is still prepared again when the document moves: its relative
+        // content now resolves beside another directory.
+        var directoryChanged = !string.Equals(
+            a: candidate.DocumentDirectory,
+            b: m_documentDirectory,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
 
         try {
             foreach (var declaration in candidate.Machines) {
@@ -519,7 +528,7 @@ public sealed partial class WorldMachineHost {
                 }
                 if (
                     (current is not null) &&
-                    !m_documentDirectoryChanged &&
+                    !directoryChanged &&
                     m_instances.TryGetValue(
                     key: declaration.Name,
                     value: out var live
@@ -551,7 +560,8 @@ public sealed partial class WorldMachineHost {
                 var engine = Catalog.Engines[declaration.Engine];
                 var request = PrepareCreation(
                     engine,
-                    declaration.Configuration
+                    declaration.Configuration,
+                    candidate.DocumentDirectory
                 );
                 var runtime = engine.CreateMachine(request: request);
                 var lease = new MachineLease(
@@ -627,7 +637,9 @@ public sealed partial class WorldMachineHost {
             element1: first.Configuration,
             element2: second.Configuration
         ));
-    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration) {
+    // Reads a configuration's content and asset paths, each relative path beside documentDirectory: the directory of
+    // the document that declares the machine.
+    private MachineCreationRequest PrepareCreation(IMachineEngine engine, JsonElement configuration, string? documentDirectory) {
         MachineConfigurationValidation.Validate(
             descriptor: engine.Descriptor.Configuration,
             value: configuration
@@ -646,6 +658,7 @@ public sealed partial class WorldMachineHost {
 
                 if (!TryReadContent(
                     path,
+                    documentDirectory,
                     documentRelative: true,
                     out var source,
                     out var fault
@@ -745,6 +758,14 @@ public sealed partial class WorldMachineHost {
         m_instances = plan.Candidate;
         m_nextInstanceGeneration = plan.NextGeneration;
         m_instanceRevision++;
+        if (!string.Equals(
+            a: plan.DocumentDirectory,
+            b: m_documentDirectory,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            m_documentDirectory = plan.DocumentDirectory;
+            m_documentDirectoryChanged = true;
+        }
         plan.Committed = true;
     }
     private void DisposeInstances() {
@@ -764,8 +785,10 @@ public sealed partial class WorldMachineHost {
 
         public long CompletedSteps { get; set; }
     }
-    internal sealed class PreparedInstances(WorldMachineHost owner, ulong revision, ulong nextGeneration) : IDisposable {
+    internal sealed class PreparedInstances(WorldMachineHost owner, ulong revision, ulong nextGeneration, string? documentDirectory) : IDisposable {
         public WorldMachineHost Owner { get; } = owner;
+        // The directory the candidate document's relative content resolved beside.
+        public string? DocumentDirectory { get; } = documentDirectory;
         public ulong Revision { get; } = revision;
         public ulong NextGeneration { get; set; } = nextGeneration;
         public Dictionary<string, MachineInstance> Candidate { get; } = new(comparer: StringComparer.Ordinal);

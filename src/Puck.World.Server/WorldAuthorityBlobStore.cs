@@ -19,6 +19,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     private const int MaxCasAttempts = 5;
 
     private readonly TimeProvider m_clock;
+    private readonly string? m_documentDirectory;
     private readonly IMachineValidationCatalog? m_machines;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
@@ -31,12 +32,16 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     /// is one the hosting activation can accept; null defers provider checks and the activation admits for itself.</param>
     /// <param name="timeProvider">The host clock every <see cref="OperationTimeout"/> runs on; <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>.</param>
+    /// <param name="documentDirectory">The directory a recovered definition's relative paths resolve beside
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>): the host's layout of the hosted documents, such as a silo
+    /// document's <see cref="WorldSiloDefinition.DocumentDirectory"/>; <see langword="null"/> gives them none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target, IMachineValidationCatalog? machines = null, TimeProvider? timeProvider = null) {
+    public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target, IMachineValidationCatalog? machines = null, TimeProvider? timeProvider = null, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
         m_clock = (timeProvider ?? TimeProvider.System);
+        m_documentDirectory = documentDirectory;
         m_machines = machines;
         m_store = store;
         m_target = target;
@@ -113,6 +118,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             store: m_store,
             target: m_target,
             timeProvider: m_clock,
+            documentDirectory: m_documentDirectory,
             world: identity.World
         );
 
@@ -1062,7 +1068,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity.World.Value,
                 resolver.ResolveHostedAsync,
                 cancellationToken,
-                catalog: m_machines
+                catalog: m_machines,
+                documentDirectory: m_documentDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (loaded.Admission is null) throw new InvalidDataException(message: $"root-qualified definition is invalid — {loaded.Reason}");
