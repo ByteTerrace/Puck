@@ -93,8 +93,8 @@ public sealed class PartProgramLawTests {
                 material: 0,
                 radius: 1
             ),
-            Op(SdfOp.PopField) with { Data1 = new Vector4(x: 0, y: 0.5f, z: 0, w: 0) },
-            Op(SdfOp.PopField) with { Data1 = new Vector4(x: 0, y: 0.8f, z: 0, w: 0) },
+            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.5f, z: 0) },
+            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.8f, z: 0) },
         ]);
         var program = Build(
             instructions,
@@ -109,15 +109,14 @@ public sealed class PartProgramLawTests {
         var words = program.Words;
         var table = PartTable(words: words);
 
-        Assert.NotEqual(expected: 0u, actual: (words[((table + 4) + 2)] & 0x7FFFFFFFu));
-        Assert.Equal(expected: 0u, actual: (words[((table + 8) + 2)] & 0x7FFFFFFFu));
+        Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & 0x7FFFFFFFu);
+        Assert.Equal(expected: 0u, actual: words[((table + 8) + 2)] & 0x7FFFFFFFu);
         Assert.Equal(expected: 2.5f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
         Assert.Equal(
             expected: (1f / program.InspectInstance(index: 1).FieldRescale),
             actual: BitConverter.UInt32BitsToSingle(value: words[((table + 8) + 3)])
         );
     }
-
     [Fact]
     public void CapacityDoesNotDependOnSharedGeometry() {
         var shared = Scope(
