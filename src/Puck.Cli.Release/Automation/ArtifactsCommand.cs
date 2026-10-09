@@ -385,8 +385,10 @@ public static class ArtifactsCommand {
             body: async (assembly, cancellationToken) => {
                 var name = Path.GetFileNameWithoutExtension(path: assembly);
                 var clock = System.Diagnostics.Stopwatch.StartNew();
+                // The results directory is passed whole: a test host resolves a relative one from where it stands, which
+                // for some assemblies is their own output directory, and their reports would miss the upload.
                 var run = await CliProcess.RunAsync(
-                    arguments: TestWindowsArguments(assembly: assembly, report: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.trx", results: Results),
+                    arguments: TestWindowsArguments(assembly: assembly, report: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.trx", results: Path.Combine(path1: root, path2: Results)),
                     cancellationToken: cancellationToken,
                     capture: true,
                     fileName: "dotnet",
