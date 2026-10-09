@@ -226,6 +226,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
 #endif
                     ) {
+                        sdfFieldVisits += (part.z & 0x7FFFFFFFu);
                         sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
@@ -252,7 +253,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
         uint4 segmentMeta = sdfProgramWord(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u);
         if (segmentMeta.z > segmentMeta.w || segmentMeta.w > sdfProgramLayout.instructionCount) { return sdfIsaErrorHit(); }
+        sdfFieldVisits++;
         uint segmentBoundMode = (segmentMeta.x & SDF_SEGMENT_BOUND_MASK);
+        // The static far field omits every segment a moving transform places (sdfIndirectStaticField).
+        if (sdfIndirectParticipationActive && sdfIndirectStaticField && (segmentBoundMode == SDF_BOUND_DYNAMIC)) { continue; }
 
         [branch]
         if (segmentBoundMode != SDF_BOUND_NONE
@@ -290,6 +294,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         // loop/switch/PHI lattice for common articulated geometry. One dynamic slot is shared by the run, so a
         // multi-primitive bone loads once. KEEP-IN-SYNC PAIR: mapGradCore has the parallel rigid-leaf dual walk (same
         // segment/plan decode, same tight-sphere rejects, same pose math) — the two rigid walks must stay twins.
+        sdfFieldVisits += (segmentMeta.w - segmentMeta.z);
 #ifndef SDF_VM_DISABLE_RIGID_PLAN
         [branch]
         if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) != 0u) {

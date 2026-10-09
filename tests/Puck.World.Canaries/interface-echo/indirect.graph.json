@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 101,
+        "width": 102,
         "height": 1
       }
     }
@@ -330,6 +330,11 @@
           "type": "uint",
           "default": 0,
           "description": "The indirect pass\u0027s indirectSources sentinel."
+        },
+        "indirectStaticFar": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectStaticFar sentinel."
         },
         "indirectTier": {
           "type": "uint",

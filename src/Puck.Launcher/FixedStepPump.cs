@@ -178,11 +178,16 @@ public sealed class FixedStepPump {
     /// the capture pin rebased, exactly as a gated one does: the time spent waiting for the frame is never stepped,
     /// so the simulation neither passes the tick the frame must show nor bursts once the frame is served.</para></remarks>
     public int Advance(ulong deltaTicks, ulong maxFrameTicks, ulong stepTicks) {
+        // The host time a clamp drops is never stepped, but a holding pump still withholds it: a capture's hold budget
+        // is spent in host time, so a slow frame charges its whole interval, never only the clamped part.
+        var dropped = 0UL;
+
         if (deltaTicks > maxFrameTicks) {
             // InputClock never clamps, while the simulation intentionally drops excess wall time. Rebase the
             // capture-to-simulation pin by the dropped interval so newly captured input remains due now rather than
             // waiting for simulation time the pump deliberately discarded.
-            CaptureOriginTicks += (deltaTicks - maxFrameTicks);
+            dropped = (deltaTicks - maxFrameTicks);
+            CaptureOriginTicks += dropped;
             deltaTicks = maxFrameTicks;
         }
 
@@ -195,8 +200,10 @@ public sealed class FixedStepPump {
             var heldTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
             var gate = Gate(
                 ratePerSecond: ratePerSecond,
-                withheldTicks: heldTicks
+                withheldTicks: (heldTicks + dropped)
             );
+
+            dropped = 0UL;
 
             if (gate == StepGate.RateChanged) {
                 break;

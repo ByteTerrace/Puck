@@ -14,7 +14,6 @@ static uint sdfIndirectEvaluations = 0u;
 static uint sdfIndirectSteps = 0u;
 static uint sdfIndirectProofEvaluations = 0u;
 static uint sdfIndirectHashes = 0u;
-static uint sdfIndirectProofOwner = 0xffffffffu;
 static bool sdfIndirectReceiverPermit = false;
 static bool sdfIndirectReceiverDeferred = false;
 static const uint SDF_INSTANCE_MASK_ALL = 0xffffffffu;
@@ -130,12 +129,13 @@ void CSMain(uint lane : SV_GroupIndex) {
         sdfIndirectEvaluations = 0u;
         sdfIndirectReceiverDeferred = false;
         sdfIndirectReceiverPermit = fixtureMode == 10u;
-#ifdef SDF_INDIRECT_PASS
-        sdfIndirectProofOwner = lane == 0u && fixtureMode == 0u ? 0u : 0xffffffffu;
-#endif
         uint budget = phase == 0u && fixtureMode == 14u ? 0u : 32u;
         float clearance = fixtureMode == 9u && phase == 0u ? 0.0 : (fixtureMode == 4u ? 0.001 : 1.0);
+#ifdef SDF_RECEIVER_PASS
+        proofMasks[lane] = sdfIndirectProve(position, 0u, budget, clearance, true);
+#else
         proofMasks[lane] = sdfIndirectProve(position, 0u, budget, clearance);
+#endif
         proofDeferred[lane] = sdfIndirectReceiverDeferred ? 1u : 0u;
         AllMemoryBarrierWithGroupSync();
         if (lane == 0u) {

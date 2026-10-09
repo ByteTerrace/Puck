@@ -49,18 +49,22 @@ public static class SdfIndirectWork {
     }
     /// <summary>Prices the pinned frame's possible visibility work. Disabled direct light performs no shadow
     /// queries; enabled direct light retains the full directional fallback bound regardless of map availability.
-    /// A probe whose shading exceeds one submission is a batch of its own, which the cache splits into ray chunks.</summary>
+    /// A probe whose shading exceeds one submission is a batch of its own, which the cache splits into ray chunks.
+    /// Once the device has measured the shade unit, the measured visits price the batch against the submission
+    /// allowance and the evaluation-count bound, which stands in for that price, no longer applies.</summary>
     /// <param name="layout">The cache tier.</param>
     /// <param name="frame">The immutable lighting source.</param>
+    /// <param name="measuredFieldCost">The shade unit's measured field visits (<see cref="SdfIndirectCache.MeasuredFieldCost"/>),
+    /// or null to price every fallback query against the complete program.</param>
     /// <returns>The probe count admitted per batch.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="SdfIndirectCostRefusedException">One field query or one shaded ray exceeds a submission.</exception>
-    public static int ShadeProbeBudget(SdfIndirectLayout layout, SdfFrame frame) {
+    public static int ShadeProbeBudget(SdfIndirectLayout layout, SdfFrame frame, long? measuredFieldCost = null) {
         ArgumentNullException.ThrowIfNull(frame);
-        var count = ((((frame.IndirectSources & SdfIndirectSources.Direct) == 0) || (frame.IndirectGains.Lights == 0f))
+        var count = (((((frame.IndirectSources & SdfIndirectSources.Direct) == 0) || (frame.IndirectGains.Lights == 0f)) || (measuredFieldCost is not null))
             ? ShadeProbeBudget(directionalChannels: 0, layout: layout)
             : ShadeProbeBudget(layout: layout, lights: frame.Lights));
-        var units = SdfIndirectCost.ShadeUnits(frame: frame, layout: layout);
+        var units = (SdfIndirectCost.ShadeUnits(frame: frame, layout: layout) with { MeasuredFieldCost = measuredFieldCost });
         var whole = SdfIndirectCost.WholeItems(count: count, instructionCount: frame.Program.InstructionCount, units: units);
 
         if ((whole > 0) || (count == 0)) { return whole; }

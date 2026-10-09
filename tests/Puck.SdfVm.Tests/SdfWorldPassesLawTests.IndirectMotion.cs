@@ -40,6 +40,7 @@ public sealed partial class SdfWorldPassesLawTests {
             cache.Submitted();
             return cache.IsComplete;
         }, building: () => false, reason: () => "The fixed transport demand has not completed.");
+        CompleteSolve(cache: cache);
         var before = cache.Snapshot();
 
         Assert.Contains(collection: before.Bricks, filter: brick => brick.SubmittedStrata.Any(predicate: mask => (mask != 0u)));
@@ -75,5 +76,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Contains(collection: after.Bricks, filter: brick => (brick.SubmittedStrata.All(predicate: mask => (mask == 0u)) &&
             before.Bricks.Single(predicate: previous => (previous.Key == brick.Key)).SubmittedStrata.Any(predicate: mask => (mask != 0u))));
+    }
+
+    // Publishes the current transport's finite solve, completing the cycle a queued geometry change waits for.
+    private static void CompleteSolve(SdfIndirectCache cache) {
+        cache.BeginLighting();
+        while (!cache.LightingComplete) { cache.PlanLighting(); cache.SubmittedLighting(); }
     }
 }
