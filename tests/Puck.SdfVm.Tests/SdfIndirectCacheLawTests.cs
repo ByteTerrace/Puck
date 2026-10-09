@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-public sealed class SdfIndirectCacheLawTests {
+public sealed partial class SdfIndirectCacheLawTests {
     private static IrradianceFrameInputs Inputs => new(Cameras: [Double3.Zero],
         Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: 0.1)], WorldMin: Double3.Zero, WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1));
 
@@ -81,8 +81,14 @@ public sealed class SdfIndirectCacheLawTests {
         rig.Cache.Plan(inputs: Inputs);
         Assert.Equal(admitted, rig.Cache.Regions[1].Contents.ToArray());
         Assert.Equal(revision, rig.Cache.CertificateRevision);
-        rig.Cache.Submitted();
+        // The queued change waits for the whole cycle: the withdrawn transport traced again and its solve published.
+        while (!rig.Cache.TransportComplete) { rig.Cache.Submitted(); rig.Cache.Plan(inputs: Inputs); }
+        Assert.True(condition: rig.Cache.HasQueuedGeometry);
+        rig.Cache.BeginLighting();
+        while (!rig.Cache.LightingComplete) { rig.Cache.PlanLighting(); rig.Cache.SubmittedLighting(); }
+        revision = rig.Cache.CertificateRevision;
         rig.Cache.Plan(inputs: Inputs);
+        Assert.False(condition: rig.Cache.HasQueuedGeometry);
         Assert.True(condition: (rig.Cache.PlaceCount > 0));
         Assert.True(condition: (rig.Cache.CertificateRevision > revision));
         Assert.All(rig.Cache.Regions[3].Contents.ToArray(), value => Assert.Equal(actual: value, expected: 0));

@@ -86,6 +86,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         instanceIndex = ((maskWordIndex << 5u) + firstbitlow(maskWordBits));
+        // Every instance the walk reads is a visit of the measured price, parked and non-participating ones included.
+        sdfFieldVisits++;
 
         maskWordBits &= (maskWordBits - 1u);
 
@@ -104,7 +106,7 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         uint4 instanceMeta = sdfProgramWord(entryBase + 1u);
-        if (sdfIndirectParticipationActive && sdfInstanceIndirectPolicy(instanceMeta) != SDF_INDIRECT_PARTICIPATION_CAST) {
+        if (sdfIndirectParticipationActive && ((sdfInstanceIndirectPolicy(instanceMeta) != SDF_INDIRECT_PARTICIPATION_CAST) || (sdfIndirectStaticField && (instanceMeta.x == SDF_BOUND_DYNAMIC)))) {
             continue;
         }
 #ifdef SDF_DYNAMIC_TRANSFORMS

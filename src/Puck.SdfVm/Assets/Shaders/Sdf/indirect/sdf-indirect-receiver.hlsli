@@ -41,8 +41,11 @@ bool sdfIndirectIrradianceSupported(float3 launched, uint level, uint mask, uint
 
 // The receiver's proof: the retained certificate when it still stands, or the finest level whose launch, proof and
 // published support succeed, stored as the pixel's certificate. Status 0 is no receiver, 1 no published bank, 2 no
-// supported level, 3 a certified level, 4 a deferred proof and 5 a receiver outside the material path. A procedure
-// (sdfIndirectReceiveStep): each level's launch and proof are calls its owner's run answers.
+// supported level, 3 a certified level, 4 a deferred proof and 5 a receiver outside the material path. A field receiver
+// first marches its approach (sdf-indirect-approach.hlsli): a fixed number of complete-field samples per pixel, outside
+// the shared admission, so a published canonical proof answers it with no admitted work. A mesh receiver, or one whose
+// approach joins no sample, launches along its normal under that admission. A procedure (sdfIndirectReceiveStep): each
+// approach sample is a query, each level's launch and proof a call, which its owner's run answers.
 struct SdfIndirectReceiveProc {
     uint2 pixel;
     uint viewIndex;
@@ -50,7 +53,11 @@ struct SdfIndirectReceiveProc {
     SdfSurfaceSample receiver;
     float3 surfacePoint;
     uint record;
-    uint approach;
+    float3 approachStart;
+    float approachDistance;
+    float surfaceClearance;
+    uint approachStep;
+    float3 approach;
     float approachClearance;
     uint level;
     float3 launched;
@@ -62,6 +69,8 @@ static SdfIndirectReceiveProc sdfIndirectReceiveProc = (SdfIndirectReceiveProc)0
 static const uint SdfIndirectReceiveBegun = 0u;
 static const uint SdfIndirectReceiveLaunched = 1u;
 static const uint SdfIndirectReceiveProved = 2u;
+static const uint SdfIndirectReceiveSurface = 3u;
+static const uint SdfIndirectReceiveApproach = 4u;
 
 uint sdfIndirectReceiveBegin(SdfPixel p, SdfSurfaceSample receiver, float3 surfacePoint) {
     sdfIndirectReceiveProc.pixel = p.pixel;
@@ -131,9 +140,44 @@ uint sdfIndirectReceiveStep() {
             }
             return SdfIndirectStepReturn;
         }
-        sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.receiver.mesh ? 0u : sdfVisibilityApproach(record);
-        sdfIndirectReceiveProc.approachClearance = sdfIndirectApproachClearance(sdfIndirectReceiveProc.approach);
+        sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.surfacePoint;
+        sdfIndirectReceiveProc.approachClearance = 0.0;
         sdfIndirectReceiveProc.level = 0u;
+        if (!sdfIndirectReceiveProc.receiver.mesh) {
+            sdfIndirectReceiveProc.approachStep = 0u;
+            sdfIndirectReceiveProc.phase = SdfIndirectReceiveSurface;
+            sdfIndirectApproachBefore = sdfFieldVisits;
+            return sdfIndirectAsk(sdfIndirectReceiveProc.surfacePoint, SDF_INSTANCE_MASK_ALL);
+        }
+    } else if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveSurface || sdfIndirectReceiveProc.phase == SdfIndirectReceiveApproach) {
+        // The approach's samples are per-pixel work outside the shared allowance; its measured price excludes them.
+        sdfIndirectApproachVisits = sdfFieldVisits - sdfIndirectApproachBefore;
+        float ball = sdfMapBallClearance(sdfIndirectReply.distance);
+        float spacing = sdfIndirectSpacing(passGroup.indirectTier, 0u);
+        float3 direction = sdfIndirectReceiveProc.rayDirection;
+        bool marching = false;
+        if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveSurface) {
+            sdfIndirectReceiveProc.surfaceClearance = ball;
+            precise float3 retreat = direction * (spacing * SdfIndirectApproachRetreat);
+            precise float3 start = sdfIndirectReceiveProc.surfacePoint - retreat;
+            sdfIndirectReceiveProc.approachStart = start;
+            sdfIndirectReceiveProc.approachDistance = 0.0;
+            marching = ball >= 0.0 && isfinite(ball) && all(isfinite(start));
+        } else {
+            float3 sample = sdfIndirectPointAt(sdfIndirectReceiveProc.approachStart, direction, sdfIndirectReceiveProc.approachDistance);
+            if (sdfIndirectApproachJoined(sdfIndirectReceiveProc.surfacePoint, sample, ball, sdfIndirectReceiveProc.surfaceClearance, spacing)) {
+                sdfIndirectReceiveProc.approach = sample;
+                sdfIndirectReceiveProc.approachClearance = ball;
+            } else if (ball > 0.0 && isfinite(ball)) {
+                sdfIndirectReceiveProc.approachDistance += ball;
+                marching = true;
+            }
+        }
+        sdfIndirectReceiveProc.approachStep++;
+        if (marching && sdfIndirectReceiveProc.approachStep < SdfIndirectApproachSteps) {
+            sdfIndirectReceiveProc.phase = SdfIndirectReceiveApproach;
+            return sdfIndirectAsk(sdfIndirectPointAt(sdfIndirectReceiveProc.approachStart, direction, sdfIndirectReceiveProc.approachDistance), SDF_INSTANCE_MASK_ALL);
+        }
     } else if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveLaunched) {
         sdfIndirectReceiveProc.launched = sdfIndirectLaunchProc.position;
         sdfIndirectReceiveProc.clearance = sdfIndirectLaunchProc.clearance;
@@ -142,7 +186,7 @@ uint sdfIndirectReceiveStep() {
             sdfIndirectReceiveProc.level++;
         } else {
             sdfIndirectReceiveProc.phase = SdfIndirectReceiveProved;
-            return sdfIndirectCall(sdfIndirectProveBegin(sdfIndirectReceiveProc.launched, sdfIndirectReceiveProc.level, 2u * SdfIndirectSegmentSteps, sdfIndirectReceiveProc.clearance));
+            return sdfIndirectCall(sdfIndirectProveBegin(sdfIndirectReceiveProc.launched, sdfIndirectReceiveProc.level, SdfIndirectReceiverProofSteps, sdfIndirectReceiveProc.clearance, true));
         }
     } else {
         uint mask = sdfIndirectProveProc.mask;
@@ -169,11 +213,11 @@ uint sdfIndirectReceiveStep() {
         uint level = sdfIndirectReceiveProc.level;
         float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
         float3 surfacePoint = sdfIndirectReceiveProc.surfacePoint;
-        sdfIndirectReceiveProc.launched = sdfIndirectApproachPoint(surfacePoint, sdfIndirectReceiveProc.rayDirection, sdfIndirectReceiveProc.approach);
+        sdfIndirectReceiveProc.launched = sdfIndirectReceiveProc.approach;
         sdfIndirectReceiveProc.clearance = sdfIndirectReceiveProc.approachClearance;
         if (!(sdfIndirectReceiveProc.clearance > 0.0)) {
-            // A mesh or grazing primary has no approach certificate. Its normal launch shares the same finite
-            // admission as the following proof, so invisible or deferred receivers do no unbounded field work.
+            // A mesh, or a receiver whose approach joined no sample, launches along its normal. That launch shares the
+            // same finite admission as the following proof, so deferred receivers do no unbounded field work.
             if (sdfIndirectAdmitReceiver()) {
                 sdfIndirectReceiverPermit = true;
                 sdfIndirectReceiveProc.phase = SdfIndirectReceiveLaunched;
@@ -181,7 +225,7 @@ uint sdfIndirectReceiveStep() {
             }
         } else {
             sdfIndirectReceiveProc.phase = SdfIndirectReceiveProved;
-            return sdfIndirectCall(sdfIndirectProveBegin(sdfIndirectReceiveProc.launched, level, 2u * SdfIndirectSegmentSteps, sdfIndirectReceiveProc.clearance));
+            return sdfIndirectCall(sdfIndirectProveBegin(sdfIndirectReceiveProc.launched, level, SdfIndirectReceiverProofSteps, sdfIndirectReceiveProc.clearance, true));
         }
     }
     sdfIndirectReceiveUncertified(record);
@@ -199,6 +243,7 @@ struct SdfIndirectReceiverProc {
     SdfIndirectSources selected;
     bool replaced;
     uint nearLoads;
+    uint beforeVisits;
 #ifndef SDF_INDIRECT_COMPARISON
     bool previousSecondary;
     bool previousShadow;
@@ -229,11 +274,16 @@ uint sdfIndirectReceiverStep() {
         sdfIndirectReceiverProc.selected = (SdfIndirectSources)0;
         sdfIndirectReceiverProc.replaced = false;
         sdfIndirectReceiverProc.nearLoads = 0u;
+        sdfIndirectReceiverProc.beforeVisits = sdfFieldVisits;
+        sdfIndirectApproachVisits = 0u;
         sdfIndirectReceiverProc.phase = SdfIndirectReceiverReceived;
         return sdfIndirectCall(sdfIndirectReceiveBegin(sdfIndirectReceiverProc.p, sdfIndirectReceiverProc.receiver, sdfIndirectReceiverProc.surfacePoint));
     }
     SdfPixel p = sdfIndirectReceiverProc.p;
     if (sdfIndirectReceiverProc.phase == SdfIndirectReceiverReceived) {
+        // The admitted receiver's launch and proof are the work its shared allowance prices; near and comparison
+        // samples carry their own per-pixel limits.
+        sdfIndirectReceiverVisits = sdfFieldVisits - sdfIndirectReceiverProc.beforeVisits - sdfIndirectApproachVisits;
         if (sdfIndirectReceiverStatus != 3u) { return SdfIndirectStepReturn; }
 #ifdef SDF_INDIRECT_COMPARISON
         // The comparison receiver: near-field samples are admitted only with the cache method, so it carries none.
@@ -337,6 +387,7 @@ void sdfReceiverStage(SdfPixel p) {
             sdfWorkTexels = 1u;
         }
     }
+    sdfIndirectReportCost(SdfIndirectCostReceiver, sdfIndirectReceiverVisits, sdfIndirectReceiverAdmitted ? 1u : 0u);
     if (!sdfIndirectPickActive) { return; }
     // Views writes the rest of the selected pixel's record; the near ray and a replacing answer's sources are the
     // receiver's.

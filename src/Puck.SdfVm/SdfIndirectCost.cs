@@ -39,11 +39,21 @@ public sealed record SdfIndirectChunk(int ItemFirst, int UnitFirst, int UnitCoun
 /// <param name="FixedItemCost">Bounded record visits per touched item, such as a probe's irradiance reduction.</param>
 /// <param name="SplitItemCost">Bounded record visits per item a chunk covers only in part, such as the stored rays a
 /// split probe writes and reads back for its reduction.</param>
-public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPerUnit, long FixedUnitCost = 0, long FixedItemCost = 0, long SplitItemCost = 0) {
-    /// <summary>Prices one unit against the complete field.</summary>
+/// <param name="MeasuredFieldCost">The field instruction visits per unit the device counted for this kind's recent
+/// submissions (<see cref="SdfIndirectCache.MeasuredFieldCost"/>), or null before any was counted. It replaces the
+/// conservative field price, never exceeding it; the fixed record visits are added either way.</param>
+public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPerUnit, long FixedUnitCost = 0, long FixedItemCost = 0, long SplitItemCost = 0,
+    long? MeasuredFieldCost = null) {
+    /// <summary>Prices one unit: its measured field visits, or every query against the complete field before a
+    /// measurement exists, plus its fixed record visits.</summary>
     /// <param name="instructionCount">The field program's instruction count.</param>
     /// <returns>The unit's instruction-visit estimate.</returns>
-    public long UnitCost(int instructionCount) => checked((SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: QueriesPerUnit) + FixedUnitCost));
+    public long UnitCost(int instructionCount) {
+        var conservative = SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: QueriesPerUnit);
+        var field = ((MeasuredFieldCost is { } measured) ? Math.Clamp(value: measured, min: Math.Min(val1: 1L, val2: conservative), max: conservative) : conservative);
+
+        return checked((field + FixedUnitCost));
+    }
     /// <summary>Prices one whole item against the complete field.</summary>
     /// <param name="instructionCount">The field program's instruction count.</param>
     /// <returns>The item's instruction-visit estimate.</returns>
@@ -85,8 +95,9 @@ public static class SdfIndirectCost {
     public const int ClassifyQueries = IrradianceSchedule.ClassifyEvaluations;
     /// <summary>One brick's placement samples and gradients.</summary>
     public const int PlaceQueries = IrradianceSchedule.PlaceEvaluations;
-    /// <summary>The shared receiver launch and proof allowance per admitted receiver.</summary>
-    public const int ReceiverQueries = SdfIndirectLayout.FeedbackSteps;
+    /// <summary>The shared receiver allowance per admitted receiver: its normal launch, its bin's canonical proof and
+    /// its own proof when the canonical record does not reach its point.</summary>
+    public const int ReceiverQueries = ((SdfIndirectLayout.LaunchSteps + SdfIndirectLayout.CanonicalProofSteps) + SdfIndirectLayout.ReceiverProofSteps);
 
     /// <summary>Gets a brick's placement: one unit per probe, each probe's samples and gradients.</summary>
     public static SdfIndirectUnits PlaceUnits { get; } = new(UnitsPerItem: SdfIndirectLayout.ProbesPerBrick, QueriesPerUnit: (PlaceQueries / SdfIndirectLayout.ProbesPerBrick));

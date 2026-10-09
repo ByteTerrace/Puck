@@ -1,26 +1,17 @@
-// SdfIndirectApproach: a complete-field primary sample supplies the receiver's free-space certificate.
+// The receiver's approach: complete-field samples along its camera ray, short of the surface, whose clear ball joins
+// the surface sample's own. The receiver pass marches it (sdf-indirect-receiver.hlsli) before a shared proof can read a
+// canonical record; a receiver with no joined sample launches along its normal under the shared admission instead.
 #ifndef SDF_INDIRECT_APPROACH_HLSLI
 #define SDF_INDIRECT_APPROACH_HLSLI
-float3 sdfIndirectApproachPoint(float3 surfacePoint, float3 direction, uint packed) {
-    precise float3 retreat = direction * f16tof32(packed & 65535u);
-    precise float3 position = surfacePoint - retreat;
-    return position;
-}
-float sdfIndirectApproachClearance(uint packed) { return f16tof32(packed >> 16u); }
-uint sdfIndirectPackApproach(float3 surfacePoint, float3 direction, float3 sample, float clearance,
-    float surfaceClearance, float spacing) {
-    float distance = dot(surfacePoint - sample, direction);
-    if (!isfinite(distance) || !isfinite(clearance) || !isfinite(surfaceClearance) || !isfinite(spacing)
-        || spacing <= 0.0 || clearance <= 0.0 || surfaceClearance < 0.0 || distance < 0.0
-        || distance > spacing * 0.5 || distance > 65504.0 || length(surfacePoint - sample) > clearance + surfaceClearance) { return 0u; }
-    uint offset = f32tof16(distance) & 65535u;
-    float3 reconstructed = sdfIndirectApproachPoint(surfacePoint, direction, offset);
-    float radius = clearance - length(sample - reconstructed);
-    if (!(radius > 0.0) || length(surfacePoint - reconstructed) > spacing * 0.5) { return 0u; }
-    uint rounded = f32tof16(min(radius, 65504.0)) & 65535u;
-    if (f16tof32(rounded) > radius) { rounded--; }
-    float stored = f16tof32(rounded);
-    if (!(stored > 0.0) || length(surfacePoint - reconstructed) > stored + surfaceClearance) { return 0u; }
-    return offset | (rounded << 16u);
+// The approach starts this fraction of the finest spacing back along the camera ray and takes at most this many
+// samples toward the surface, the surface sample included. A sample farther than half a spacing is never a launch.
+static const float SdfIndirectApproachRetreat = 0.5;
+static const uint SdfIndirectApproachSteps = 4u;
+// Whether a complete-field sample's clear ball joins the surface sample's, within half the finest spacing: the sample
+// is then a certified launch for the receiver whose surface the camera ray reached.
+bool sdfIndirectApproachJoined(float3 surfacePoint, float3 sample, float clearance, float surfaceClearance, float spacing) {
+    float gap = length(surfacePoint - sample);
+    return isfinite(gap) && isfinite(clearance) && isfinite(surfaceClearance) && isfinite(spacing) && spacing > 0.0
+        && clearance > 0.0 && surfaceClearance >= 0.0 && gap <= spacing * SdfIndirectApproachRetreat && gap <= clearance + surfaceClearance;
 }
 #endif

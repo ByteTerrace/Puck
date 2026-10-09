@@ -11,7 +11,7 @@ public sealed class IrradiancePlacementScheduleLawTests {
         var placed = new HashSet<IrradianceBrickKey>();
         var classified = new HashSet<IrradianceBrickKey>();
 
-        for (var frame = 0; (frame < 16); frame++) {
+        for (var frame = 0; (frame < 24); frame++) {
             var plan = schedule.Frame(inputs: input);
 
             Assert.InRange(plan.Placed.Count, 0, 1);
@@ -29,7 +29,8 @@ public sealed class IrradiancePlacementScheduleLawTests {
                 }
                 classified.Add(item: key);
             }
-            foreach (var trace in plan.Traces) { Assert.Contains(expected: IrradianceLattice.BrickOf(key: trace.Probe), set: classified); }
+            // A ray reads whichever cells its path reaches: tracing waits for the complete lattice.
+            foreach (var trace in plan.Traces) { Assert.Equal(expected: 8, actual: classified.Count); Assert.Contains(expected: IrradianceLattice.BrickOf(key: trace.Probe), set: classified); }
         }
         Assert.Equal(8, classified.Count);
         Assert.True(condition: schedule.IsComplete);

@@ -55,11 +55,18 @@ path, and count traversal scratch and constant rings beside the depth bank in
 `SdfPassPlanLawTests`. The [light-view contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view)
 owns the geometry support limits.
 
-The receiver approach in visibility L.y is owned by `SdfIndirectApproach` and
-`indirect/sdf-indirect-approach.hlsli`. Keep the reconstructed ball inside its
-complete-field certificate and within half a spacing; do not derive a ball from
-a camera mask or an independent part. Primary publishes zero when no approach
-is certified, leaving the bounded normal-launch fallback to the receiver.
+The receiver pass owns the receiver approach (`indirect/sdf-indirect-approach.hlsli`,
+marched in `sdf-indirect-receiver.hlsli`): at most four complete-field samples
+per uncertified field receiver, the surface first, then a short march along the
+camera ray from half the finest spacing back, accepted when a sample's clear
+ball joins the surface's within half a spacing. Do not derive a ball from a
+camera mask, tape or independent part, and never move the approach back into
+primary: primary marches alike with indirect on and off, and visibility L.y is
+spare. The approach is fixed per-pixel work outside the shared receiver
+admission, so a published canonical proof answers it without admitted work;
+its visits are excluded from the receiver's measured price. A mesh, or a
+receiver whose approach joins no sample, takes the bounded normal launch under
+that admission.
 
 Shared receiver-proof writes use a package `ComputeReadWrite` buffer input.
 Declare the access in both the package and its fragment; never bind a writable
@@ -88,9 +95,15 @@ the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through
 a sweep. `SdfIndirectCache` publishes only complete submitted sweeps, separately
 from geometry trace completion, and retains the published source while a newer
-source is solving. Shade admission bounds all pinned directional fallback queries
-by the tier's
-existing trace-evaluation allowance and `SdfIndirectCost` instruction budget.
+source is solving. Admission prices every kind's unit at the field instruction
+visits its kernels measured (`SdfIndirectCache.Prices.cs`: the map walks count
+`sdfFieldVisits`, the kernels report visits and units through
+`sdfIndirectReportCost`, the trace recorder copies the counters and the
+produced-frame boundary reads fenced copies in order), never above the
+conservative complete-program price that prices an unmeasured kind. Shade
+admission bounds all pinned directional fallback queries by the tier's
+existing trace-evaluation allowance and `SdfIndirectCost` instruction budget
+until the shade unit is measured.
 Transport, light rectangles and shared receiver proofs use the same field-scaled
 admission; placement, classification and tracing share one submission allowance.
 Shade also prices bounded continuation-cache traversal. Keep the
@@ -180,14 +193,17 @@ views takes a surface pick only once the receiver armed it
 (`SdfWorldPicker.Arm`), so the selected receiver record's two writers describe
 one pixel. Receivers consume the complete bank
 and share bounded receiver-proof admission. The existing trace pass resets its
-one admission word, requested only by pending view scopes. Each receiver
-claims an empty shared proof bucket before segment evaluation, through
-`sdf-indirect-proof.hlsli`. Pending/current publications defer without reading
-partial keys; earlier non-reusable occupants retain admitted uncached fallback.
-Every unsuccessful owner releases its claim. Never transfer failed support as
-a shared mask-zero proof or make colliding keys wait forever. Successful same-key
-contenders share field work; failed attempts may reacquire within the unchanged
-allowance. Trace keeps its designated source-ray ownership. Each view separately
+one admission word, requested only by pending view scopes. A shared receiver
+proof is canonical (`sdf-indirect-proof.hlsli`): its record is proved from its
+anchor bin's centre within the fixed `CanonicalProofSteps`, so it is a pure
+function of the bin; a receiver whose certified ball reaches the anchor's ball
+inherits its mask, and every other receiver proves its own point unpublished.
+A receiver claims an empty bucket before computing a missing record; a
+pending/current publication defers without reading partial keys, and a bucket
+holding another bin's record is computed again unpublished, never waited for.
+Never anchor a shared record at whichever receiver claimed it: claim order would
+then change answers. Never transfer failed support as a shared mask-zero proof.
+Transport and Near proofs are always the caller's own and never shared. Each view separately
 owns an eight-byte deferred/reader census, explicitly transfer-cleared before the
 receiver, written by it, read by views and read back after views from that
 version after the same fence.
@@ -200,7 +216,12 @@ brick writes are in the point-of-use geometry signature; unfinished bakes never
 preserve certificates. Completed unresolved results stand and deferred results retry.
 The fenced deferred count keeps the receiver and views active until
 completion without making unchanged Primary read the cache. Capture also waits
-for its own view's current fenced receiver scope, not only the shared solve.
+for its own view's current fenced receiver scope, not only the shared solve, and
+a converging capture's scope must belong to the sample its next render takes
+(`SdfTemporalHistory.ConvergingJitter`). A capture or `world.wait indirect` on a
+solve that cannot finish (`SdfIndirectCache.CannotFinishReason`: transport
+withdrawn more than once since the wait began, or remaining work past
+`FinishFrameBound` produced frames at measured prices) is refused at once.
 An exact completed zero-reader census removes only indirect demand and the cache
 wait; preserve independent environment and screen-closure readiness. Expire it
 on camera, geometry, binding, extent or mode changes. Reuse a capture's existing
@@ -222,8 +243,15 @@ bounds for actual casters when the program or body policy changes; the tables
 queue old and current bounds before overwrite. Preserve rotation and lane changes,
 identical-row standing, receiver-only motion standing, and
 the distinction between static unbounded geometry and an unbounded dynamic
-dependency. Reuse `MarkGeometry` and its admitted/frozen queue instead of adding
-another invalidation schedule.
+dependency. Reuse `MarkGeometry` and its queue instead of adding another
+invalidation schedule. Changes queue per eight-metre cell, never as one covering
+sphere, and apply only once the current cycle's transport is traced and its
+solve published. A moving caster of a composable program
+(`SdfIndirectCache.StaticFarField`) is a near change: the trace kernel's static
+far field (`indirectStaticFar`, `sdfIndirectStaticField`) omits moving instances
+and segments past a level's near segment and throughout the coarsest level, so
+the change withdraws only probes within `IrradianceSchedule.NearReach`. Keep the
+kernel's far-field rule and `NearReach` together.
 
 Program upload classification compares exact packed geometry and material
 bindings outside the material-value table. Palette-value edits retain transport,

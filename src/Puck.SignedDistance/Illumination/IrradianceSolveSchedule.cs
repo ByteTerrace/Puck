@@ -54,14 +54,32 @@ public sealed class IrradianceSolveSchedule {
     public int CompletedSweeps { get; private set; }
     /// <summary>Gets whether direct light and every requested feedback sweep have been submitted.</summary>
     public bool IsComplete => (CompletedSweeps > m_bounces);
+    /// <summary>Gets the probe shadings the solve still owes: the rest of the current sweep and every later sweep.</summary>
+    public long RemainingProbes {
+        get {
+            if (IsComplete) { return 0; }
+            var total = 0L;
+            var done = (long)m_offset;
+
+            for (var level = 0; (level < m_levels.Length); level++) {
+                total += m_levels[level].Length;
+                if (level > m_level) { done += m_levels[level].Length; }
+            }
+            return ((((m_bounces + 1L) - CompletedSweeps) * total) - done);
+        }
+    }
 
     /// <summary>Returns the pending batch, or null after the finite solve completes. Empty inventories still publish
     /// an empty sweep through <see cref="Submitted"/>, without a GPU dispatch.</summary>
+    /// <param name="probeBudget">This batch's probe allowance, at most the solve's; absent uses the solve's. A batch
+    /// reads only the preceding complete sweep and earlier batches of coarser levels, so its size never changes what
+    /// any probe publishes.</param>
     /// <returns>The retained batch. Its probe inventory cannot be changed through this API.</returns>
-    public IrradianceSolveBatch? Plan() {
+    public IrradianceSolveBatch? Plan(int? probeBudget = null) {
         if (IsComplete || (m_pending is not null)) { return m_pending; }
         while ((m_level > 0) && (m_offset == m_levels[m_level].Length)) { m_level--; m_offset = 0; }
-        var count = Math.Min(val1: m_budget, val2: (m_levels[m_level].Length - m_offset));
+        var budget = Math.Clamp(value: (probeBudget ?? m_budget), min: 1, max: m_budget);
+        var count = Math.Min(val1: budget, val2: (m_levels[m_level].Length - m_offset));
         var probes = Array.AsReadOnly(array: m_levels[m_level].AsSpan(length: count, start: m_offset).ToArray());
         var last = ((m_offset + count) == m_levels[m_level].Length);
 

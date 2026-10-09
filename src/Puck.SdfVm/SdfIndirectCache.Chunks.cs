@@ -42,36 +42,19 @@ public sealed partial class SdfIndirectCache {
         SdfWorldPackage.IndirectTrace => m_step?.Trace,
         _ => null,
     };
-    /// <summary>Gets a transport pass's admission unit.</summary>
-    /// <param name="part">The place, classify or trace pass.</param>
-    /// <returns>The pass's unit.</returns>
-    public static SdfIndirectUnits TransportUnits(string part) => part switch {
-        SdfWorldPackage.IndirectPlace => SdfIndirectCost.PlaceUnits,
-        SdfWorldPackage.IndirectClassify => SdfIndirectCost.ClassifyUnits,
-        _ => SdfIndirectCost.TraceUnits,
-    };
-    /// <summary>The schedule's field-evaluation allowance for one plan: one submission's worth of queries, and never
-    /// less than one whole item of each kind, so a field too heavy for a whole item still makes progress in chunks.</summary>
-    /// <param name="instructionCount">The complete field's instruction count.</param>
-    /// <returns>The plan's evaluation allowance.</returns>
-    public static int PlanEvaluations(int instructionCount) => ((int)Math.Max(val1: (SdfIndirectCost.SubmissionCostLimit / Math.Max(val1: 1, val2: instructionCount)),
-        val2: ((IrradianceSchedule.PlaceEvaluations + IrradianceSchedule.ClassifyEvaluations) + IrradianceSchedule.TraceEvaluations)));
-
-    private static SdfIndirectUnits UnitsOf(int kind) => kind switch {
-        PlaceKind => SdfIndirectCost.PlaceUnits,
-        ClassifyKind => SdfIndirectCost.ClassifyUnits,
-        _ => SdfIndirectCost.TraceUnits,
-    };
     private void BeginTransportChunks(IrradianceFramePlan plan, int instructionCount) {
         ClearTransportChunks();
+        m_transportPrices = PriceRevision;
         m_planPlaced.UnionWith(other: plan.Placed);
         m_planClassified.UnionWith(other: plan.Classified);
         AppendTransportChunks(firstUnits: [0, 0, 0], instructionCount: instructionCount, plan: plan);
         PlanTransportStep();
     }
-    // A plan outlives a program upload. Its unsubmitted units are admitted again against the field the next step
-    // dispatches, from each kind's first unsubmitted unit, so no step prices an earlier field.
+    // A plan outlives a program upload and a new measurement. Its unsubmitted units are admitted again against the field
+    // and the prices the next step dispatches with, from each kind's first unsubmitted unit, so no step prices an
+    // earlier field or measurement.
     private void RechunkTransport(int instructionCount) {
+        m_transportPrices = PriceRevision;
         var plan = m_pending!;
         var counts = new[] { plan.Placed.Count, plan.Classified.Count, plan.Traces.Count };
         var firstUnits = new int[3];

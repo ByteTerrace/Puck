@@ -18,6 +18,9 @@ public interface IWorldIndirectWait {
     bool IsSettled { get; }
     /// <summary>Gets the immutable completion identities, empty before settlement.</summary>
     IReadOnlyList<WorldIndirectReadyIdentity> Identities { get; }
+    /// <summary>Gets why an unsettled wait can never settle: an active cache's solve cannot finish. A wait never holds
+    /// for such a solve; it releases at once with this reason.</summary>
+    string? Refusal { get; }
 }
 /// <summary>The actual cache publication that completed a warm-up.</summary>
 /// <param name="Residency">The residency's live name.</param>
@@ -31,13 +34,17 @@ public sealed record WorldIndirectReadyIdentity(string Residency, long Allocatio
 /// a copy of immutable identities once; later source changes cannot relabel it.</summary>
 /// <param name="framesProduced">The live render root's produced-frame count, read on its owner thread.</param>
 /// <param name="capture">Returns every active cache's actual identity only when all current-source fences hold, or null.</param>
-public sealed class WorldIndirectWait(Func<long> framesProduced, Func<IReadOnlyList<WorldIndirectReadyIdentity>?> capture) : IWorldIndirectWait {
+/// <param name="refusal">Names why the current solve cannot finish (a scene that keeps withdrawing its transport, or
+/// remaining work beyond the frame bound), or returns null; absent never refuses.</param>
+public sealed class WorldIndirectWait(Func<long> framesProduced, Func<IReadOnlyList<WorldIndirectReadyIdentity>?> capture, Func<string?>? refusal = null) : IWorldIndirectWait {
     private readonly long m_armedFrame = framesProduced();
 
     private IReadOnlyList<WorldIndirectReadyIdentity>? m_identities;
 
     /// <inheritdoc/>
     public IReadOnlyList<WorldIndirectReadyIdentity> Identities => (m_identities ?? []);
+    /// <inheritdoc/>
+    public string? Refusal => ((m_identities is null) ? refusal?.Invoke() : null);
     /// <inheritdoc/>
     public bool IsSettled {
         get {
