@@ -3,9 +3,18 @@
 #define FIELD_SDF_PROGRAM_HLSLI
 static uint sdfWorkShapes = 0u;
 static uint sdfWorkGradients = 0u;
-// The field walk's instruction visits: one per directory segment it tests and every instruction of each segment it
-// does not cull. The indirect kernels report them so the cache admits its work at its measured price (SdfIndirectCost).
+// The field walk's visits: one per instance it reads, one per directory segment it tests, and every instruction of each
+// segment it does not cull and part leaf it composes. The indirect kernels report them so the cache admits its work at
+// its measured price (SdfIndirectCost).
 static uint sdfFieldVisits = 0u;
+// A point query's sparse instance mask (indirect/sdf-indirect-field.hlsli, sdfIndirectGridBlock): the instances binned in
+// the query's block of grid cells and the always-list, as distinct 32-instance mask words and their bits. While active,
+// the visible-instance walk enumerates these words in ascending order instead of every instance.
+#define SDF_GRID_SPARSE_WORDS 16u
+static bool sdfGridSparseActive = false;
+static uint sdfGridSparseCount = 0u;
+static uint sdfGridSparseWords[SDF_GRID_SPARSE_WORDS];
+static uint sdfGridSparseBits[SDF_GRID_SPARSE_WORDS];
 uint sdfProgramVectorCount() {
     uint count;
     uint stride;

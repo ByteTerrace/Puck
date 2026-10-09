@@ -110,8 +110,17 @@ admission; placement, classification and tracing share one submission allowance.
 Shade also prices bounded continuation-cache traversal. Keep the
 instruction count from the actual submitted field, including pinned shade sources.
 Diagnostic `--debug-layers` logging precedes recording and names each estimate.
-`SdfIndirectFrameBudget` shares one cache-submission allowance plus one auxiliary
-allowance across the residency's produced frame. Reserve a transport step and
+`SdfIndirectFrameBudget` renews a device slice (`TryAdmitDevice`: transport and
+shade) and an auxiliary allowance (`TryAdmit`: light rectangles and receiver
+proofs) every produced frame. The slice is the tier's device time
+(`SdfIndirectLayout.FrameMicroseconds`) at `SdfIndirectCost.DeviceVisitsPerMicrosecond`,
+held in counted visits; it applies once every transport kind is measured, and
+one submission's cap applies before. A frame's first device chunk always admits.
+Never raise the slice to make a scene converge: make the prices accurate.
+Indirect complete-field samples walk their instance-grid block (`sdfIndirectGridBlock`,
+mirroring `SdfInstanceGridPointQuery.TryBlock`, whose law proves the bound sound):
+change both together, keep the footprint pad in the bound, and keep the sparse mask
+ascending so the segment merge order holds. Reserve a transport step and
 light rectangles once across their passes, shade by its batch's current chunk, and
 receiver proofs once across views. Skipped chunks remain pending; only
 `SdfWorldResidency.BeginFrame` renews admission. Diagnostics distinguish the
@@ -210,16 +219,22 @@ receiver, written by it, read by views and read back after views from that
 version after the same fence.
 The receiver publishes its eight-word certificate through an explicit preserving
 visibility version, qualified by the complete allocation identity and transport
-revision. Primary clears it on a new sample; repeating the exact submitted
-geometry, camera, jitter, grid and visibility allocation preserves it even with
-cadence off. Commit that identity only after successful submission. Completed
+revision. Primary clears it only on new visibility storage (recorder, buffer,
+binding or extent). A new camera sample, jitter or geometry keeps it: the receiver
+pass keeps a certificate while its launch ball, widened by primary's acceptance
+threshold, still reaches the pixel's new surface point (`sdfIndirectCertificateJoins`),
+and withdraws and re-proves it otherwise. Never clear every certificate on a new sample:
+a moving body then re-proves the whole view each frame against a finite admission, and
+most pixels stay deferred. The receiver scope still advances with each new surface.
+Commit that identity only after successful submission. Completed
 brick writes are in the point-of-use geometry signature; unfinished bakes never
 preserve certificates. Completed unresolved results stand and deferred results retry.
 The fenced deferred count keeps the receiver and views active until
 completion without making unchanged Primary read the cache. Capture also waits
 for its own view's current fenced receiver scope, not only the shared solve, and
-a converging capture's scope must belong to the sample its next render takes
-(`SdfTemporalHistory.ConvergingJitter`). A capture or `world.wait indirect` on a
+a converging capture's scope must belong to its own sample: the submitted surface
+records the converging capture and its `RenderGraphConvergence.Samples` index, compared
+by identity, never by jitter value, which repeats every eight samples. A capture or `world.wait indirect` on a
 solve that cannot finish (`SdfIndirectCache.CannotFinishReason`: transport
 withdrawn more than once since the wait began, or remaining work past
 `FinishFrameBound` produced frames at measured prices) is refused at once.

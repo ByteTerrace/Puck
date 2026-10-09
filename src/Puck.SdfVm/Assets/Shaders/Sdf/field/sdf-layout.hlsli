@@ -71,11 +71,31 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 #endif
         }
 
-        [loop]
-        for (uint advance = 0u; advance < SDF_INSTANCE_MASK_MAX_WORDS; advance++) {
-            if (maskWordBits != 0u || maskWordIndex + 1u >= wordCount) { break; }
-            maskWordIndex++;
-            maskWordBits = sdfInstanceMaskWord(instanceMaskBase, maskWordIndex, instanceCount);
+        if (sdfGridSparseActive) {
+            // A point query's sparse mask: the next of its words, in ascending order, once this word's bits are spent.
+            if (maskWordBits == 0u) {
+                uint nextWord = 0xFFFFFFFFu;
+                uint nextBits = 0u;
+                [loop]
+                for (uint slot = 0u; slot < min(sdfGridSparseCount, SDF_GRID_SPARSE_WORDS); slot++) {
+                    uint word = sdfGridSparseWords[slot];
+                    if (((maskWordIndex == 0xFFFFFFFFu) || (word > maskWordIndex)) && (word < nextWord)) {
+                        nextWord = word;
+                        nextBits = sdfGridSparseBits[slot];
+                    }
+                }
+                if (nextWord != 0xFFFFFFFFu) {
+                    maskWordIndex = nextWord;
+                    maskWordBits = nextBits;
+                }
+            }
+        } else {
+            [loop]
+            for (uint advance = 0u; advance < SDF_INSTANCE_MASK_MAX_WORDS; advance++) {
+                if (maskWordBits != 0u || maskWordIndex + 1u >= wordCount) { break; }
+                maskWordIndex++;
+                maskWordBits = sdfInstanceMaskWord(instanceMaskBase, maskWordIndex, instanceCount);
+            }
         }
 
         if (maskWordBits == 0u) {
