@@ -74,6 +74,51 @@ public sealed class PartProgramLawTests {
         with { Shape = ((uint)SdfShapeType.Sphere), Material = material };
 
     [Fact]
+    public void AnUncompiledInstanceCarriesItsFieldRescaleInverse() {
+        // Instance 0 is one scope of leaves and compiles. Instance 1 nests a scope, which the part compiler refuses, so
+        // it stays on the generic walk; its entry still carries 1 / FieldRescale, which mapCore's whole-instance and
+        // group-mask word rejections divide the gap to its bound by.
+        var instructions = Scope(
+            inner: 1,
+            materialA: 0,
+            materialB: 1,
+            outer: 2,
+            slotA: 1,
+            slotB: 2
+        );
+        var first = instructions.Count;
+
+        instructions.AddRange(collection: [
+            Op(SdfOp.PushField), Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(
+                material: 0,
+                radius: 1
+            ),
+            Op(SdfOp.PopField) with { Data1 = new Vector4(x: 0, y: 0.5f, z: 0, w: 0) },
+            Op(SdfOp.PopField) with { Data1 = new Vector4(x: 0, y: 0.8f, z: 0, w: 0) },
+        ]);
+        var program = Build(
+            instructions,
+            [Range(
+                end: first,
+                first: 0
+            ), Range(
+                end: instructions.Count,
+                first: first
+            )]
+        );
+        var words = program.Words;
+        var table = PartTable(words: words);
+
+        Assert.NotEqual(expected: 0u, actual: (words[((table + 4) + 2)] & 0x7FFFFFFFu));
+        Assert.Equal(expected: 0u, actual: (words[((table + 8) + 2)] & 0x7FFFFFFFu));
+        Assert.Equal(expected: 2.5f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
+        Assert.Equal(
+            expected: (1f / program.InspectInstance(index: 1).FieldRescale),
+            actual: BitConverter.UInt32BitsToSingle(value: words[((table + 8) + 3)])
+        );
+    }
+
+    [Fact]
     public void CapacityDoesNotDependOnSharedGeometry() {
         var shared = Scope(
             inner: 1,
