@@ -16,7 +16,7 @@ namespace Puck.World.Presentation.Tests;
 /// and on a miss, a key the pack lacks or a pack that is gone, the presentation's <see cref="WorldBakeSchedule"/> bakes
 /// in the background only the prototypes the cache lacks, keeps them under the cache's directory, and reports each
 /// ready. A boot that finds no compiled world holding <c>BAKE</c> leaves it out rather than baking on its critical path.
-/// The chunk's version comes from the fingerprint, and the pack of this world's bakes is pinned. Bakes never reach
+/// The chunk's version comes from the fingerprint, and the bytes of this world's bakes are pinned. Bakes never reach
 /// simulation state.
 /// </summary>
 [Collection(name: DocumentCompositionCollection.Name)]
@@ -29,10 +29,15 @@ public sealed class CreationBakeLawTests {
             { "id": "glint", "document": { "schema": "puck.creation.v1", "name": "glint", "palette": [{ "color": "#FFFFFF", "emissive": 0, "specular": 0, "roughness": 0 }], "shapes": [{ "id": 0, "name": "glint", "type": "Sphere", "position": [0, 0.2, 0], "rotation": [0, 0, 0, 1], "scale": [0.2, 0.2, 0.2], "material": 0, "blend": "Union", "detail": true }] } }
         ],
         """;
-    // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin, and so does a moved
-    // WorldBakePack shape fingerprint, which the pack's header carries.
-    private const string PinnedProduct = "sha256-64/e287f0aa5b1775c8";
 
+    // Each prototype's outcome in the bake pack of this file's world: the bake's bytes, which no host may change. Keys and
+    // the pack's chunk versions carry DerivationFingerprint.Bake and its header the WorldBakePack shape, so a regenerated
+    // fingerprint or a moved shape moves the pack but none of these; re-record one only when the bake's bytes move.
+    private static readonly IReadOnlyDictionary<string, string> PinnedOutcomes = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+        ["pip"] = "sha256-64/884f8f986699e2c2",
+        ["block"] = "sha256-64/cb7f36f87189923e",
+        ["glint"] = "sha256-64/52833db62d642af4",
+    };
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
     private static string WriteWorld(TemporaryDirectory directory) {
@@ -578,12 +583,11 @@ public sealed class CreationBakeLawTests {
         );
     }
     [Fact]
-    public void TheChunkNamesOnlyKeysItsVersionComesFromTheFingerprintAndItsPackIsPinned() {
+    public void TheChunkNamesOnlyKeysItsVersionComesFromTheFingerprintAndItsBakesArePinned() {
         using var directory = new TemporaryDirectory();
         var path = WriteWorld(directory: directory);
         var chunk = new WorldBakeChunk(store: null);
         var pack = CompileWithPack(path: path);
-        var product = AssetContentHash.Compute(content: pack);
 
         Assert.Equal(expected: DerivationFingerprint.BakeChunkVersion, actual: chunk.Version);
         Assert.False(condition: chunk.DerivesOnBoot);
@@ -606,9 +610,17 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: stored.Payload.ToArray(), actual: named.Payload.ToArray());
         Assert.True(condition: WorldBakePack.TryDecode(content: pack, pack: out var decoded, reason: out reason), userMessage: reason);
         Assert.Equal(expected: keys.Count, actual: decoded.Count);
+
+        var requests = WorldBakeStore.RequestsOf(definition: Definition(), quality: WorldBakeChunk.Quality);
+        var outcomes = requests.Select(selector: request => {
+            Assert.True(condition: decoded.TryGet(key: request.Key.Pin, outcome: out var outcome), userMessage: $"the pack lacks {request.PrototypeId}'s key");
+
+            return (request.PrototypeId, Outcome: AssetContentHash.Compute(content: outcome.ToArray()).ToString());
+        }).ToArray();
+
         Assert.True(
-            condition: (product.ToString() == PinnedProduct),
-            userMessage: $"the pack of this world's bakes at fingerprint {DerivationFingerprint.Bake} is {product}, pinned as {PinnedProduct}; re-record the product pin after regenerating the fingerprint.\n{Anatomy(pack: pack)}"
+            condition: (outcomes.All(predicate: static outcome => (PinnedOutcomes.GetValueOrDefault(key: outcome.PrototypeId) == outcome.Outcome)) && (outcomes.Length == PinnedOutcomes.Count)),
+            userMessage: $"this world's bakes at fingerprint {DerivationFingerprint.Bake} are {string.Join(separator: ", ", values: outcomes.Select(selector: static outcome => $"{outcome.PrototypeId} {outcome.Outcome}"))}, pinned as {string.Join(separator: ", ", values: PinnedOutcomes.Select(selector: static pin => $"{pin.Key} {pin.Value}"))}; re-record a pin only when the bake's bytes moved, never for a host.\n{Anatomy(pack: pack)}"
         );
     }
 

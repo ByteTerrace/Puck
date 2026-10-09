@@ -1,0 +1,188 @@
+// The debug world: a flat 256 m ground under a clear day, with axis markers and reference cubes at the origin and
+// the Moth avatar to walk it. It is the plain starting point the island is built up from, in engine: boot it with
+// `--world src/Puck.World/Assets/worlds/debug.puck`, edit this source, and `world.reload` recompiles it in place.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "debug"
+
+import "skies.puck"
+
+metadata {
+  title: "Debug"
+  description: "A flat 256 m ground under a clear day, with axis markers and 1, 2 and 4 m reference cubes at the origin."
+}
+
+placements {
+  placement "axis-x" {
+    prototype: "axis-x"
+    position [8, 0.02, 0]
+  }
+
+  placement "axis-z" {
+    prototype: "axis-z"
+    position [0, 0.02, 8]
+  }
+
+  placement "axis-up" {
+    prototype: "axis-up"
+    position [0, 2, 0]
+  }
+
+  placement "cube-1m" {
+    prototype: "cube-1m"
+    position [-4, 0.5, 6]
+    solid
+  }
+
+  placement "cube-2m" {
+    prototype: "cube-2m"
+    position [-7, 1, 6]
+    solid
+  }
+
+  placement "cube-4m" {
+    prototype: "cube-4m"
+    position [-12, 2, 6]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        {
+          color: "#8C8C8C"
+          roughness: 0.9
+          specular: 0.02
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, -0.2, 0]
+        scale [128, 0.2, 128]
+      }
+    }
+  }
+
+  prototype "axis-x" {
+    document {
+      name: "axis-x"
+      palette [
+        {
+          color: "#FF3B30"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "line" {
+        material: 0
+        position [0, 0, 0]
+        scale [8, 0.02, 0.05]
+      }
+    }
+  }
+
+  prototype "axis-z" {
+    document {
+      name: "axis-z"
+      palette [
+        {
+          color: "#2F6BFF"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "line" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.05, 0.02, 8]
+      }
+    }
+  }
+
+  prototype "axis-up" {
+    document {
+      name: "axis-up"
+      palette [
+        {
+          color: "#F2F2F2"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "pole" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.04, 2, 0.04]
+      }
+    }
+  }
+
+  prototype "cube-1m" {
+    document {
+      name: "cube-1m"
+      palette [
+        {
+          color: "#E8B341"
+          roughness: 0.7
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "cube" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+
+  prototype "cube-2m" {
+    document {
+      name: "cube-2m"
+      palette [
+        {
+          color: "#5BC98C"
+          roughness: 0.7
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "cube" {
+        material: 0
+        position [0, 0, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+
+  prototype "cube-4m" {
+    document {
+      name: "cube-4m"
+      palette [
+        {
+          color: "#5EEBE0"
+          roughness: 0.7
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "cube" {
+        material: 0
+        position [0, 0, 0]
+        scale [2, 2, 2]
+      }
+    }
+  }
+}
+
+render {
+  farDistance: 200
+  sky {
+    clearDay(cloudiness: 0.3)
+  }
+  atmosphere {
+    clearDayAir()
+  }
+}

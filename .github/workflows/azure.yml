@@ -35,6 +35,9 @@ jobs:
   browser:
     name: Build the WebAssembly payload
     uses: ./.github/workflows/browser.yml
+  docs:
+    name: Build API documentation
+    uses: ./.github/workflows/docs.yml
   build:
     name: Test .NET artifacts
     needs: artifacts
@@ -229,13 +232,12 @@ jobs:
     timeout-minutes: 120
   applications:
     name: Assemble the application bundle
-    needs: [artifacts, browser]
+    needs: [artifacts, browser, docs]
     runs-on: windows-2025
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # No NuGet cache: the solution-wide cache measured about three minutes to download and unpack here, where this job
-      # restores only the API documentation's projects and the docfx tool.
+      # No NuGet cache: this job restores no project; it runs the installed CLI and the dashboard's npm build.
       - name: Install the pinned .NET SDK
         uses: ./.github/actions/setup-dotnet
       - name: Install Node.js
@@ -258,14 +260,30 @@ jobs:
         with:
           name: browser-payload
           path: artifacts/runtime/browser
-      - name: Download the compiled Roslyn analyzers
+      # As its zip, unextracted: the action's streaming extraction of the site's 12,600 files fails on this runner every
+      # time, after five retries. `puck docs build --site` extracts the archive itself.
+      - name: Download the API documentation site as its archive
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: compiler-analyzers
-          path: src/Puck.Analyzers/bin/Release/netstandard2.0
+          name: documentation
+          path: artifacts/documentation
+          skip-decompress: true
+      # The dashboard's staging Brotli-compresses about 100 MB at the highest quality, most of it the DuckDB modules and
+      # extensions; its cache holds their outputs, so only a dependency change compresses them again.
+      - id: brotli-cache
+        name: Restore the dashboard Brotli cache
+        uses: ./.github/actions/brotli-cache
+        with:
+          mode: restore
       - name: Build and verify deployment bundle
-        run: puck azure build --runtime-artifacts artifacts/runtime
+        run: puck azure build --runtime-artifacts artifacts/runtime --documentation artifacts/documentation
         shell: bash
+      - if: steps.brotli-cache.outputs.cache-hit != 'true'
+        name: Save the dashboard Brotli cache
+        uses: ./.github/actions/brotli-cache
+        with:
+          key: ${{ steps.brotli-cache.outputs.key }}
+          mode: save
       - name: Upload the application deployment bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -266,7 +266,7 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 puck artifacts capture | restore | test-world
 puck artifacts test-windows [--shard <index> --shards <count>]
 puck artifacts durations <directory>
-puck docs build [--output <directory>]
+puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> --output <directory>
@@ -2425,7 +2425,8 @@ refused profile, package or plan, or for a blocked check when nothing failed.
 ## `puck docs`—the documentation family
 
 ```text
-puck docs build [--output <directory>]      stage the website reference (default <repo>/artifacts/docs)
+puck docs build [--output <directory>] [--site <path>]
+                                            stage the website reference (default <repo>/artifacts/docs)
 puck docs links [<document> ...]            check relative links, heading anchors, and cited repository paths
 puck docs citations [--enumeration <path>]  check the console-verb tokens skills and XML docs cite
 ```
@@ -2435,7 +2436,13 @@ puck docs citations [--enumeration <path>]  check the console-verb tokens skills
 Runs the pinned DocFX tool and stages `reference/` (with the site overview as
 `reference/overview.html`) and `_theme/` under the output directory, which
 defaults to `artifacts/docs` at the repository root. An output directory that
-already holds `reference/` or `_theme/` is refused.
+already holds `reference/` or `_theme/` is refused. `--site <path>` stages a
+site DocFX already generated from this checkout instead of running it: the
+site's directory, a zip archive of it, or a directory holding only that archive,
+which is how a workflow artifact downloaded without extraction arrives. A site
+without `index.html` is refused, and so is an archive that is not a zip; the
+application bundle stages the documentation workflow's site this way
+(`puck azure build --documentation`).
 
 ### `docs links`—relative link and path check
 

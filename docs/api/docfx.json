@@ -42,6 +42,9 @@
             "memberLayout": "separatePages",
             "namespaceLayout": "nested",
             "outputFormat": "mref",
+            "properties": {
+                "PuckApiReference": "true"
+            },
             "src": [
                 {
                     "files": [

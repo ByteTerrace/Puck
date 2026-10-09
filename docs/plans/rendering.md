@@ -6565,9 +6565,9 @@ are chosen by measured cost.
 applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
 two visits to the handover band, settled draw-count observations, and a paused
 authoritative-hash comparison around `world.bakes`. Those World observations
-still require both backends. The creation-bake product pin is checked after the
-final bake derivation fingerprint is current; a successful shader build alone
-does not establish that product.
+still require both backends. The creation-bake outcome pins are checked after
+the final bake derivation fingerprint is current; a successful shader build alone
+does not establish those bytes.
 
 **Manifold extraction.** The extractor places one vertex per surface patch of a
 cell, not one per cell: a cell's patches are the connected pieces of the

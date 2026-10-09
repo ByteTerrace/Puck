@@ -1,0 +1,56 @@
+description: Restore or save the content-addressed Brotli cache the dashboard's staging keeps under the per-user Puck directory, keyed by the pinned dependencies whose files it compresses.
+inputs:
+  key:
+    default: ""
+    description: The key to save under, the key output of this run's restore; required by save, ignored by restore.
+  mode:
+    description: restore (the newest cache of this OS and encoder) or save (under key).
+    required: true
+name: Dashboard Brotli cache
+outputs:
+  cache-hit:
+    description: Whether a cache under exactly this run's key exists (restore).
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: This run's key (restore).
+    value: ${{ steps.key.outputs.key }}
+runs:
+  steps:
+    # An entry is named by its input's SHA-256, the quality, the window and the encoder's version
+    # (src/Puck.Dashboard/scripts/stageDeploy.mjs), so a stale entry is never read; this key only decides when a new cache
+    # is saved. The files that take staging its time are the DuckDB modules and extensions, which change only with the
+    # lock file and the extension manifest, so those, the staging script and the encoder name the key. The portal's own
+    # chunks change with every commit and compress in seconds; they are left out of the key, so they are not saved anew
+    # each run. Restore takes the newest cache of this encoder: staging uses what it can and drops the rest.
+    - id: key
+      if: inputs.mode == 'restore'
+      env:
+        INPUTS: ${{ hashFiles('src/Puck.Dashboard/scripts/stageDeploy.mjs', 'src/Puck.Dashboard/src/package-lock.json', 'src/Puck.Dashboard/src/portal/duckdb-extensions.json') }}
+      name: Name the Brotli cache key
+      run: |
+        prefix="brotli-${RUNNER_OS}-$(node -p process.versions.brotli)-"
+        echo "Brotli cache key: $prefix$INPUTS"
+        echo "key=$prefix$INPUTS" >> "$GITHUB_OUTPUT"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - id: restore
+      if: inputs.mode == 'restore'
+      name: Restore the newest Brotli cache of this encoder
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ steps.key.outputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/brotli' || '~/.local/share/Puck/brotli' }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+    - if: inputs.mode == 'save' && inputs.key == ''
+      name: Require the key to save under
+      run: |
+        echo "Save the Brotli cache under the key output of this run's restore." >&2
+        exit 1
+      shell: bash
+    - if: inputs.mode == 'save' && inputs.key != ''
+      name: Save the Brotli cache
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        key: ${{ inputs.key }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/Puck/brotli' || '~/.local/share/Puck/brotli' }}
+  using: composite
