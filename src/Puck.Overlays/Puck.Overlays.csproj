@@ -32,8 +32,8 @@
         <Content Include="Assets/Fonts/**/*.pack" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
-        <!-- SPIR-V for Vulkan and DXIL for DirectX (fragment only: PuckComputeShaderDxilEnabled is false above), both
-             compiled from the same HLSL source and shipped by the shared CollectShaderBytecode target. -->
+        <!-- SPIR-V for Vulkan and, on Windows, DXIL for DirectX (fragment only: PuckComputeShaderDxilEnabled is false
+             above), both compiled from the same HLSL source and shipped by the shared CollectShaderBytecode target. -->
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
     </ItemGroup>

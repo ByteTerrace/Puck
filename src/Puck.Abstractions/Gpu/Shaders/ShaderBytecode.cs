@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Text;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -130,53 +129,6 @@ public static class ShaderBytecode {
         }
     }
 
-    /// <summary>Lists the chunks of a well-formed DXBC container, in container order: each chunk's four-character code
-    /// (<c>DXIL</c>, <c>STAT</c>, <c>PSV0</c>, …) and its payload, the bytes after the chunk's eight-byte header.</summary>
-    /// <param name="bytecode">The container.</param>
-    /// <returns>The chunks.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytecode"/> is not a well-formed DXBC container.</exception>
-    public static IReadOnlyList<(string Code, ReadOnlyMemory<byte> Payload)> DxbcChunks(ReadOnlyMemory<byte> bytecode) {
-        var span = bytecode.Span;
-
-        if (!IsDxbcContainer(bytecode: span)) {
-            throw new ArgumentException(
-                message: "Shader bytecode is not a DXBC container.",
-                paramName: nameof(bytecode)
-            );
-        }
-
-        ValidateFormat(bytecode: span);
-
-        var chunkCount = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: span.Slice(
-            length: 4,
-            start: 28
-        )));
-        var chunks = new (string, ReadOnlyMemory<byte>)[chunkCount];
-
-        for (var chunkIndex = 0; (chunkIndex < chunkCount); chunkIndex++) {
-            var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: span.Slice(
-                length: sizeof(uint),
-                start: (DxbcHeaderByteLength + (chunkIndex * sizeof(uint)))
-            )));
-            var payloadLength = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: span.Slice(
-                length: 4,
-                start: (offset + 4)
-            )));
-
-            chunks[chunkIndex] = (
-                Encoding.ASCII.GetString(bytes: span.Slice(
-                    length: 4,
-                    start: offset
-                )),
-                bytecode.Slice(
-                    length: payloadLength,
-                    start: (offset + 8)
-                )
-            );
-        }
-
-        return chunks;
-    }
     /// <summary>Returns the compiled-bytecode file extension a backend loads: <c>".dxil"</c> for Direct3D 12,
     /// <c>".spv"</c> for Vulkan.</summary>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>

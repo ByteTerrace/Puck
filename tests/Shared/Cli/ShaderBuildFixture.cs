@@ -80,6 +80,26 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
         timeout: TimeSpan.FromMinutes(value: 2),
         workingDirectory: Root
     );
+    // Evaluates the project, building nothing, and returns the file name of every item of one type it plans.
+    public string[] Evaluate(string item, string[]? properties = null) {
+        var run = CliProcess.RunCaptured(
+            arguments: ["msbuild", "--disable-build-servers", PathOf(path: "fixture.proj"), "-nologo", "-nodeReuse:false", $"-getItem:{item}", $"-p:Configuration={Configuration}", .. (properties ?? []).Select(selector: static property => $"-p:{property}")],
+            cancellationToken: TestContext.Current.CancellationToken,
+            fileName: "dotnet",
+            input: string.Empty,
+            timeout: TimeSpan.FromMinutes(value: 2),
+            workingDirectory: Root
+        );
+
+        RequireSuccess(run: run);
+
+        using var document = System.Text.Json.JsonDocument.Parse(json: run.Stdout);
+
+        return [.. (document.RootElement.GetProperty(propertyName: "Items").TryGetProperty(propertyName: item, value: out var items)
+                ? items.EnumerateArray().Select(selector: static entry => Path.GetFileName(path: entry.GetProperty(propertyName: "Identity").GetString()!))
+                : [])
+            .Order(comparer: StringComparer.Ordinal)];
+    }
     public void RequireSuccess(CliProcessResult run) => Assert.True(condition: (run.ExitCode == 0), userMessage: $"{run.Stdout}\n{run.Stderr}");
     public void Dispose() => m_directory?.Dispose();
 

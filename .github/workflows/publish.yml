@@ -56,10 +56,7 @@ jobs:
       prebuilt: true
   docs:
     name: Build API documentation
-    needs: artifacts
     uses: ./.github/workflows/docs.yml
-    with:
-      prebuilt: true
   prepare:
     name: Validate the release source and prepare the selected package batch
     needs: pack

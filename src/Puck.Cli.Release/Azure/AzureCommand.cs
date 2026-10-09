@@ -47,6 +47,7 @@ public static partial class AzureCommand {
         ) {
             buildOutput,
             new Option<string?>(name: "--runtime-artifacts") { Description = "This commit's compiled Functions and browser payloads, when a producer job already built them." },
+            new Option<string?>(name: "--documentation") { Description = "This commit's DocFX site, when the documentation producer already generated it." },
         };
         var buildInfrastructure = new Command(
             description: "Compile the platform and world-compute templates and the parameters for this commit.",
@@ -164,7 +165,8 @@ public static partial class AzureCommand {
 
         Bind(command: build, work: (parseResult, _) => BuildAsync(
             output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: buildOutput)),
-            runtimeArtifacts: parseResult.GetValue<string?>(name: "--runtime-artifacts")
+            runtimeArtifacts: parseResult.GetValue<string?>(name: "--runtime-artifacts"),
+            documentation: parseResult.GetValue<string?>(name: "--documentation")
         ));
         Bind(command: buildInfrastructure, work: (parseResult, _) => BuildInfrastructureAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: infrastructureOutput))));
         Bind(command: deployInfrastructure, work: (parseResult, _) => DeployInfrastructureAsync(
@@ -344,8 +346,9 @@ public static partial class AzureCommand {
             : "false")
         );
     }
-    private static async Task BuildAsync(string output, string? runtimeArtifacts) {
+    private static async Task BuildAsync(string output, string? runtimeArtifacts, string? documentation) {
         if (runtimeArtifacts is { Length: 0 }) { runtimeArtifacts = null; }
+        if (documentation is { Length: 0 }) { documentation = null; }
         if (Directory.Exists(path: output)) { throw new IOException(message: $"Use a fresh output directory: {output}"); }
         Directory.CreateDirectory(path: output);
         var commit = await RunAsync(
@@ -491,15 +494,16 @@ public static partial class AzureCommand {
             ),
             source: "src/Puck.Dashboard/dist-deploy"
         );
-        await PuckAsync(
+        await PuckAsync(arguments: [
             "docs",
             "build",
             "--output",
             Path.Combine(
                 path1: output,
                 path2: "dashboard-storage"
-            )
-        );
+            ),
+            .. ((documentation is null) ? Array.Empty<string>() : ["--site", Path.GetFullPath(path: documentation)]),
+        ]);
         await PuckAsync(
             "bundle",
             "create",

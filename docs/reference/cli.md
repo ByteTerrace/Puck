@@ -130,7 +130,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
 | [`puck wasm`](../../wasm/README.md) | builds every committed WASM guest and writes each to its committed paths. |
@@ -266,7 +266,7 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 puck artifacts capture | restore | test-world
 puck artifacts test-windows [--shard <index> --shards <count>]
 puck artifacts durations <directory>
-puck docs build [--output <directory>]
+puck docs build [--output <directory>] [--site <directory>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> --output <directory>
@@ -678,13 +678,15 @@ A missing source, an unknown `--stage`, an unreadable file, a
 missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
 
-`compare` holds every compiled shader, each `.spv` and `.dxil`, in one tree to
-the same file in another, byte for byte. Both trees are walked for bytecode,
-skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
-matched by relative path; a file only one tree holds, or one whose bytes differ
-(named with its first differing byte and, for a DXIL container, the chunks
-that differ, such as `DXIL`, `STAT` or `PSV0`), fails with exit 1, and a tree holding no
-bytecode is refused with exit 2. `<actual>` is the repository root when absent.
+`compare` holds every compiled SPIR-V module (`.spv`) in one tree to the same
+file in another, byte for byte. Both trees are walked for SPIR-V, skipping
+`artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and matched by
+relative path; a module only one tree holds, or one whose bytes differ (named
+with its first differing byte), fails with exit 1, and a tree holding no SPIR-V
+is refused with exit 2. DXIL is no part of the comparison, and a `.dxil` file in
+either tree is ignored: Direct3D 12 is its one reader, so the shader build
+compiles DXIL on Windows alone ([freshness](shaders.md#freshness)).
+`<actual>` is the repository root when absent.
 `--build` first builds `Puck.Shaders.Generator`, the shader build's host, then
 restores and runs the build's own `CompileShaders` target
 (`build/Shaders.targets`) in every tracked project outside `experimental/` that
@@ -695,9 +697,9 @@ host really compiles every output, with exactly the first host's arguments.
 afterwards; it must be absent or empty, or the verb refuses with exit 2, since
 a filled cache would answer with bytes this host's DXC never produced. CI saves
 the kept cache once the comparison passes. `collect`
-copies the checkout's compiled shaders into one directory at their repository
-paths, the tree `compare` reads on the other host. CI collects the Windows
-build's shaders and compares a Linux DXC build of the same commit against them
+copies the checkout's SPIR-V into one directory at its repository paths, the
+tree `compare` reads on the other host. CI collects the Windows build's SPIR-V
+and compares a Linux DXC build of the same commit against it
 ([CI tooling](../development/ci.md)), the binding contract's cross-host gate
 leg.
 
@@ -2413,7 +2415,8 @@ refused profile, package or plan, or for a blocked check when nothing failed.
 ## `puck docs`—the documentation family
 
 ```text
-puck docs build [--output <directory>]      stage the website reference (default <repo>/artifacts/docs)
+puck docs build [--output <directory>] [--site <directory>]
+                                            stage the website reference (default <repo>/artifacts/docs)
 puck docs links [<document> ...]            check relative links, heading anchors, and cited repository paths
 puck docs citations [--enumeration <path>]  check the console-verb tokens skills and XML docs cite
 ```
@@ -2423,7 +2426,11 @@ puck docs citations [--enumeration <path>]  check the console-verb tokens skills
 Runs the pinned DocFX tool and stages `reference/` (with the site overview as
 `reference/overview.html`) and `_theme/` under the output directory, which
 defaults to `artifacts/docs` at the repository root. An output directory that
-already holds `reference/` or `_theme/` is refused.
+already holds `reference/` or `_theme/` is refused. `--site <directory>` stages
+a site DocFX already generated from this checkout instead of running it, and is
+refused when that directory holds no `index.html`; the application bundle
+stages the documentation workflow's site this way
+(`puck azure build --documentation`).
 
 ### `docs links`—relative link and path check
 
