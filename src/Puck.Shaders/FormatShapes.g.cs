@@ -8,7 +8,7 @@ namespace Puck.Shaders {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>ProbeKindManifest.SchemaTag</c>, declared in <c>src/Puck.Shaders/ProbeKindManifest.cs</c>.</summary>
-        public const string ProbeKindManifestSchemaTag = "71c92eb00760b8f9";
+        public const string ProbeKindManifestSchemaTag = "2424923133ff4060";
         /// <summary>The shape fingerprint of <c>RenderGraphSchemas.Graph</c>, declared in <c>src/Puck.Shaders/Graph/RenderGraphModel.cs</c>.</summary>
         public const string RenderGraphSchemasGraph = "3c0a8ed800fd6797";
         /// <summary>The shape fingerprint of <c>ShaderPackageManifest.SchemaName</c>, declared in <c>src/Puck.Shaders/Packaging/ShaderPackageManifest.cs</c>.</summary>

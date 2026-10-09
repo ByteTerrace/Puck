@@ -7,9 +7,9 @@ namespace Puck.Cli.Format.Tests;
 /// <summary>
 /// Laws for <c>FormatVersions.json</c> and <c>puck formats</c> (<see cref="FormatVersionsLedger"/>): discovery reads
 /// the tokens the source declares; recording round-trips; a retokened, reshaped, unrecorded, stale, or moved format is
-/// drift, and none of it demands a token bump; and two branches that edit one codec differently collide in the ledger on
-/// its shape line. The laws that hold the shipped ledger and the generated <c>FormatShapes.g.cs</c> files to the shipped
-/// source run in <c>Puck.Cli.Tests</c> (<c>ShippedFormatLedgerLawTests</c>), whose host loads the puck tool's assemblies.
+/// drift, and none of it demands a token bump; the shipped ledger and the generated <c>FormatShapes.g.cs</c> files equal
+/// the shipped source; a shape is the same in every host that computes it; and two branches that edit one codec
+/// differently collide in the ledger on its shape line.
 /// </summary>
 public sealed class FormatVersionsLedgerLawTests {
     private const string CodecPath = "src/Puck.Demo/DemoCodec.cs";
@@ -273,6 +273,56 @@ public sealed class FormatVersionsLedgerLawTests {
             )
         );
     }
+    // The puck tool records the ledger in a host that loads every verb assembly; this suite's host loads Puck.Cli.Format
+    // and its references alone, so the shipped ledger holding here is a shape computed in two different hosts agreeing.
+    [Fact]
+    public void TheShippedLedgerIsExactlyWhatTheShippedSourceDeclares() {
+        var (repositoryRoot, _, current) = Shipped.Value;
+        var text = File.ReadAllText(path: Path.Combine(
+            path1: repositoryRoot,
+            path2: FormatVersionsLedger.FileName
+        ));
+
+        Assert.True(
+            condition: FormatVersionsLedger.TryParse(
+                entries: out var recorded,
+                error: out var error,
+                json: text
+            ),
+            userMessage: error
+        );
+        Assert.Empty(collection: FormatVersionsLedger.Check(
+            current: current,
+            recorded: recorded,
+            recordedText: text
+        ));
+
+        foreach (var id in new[] { "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
+            Assert.Contains(
+                collection: current,
+                filter: entry => (entry.Id == id)
+            );
+        }
+    }
+    // A shape is a function of the source, never of the assemblies the computing process loads. This host trusts Roslyn,
+    // which the shared framework does not carry, so a call into it must digest exactly as a call into an assembly no host
+    // has: its named arguments in the order they are written. A framework member binds in every host, so reordering its
+    // named arguments never moves the shape.
+    [Fact]
+    public void AShapeIsTheSameWhateverAssembliesTheComputingHostTrusts() {
+        static bool Moves(string call, string reordered) => (Records(sources: Sources(body: $"_ = {call}; return 1;")) != Records(sources: Sources(body: $"_ = {reordered}; return 1;")));
+
+        Assert.Contains(
+            collection: ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!).Split(separator: Path.PathSeparator),
+            filter: static path => (Path.GetFileName(path: path) == "Microsoft.CodeAnalysis.CSharp.dll")
+        );
+        Assert.True(condition: Moves(call: "Nowhere.Syntax.Factory.ParseExpression(text: \"x\", offset: 0)", reordered: "Nowhere.Syntax.Factory.ParseExpression(offset: 0, text: \"x\")"));
+        Assert.True(
+            condition: Moves(call: "Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParseExpression(text: \"x\", offset: 0)", reordered: "Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParseExpression(offset: 0, text: \"x\")"),
+            userMessage: "A call into an assembly this host trusts beyond the shared framework bound in the closure: the shape depends on the host."
+        );
+        Assert.False(condition: Moves(call: "Math.Clamp(value: 1, min: 0, max: 2)", reordered: "Math.Clamp(max: 2, min: 0, value: 1)"));
+    }
     [InlineData("Document.cs", "int Value", "long Value")]
     [InlineData("Model.cs", "int Value", "long Value")]
     [InlineData("Model.cs", "int Value", "int Renamed")]
@@ -467,6 +517,24 @@ public sealed class FormatVersionsLedgerLawTests {
             collection: FormatShapesFiles.Check(existing: new Dictionary<string, string> { ["src/Puck.Demo/FormatShapes.g.cs"] = "text", ["src/Puck.Gone/FormatShapes.g.cs"] = "x" }, plan: plan),
             filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: src/Puck.Gone/FormatShapes.g.cs")
         );
+    }
+    [Fact]
+    public void TheShippedShapeFilesAreExactlyWhatTheShippedLedgerPlans() {
+        var (repositoryRoot, sources, entries) = Shipped.Value;
+        var plan = FormatsCommand.ShapeFiles(
+            entries: entries,
+            repositoryRoot: repositoryRoot,
+            sources: sources
+        );
+
+        Assert.NotEmpty(collection: plan);
+
+        foreach (var (path, text) in plan) {
+            Assert.Equal(
+                actual: File.ReadAllText(path: Path.Combine(path1: repositoryRoot, path2: path)),
+                expected: text
+            );
+        }
     }
 
     // The boundary: what a codec's shape covers beyond its own files.

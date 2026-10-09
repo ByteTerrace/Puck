@@ -8,9 +8,9 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli.Release/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "84c4024ea100d321";
+        public const string WorldReleaseExerciseResultCurrentSchema = "a180ab440798911c";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli.Release/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
-        public const string WorldReleaseQualificationRunnerMarker = "080242342997fb5a";
+        public const string WorldReleaseQualificationRunnerMarker = "0b8d64866be5af19";
     }
 }
 
@@ -19,6 +19,6 @@ namespace Puck.Cli.Azure {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseDeploymentStore.Schema</c>, declared in <c>src/Puck.Cli.Release/Azure/WorldReleaseDeploymentStore.cs</c>.</summary>
-        public const string WorldReleaseDeploymentStoreSchema = "1252778689ec9193";
+        public const string WorldReleaseDeploymentStoreSchema = "10ce970d207ba568";
     }
 }

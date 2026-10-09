@@ -55,6 +55,12 @@ public sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClosur
 /// package members are outside the repository and outside the digest.
 /// </para>
 /// <para>
+/// The closure compiles the repository's sources against the shared framework alone, never against the assemblies the
+/// computing process happens to load, so a shape is a function of the source: the puck tool, a test host and another
+/// machine on the same framework close the same source to the same shape. A call into a package member binds to nothing,
+/// so its arguments are digested in the order they are written.
+/// </para>
+/// <para>
 /// Formatting, trivia and local renames never move a digest; operator grouping, argument binding, evaluation order and
 /// serialized member names do.
 /// </para>
@@ -124,13 +130,19 @@ public sealed class FormatShapeClosure {
     private Dictionary<string, List<ISymbol>>? m_implementers;
 
     // The assemblies every closure compiles against, read once per process: a reference holds its metadata, so every
-    // compilation after the first reuses what the first one read. They are the host's trusted assemblies: the shared
-    // framework and the host's own application assemblies, so a shape depends on the process that computes it. The puck
-    // tool records the ledger, and the laws that judge the shipped ledger run in Puck.Cli.Tests, whose host loads the
-    // tool's assemblies.
-    private static readonly Lazy<MetadataReference[]> PlatformReferences = new(valueFactory: static () => [.. ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
-        .Split(separator: Path.PathSeparator)
-        .Select(selector: static path => MetadataReference.CreateFromFile(path: path))]);
+    // compilation after the first reuses what the first one read. They are the shared framework's alone, the trusted
+    // assemblies that sit beside the core library, never the host's own application assemblies: the same source closes
+    // to the same shape in every process that runs on the framework. A package member binds to nothing here, so a call
+    // into one is digested as written.
+    private static readonly Lazy<MetadataReference[]> FrameworkReferences = new(valueFactory: static () => {
+        var framework = Path.GetDirectoryName(path: typeof(object).Assembly.Location)!;
+
+        return [.. ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(separator: Path.PathSeparator)
+            .Where(predicate: path => string.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, a: Path.GetDirectoryName(path: path), b: framework))
+            .Order(comparer: StringComparer.OrdinalIgnoreCase)
+            .Select(selector: static path => MetadataReference.CreateFromFile(path: path))];
+    });
 
     /// <summary>Parses every file once, on every core.</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
@@ -163,7 +175,7 @@ public sealed class FormatShapeClosure {
                 allowUnsafe: true,
                 outputKind: OutputKind.DynamicallyLinkedLibrary
             ),
-            references: PlatformReferences.Value,
+            references: FrameworkReferences.Value,
             syntaxTrees: m_trees.Values.Append(element: CSharpSyntaxTree.ParseText(
                 options: ParseOptions,
                 text: "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;"

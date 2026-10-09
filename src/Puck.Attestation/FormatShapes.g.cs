@@ -8,6 +8,6 @@ namespace Puck.Attestation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CborAttestationCodec.FormatVersion</c>, declared in <c>src/Puck.Attestation/CborAttestationCodec.cs</c>.</summary>
-        public const string CborAttestationCodecFormatVersion = "64fc9cf636853ce8";
+        public const string CborAttestationCodecFormatVersion = "c0481d30169b9acb";
     }
 }

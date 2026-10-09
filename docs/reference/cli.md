@@ -3843,7 +3843,10 @@ without trivia. Parentheses do not contribute an extra node, but operator groupi
 call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
 are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
 Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
-move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
+move it. Unresolved calls retain their written syntax. The closure compiles the repository's sources against the shared
+framework alone, never the assemblies the computing process loads, so a call into a package member is unresolved in
+every host and the same source gives the same digest in the `puck` tool, a test suite's host and any machine on the
+framework. These are conservative source fingerprints: an implementation
 edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
 is refused.
 

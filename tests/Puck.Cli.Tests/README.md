@@ -46,11 +46,6 @@ misspelled option beside one that forwards its tokens (`MisspelledOptionLawTests
 The repository-wide laws read the whole tree: `JsonNewlineSpellingLawTests`,
 `MsBuildPathSpellingLawTests`, `LockFileOwnershipLawTests`,
 `SchemaTokenOwnershipLawTests` and `SourceRevisionLawTests`.
-`ShippedFormatLedgerLawTests` holds `FormatVersions.json` and the generated
-`FormatShapes.g.cs` files to the shipped source. It runs here because a
-format's shape compiles against the assemblies the computing process trusts,
-and this suite's host loads the same assemblies as the `puck` tool that records
-the ledger.
 
 ## Verification
 

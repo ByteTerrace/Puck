@@ -4,9 +4,9 @@ These laws hold `puck format` (selection, whitespace scope, trailing commas, nam
 deadline, static initialization order, `.puck` sources), `puck formats` and its ledger, and the pull-request
 formatter's submission policy (`FormatSubmissionTests`). The suite references `Puck.Cli.Format` alone; the law that
 formatting every tracked `.puck` source leaves its compiled document unchanged needs the compiler and lives in
-[`Puck.Cli.Worlds.Tests`](../Puck.Cli.Worlds.Tests/README.md). A format's shape compiles the sources against the
-assemblies the computing process trusts, and the puck tool records the ledger, so the laws that hold the shipped ledger
-to the shipped source run in [`Puck.Cli.Tests`](../Puck.Cli.Tests/README.md), whose host loads the tool's assemblies.
+[`Puck.Cli.Worlds.Tests`](../Puck.Cli.Worlds.Tests/README.md). A format's shape compiles the sources against the shared
+framework alone, so the shipped ledger the puck tool records holds here too, in a host that loads none of the tool's
+other verb assemblies (`FormatVersionsLedgerLawTests`).
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 
