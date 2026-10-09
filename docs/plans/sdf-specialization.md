@@ -610,21 +610,26 @@ the pipeline-cache store; E owns the compile tree, the closure, the chunk and
 the store reader. Both register services in `WorldBootComposition`, and E's
 deletions touch D's pipeline files, so D lands first and E merges it.
 
-## Decisions for the owner
+## Decisions
 
-The engineering choices above follow from the measurements. These remain
-product trade-offs:
+The engineering choices above follow from the measurements. The three product
+trade-offs they left are decided by the owner:
 
-- **Live specialization in a shipped World.** A shipped World carries no
-  compiler, so an edit that adds a chain or primitive renders generic until the
-  next package. Shipping `dxc` and `dxcompiler` with the World (tens of
-  megabytes) would let a player's creation specialize in the field.
-- **One set per world, or one for the shipped tree.** Per-world sets give the
-  smallest kernels (the island's cuts the field code by more than half) but cost
-  four to five CPU-minutes of cold compile each; one tree-wide union compiles
-  once and covers a portal or session into any shipped world without a second
-  set, at the measured cost of a field only 14 to 22 per cent smaller than the
-  generic interpreter's.
-- **What an editor session grows.** Growing the set across a session avoids
-  recompiling when an author toggles between two sculpts, at the cost of
-  kernels that only grow until the session ends.
+- **The World ships `dxc`.** A shipped World carries `dxc` and `dxcompiler`
+  (tens of megabytes), so an edit that adds a chain or primitive specializes in
+  the field instead of rendering generic until the next package. The
+  `no-device-compile` canary and qualification's hidden-compiler matrix keep
+  their meaning for the shipped sets: a shipped world still boots specialized
+  from its store with the compiler hidden, and the compiler serves only what the
+  store does not cover.
+- **One set per world.** Per-world sets give the smallest kernels (the
+  island's cuts the field code by more than half) at four to five CPU-minutes
+  of cold compile each; a tree-wide union, which would compile once and cover a
+  portal or session into any shipped world, was measured at a field only 14 to
+  22 per cent smaller than the generic interpreter's and is not taken. A portal
+  or session into another world therefore builds that world's set.
+- **An editor session's set only grows; a save rebuilds it to fit.** Growing
+  the set across a session avoids recompiling when an author toggles between
+  two sculpts; the kernels grow until the session ends. Saving the world
+  computes the set the saved document needs and rebuilds it to exactly that,
+  so a shipped set never carries a sculpt the author discarded.
