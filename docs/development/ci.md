@@ -64,14 +64,22 @@ assembly of its manifest as `dotnet <assembly.dll>`, two assemblies at a time an
 longest suite runs alongside the others; each run's output is printed whole when it finishes. A failing assembly
 cancels nothing: every assembly runs, and the job ends by naming each one that failed. The job installs the
 pinned DXC through `setup-dxc`, so shader laws that compile or reflect bytecode run here rather than skipping.
+The runner has no GPU, so every assembly runs with the CPU selection the gate's
+suites take (`--filter-not-trait Category=Gpu`): a device law is a GPU leg, and the
+runner's software adapter does not finish the SDF interpreter kernels. The laws
+that read a build tree (`BuildTree`) are left out too, since a restored archive
+has no `obj` and writes each file on its own; the gate runs them where it built.
 This consumer does not evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
-producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
-device, including the video capability needed by the shared-texture cleanup test.
-Deterministic SDF result-equivalence laws run in CI. CLI process
+producer's browser AppBundle inside that checkout.
+The deterministic SDF result-equivalence laws that need no device run here: the
+host interpreters held to each other and to their encodings
+(`Puck.SignedDistance.Tests`, `Puck.SdfVm.Tests`). The device laws that hold a
+GPU's answers to those references (`SdfFieldDeviceLawTests` and the other `Gpu`
+classes) run in `puck gate --gpu` on a GPU machine. CLI process
 interop fixtures run without competing Roslyn/packaging test collections in the
-same assembly. Test projects run one at a time so their independent thread pools
-do not oversubscribe the runner and starve socket handshakes. Tests within each
+same assembly. Running two assemblies at a time keeps their independent thread
+pools from oversubscribing the runner and starving socket handshakes. Tests within each
 assembly retain their configured concurrency; production deadlines are unchanged.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
@@ -230,7 +238,7 @@ the step in the same change.
 | `puck derivations --check` | `artifacts.yml` | `derivations` |
 | `puck schema`, `registry`, `architecture`, `branding`, `formats` and `canary-ceilings --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
-| Every test assembly (`puck artifacts test-windows`, with the pinned DXC so shader laws run), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` |
+| Every test assembly (`puck artifacts test-windows`, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, Linux DXC

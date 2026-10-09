@@ -34,7 +34,9 @@ and a writer that lists a directory at most once an interval.
 reference is a hard link to the referenced project's `bin`, and no file shares
 its file with a compiler output under `obj`, which the compiler rewrites in
 place. It reads file identities through the Windows file API and skips
-elsewhere.
+elsewhere. It carries the `BuildTree` trait: `puck gate` runs it in the checkout
+it built, and CI's test job, which restores an archive of `bin` outputs rather
+than building, leaves it out.
 
 ## Running
 

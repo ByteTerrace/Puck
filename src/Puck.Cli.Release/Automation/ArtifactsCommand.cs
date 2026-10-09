@@ -11,6 +11,23 @@ namespace Puck.Cli.Automation;
 /// what one Windows build produced, without compiling again.
 /// </summary>
 public static class ArtifactsCommand {
+    /// <summary>Returns the <c>dotnet</c> arguments <c>test-windows</c> runs one archived test assembly with. The runner has
+    /// no GPU and its tree is a restored archive rather than a build, so the run takes the CPU selection
+    /// (<see cref="CliTestRun.CpuSelection"/>) and leaves out the laws that read a build tree
+    /// (<see cref="CliTestRun.WithoutBuildTree"/>), writes its TRX report, and dumps and ends a run that stops making
+    /// progress.</summary>
+    /// <param name="assembly">The test assembly.</param>
+    /// <param name="results">The results directory.</param>
+    /// <param name="report">The TRX report's file name in it.</param>
+    /// <returns>The arguments.</returns>
+    public static string[] TestWindowsArguments(string assembly, string results, string report) => [
+        assembly,
+        .. CliTestRun.CpuSelection,
+        .. CliTestRun.WithoutBuildTree,
+        .. CliTestRun.Report(directory: results, fileName: report),
+        .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15)),
+    ];
+
     private const string Archive = "artifacts/compiled-windows.zip";
     private const string Identity = "source.json";
 
@@ -289,7 +306,8 @@ public static class ArtifactsCommand {
         // Two assemblies at a time, largest first, so the longest suite runs alongside the others instead of after
         // them. Each run's output is printed whole when it finishes, so two runs never interleave. Every assembly runs
         // whatever another one did, so one CI run names every failing assembly instead of the first. The platform
-        // exits nonzero for a run that discovered no test; a hardware-only assembly may still skip every case.
+        // exits nonzero for a run that discovered no test; a hardware-only assembly may still skip every case. Each run's
+        // selection is TestWindowsArguments'.
         var console = new Lock();
         var failures = new List<string>();
         var ordered = selected.Order(comparer: StringComparer.Ordinal).Select(selector: (assembly, index) => (assembly, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.assembly).Length);
@@ -298,7 +316,7 @@ public static class ArtifactsCommand {
             body: async (item, cancellationToken) => {
                 var (assembly, index) = item;
                 var run = await CliProcess.RunAsync(
-                    arguments: [assembly, .. CliTestRun.Report(directory: Results, fileName: $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx"), .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15))],
+                    arguments: TestWindowsArguments(assembly: assembly, report: $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx", results: Results),
                     cancellationToken: cancellationToken,
                     capture: true,
                     fileName: "dotnet",

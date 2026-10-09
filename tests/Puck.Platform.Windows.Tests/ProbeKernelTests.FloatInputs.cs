@@ -20,9 +20,9 @@ public sealed partial class ProbeKernelTests {
         var targets = bench.CreateSharedRing(slots: 2);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/average"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "average"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/average"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "average"),
             FinalizeEntry: "finalize",
             Constants: PackConstants(values: [1f, 0.5f, 0.5f]),
             ChannelCount: 3,
@@ -56,9 +56,9 @@ public sealed partial class ProbeKernelTests {
         var (input, view) = FloatInput(bench: bench, color: [1024f, 0f, 0f, 1f]);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "ir-blob"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "ir-blob"),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
             ChannelCount: 4,
@@ -93,9 +93,9 @@ public sealed partial class ProbeKernelTests {
         var targets = bench.CreateSharedRing(slots: 2);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/faerie"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "faerie"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/faerie"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "faerie"),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
                 ambient: 1f,

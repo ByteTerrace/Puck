@@ -341,8 +341,13 @@ keep its device laws apart. A class that names a collection of its own keeps
 it, and that collection must disable parallelization too.
 
 A run beside another GPU leg leaves the device laws out with
-`--filter-not-trait Category=Gpu`; `puck affected` runs its suites that way, and
-`puck gate --gpu` runs the device laws alone with `--filter-trait Category=Gpu`.
+`--filter-not-trait Category=Gpu`; `puck affected` runs its suites that way, as
+does CI's test job on its GPU-less runner, and `puck gate --gpu` runs the device
+laws alone with `--filter-trait Category=Gpu`. CI's runner has no GPU yet
+exposes a Direct3D 12 adapter that DXGI does not flag software, so
+`DirectXTestDevices.Hardware()` does not skip there, and an SDF interpreter
+kernel on it does not finish: the trait, not the skip, keeps a device law off
+that runner.
 
 ### Game changes
 

@@ -21,7 +21,7 @@
                 "M:System.IO.Stream.Dispose(System.Boolean)",
                 "M:System.IO.Stream.DisposeAsync"
             ],
-            "shape": "6701248acb0a54fc",
+            "shape": "1947e03b5973ab4d",
             "source": "src/Puck.Cli.Gate/Affected/AffectedCoverage.cs",
             "token": "puck.canary.coverage.v1"
         },
