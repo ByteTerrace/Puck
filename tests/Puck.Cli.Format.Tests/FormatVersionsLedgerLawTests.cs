@@ -38,12 +38,12 @@ public sealed class FormatVersionsLedgerLawTests {
     };
 
     // The shipped source is read and closed once for every law that judges it; closing it is the slow step.
-    private static readonly Lazy<(string Root, Dictionary<string, string> Sources, IReadOnlyList<FormatEntry> Entries)> Shipped = new(valueFactory: static () => {
+    private static readonly Lazy<(string Root, FormatShapeSources Sources, IReadOnlyList<FormatEntry> Entries)> Shipped = new(valueFactory: static () => {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
         var sources = FormatsCommand.ReadSources(repositoryRoot: repositoryRoot);
 
-        return (repositoryRoot, sources, FormatVersionsLedger.Discover(files: sources));
+        return (repositoryRoot, sources, FormatVersionsLedger.Discover(sources: sources));
     });
 
     private static FormatEntry Entry(IReadOnlyList<FormatEntry> entries, string id) => entries.Single(predicate: entry => (entry.Id == id));
@@ -524,7 +524,7 @@ public sealed class FormatVersionsLedgerLawTests {
         var plan = FormatsCommand.ShapeFiles(
             entries: entries,
             repositoryRoot: repositoryRoot,
-            sources: sources
+            sources: sources.Files
         );
 
         Assert.NotEmpty(collection: plan);
@@ -669,28 +669,28 @@ public sealed class FormatVersionsLedgerLawTests {
     [Fact]
     public void TheShippedPilotsMoveWhenAWireLeafSwapsItsReadsOrACastEnumReorders() {
         var (_, sources, _) = Shipped.Value;
-        var swapped = new Dictionary<string, string>(sources, StringComparer.Ordinal);
-        var reordered = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+        var swapped = new Dictionary<string, string>(collection: sources.Files, comparer: StringComparer.Ordinal);
+        var reordered = new Dictionary<string, string>(collection: sources.Files, comparer: StringComparer.Ordinal);
         const string Leaves = "src/Puck.World.Server/WorldWireLeaves.cs";
         const string Feed = "src/Puck.World.Server/WorldEventFeed.cs";
         const string Domain = "        var identityDomain = reader.ReadString(field: \"peer identity domain\");\n";
         const string Subject = "        var identitySubject = reader.ReadString(field: \"peer identity subject\");\n";
 
-        Assert.Contains(actualString: sources[Leaves], expectedSubstring: (Domain + Subject));
-        Assert.Contains(actualString: sources[Feed], expectedSubstring: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
+        Assert.Contains(actualString: sources.Files[Leaves], expectedSubstring: (Domain + Subject));
+        Assert.Contains(actualString: sources.Files[Feed], expectedSubstring: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
 
-        swapped[Leaves] = sources[Leaves].Replace(newValue: (Subject + Domain), oldValue: (Domain + Subject));
-        reordered[Feed] = sources[Feed].Replace(newValue: "RegionExit,\n    /// <summary>A body left a named region.</summary>\n    RegionEnter,", oldValue: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
+        swapped[Leaves] = sources.Files[Leaves].Replace(newValue: (Subject + Domain), oldValue: (Domain + Subject));
+        reordered[Feed] = sources.Files[Feed].Replace(newValue: "RegionExit,\n    /// <summary>A body left a named region.</summary>\n    RegionEnter,", oldValue: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
 
         foreach (var id in new[] { "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldReplaySnapshot.ShapeToken" }) {
             var shape = Shipped.Value.Entries.Single(predicate: entry => (entry.Id == id)).Shape;
 
-            Assert.NotEqual(expected: shape, actual: FormatVersionsLedger.Explain(files: swapped, id: id)!.Value.Entry.Shape);
+            Assert.NotEqual(expected: shape, actual: FormatVersionsLedger.Explain(sources: sources with { Files = swapped }, id: id)!.Value.Entry.Shape);
         }
 
         Assert.NotEqual(
             expected: Shipped.Value.Entries.Single(predicate: static entry => (entry.Id == "WorldAuthorityCheckpointCodec.SupportedVersion")).Shape,
-            actual: FormatVersionsLedger.Explain(files: reordered, id: "WorldAuthorityCheckpointCodec.SupportedVersion")!.Value.Entry.Shape
+            actual: FormatVersionsLedger.Explain(sources: sources with { Files = reordered }, id: "WorldAuthorityCheckpointCodec.SupportedVersion")!.Value.Entry.Shape
         );
     }
 

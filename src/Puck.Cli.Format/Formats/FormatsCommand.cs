@@ -8,10 +8,10 @@ namespace Puck.Cli.Formats;
 public static class FormatsCommand {
     private const string Verb = "formats";
 
-    private static string[] ListSources(string repositoryRoot, params string[] options) {
+    private static string[] ListSources(string repositoryRoot, string pathspec) {
         var listing = CliGit.Run(
             repository: repositoryRoot,
-            arguments: ["ls-files", "-z", .. options, "--", "src/*.cs"]
+            arguments: ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", pathspec]
         );
 
         if (listing.ExitCode != 0) {
@@ -24,16 +24,24 @@ public static class FormatsCommand {
         ).Where(predicate: static relative => !relative.EndsWith(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ".g.cs"
-        )).Order(comparer: StringComparer.Ordinal).ToArray();
+        )).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>Reads tracked and unignored new source files so staging cannot change the recorded shape.</summary>
+    /// <summary>Reads tracked and unignored new source files, so staging cannot change the recorded shape, in the compile
+    /// context their projects give them: every tracked or unignored new project under <c>src/</c> is evaluated for its
+    /// usings and the files it links in (<see cref="FormatShapeSources.Evaluate"/>).</summary>
     /// <param name="repositoryRoot">The repository root.</param>
-    /// <returns>Each file's text by repository-relative path with forward slashes.</returns>
-    public static Dictionary<string, string> ReadSources(string repositoryRoot) {
+    /// <returns>Each file's text by repository-relative path with forward slashes, with its compile context.</returns>
+    public static FormatShapeSources ReadSources(string repositoryRoot) => FormatShapeSources.Evaluate(
+        files: ReadFiles(repositoryRoot: repositoryRoot),
+        projects: [.. ListSources(pathspec: "src/*.csproj", repositoryRoot: repositoryRoot).Where(predicate: relative => File.Exists(path: Path.Combine(path1: repositoryRoot, path2: relative)))],
+        repositoryRoot: repositoryRoot
+    );
+
+    private static Dictionary<string, string> ReadFiles(string repositoryRoot) {
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        foreach (var relative in ListSources(repositoryRoot, "--cached", "--others", "--exclude-standard")) {
+        foreach (var relative in ListSources(pathspec: "src/*.cs", repositoryRoot: repositoryRoot)) {
             var fullPath = Path.Combine(
                 path1: repositoryRoot,
                 path2: relative
@@ -48,6 +56,7 @@ public static class FormatsCommand {
 
         return files;
     }
+
     /// <summary>Plans every generated <c>FormatShapes.g.cs</c> for a checkout.</summary>
     /// <param name="entries">The ledger's entries.</param>
     /// <param name="repositoryRoot">The repository root, whose project files place each constants file.</param>
@@ -137,7 +146,7 @@ public static class FormatsCommand {
 
         try {
             if (FormatVersionsLedger.Explain(
-                files: ReadSources(repositoryRoot: repositoryRoot),
+                sources: ReadSources(repositoryRoot: repositoryRoot),
                 id: id
             ) is not var (entry, closure)) {
                 return CliExit.Refuse(
@@ -147,7 +156,7 @@ public static class FormatsCommand {
                 );
             }
 
-            Console.WriteLine(value: $"{entry.Id} ({entry.Source}) token {entry.Token} shape {entry.Shape}: {closure.Units.Count} unit(s) in {closure.Units.Select(selector: static unit => unit.Path).Distinct(comparer: StringComparer.Ordinal).Count()} file(s), {closure.Open.Count} open call(s).");
+            Console.WriteLine(value: $"{entry.Id} ({entry.Source}) token {entry.Token} shape {entry.Shape}: {closure.Units.Count} unit(s) in {closure.Units.Select(selector: static unit => unit.Path).Distinct(comparer: StringComparer.Ordinal).Count()} file(s), {closure.Open.Count} open call(s), {closure.Outside.Count} name(s) outside the repository.");
 
             foreach (var group in closure.Units.GroupBy(keySelector: static unit => unit.Path, comparer: StringComparer.Ordinal).OrderBy(keySelector: static group => group.Key, comparer: StringComparer.Ordinal)) {
                 Console.WriteLine(value: $"  {group.Key}");
@@ -155,14 +164,23 @@ public static class FormatsCommand {
                 foreach (var unit in group.OrderBy(keySelector: static unit => unit.Key, comparer: StringComparer.Ordinal)) { Console.WriteLine(value: $"    {unit.Kind.ToString().ToLowerInvariant()} {unit.Key}"); }
             }
             foreach (var call in closure.Open) { Console.WriteLine(value: $"  open {call}"); }
+            foreach (var name in closure.Outside) { Console.WriteLine(value: $"  outside {name}"); }
 
             return CliExit.Success;
         } catch (FormatBoundaryException exception) {
             foreach (var problem in exception.Problems) { Console.Error.WriteLine(value: $"{Verb}: {problem}"); }
 
             return CliExit.Failed;
+        } catch (Exception exception) when ((exception is InvalidOperationException or TimeoutException)) {
+            return Unevaluated(exception: exception);
         }
     }
+    // The projects could not be evaluated, so no file has its compile context and no shape can be computed honestly.
+    private static int Unevaluated(Exception exception) => CliExit.Refuse(
+        verb: Verb,
+        what: "the projects under src/",
+        why: exception.Message
+    );
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
@@ -176,11 +194,16 @@ public static class FormatsCommand {
     /// <param name="check">Whether to check the ledger without writing it.</param>
     /// <returns>Zero on success, one for ledger drift, or two for an unusable ledger.</returns>
     public static int Execute(string repositoryRoot, bool check) {
-        var sources = ReadSources(repositoryRoot: repositoryRoot);
+        FormatShapeSources sources;
         IReadOnlyList<FormatEntry> current;
 
         try {
-            current = FormatVersionsLedger.Discover(files: sources);
+            sources = ReadSources(repositoryRoot: repositoryRoot);
+        } catch (Exception exception) when ((exception is InvalidOperationException or TimeoutException)) {
+            return Unevaluated(exception: exception);
+        }
+        try {
+            current = FormatVersionsLedger.Discover(sources: sources);
         } catch (FormatBoundaryException exception) {
             foreach (var problem in exception.Problems) { Console.Error.WriteLine(value: $"{Verb}: {problem}"); }
 
@@ -194,7 +217,7 @@ public static class FormatsCommand {
         var shapes = ShapeFiles(
             entries: current,
             repositoryRoot: repositoryRoot,
-            sources: sources
+            sources: sources.Files
         );
         var existing = ExistingShapes(
             plan: shapes,
@@ -314,7 +337,10 @@ public static class FormatsCommand {
 
             Both recording and --check read tracked and non-ignored new C# sources under
             src/, excluding .g.cs files. Staging a source does not change its shape. A new
-            codec participates before staging; --check reports its missing entry.
+            codec participates before staging; --check reports its missing entry. Each source
+            compiles with its own project's usings, which an MSBuild evaluation of every project
+            under src/ reads without building or restoring; a closure that names a repository
+            type in its project's scope and cannot bind it is refused.
 
             Each project that declares a format also gets a generated FormatShapes.g.cs holding
             one constant per entry, that entry's shape digest, so the codec that owns the format

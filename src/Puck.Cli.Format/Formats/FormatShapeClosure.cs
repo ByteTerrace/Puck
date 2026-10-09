@@ -27,7 +27,14 @@ public readonly record struct FormatRef(string Source, string Owner, string Memb
 /// <param name="Units">Every unit the shape covers.</param>
 /// <param name="Open">Every repository member the closure calls that is neither covered nor marked, by documentation-comment
 /// id in ordinal order: the calls the shape does not see.</param>
-public sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClosure.Unit> Units, IReadOnlyList<string> Open);
+/// <param name="Outside">Every name the closure's units write that binds to nothing and names no repository type, in
+/// ordinal order: a package's type or member, which the closure compiles without by design.</param>
+public sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClosure.Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Outside);
+/// <summary>The names one format's closure writes that bind to nothing.</summary>
+/// <param name="Repository">Each name of a type the repository declares, which the closure failed to see, in ordinal
+/// order. <see cref="FormatShapeClosure.Of"/> refuses a closure that has one.</param>
+/// <param name="Outside">Each other name, a package's, in ordinal order.</param>
+public sealed record FormatUnbound(IReadOnlyList<string> Repository, IReadOnlyList<string> Outside);
 /// <summary>
 /// The shape of a format: a digest of the canonical syntax of everything its codec's read and write paths cover inside the
 /// repository, computed with the Roslyn semantic model over <em>units</em>: a type's layout (its header and its data
@@ -59,6 +66,14 @@ public sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClosur
 /// computing process happens to load, so a shape is a function of the source: the puck tool, a test host and another
 /// machine on the same framework close the same source to the same shape. A call into a package member binds to nothing,
 /// so its arguments are digested in the order they are written.
+/// </para>
+/// <para>
+/// Each file compiles with the usings its own project compiles it with (<see cref="FormatShapeSources"/>): the project's
+/// <c>Using</c> items and implicit usings, and the <c>global using</c> directives the project's files state, written into
+/// each of that project's files as file-scoped directives, so one project's usings never reach another's files in the
+/// one compilation. The files projects link in from outside <c>src/</c>, and a <c>FormatShapes</c> class for each
+/// namespace that declares a format, bind names and are never units. A name a unit writes that still binds to nothing
+/// while a repository type of that name exists is refused: the shape would be blind to that type.
 /// </para>
 /// <para>
 /// Formatting, trivia and local renames never move a digest; operator grouping, argument binding, evaluation order and
@@ -97,6 +112,8 @@ public sealed class FormatShapeClosure {
         public bool Encodes { get; set; }
 
         public SortedSet<string> Refusals { get; } = new(comparer: StringComparer.Ordinal);
+        // The names the unit writes that bind to nothing, as written: a type name, or an attribute's name.
+        public SortedSet<string> Unbound { get; } = new(comparer: StringComparer.Ordinal);
     }
     // Drops every token's trivia in one walk of the tree. ReplaceTokens over every token is quadratic in the file: it tests
     // each node's span against the span of every token it replaces.
@@ -115,6 +132,7 @@ public sealed class FormatShapeClosure {
     private static readonly CSharpParseOptions ParseOptions = CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview);
 
     private readonly CSharpCompilation m_compilation;
+    private readonly FormatCompileContext m_context;
     private readonly IReadOnlyDictionary<string, string> m_files;
     private readonly Dictionary<string, SyntaxTree> m_current;
 
@@ -157,17 +175,16 @@ public sealed class FormatShapeClosure {
         keySelector: static pair => pair.Key
     );
 
-    /// <summary>Parses every file once.</summary>
-    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
-    public FormatShapeClosure(IReadOnlyDictionary<string, string> files) : this(files: files, trees: Parse(files: files)) { }
     /// <summary>Closes formats over trees already parsed (<see cref="Parse"/>).</summary>
-    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
-    /// <param name="trees">Each file's syntax tree, by its path.</param>
-    public FormatShapeClosure(IReadOnlyDictionary<string, string> files, IReadOnlyDictionary<string, SyntaxTree> trees) {
-        m_files = files;
+    /// <param name="sources">The sources and each one's compile context.</param>
+    /// <param name="trees">Each source file's syntax tree, by its path.</param>
+    /// <param name="declared">Every format the sources declare, whose shape constants the codecs read.</param>
+    public FormatShapeClosure(FormatShapeSources sources, IReadOnlyDictionary<string, SyntaxTree> trees, IReadOnlyList<FormatRef> declared) {
+        m_files = sources.Files;
+        m_context = new FormatCompileContext(sources: sources, trees: trees);
         // The compilation holds the trees in the files' own order, whatever order they were parsed in, so symbols declared
         // across partial files enumerate as they always have.
-        m_trees = files.Keys.ToDictionary(comparer: StringComparer.Ordinal, elementSelector: path => trees[path], keySelector: static path => path);
+        m_trees = m_context.Units();
         m_current = new Dictionary<string, SyntaxTree>(collection: m_trees, comparer: StringComparer.Ordinal);
         m_compilation = CSharpCompilation.Create(
             assemblyName: "FormatShapes",
@@ -176,10 +193,7 @@ public sealed class FormatShapeClosure {
                 outputKind: OutputKind.DynamicallyLinkedLibrary
             ),
             references: FrameworkReferences.Value,
-            syntaxTrees: m_trees.Values.Append(element: CSharpSyntaxTree.ParseText(
-                options: ParseOptions,
-                text: "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;"
-            ))
+            syntaxTrees: m_trees.Values.Concat(second: m_context.Bindings(declared: declared))
         );
         m_canonicalCompilation = m_compilation;
     }
@@ -200,7 +214,7 @@ public sealed class FormatShapeClosure {
         // Each format's analysis reads only caches whose entries are whole functions of their keys, so the formats are
         // analyzed side by side and joined in their own order.
         var analyses = formats.AsParallel().AsOrdered().Select(selector: format => Analyze(format: format)).ToArray();
-        var refusals = analyses.SelectMany(selector: static analysis => analysis.Refusals).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
+        var refusals = analyses.SelectMany(selector: static analysis => analysis.Refusals).Concat(second: formats.Zip(second: analyses).SelectMany(selector: static pair => pair.Second.Unbound.Repository.Select(selector: name => $"unresolved: {pair.First.Id} names {name}, a repository type its closure cannot bind; the shape cannot see it until the closure compiles that file with the usings its project does (FormatShapeSources)"))).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
 
         if (refusals.Length != 0) { throw new FormatBoundaryException(problems: refusals); }
 
@@ -208,12 +222,18 @@ public sealed class FormatShapeClosure {
 
         return [.. analyses.Select(selector: analysis => new FormatClosure(
             Open: analysis.Open,
+            Outside: analysis.Unbound.Outside,
             Shape: Digest(units: analysis.Units),
             Units: analysis.Units
         ))];
     }
+    /// <summary>The names each format's closure writes that bind to nothing, without refusing any: what <see cref="Of"/>
+    /// would refuse, and what it leaves outside the repository.</summary>
+    /// <param name="formats">Each format's declaring file, declaring type, token member and ledger id.</param>
+    /// <returns>Each format's unbound names, in the order of <paramref name="formats"/>.</returns>
+    public FormatUnbound[] UnboundOf(IReadOnlyList<FormatRef> formats) => [.. formats.AsParallel().AsOrdered().Select(selector: format => Analyze(format: format).Unbound)];
 
-    private sealed record Analysis(IReadOnlyList<Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Refusals);
+    private sealed record Analysis(IReadOnlyList<Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Refusals, FormatUnbound Unbound);
 
     private Analysis Analyze(FormatRef format) {
         var (roots, candidates) = Roots(format: format);
@@ -254,12 +274,112 @@ public sealed class FormatShapeClosure {
         // A call whose units were reached some other way is covered, not open.
         var open = unfollowed.Where(predicate: call => !call.Targets.Concat(second: call.Dispatch).Any(predicate: seen.Contains)).Select(selector: static call => call.Callee).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
 
+        // A name that binds to nothing is a package's, unless its file's project scope holds a repository type of that name:
+        // then the closure failed to see a type the build sees, and the shape is blind to it.
+        var repository = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var outside = new SortedSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var unit in seen) {
+            foreach (var name in Reach(unit: unit).Unbound) { (InScope(name: name, unit: unit) ? repository : outside).Add(item: name); }
+        }
+
+        outside.ExceptWith(other: repository);
+
         return new Analysis(
             Open: open,
             Refusals: [.. refusals],
+            Unbound: new FormatUnbound(Outside: [.. outside], Repository: [.. repository]),
             Units: [.. seen.OrderBy(comparer: StringComparer.Ordinal, keySelector: static unit => unit.Key).ThenBy(keySelector: static unit => unit.Kind).ThenBy(comparer: StringComparer.Ordinal, keySelector: static unit => unit.Path)]
         );
     }
+
+    private Dictionary<string, HashSet<string>>? m_containers;
+
+    private readonly ConcurrentDictionary<Unit, (HashSet<string> Containers, Dictionary<string, (string Container, string Name)> Aliases)> m_scopes = new();
+
+    // Whether a repository type of this name is in the unit's scope as its project compiles it: declared in a namespace its
+    // usings or enclosing namespaces name, nested in a type its static usings or enclosing types name, or the target of an
+    // alias its usings declare. An attribute is written without its suffix.
+    private bool InScope(string name, Unit unit) {
+        var containers = Containers();
+
+        var (scope, aliases) = ScopeOf(unit: unit);
+
+        bool Declared(string type) => (containers.TryGetValue(key: type, value: out var holders) && holders.Overlaps(other: scope));
+
+        return (Declared(type: name) || Declared(type: $"{name}Attribute") || (aliases.TryGetValue(key: name, value: out var target) && containers.TryGetValue(key: target.Name, value: out var named) && named.Contains(item: target.Container)));
+    }
+    // Each type's simple name, with every container that declares a type of that name: its namespace (empty for the
+    // global namespace), or its containing type.
+    private Dictionary<string, HashSet<string>> Containers() {
+        if (Volatile.Read(location: ref m_containers) is { } built) { return built; }
+
+        var containers = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
+        var pending = new Stack<INamespaceOrTypeSymbol>();
+
+        pending.Push(item: m_compilation.Assembly.GlobalNamespace);
+
+        while (pending.TryPop(result: out var next)) {
+            foreach (var member in next.GetMembers()) {
+                if (member is not INamespaceOrTypeSymbol inner) { continue; }
+
+                pending.Push(item: inner);
+
+                if (inner is INamedTypeSymbol type) {
+                    if (!containers.TryGetValue(key: type.Name, value: out var holders)) { containers[type.Name] = holders = new HashSet<string>(comparer: StringComparer.Ordinal); }
+
+                    holders.Add(item: ((type.ContainingType is { } outer)
+                        ? outer.OriginalDefinition.ToDisplayString()
+                        : (type.ContainingNamespace.IsGlobalNamespace ? string.Empty : type.ContainingNamespace.ToDisplayString())));
+                }
+            }
+        }
+
+        return (Interlocked.CompareExchange(comparand: null, location1: ref m_containers, value: containers) ?? containers);
+    }
+    // The containers a unit's names are looked up in, and the aliases it can use, as its project compiles its file.
+    private (HashSet<string> Containers, Dictionary<string, (string Container, string Name)> Aliases) ScopeOf(Unit unit) {
+        if (m_scopes.TryGetValue(key: unit, value: out var scope)) { return scope; }
+
+        var containers = new HashSet<string>(comparer: StringComparer.Ordinal) { string.Empty };
+        var aliases = new Dictionary<string, (string Container, string Name)>(comparer: StringComparer.Ordinal);
+
+        foreach (var directive in m_context.Scope(path: unit.Path)) {
+            if (directive.Alias is { } alias) {
+                // An alias names a repository type when the container its target is qualified by declares a type of that name.
+                if (directive.NamespaceOrType is QualifiedNameSyntax qualified) { aliases[alias.Name.Identifier.ValueText] = (qualified.Left.WithoutTrivia().NormalizeWhitespace().ToFullString().Replace(newValue: string.Empty, oldValue: "global::"), qualified.Right.Identifier.ValueText); }
+            } else {
+                containers.Add(item: FormatCompileContext.Named(directive: directive));
+            }
+        }
+
+        var node = Index(path: unit.Path).Nodes[(unit.Key, unit.Kind)];
+        var model = Model(tree: m_trees[unit.Path]);
+
+        foreach (var ancestor in node.AncestorsAndSelf()) {
+            switch (ancestor) {
+                case BaseNamespaceDeclarationSyntax space when (model.GetDeclaredSymbol(space) is INamespaceSymbol declared):
+                    for (var current = declared; !current.IsGlobalNamespace; current = current.ContainingNamespace) { containers.Add(item: current.ToDisplayString()); }
+                    break;
+                case BaseTypeDeclarationSyntax type when (model.GetDeclaredSymbol(type) is INamedTypeSymbol declared):
+                    for (var current = declared; (current is not null); current = current.BaseType) { containers.Add(item: current.OriginalDefinition.ToDisplayString()); }
+                    break;
+            }
+        }
+
+        return m_scopes.GetOrAdd(key: unit, value: (containers, aliases));
+    }
+    // Whether a name stands where a type or a value is looked up by name in scope: not as a member after a dot, a named
+    // argument's or initializer's label, or an alias's own name.
+    private static bool IsLookup(SimpleNameSyntax name) => name.Parent switch {
+        MemberAccessExpressionSyntax access => (access.Expression == name),
+        QualifiedNameSyntax qualified => (qualified.Left == name),
+        AliasQualifiedNameSyntax => false,
+        MemberBindingExpressionSyntax or NameColonSyntax or NameEqualsSyntax or NameMemberCrefSyntax => false,
+        AssignmentExpressionSyntax { Parent: InitializerExpressionSyntax } assignment => (assignment.Left != name),
+        TypeConstraintSyntax => (name.Identifier.ValueText is not ("notnull" or "unmanaged")),
+        _ => true,
+    };
     // A property whose body calls nothing in the repository only reads data: its body is covered, not left open.
     private bool IsPlainAccessor(Call call) => (call.Callee.StartsWith(comparisonType: StringComparison.Ordinal, value: "P:") && (call.Targets.Length > 0) && (call.Dispatch.Length == 0) && call.Targets.All(predicate: target => (Reach(unit: target).Calls.Count == 0)));
     private string Digest(IReadOnlyList<Unit> units) {
@@ -574,6 +694,7 @@ public sealed class FormatShapeClosure {
 
                     if (info.Symbol is null) {
                         foreach (var candidate in info.CandidateSymbols) { Resolve(reach: reach, symbol: candidate); }
+                        if ((info.CandidateSymbols.Length == 0) && (node is SimpleNameSyntax name) && IsLookup(name: name) && (SyntaxFacts.GetContextualKeywordKind(text: name.Identifier.ValueText) == SyntaxKind.None)) { reach.Unbound.Add(item: name.Identifier.ValueText); }
                     }
 
                     if (node is AssignmentExpressionSyntax assignment) { Deconstruction(info: model.GetDeconstructionInfo(assignment: assignment), reach: reach); }

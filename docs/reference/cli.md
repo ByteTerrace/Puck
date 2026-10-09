@@ -133,7 +133,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's compiled shaders to another and compare them byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
-| [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
+| [`puck wasm`](../../wasm/README.md) | builds every committed WASM guest and writes each to its committed paths. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 | [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
@@ -298,8 +298,10 @@ referenced neighbours under canonical hosted file names. It rebases provider-dec
 asset paths from nested documents to the common worlds directory; the image retains
 the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
-and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
-committed default addon, printing the content hash needed by its document rows.
+and contacts the supplied host. `wasm build` builds every committed WebAssembly guest with Cargo, one build per variant
+each crate declares under `[package.metadata.puck]` in its `Cargo.toml`, writes each module to every repository path
+its build names, and prints each module's content hash for the `addons` rows that pin it. It refuses before building
+when a tracked `.wasm` under `wasm/` or `src/` is no declared build's output.
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
 content-addressed manifest (`release.json` in the package directory unless
@@ -3839,6 +3841,17 @@ Both forms read tracked and non-ignored new C# sources under `src/`, excluding
 participates in discovery before it is staged, and `--check` reports its missing
 entry without writing the ledger.
 
+Each source compiles with the usings its own project compiles it with. Both forms evaluate every tracked or unignored
+new project under `src/` with MSBuild (one `dotnet msbuild` run that reads items and builds nothing, with the
+package-restore imports under `obj/` and the workload imports switched off), so the project's `Using` items, implicit usings included, come from
+its project file, the `Directory.Build` files and the SDK that `global.json` pins, never from a build or restore. The
+`global using` directives a project's files state belong to that project. The closure is one compilation, so each file
+receives its own project's usings as file-scoped directives and no project's usings reach another's files. The files a
+project links in from outside `src/` (the `build/*.cs` markers and helpers) and a `FormatShapes` class per namespace that
+declares a format bind names but are never part of a shape. A name a covered unit writes that binds to nothing while its
+project's scope holds a repository type of that name is refused (`unresolved: <id> names <type>`), because the shape
+would be blind to that type. A project the evaluation cannot read refuses both forms.
+
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:
 
@@ -3885,8 +3898,8 @@ of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, 
 outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
 the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
 re-recorded. `puck formats --explain <id>`
-prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
-repository and outside the digest.
+prints the units a format covers, by file, the calls it leaves open, and the names outside the repository it binds to
+nothing. Platform and package members are outside the repository and outside the digest.
 
 A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
 `.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest

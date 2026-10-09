@@ -132,8 +132,8 @@ regenerates, the hash pins move) while the token stays `1`. What tells two layou
 fingerprint `puck formats` records for the host's side of the ABI (`AddonAbi.AbiShapeFingerprint`): every
 guest returns it, as one word, from `puck_abi_shape`, and a guest of another shape faults `AbiMismatch`
 naming both. The generated Rust constants (`ABI_SHAPE`) move with it, so a guest built before the ABI changed
-is refused at mount, and `puck wasm build` plus the fixture rebuilds are owed after any change to the
-host's ABI source.
+is refused at mount, and `puck wasm-stdlib` then `puck wasm build`, which rebuilds every committed guest, are owed after
+any change to the host's ABI source.
 
 ### Guest exports
 

@@ -37,8 +37,8 @@ namespace Puck.Cli.Qualification {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli.Runs/Qualification/QualificationReport.cs</c>.</summary>
-        public const string QualificationReportSchemaVersion = "3ca2bd8836342fe5";
+        public const string QualificationReportSchemaVersion = "d2d9087d13f0c2c3";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli.Runs/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "baa206880cda7a4e";
+        public const string ReleaseProfileSchemaVersion = "cea0019378921bc2";
     }
 }
