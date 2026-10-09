@@ -1,0 +1,17 @@
+{
+  "seed": 664176994,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 4 or 5 of the 8 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "train": [
+    "w02-row-set-refusal",
+    "w05-gcp-storage-provider",
+    "w07-failed-build-stale-binary",
+    "w08-gpu-grant-held-by-parity"
+  ],
+  "test": [
+    "w01-seat-mouse-look-sensitivity",
+    "w03-hermetic-hud-script",
+    "w04-cooldown-rule",
+    "w06-agent-harness-on-azure"
+  ]
+}
