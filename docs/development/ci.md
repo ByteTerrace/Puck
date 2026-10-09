@@ -61,8 +61,10 @@ then recreates ordinary independent files; symbols and runtime layouts are prese
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
 a fresh Windows checkout, verifies its commit and platform, and runs each test
 assembly of its manifest as `dotnet <assembly.dll>`, two assemblies at a time and largest first, so the
-longest suite runs alongside the others; each run's output is printed whole when it finishes. This consumer does not
-evaluate the solution, restore project dependencies, or install WASM workloads.
+longest suite runs alongside the others; each run's output is printed whole when it finishes. A failing assembly
+cancels nothing: every assembly runs, and the job ends by naming each one that failed. The job installs the
+pinned DXC through `setup-dxc`, so shader laws that compile or reflect bytecode run here rather than skipping.
+This consumer does not evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
 producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
