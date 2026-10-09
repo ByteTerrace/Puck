@@ -451,9 +451,8 @@ public sealed partial record ProbeKindManifest(
 
     private static string Format(double value) => value.ToString(provider: CultureInfo.InvariantCulture);
 }
-
 /// <summary>The source-generated (AOT/trim-safe) serialization context for <see cref="ProbeKindManifest"/>.</summary>
 [JsonSerializable(typeof(ProbeKindManifest))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
-internal sealed partial class ProbeKindManifestJsonContext : JsonSerializerContext {
+public sealed partial class ProbeKindManifestJsonContext : JsonSerializerContext {
 }

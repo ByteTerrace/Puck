@@ -681,7 +681,7 @@
         "Flavor": "FusedSubstrate",
         "Subject": "FixedRigidTransform.Exp\u0027s REAL part",
         "Against": "FixedQuaternion.Exp of the same bivector",
-        "Shared": "FixedVectorMath.TryNormalizeWithMagnitude and FixedQ4816.SinCosRaw \u2014 the IDENTICAL internal members on both sides \u2014 plus the (\u00FB\u00B7sin, cos) assembly, which is written out twice (FixedRigidTransform.cs:122-142,157-161 against FixedQuaternion.cs:166-185). The two must agree BIT-FOR-BIT at every screw-ladder row, which is what makes the duplication safe rather than merely present. The hypercomplex campaign\u0027s quaternion.exp-log-seam is where that shared block is pinned against a hand-derived closed form",
+        "Shared": "FixedVectorMath.TryNormalizeWithMagnitude and FixedQ4816.SinCosRaw \u2014 the IDENTICAL members on both sides \u2014 plus the (\u00FB\u00B7sin, cos) assembly, which is written out twice (FixedRigidTransform.cs:122-142,157-161 against FixedQuaternion.cs:166-185). The two must agree BIT-FOR-BIT at every screw-ladder row, which is what makes the duplication safe rather than merely present. The hypercomplex campaign\u0027s quaternion.exp-log-seam is where that shared block is pinned against a hand-derived closed form",
         "Citation": "",
         "Absolute": ""
       },
@@ -691,7 +691,7 @@
         "Subject": "Exp\u0027s and Log\u0027s transcendental and divisional machinery",
         "Against": "FixedQ4816.SinCosRaw, FixedQ4816.Atan2, FixedQ4816.op_Division (Exp\u0027s quotients \u2014 Log\u0027s lanes now close through FusedArithmetic.DivideProductSum instead) and FixedVectorMath.TryNormalizeWithMagnitude, plus this file\u0027s own private DotOverAngle, SinOverAngleQ62 and RoundLogLane quotients",
         "Shared": "the entire sine/cosine, arctangent, normalization and 128-by-64 division computation",
-        "Citation": "All four now carry a law case, so nothing here is OWED: FixedQ4816.Atan2 stands against Oracles.EncloseAtan2 in scalar.atan2-vs-series, FixedQ4816.op_Division against Oracles.RoundDyadicRatio in scalar.divide-vs-oracle, FixedQ4816.SinCosRaw against an angle-addition carriage of Oracles.EncloseSinCos over the whole unsigned width in quaternion.sincos-raw-full-unsigned-width, and FixedVectorMath.TryNormalizeWithMagnitude against Oracles.NearestIntegerRoot and Oracles.IdealUnitVector in vector.normalize-with-magnitude-full-unsigned-width. The last two are INTERNAL, so the coverage manifest cannot name them and only these citations record that they are pinned at all. DotOverAngle and SinOverAngleQ62 are PRIVATE to this file and are pinned only through the two ladders above, which is stated here rather than implied",
+        "Citation": "All four now carry a law case, so nothing here is OWED: FixedQ4816.Atan2 stands against Oracles.EncloseAtan2 in scalar.atan2-vs-series, FixedQ4816.op_Division against Oracles.RoundDyadicRatio in scalar.divide-vs-oracle, FixedQ4816.SinCosRaw against an angle-addition carriage of Oracles.EncloseSinCos over the whole unsigned width in quaternion.sincos-raw-full-unsigned-width, and FixedVectorMath.TryNormalizeWithMagnitude against Oracles.NearestIntegerRoot and Oracles.IdealUnitVector in vector.normalize-with-magnitude-full-unsigned-width. The coverage manifest credits the last two to those cases as well. DotOverAngle and SinOverAngleQ62 are PRIVATE to this file and are pinned only through the two ladders above, which is stated here rather than implied",
         "Absolute": ""
       }
     ]

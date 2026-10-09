@@ -136,7 +136,7 @@ public sealed record SignedAttestation {
     /// <param name="payloadBytes">The payload those bytes encode.</param>
     /// <param name="signature">The signature over <paramref name="signedPortion"/>.</param>
     /// <param name="signedPortion">The exact bytes the signature covers.</param>
-    internal static SignedAttestation FromSignedPortion(
+    public static SignedAttestation FromSignedPortion(
         AttestationHeader header,
         AttestationPayloadKind payloadKind,
         ReadOnlyMemory<byte> payloadBytes,
@@ -150,7 +150,6 @@ public sealed record SignedAttestation {
             signature: signature,
             signedPortion: signedPortion
         );
-
     /// <summary>
     /// Builds an attestation by encoding the given fields under <paramref name="codec"/> — the wire form a
     /// party holding these values would actually transmit. This is how a modified attestation is constructed

@@ -23,7 +23,7 @@ namespace Puck.Attestation;
 /// <para>One binding is refused as a broken chain, three as an unbounded one. Two is a number this verifier
 /// hard-codes, not an engine it runs — there is no path discovery and no cross-certification.</para>
 /// </remarks>
-internal static class AttestationVerifier {
+public static class AttestationVerifier {
     /// <summary>
     /// The policy tail both depths share: window, audience, and sequence. Audience and sequence are
     /// independent rather than exclusive — the doc's table pairs them because portability and statelessness
@@ -728,7 +728,7 @@ internal static class AttestationVerifier {
     /// </param>
     /// <param name="expectedPurpose">The purpose this call expects the claim to declare. Must be non-blank, and must not be <see cref="AttestationPurposes.KeyBinding"/> — that purpose is refused unconditionally, which is what stops a binding being replayed as a claim.</param>
     /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="AttestationHeader.Audience"/>.</param>
-    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> only when the adversarial tests exercise this internal verifier directly.</param>
+    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> when a caller, such as the adversarial tests, drives this verifier directly rather than through the facade.</param>
     public static AttestationVerifyResult VerifyChain(
         IAttestationCodec codec,
         SignedAttestation claim,

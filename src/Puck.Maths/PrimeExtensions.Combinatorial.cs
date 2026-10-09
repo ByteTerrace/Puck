@@ -259,20 +259,21 @@ public static partial class PrimeExtensions {
         }
     }
 
-    internal readonly struct CombinatorialWheelStep {
-        internal readonly byte Bit;
-        internal readonly byte Gap;
-        internal readonly byte Carry;
+    public readonly struct CombinatorialWheelStep {
+        public readonly byte Bit;
+        public readonly byte Gap;
+        public readonly byte Carry;
 
-        internal CombinatorialWheelStep(byte bit, byte gap, byte carry) {
+        public CombinatorialWheelStep(byte bit, byte gap, byte carry) {
             Bit = bit;
             Gap = gap;
             Carry = carry;
         }
     }
-    internal static class CombinatorialTables {
-        internal static readonly ulong[] PrefixMasks = CreatePrefixMasks();
-        internal static readonly CombinatorialWheelStep[] Steps = CreateSteps();
+    public static class CombinatorialTables {
+        public static readonly ulong[] PrefixMasks = CreatePrefixMasks();
+        public static readonly CombinatorialWheelStep[] Steps = CreateSteps();
+
         internal static readonly ulong[] TinyWords = CreateTinyWords();
         internal static readonly uint[] TinyPrefix = CreateTinyPrefix();
 
@@ -337,7 +338,7 @@ public static partial class PrimeExtensions {
     // sieve, crossing off p starts at p, not p*p: phi excludes the sieving primes too.
     // Block counters are decremented only when a bit was set. Within each prime, leaf
     // quotients are increasing, so a prefix cursor reuses both block and word prefixes.
-    internal sealed class CombinatorialLeafSieve {
+    public sealed class CombinatorialLeafSieve {
         private ulong[] m_words = [];
         private uint[] m_counters = [];
         private uint[] m_next = [];
@@ -346,9 +347,9 @@ public static partial class PrimeExtensions {
         private int m_counterShift;
         private uint m_total;
 
-        internal uint TotalCount => m_total;
+        public uint TotalCount => m_total;
 
-        internal void Reset(uint width, uint[] primes, int primeCount) {
+        public void Reset(uint width, uint[] primes, int primeCount) {
             var words = ((int)(width / PrimeWheel30.WordIntegers));
 
             if (m_words.Length < words) {
@@ -367,7 +368,7 @@ public static partial class PrimeExtensions {
                 m_phase[index] = ((byte)(channel * PrimeWheel30.ChannelCount));
             }
         }
-        internal void Initialize(ulong low, uint width) {
+        public void Initialize(ulong low, uint width) {
             m_wordLength = ((int)(((width + PrimeWheel30.WordIntegers) - 1U) / PrimeWheel30.WordIntegers));
 
             var bytes = MemoryMarshal.AsBytes(span: m_words.AsSpan(length: m_wordLength, start: 0));
@@ -400,10 +401,10 @@ public static partial class PrimeExtensions {
             }
         }
         // Starts nondecreasing prefix queries over the current bitmap; the cursor is stale after the next crossing.
-        internal CombinatorialPrefixCursor StartPrefix() =>
+        public CombinatorialPrefixCursor StartPrefix() =>
             new(counters: m_counters, shift: m_counterShift, wordLength: m_wordLength, words: m_words);
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal void CrossOff(uint prime, int index) {
+        public void CrossOff(uint prime, int index) {
             var state = m_phase[index];
             var cursor = m_next[index];
             var phase = state & (PrimeWheel30.ChannelCount - 1);
@@ -551,7 +552,7 @@ public static partial class PrimeExtensions {
     }
     // Reads prefix counts of one leaf-sieve bitmap for nondecreasing offsets below its width. The hard-leaf loop keeps
     // one cursor per prime as a local; a batch copies it into registers and writes it back.
-    internal ref struct CombinatorialPrefixCursor {
+    public ref struct CombinatorialPrefixCursor {
         private readonly ref ulong m_words;
         private readonly ref uint m_counters;
         private readonly ref ulong m_masks;
@@ -563,7 +564,7 @@ public static partial class PrimeExtensions {
         private uint m_counterSum;
         private uint m_wordSum;
 
-        internal CombinatorialPrefixCursor(ulong[] words, uint[] counters, int shift, int wordLength) {
+        public CombinatorialPrefixCursor(ulong[] words, uint[] counters, int shift, int wordLength) {
             m_words = ref MemoryMarshal.GetArrayDataReference(array: words);
             m_counters = ref MemoryMarshal.GetArrayDataReference(array: counters);
             m_masks = ref MemoryMarshal.GetArrayDataReference(array: CombinatorialTables.PrefixMasks);
@@ -572,7 +573,7 @@ public static partial class PrimeExtensions {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal uint Count(uint offset) {
+        public uint Count(uint offset) {
             var targetWord = ((int)(offset / PrimeWheel30.WordIntegers));
             var targetCounter = (targetWord >> m_shift);
 

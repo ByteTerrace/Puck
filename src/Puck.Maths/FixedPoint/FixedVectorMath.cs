@@ -5,7 +5,7 @@ using System.Numerics;
 namespace Puck.Maths;
 
 /// <summary>Full-range helpers shared by fixed-point direction and norm operations.</summary>
-internal static class FixedVectorMath {
+public static class FixedVectorMath {
     private const int DirectionLeadingBit = 45;
 
     internal readonly struct NormalizationScale(ulong denominator, int numeratorShift) {
@@ -105,7 +105,8 @@ internal static class FixedVectorMath {
         )
         );
     }
-    internal static (long X, long Y, long Z) Normalize(long x, long y, long z) {
+
+    public static (long X, long Y, long Z) Normalize(long x, long y, long z) {
         var max = Math.Max(
             val1: RawMagnitude(value: x),
             val2: Math.Max(
@@ -149,6 +150,7 @@ internal static class FixedVectorMath {
         )
         );
     }
+
     internal static (long X, long Y, long Z, long W) Normalize(long x, long y, long z, long w) {
         var max = Math.Max(
             val1: Math.Max(
@@ -204,8 +206,10 @@ internal static class FixedVectorMath {
         )
         );
     }
-    internal static ulong RawMagnitude(long value) =>
+
+    public static ulong RawMagnitude(long value) =>
         FusedArithmetic.RawMagnitude(value: value);
+
     /// <summary>The exact separation between two raw carrier readings, independent of ordinary signed subtraction: the
     /// true difference between two <see cref="long"/> values always fits the unsigned 64-bit carrier (its magnitude is
     /// at most <c>2⁶⁴ − 1</c>, reached exactly at the opposing carrier extremes), so this never wraps regardless of how
@@ -366,7 +370,8 @@ internal static class FixedVectorMath {
                 ? 1
                 : 0));
     }
-    internal static bool TryMagnitude(long x, long y, out FixedQ4816 result) {
+
+    public static bool TryMagnitude(long x, long y, out FixedQ4816 result) {
         var squaredSum = (Square(value: x) + Square(value: y));
 
         return TryRoot(
@@ -374,7 +379,7 @@ internal static class FixedVectorMath {
             out result
         );
     }
-    internal static bool TryMagnitude(long x, long y, long z, out FixedQ4816 result) {
+    public static bool TryMagnitude(long x, long y, long z, out FixedQ4816 result) {
         var squaredSum = ((Square(value: x) + Square(value: y)) + Square(value: z));
 
         return TryRoot(
@@ -382,7 +387,7 @@ internal static class FixedVectorMath {
             out result
         );
     }
-    internal static bool TryMagnitude(long x, long y, long z, long w, out FixedQ4816 result) {
+    public static bool TryMagnitude(long x, long y, long z, long w, out FixedQ4816 result) {
         var squaredSum = ((Square(value: x) + Square(value: y)) + Square(value: z));
         var fourthSquare = Square(value: w);
         var completeSum = (squaredSum + fourthSquare);
@@ -402,7 +407,7 @@ internal static class FixedVectorMath {
     /// <summary>Normalizes a three-component direction and produces its raw Q16 magnitude in the same pass. The
     /// magnitude spans the full unsigned 64-bit range (three squared longs always root within it), so callers can
     /// phase-reduce norms that exceed the signed Q48.16 carrier instead of saturating.</summary>
-    internal static bool TryNormalizeWithMagnitude(
+    public static bool TryNormalizeWithMagnitude(
         long x,
         long y,
         long z,
@@ -478,6 +483,7 @@ internal static class FixedVectorMath {
         rawMagnitude = magnitude;
         return true;
     }
+
     internal static bool TrySquaredMagnitude(long x, long y, out FixedQ4816 result) =>
         TryRoundSquaredSum(
             squaredSum: (Square(value: x) + Square(value: y)),

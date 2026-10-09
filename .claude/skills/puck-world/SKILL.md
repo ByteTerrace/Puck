@@ -513,11 +513,12 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   are proved in `tests/Puck.World.Server.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
   behind — its history is in git, and its contract is validated by running
-  the app until a law or canary owns it. Ask before creating new persisted
-  runner/battery artifacts or other permanent verification infrastructure, and
-  do not repair a rotted fixture — quarantine it and move on (validation currency
-  is run-the-app, owner-in-the-loop). A retired runner is deleted with its
-  directory, never kept alive to announce that it no longer runs.
+  the app until a law or canary owns it. New verification needs no one's
+  permission: it lives as laws, canaries or `puck` verbs under the gate.
+  Standalone runners, record directories and `--validate-*` flags stay banned
+  (`AGENTS.md` rule 3). Do not repair a rotted fixture — quarantine it and move
+  on (validation currency is running the app). A retired runner is deleted with
+  its directory, never kept alive to announce that it no longer runs.
 
 A minimal smoke session:
 

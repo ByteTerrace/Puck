@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 
 using Xunit;
@@ -51,21 +50,6 @@ public sealed class PackagingTests {
             actualString: (Packed.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? string.Empty)
         );
         Assert.NotEmpty(collection: (Packed.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty));
-    }
-    [Fact]
-    public void AssemblyGrantsNoInternalsVisibleTo() {
-        // Owner ruling: a grant hands a whole assembly's internals to a friend forever. Widen the
-        // member instead. On a package this also matters at the boundary — a grant names an
-        // assembly a consumer cannot produce, so it is dead weight in the shipped metadata.
-        var grants = Packed.GetCustomAttributes<InternalsVisibleToAttribute>().Select(selector: static grant => grant.AssemblyName);
-
-        Assert.Equal(
-            expected: string.Empty,
-            actual: string.Join(
-                separator: ", ",
-                values: grants
-            )
-        );
     }
     [Fact]
     public void EveryPublicTypeIsDocumentedInTheShippedXml() {

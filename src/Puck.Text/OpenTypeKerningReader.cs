@@ -2,7 +2,8 @@ namespace Puck.Text;
 
 /// <summary>One flattened kerning adjustment: the X-advance change, in font units, applied between the ordered
 /// glyph pair.</summary>
-internal readonly record struct OpenTypeKerningPair(ushort Left, ushort Right, int XAdvance);
+public readonly record struct OpenTypeKerningPair(ushort Left, ushort Right, int XAdvance);
+
 /// <summary>
 /// Flattens a font's pair kerning for a bounded glyph set: GPOS <c>kern</c>-feature pair positioning (PairPos
 /// formats 1 and 2, reached directly or through extension lookups) when it yields any pairs, otherwise the legacy

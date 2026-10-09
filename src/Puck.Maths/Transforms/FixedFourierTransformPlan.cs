@@ -65,9 +65,8 @@ public sealed class FixedFourierTransformPlan {
         );
     }
 
-    internal ReadOnlySpan<FixedComplex> ForwardTwiddles => m_forwardTwiddles;
-    internal ReadOnlySpan<FixedComplex> InverseTwiddles => m_inverseTwiddles;
-
+    public ReadOnlySpan<FixedComplex> ForwardTwiddles => m_forwardTwiddles;
+    public ReadOnlySpan<FixedComplex> InverseTwiddles => m_inverseTwiddles;
     /// <summary>Gets the transform length this plan was built for.</summary>
     public int Length { get; }
 }

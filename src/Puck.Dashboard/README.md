@@ -158,6 +158,15 @@ the same roles as the syntax colors, so both color schemes follow the brand.
 React Compiler runs over both applications' sources, so components do not add
 `useMemo` or `useCallback` for speed.
 
+Nothing moves under the pointer. Content that loads after the first paint
+reserves its final space (a skeleton at its final size, a fixed-height region,
+`scrollbar-gutter: stable`) rather than pushing its neighbours aside. A good
+Cumulative Layout Shift score is not enough, because CLS ignores shifts within
+500 ms of input, which are exactly the tab-switch, expand and load-more jumps
+that cause misclicks. Check a UI change by recording every `layout-shift` entry
+with its sources while exercising real interactions, and treat any shift near
+the pointer as a defect.
+
 ## Federation
 
 The host and portal are one application in two builds, joined by module

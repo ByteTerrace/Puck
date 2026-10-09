@@ -508,7 +508,11 @@
     "Tier": "Default",
     "Members": [
       { "Type": "Puck.Maths.FixedQ3232", "Name": "MaxValue" },
-      { "Type": "Puck.Maths.FixedQ3232", "Name": "MinValue" }
+      { "Type": "Puck.Maths.FixedQ3232", "Name": "MinValue" },
+      {
+        "Type": "Puck.Maths.FixedPointConvert",
+        "Name": "ScaleDecimalWide"
+      }
     ],
     "Legs": [
       {

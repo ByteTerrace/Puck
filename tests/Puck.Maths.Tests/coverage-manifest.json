@@ -464,6 +464,110 @@
     },
     {
       "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldKernels.IsRegionTierSupported(Puck.Maths.BinaryFieldRegionTier)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldKernels.MultiplyAccumulateRegionAffine(System.Span<System.Byte>,System.ReadOnlySpan<System.Byte>,System.Byte,System.Boolean,System.Int32,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.narrow-degree-regions-vs-oracle",
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldKernels.MultiplyAccumulateRegionScalar(System.Span<T>,System.ReadOnlySpan<T>,T,System.Boolean,System.Int32,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldKernels.MultiplyAccumulateRegionSplit(System.Span<System.Byte>,System.ReadOnlySpan<System.Byte>,System.Byte,System.Boolean,System.Int32,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldKernels.MultiplyAccumulateRegionWideAffine(System.Span<System.UInt16>,System.ReadOnlySpan<System.UInt16>,System.UInt16,System.Boolean,System.Int32,System.UInt16)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Affine128",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Affine256",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Affine512",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Scalar",
+      "Reason": "The label of the always-available reference rung. The rung laws reach that rung by calling its kernel by name (BinaryFieldKernels.MultiplyAccumulateRegionScalar, SignedByteVectorFunctions.DotScalar) and credit the kernel, which binary-field.region-tiers-vs-scalar-rung, binary-field.narrow-degree-regions-vs-oracle, signed-byte-vectors.dot-vs-oracle and signed-byte-vectors.dot-tiers-vs-scalar-rung gate. No dispatch selects a rung by passing this label, and each support predicate answers true for it unconditionally, so nothing a law could observe turns on it.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Split128",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Split256",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.BinaryFieldRegionTier.Split512",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.BinaryFieldRegionTier.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
         "binary-field.construction-and-refusals",
         "binary-field.irreducibility-vs-trial-division",
         "binary-field.multiplicative-group-vs-oracle",
@@ -5545,6 +5649,20 @@
     },
     {
       "CoveredBy": [
+        "scalar.trigonometry-twiddles"
+      ],
+      "Id": "Puck.Maths.FixedCosineTransformPlan.ForwardTwiddles",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-twiddles"
+      ],
+      "Id": "Puck.Maths.FixedCosineTransformPlan.InverseTwiddles",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "dct.constant-and-impulse-exact"
       ],
       "Id": "Puck.Maths.FixedCosineTransformPlan.Length",
@@ -5796,6 +5914,20 @@
     },
     {
       "CoveredBy": [
+        "scalar.trigonometry-twiddles"
+      ],
+      "Id": "Puck.Maths.FixedFourierTransformPlan.ForwardTwiddles",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-twiddles"
+      ],
+      "Id": "Puck.Maths.FixedFourierTransformPlan.InverseTwiddles",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "fft.impulse-dc-nyquist-exact"
       ],
       "Id": "Puck.Maths.FixedFourierTransformPlan.Length",
@@ -6041,6 +6173,61 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart..ctor(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64)",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.CenterX",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.CenterY",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.CenterZ",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Ixx",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Ixy",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Ixz",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Iyy",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Iyz",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Izz",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.CompoundPart.Mass",
+      "Reason": "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.",
+      "State": "waived"
+    },
+    {
       "CoveredBy": [
         "mass-properties.fraction-bit-count-bound"
       ],
@@ -6056,9 +6243,44 @@
     },
     {
       "CoveredBy": [
+        "mass-properties.volumes-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TryBoxVolume(System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "mass-properties.capsule-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedMassProperties.TryCapsuleBody(System.Int64,System.Int32,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mass-properties.volumes-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TryCapsuleVolume(System.Int64,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mass-properties.compound-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TryCompound(System.ReadOnlySpan<Puck.Maths.FixedMassProperties.CompoundPart>,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mass-properties.cylinder-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TryCylinderBody(System.Int64,System.Int32,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mass-properties.volumes-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TryCylinderVolume(System.Int64,System.Int64,System.Int32,System.Int32,System.Int64&)",
       "State": "covered"
     },
     {
@@ -6080,6 +6302,13 @@
         "mass-properties.sphere-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedMassProperties.TrySphereBody(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mass-properties.volumes-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedMassProperties.TrySphereVolume(System.Int64,System.Int32,System.Int32,System.Int64&)",
       "State": "covered"
     },
     {
@@ -6204,6 +6433,23 @@
         "presented.zeta-limits-refuse"
       ],
       "Id": "Puck.Maths.FixedMaterial.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.scale-decimal-wide-reaches-canonical-core",
+        "q1648.decimal-conversion-modes",
+        "q3232.decimal-conversion-modes"
+      ],
+      "Id": "Puck.Maths.FixedPointConvert.ScaleDecimalWide(System.Decimal,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.round-rational-scales-ties-and-refuses",
+        "dynamics.guard-scale-ties-vs-half-up"
+      ],
+      "Id": "Puck.Maths.FixedPointRounding.RoundRational(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Int32)",
       "State": "covered"
     },
     {
@@ -7668,6 +7914,13 @@
     },
     {
       "CoveredBy": [
+        "scalar.atan2-vs-series"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Atan2HalfPiQ61",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "scalar.integral-parts-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedQ4816.Ceiling(Puck.Maths.FixedQ4816)",
@@ -7709,6 +7962,20 @@
         "scalar.trigonometry-seams"
       ],
       "Id": "Puck.Maths.FixedQ4816.Cos(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.CosPolyC1Q60",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.CosPolyC2Q60",
       "State": "covered"
     },
     {
@@ -8110,12 +8377,77 @@
     },
     {
       "CoveredBy": [
+        "scalar.trigonometry-seams"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosCore(System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-seams"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosHalfAngle(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosInvTwoPiQ96",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-seams"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosQ32(System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "quaternion.sincos-raw-full-unsigned-width",
+        "quaternion.sincos-raw-width-sweep",
+        "scalar.trigonometry-seams"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosRaw(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosTableQ60",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "scalar.trigonometry-constants",
         "scalar.trigonometry-seams",
         "scalar.trigonometry-turns",
         "scalar.trigonometry-turns-deep"
       ],
       "Id": "Puck.Maths.FixedQ4816.SinCosTurns(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinCosTwoPiQ60",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinPolyC1Q60",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "scalar.trigonometry-constants"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.SinPolyC2Q60",
       "State": "covered"
     },
     {
@@ -9169,6 +9501,13 @@
     },
     {
       "CoveredBy": [
+        "symmetric-solve.lossless-boundary-is-exact"
+      ],
+      "Id": "Puck.Maths.FixedSymmetricSolve.Symmetric2TargetLeadingBit",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "symmetric-solve.apply2-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedSymmetricSolve.TryApplySymmetric2(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&)",
@@ -9187,6 +9526,44 @@
         "symmetric-solve.invert2-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedSymmetricSolve.TryInvertSymmetric2(System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "symmetric-solve.invert-large-magnitude-envelope-refuses",
+        "symmetric-solve.invert3-residual-within-envelope",
+        "symmetric-solve.invert3-vs-bareiss",
+        "symmetric-solve.invert3-vs-oracle",
+        "symmetric-solve.singular-matrices-refuse"
+      ],
+      "Id": "Puck.Maths.FixedSymmetricSolve.TryInvertSymmetric3(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "symmetric-solve.lossless-boundary-is-exact",
+        "symmetric-solve.lossy-rank-one-singular-refuses",
+        "symmetric-solve.refusal-leaves-no-stale-output",
+        "symmetric-solve.singular-matrices-refuse",
+        "symmetric-solve.solve2-residual-within-envelope",
+        "symmetric-solve.solve2-vs-bareiss",
+        "symmetric-solve.solve2-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedSymmetricSolve.TrySolveSymmetric2(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "symmetric-solve.invert-large-magnitude-envelope-refuses",
+        "symmetric-solve.singular-matrices-refuse",
+        "symmetric-solve.solve3-all-cofactors-exact-value",
+        "symmetric-solve.solve3-extreme-magnitude-agrees",
+        "symmetric-solve.solve3-non-diagonal-exact-value",
+        "symmetric-solve.solve3-residual-within-envelope",
+        "symmetric-solve.solve3-vs-bareiss",
+        "symmetric-solve.solve3-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedSymmetricSolve.TrySolveSymmetric3(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
       "State": "covered"
     },
     {
@@ -9819,6 +10196,55 @@
     },
     {
       "CoveredBy": [
+        "vector.normalize-vs-ideal-and-staged"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.Normalize(System.Int64,System.Int64,System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.raw-magnitude-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.RawMagnitude(System.Int64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "complex.magnitude-vs-oracle",
+        "quaternion.norm-vs-oracle",
+        "vector.norm-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.TryMagnitude(System.Int64,System.Int64,Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "complex.magnitude-vs-oracle",
+        "quaternion.norm-vs-oracle",
+        "vector.norm-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.TryMagnitude(System.Int64,System.Int64,System.Int64,Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "complex.magnitude-vs-oracle",
+        "quaternion.norm-vs-oracle",
+        "vector.norm-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.TryMagnitude(System.Int64,System.Int64,System.Int64,System.Int64,Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.normalize-ideal-bound-full-width-sweep",
+        "vector.normalize-with-magnitude-full-unsigned-width"
+      ],
+      "Id": "Puck.Maths.FixedVectorMath.TryNormalizeWithMagnitude(System.Int64,System.Int64,System.Int64,System.Int64&,System.Int64&,System.Int64&,System.UInt64&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.fnv1a-published-vector"
       ],
       "Id": "Puck.Maths.Fnv1aHash.Add(System.Byte)",
@@ -9980,6 +10406,22 @@
         "smoke.presented-functor-twin"
       ],
       "Id": "Puck.Maths.FunctorObstruction<TValue>.RuleIndex",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "mixed-scale.extreme-scale-counts-are-congruent",
+        "mixed-scale.product-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FusedArithmetic.MixedScaleProduct(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.raw-magnitude-vs-big-integer",
+        "scalar.text-round-trip"
+      ],
+      "Id": "Puck.Maths.FusedArithmetic.RawMagnitude(System.Int64)",
       "State": "covered"
     },
     {
@@ -11387,6 +11829,106 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.AllBitsSet",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.And(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.AndNot(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Broadcast(System.Byte)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Broadcast(System.UInt16)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Broadcast(System.UInt64)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.ByteCount",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.GaloisFieldAffineTransform(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.GreaterThanInt16Mask(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Load(System.Byte&,System.UIntPtr)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Load(System.UInt16&,System.UIntPtr)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Or(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Replicate(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.ShiftRightLogicalUInt16ByNibble(TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.ShuffleWithinLanes(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Store(TBytes,System.Byte&,System.UIntPtr)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Store(TBytes,System.UInt16&,System.UIntPtr)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.SwapUInt16Bytes(TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Xor(TBytes,TBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IByteVectorLanes<TBytes>.Zero",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
       "Id": "Puck.Maths.ICertifiedSweepQuery.TryCertifiedSweep(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,System.Int32,Puck.Maths.FixedQ4816,Puck.Maths.CertifiedSweep&)",
       "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
       "State": "waived"
@@ -11561,6 +12103,46 @@
       ],
       "Id": "Puck.Maths.IMeetSemilattice<TSelf>.Top",
       "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.IPrimeCandidateDecision.IsPrimeCandidate(System.UInt64)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Add(TInts,TInts)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.ByteCount",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Load(System.SByte&,System.UIntPtr)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Multiply(TShorts,TShorts)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Sum(TInts)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Widen(TShorts)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.ISignedByteWideningLanes<TSignedBytes,TShorts,TInts>.Widen(TSignedBytes)",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
     },
     {
       "CoveredBy": [
@@ -13565,6 +14147,20 @@
         "ntt.round-trip-exact"
       ],
       "Id": "Puck.Maths.NumberTheoreticTransformPlan.Create(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "ntt.convolution-vs-oracle"
+      ],
+      "Id": "Puck.Maths.NumberTheoreticTransformPlan.ForwardTwiddles",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "ntt.convolution-vs-oracle"
+      ],
+      "Id": "Puck.Maths.NumberTheoreticTransformPlan.InverseTwiddles",
       "State": "covered"
     },
     {
@@ -17199,6 +17795,268 @@
     },
     {
       "CoveredBy": [
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountRoute.Checkpoint",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeCountRoute.CheckpointInterval",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.ulong-combinatorial-checkpoint-interval",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountRoute.Gourdon",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation"
+      ],
+      "Id": "Puck.Maths.PrimeCountRoute.Narrow32",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountRoute.Quotient64",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeCountRoute.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Bound",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CachedQuotientDivisions",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CheckpointBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CheckpointSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.CheckpointWindowedSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Cutoff",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.EasyLeafBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.EasyLeafSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafFrontier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.LeafSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.OrdinaryFactorCoordinates",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-combinatorial-checkpoint-interval",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.Route",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardFrontier",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeForwardSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeReverseBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SemiprimeReverseWindows",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.SpecialFactorCoordinates",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.TableBuilt",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeCountWork.TableCapacity",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results"
+      ],
+      "Id": "Puck.Maths.PrimeCountWorkBuilder..ctor(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.CacheSegmentBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.ClearMasks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
+        "deep.prime-exploration-wide-native-counts",
+        "deep.prime-exploration-windowed-final-window",
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
+        "prime-exploration.wide-sieve-vs-integer-windows",
+        "prime-exploration.windowed-sieve-vs-integer-windows"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveMode,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.prime-exploration-wide-final-window",
         "deep.prime-exploration-wide-native-counts",
         "deep.prime-exploration-windowed-final-window",
@@ -17212,6 +18070,29 @@
         "prime-exploration.windowed-sieve-vs-integer-windows"
       ],
       "Id": "Puck.Maths.PrimeExploration.Count(System.UInt64,System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-semiprime-count-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.CountSemiprimes(System.UInt64,System.UInt32,System.Threading.CancellationToken,Puck.Maths.PrimeCountWorkBuilder)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-exploration-wide-final-window",
+        "deep.prime-exploration-windowed-final-window",
+        "prime-exploration.enumeration-refusals",
+        "prime-exploration.enumeration-vs-sieve",
+        "prime-exploration.packets-vs-integer-sieve",
+        "prime-exploration.patterns-vs-integer-sieve",
+        "prime-exploration.presieve-proof-boundary",
+        "prime-exploration.segment-cancellation",
+        "prime-exploration.wide-sieve-vs-integer-windows",
+        "prime-exploration.windowed-sieve-vs-integer-windows"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.Enumerate(System.UInt64,System.UInt64,System.Action<System.UInt64>,System.Int32,Puck.Maths.PrimeSieveMode,System.Threading.CancellationToken)",
       "State": "covered"
     },
     {
@@ -17232,6 +18113,171 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.presieve-jacobsthal-run-bound",
+        "prime-exploration.presieve-proof-boundary"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.FilterSmallPrimes(System.Span<System.Byte>,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeExploration.IPacketResidue.Masks",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.PrimeExploration.IPacketResidue.Residue",
+      "Reason": "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue1.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue1.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue11.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue11.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue13.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue13.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue17.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue17.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue19.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue19.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue23.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue23.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue29.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue29.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue7.Masks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PacketResidue7.Residue",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.presieve-jacobsthal-run-bound"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.PreSievePrimeLimit",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.ResolveMode(System.UInt64,System.UInt64,Puck.Maths.PrimeSieveMode)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.ResolveSegmentBytes(System.UInt64,System.UInt64,System.Int32,Puck.Maths.PrimeSieveMode)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.presieve-jacobsthal-run-bound"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.SmallPrimeGroups",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.presieve-jacobsthal-run-bound"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.SmallPrimePatterns.Periods",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-selection.custom-decision-mapping",
         "prime-selection.narrow-route-vs-reference",
         "prime-selection.random-rank-and-budget",
@@ -17243,10 +18289,164 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.WheelUnitsThrough.Counts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve..ctor()",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve.CrossOff(System.UInt32,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve.Initialize(System.UInt64,System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve.Reset(System.UInt32,System.UInt32[],System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve.StartPrefix()",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialLeafSieve.TotalCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialPrefixCursor..ctor(System.UInt64[],System.UInt32[],System.Int32,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-leaf-sieve-vs-oracle"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialPrefixCursor.Count(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialTables.PrefixMasks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialTables.Steps",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialWheelStep..ctor(System.Byte,System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialWheelStep.Bit",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialWheelStep.Carry",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.CombinatorialWheelStep.Gap",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-quotient-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.DivideGourdonQuotients128(System.UInt64,System.ReadOnlySpan<System.UInt32>,System.Span<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-quotient-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.DivideGourdonQuotients256(System.UInt64,System.ReadOnlySpan<System.UInt32>,System.Span<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-quotient-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.DivideGourdonQuotients512(System.UInt64,System.ReadOnlySpan<System.UInt32>,System.Span<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-quotient-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.DivideGourdonQuotientsScalar(System.UInt64,System.ReadOnlySpan<System.UInt32>,System.Span<System.UInt64>,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.factorization-full-width-sweep",
         "core.prime-extensions-vs-trial-division"
       ],
       "Id": "Puck.Maths.PrimeExtensions.Factorize(System.UInt32,System.Span<System.UInt32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.FilterGourdonHardLeaves(System.ReadOnlySpan<System.UInt16>,System.Int32&,System.Int32,System.UInt32,System.Span<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.FilterGourdonHardLeavesScalar(System.ReadOnlySpan<System.UInt16>,System.Int32&,System.Int32,System.UInt32,System.Span<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-quotient-rungs"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.GourdonQuotientLimit",
       "State": "covered"
     },
     {
@@ -17287,6 +18487,13 @@
         "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExtensions.IsPrime(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.ulong-local-sieve-budget"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.LocalSieveBudget64(System.UInt64)",
       "State": "covered"
     },
     {
@@ -17357,6 +18564,36 @@
         "prime-selection.ulong-nth-vs-independent"
       ],
       "Id": "Puck.Maths.PrimeExtensions.PrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.ProfileNthPrime(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-combinatorial-checkpoint-interval",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.ProfilePrimeCountingFunction(System.UInt64,System.Threading.CancellationToken)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeExtensions.ResolveGourdonCutoff(System.UInt64)",
       "State": "covered"
     },
     {
@@ -17834,6 +19071,205 @@
     },
     {
       "CoveredBy": [
+        "prime-selection.table-ranks-vs-sieve"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.CountOddPrimesBelow(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.witness-set-boundary-factors-exactly"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.LeastWitnessFailure",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.selfridge-symbols-vs-reciprocity"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.SelfridgeSymbol(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-combinatorial-checkpoint-interval",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Counts",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.DirectPrimalityRequests",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.adaptive-checkpoint-boundaries",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.profile-snapshot-and-cancellation",
+        "prime-selection.ulong-combinatorial-checkpoint-interval",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Result",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.Route",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionBitmapBytes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionWindowedSegments",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16",
+        "prime-selection.profile-count-results",
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-combinatorial-count-1e14",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestProfile.SelectionWindows",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-selection-results",
+        "prime-selection.ulong-windowed-checkpoint-selection"
+      ],
+      "Id": "Puck.Maths.PrimeRequestRoute.CheckpointSelection",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-count-results",
+        "prime-selection.ulong-combinatorial-count-1e14"
+      ],
+      "Id": "Puck.Maths.PrimeRequestRoute.CountOnly",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-selection-ulong-windowed-rank-1e15",
+        "exhaustive.prime-selection-ulong-windowed-rank-1e16"
+      ],
+      "Id": "Puck.Maths.PrimeRequestRoute.CountedSelection",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestRoute.Narrow32",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.profile-selection-results"
+      ],
+      "Id": "Puck.Maths.PrimeRequestRoute.OutOfRange",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeRequestRoute.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Automatic",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Eratosthenes",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Presieve",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.automatic-policy-boundaries"
+      ],
+      "Id": "Puck.Maths.PrimeSieveMode.Windowed",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.PrimeSieveMode.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Carry(System.Int32,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-exploration.group-vs-residue-arithmetic"
       ],
       "Id": "Puck.Maths.PrimeWheel30.ChannelAtNumericIndex(System.Byte)",
@@ -17848,9 +19284,30 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Gap(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Gaps",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-exploration.group-vs-residue-arithmetic"
       ],
       "Id": "Puck.Maths.PrimeWheel30.Inverse(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Lift(System.Int32,System.Int32)",
       "State": "covered"
     },
     {
@@ -17862,9 +19319,23 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.Multiplier(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-exploration.group-vs-residue-arithmetic"
       ],
       "Id": "Puck.Maths.PrimeWheel30.Multiply(System.Byte,System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.NumericBit(System.Int32)",
       "State": "covered"
     },
     {
@@ -17905,6 +19376,20 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PrefixMask(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.PrefixMasks",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-exploration.group-vs-residue-arithmetic"
       ],
       "Id": "Puck.Maths.PrimeWheel30.Residue(System.Byte)",
@@ -17919,6 +19404,13 @@
     },
     {
       "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.TargetBit(System.Int32,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-exploration.group-vs-residue-arithmetic"
       ],
       "Id": "Puck.Maths.PrimeWheel30.TryChannel(System.Byte,System.Byte&)",
@@ -17929,6 +19421,13 @@
         "prime-exploration.wheel-tables-match-their-derivation"
       ],
       "Id": "Puck.Maths.PrimeWheel30.WordIntegers",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.wheel-tables-match-their-derivation"
+      ],
+      "Id": "Puck.Maths.PrimeWheel30.WordPrefixMask(System.Int32)",
       "State": "covered"
     },
     {
@@ -21747,6 +23246,140 @@
     },
     {
       "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64..ctor(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.baillie-composition"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Add(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.baillie-composition"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Add(System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Decode(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Encode(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Modulus",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.ModulusInverse",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Multiply(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.MultiplyHigh(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.NegativeOne",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.One",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow",
+        "prime-field.strong-round-vs-oracle"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Power(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.RadixResidue(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.pow-vs-modpow"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.RadixSquared",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Reduce(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceNarrow(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.baillie-composition",
+        "prime-field.lucas-vs-companion-matrix"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Subtract(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.baillie-composition",
+        "prime-field.lucas-vs-companion-matrix"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Subtract(System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "dynamics.create-constants-vs-oracle"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.Branch",
@@ -21881,6 +23514,21 @@
     {
       "Id": "Puck.Maths.SecondOrderDynamicsBranch.value__",
       "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderExactMath.ExpUnderflowExponent",
+      "Reason": "A working-precision budget inside the exact BigInteger evaluation SecondOrderDynamics.Compile runs (the guard fraction bit count, the exponential's range-reduction shift and its underflow floor): it states no value of its own, and any setting at or past what the Q32 propagator needs leaves every public entry bit-identical, so no law can pin THIS number without pinning the implementation. What the budget buys is gated at the public result: dynamics.step-vs-evaluate-close-agreement holds Compile against the independently built Evaluate path, and dynamics.guard-scale-public-divergence-search transcribes these constants to reach the exact roundings Compile performs.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderExactMath.GuardFractionBitCount",
+      "Reason": "A working-precision budget inside the exact BigInteger evaluation SecondOrderDynamics.Compile runs (the guard fraction bit count, the exponential's range-reduction shift and its underflow floor): it states no value of its own, and any setting at or past what the Q32 propagator needs leaves every public entry bit-identical, so no law can pin THIS number without pinning the implementation. What the budget buys is gated at the public result: dynamics.step-vs-evaluate-close-agreement holds Compile against the independently built Evaluate path, and dynamics.guard-scale-public-divergence-search transcribes these constants to reach the exact roundings Compile performs.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.SecondOrderExactMath.ResidualShift",
+      "Reason": "A working-precision budget inside the exact BigInteger evaluation SecondOrderDynamics.Compile runs (the guard fraction bit count, the exponential's range-reduction shift and its underflow floor): it states no value of its own, and any setting at or past what the Q32 propagator needs leaves every public entry bit-identical, so no law can pin THIS number without pinning the implementation. What the budget buys is gated at the public result: dynamics.step-vs-evaluate-close-agreement holds Compile against the independently built Evaluate path, and dynamics.guard-scale-public-divergence-search transcribes these constants to reach the exact roundings Compile performs.",
       "State": "waived"
     },
     {
@@ -22135,6 +23783,28 @@
     },
     {
       "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung",
+        "signed-byte-vectors.dot-vs-oracle"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.DotScalar(System.ReadOnlySpan<System.SByte>,System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.DotVector(System.ReadOnlySpan<System.SByte>,System.ReadOnlySpan<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorFunctions.IsDotTierSupported(Puck.Maths.SignedByteVectorTier)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "signed-byte-vectors.normalize-admits"
       ],
       "Id": "Puck.Maths.SignedByteVectorFunctions.IsUnitAdmissible(System.ReadOnlySpan<System.SByte>)",
@@ -22160,6 +23830,37 @@
       ],
       "Id": "Puck.Maths.SignedByteVectorFunctions.TryQuantizeUnit(System.ReadOnlySpan<System.Double>,System.Span<System.SByte>)",
       "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.SignedByteVectorTier.Scalar",
+      "Reason": "The label of the always-available reference rung. The rung laws reach that rung by calling its kernel by name (BinaryFieldKernels.MultiplyAccumulateRegionScalar, SignedByteVectorFunctions.DotScalar) and credit the kernel, which binary-field.region-tiers-vs-scalar-rung, binary-field.narrow-degree-regions-vs-oracle, signed-byte-vectors.dot-vs-oracle and signed-byte-vectors.dot-tiers-vs-scalar-rung gate. No dispatch selects a rung by passing this label, and each support predicate answers true for it unconditionally, so nothing a law could observe turns on it.",
+      "State": "waived"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorTier.Vector128",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorTier.Vector256",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.SignedByteVectorTier.Vector512",
+      "State": "covered"
+    },
+    {
+      "Id": "Puck.Maths.SignedByteVectorTier.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
     },
     {
       "CoveredBy": [
@@ -25194,6 +26895,690 @@
         "vector-functions.is-finite-vs-oracle"
       ],
       "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Add(System.Runtime.Intrinsics.Vector128<System.Int32>,System.Runtime.Intrinsics.Vector128<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.AllBitsSet",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.And(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.AndNot(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Broadcast(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Broadcast(System.UInt16)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Broadcast(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.ByteCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.GaloisFieldAffineTransform(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.GreaterThanInt16Mask(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Load(System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Load(System.SByte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Load(System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Multiply(System.Runtime.Intrinsics.Vector128<System.Int16>,System.Runtime.Intrinsics.Vector128<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Or(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Replicate(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.ShiftRightLogicalUInt16ByNibble(System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.ShuffleWithinLanes(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Store(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Store(System.Runtime.Intrinsics.Vector128<System.Byte>,System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Sum(System.Runtime.Intrinsics.Vector128<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.SwapUInt16Bytes(System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Widen(System.Runtime.Intrinsics.Vector128<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Widen(System.Runtime.Intrinsics.Vector128<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Xor(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes128.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Add(System.Runtime.Intrinsics.Vector256<System.Int32>,System.Runtime.Intrinsics.Vector256<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.AllBitsSet",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.And(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.AndNot(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Broadcast(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Broadcast(System.UInt16)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Broadcast(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.ByteCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.GaloisFieldAffineTransform(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.GreaterThanInt16Mask(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Load(System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Load(System.SByte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Load(System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Multiply(System.Runtime.Intrinsics.Vector256<System.Int16>,System.Runtime.Intrinsics.Vector256<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Or(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Replicate(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.ShiftRightLogicalUInt16ByNibble(System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.ShuffleWithinLanes(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Store(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Store(System.Runtime.Intrinsics.Vector256<System.Byte>,System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Sum(System.Runtime.Intrinsics.Vector256<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.SwapUInt16Bytes(System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Widen(System.Runtime.Intrinsics.Vector256<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Widen(System.Runtime.Intrinsics.Vector256<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Xor(System.Runtime.Intrinsics.Vector256<System.Byte>,System.Runtime.Intrinsics.Vector256<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes256.Zero",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Add(System.Runtime.Intrinsics.Vector512<System.Int32>,System.Runtime.Intrinsics.Vector512<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.AllBitsSet",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.And(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.AndNot(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Broadcast(System.Byte)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Broadcast(System.UInt16)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Broadcast(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.ByteCount",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.GaloisFieldAffineTransform(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-selection.gourdon-hard-leaf-filter-rungs"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.GreaterThanInt16Mask(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Load(System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Load(System.SByte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung",
+        "prime-selection.gourdon-hard-leaf-filter-rungs",
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Load(System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Multiply(System.Runtime.Intrinsics.Vector512<System.Int16>,System.Runtime.Intrinsics.Vector512<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Or(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Replicate(System.Runtime.Intrinsics.Vector128<System.Byte>,System.Runtime.Intrinsics.Vector128<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.ShiftRightLogicalUInt16ByNibble(System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.ShuffleWithinLanes(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Store(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Byte&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Store(System.Runtime.Intrinsics.Vector512<System.Byte>,System.UInt16&,System.UIntPtr)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Sum(System.Runtime.Intrinsics.Vector512<System.Int32>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.SwapUInt16Bytes(System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Widen(System.Runtime.Intrinsics.Vector512<System.Int16>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "signed-byte-vectors.dot-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Widen(System.Runtime.Intrinsics.Vector512<System.SByte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Xor(System.Runtime.Intrinsics.Vector512<System.Byte>,System.Runtime.Intrinsics.Vector512<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "binary-field.region-lengths-vs-scalar-rung",
+        "binary-field.region-tiers-vs-scalar-rung",
+        "binary-field.wide-region-tiers-vs-scalar-rung"
+      ],
+      "Id": "Puck.Maths.VectorLanes512.Zero",
       "State": "covered"
     },
     {

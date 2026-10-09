@@ -14,11 +14,11 @@ public static partial class PrimeExploration {
     // integers coprime to that primorial, never leaves more than 491 consecutive non-candidates: at most two consecutive
     // all-zero 64-bit words, and a candidate in any 17 consecutive wheel bytes. Restoring the primes themselves in the
     // first blocks only adds candidates.
-    internal const uint PreSievePrimeLimit = 163;
+    public const uint PreSievePrimeLimit = 163;
 
     // Pairing large primes with smaller ones keeps the combined periods compact. The grouping is inspired by
     // primesieve's PreSieve.cpp; every byte here is generated from divisibility, rather than copied upstream data.
-    internal static readonly (int First, int Second, int Third)[] SmallPrimeGroups = [
+    public static readonly (int First, int Second, int Third)[] SmallPrimeGroups = [
         (7, 23, 37), (11, 19, 31), (13, 17, 29), (41, 163, 1),
         (43, 157, 1), (47, 151, 1), (53, 149, 1), (59, 139, 1),
         (61, 137, 1), (67, 131, 1), (71, 127, 1), (73, 113, 1),
@@ -26,8 +26,8 @@ public static partial class PrimeExploration {
     ];
 
     // One period of each group's pattern, built on first use.
-    internal static class SmallPrimePatterns {
-        internal static readonly byte[][] Periods = CreateSmallPrimePatterns();
+    public static class SmallPrimePatterns {
+        public static readonly byte[][] Periods = CreateSmallPrimePatterns();
     }
 
     private static byte[][] CreateSmallPrimePatterns() {
@@ -57,7 +57,7 @@ public static partial class PrimeExploration {
         return patterns;
     }
 
-    internal static void FilterSmallPrimes(Span<byte> segment, ulong blockLow) {
+    public static void FilterSmallPrimes(Span<byte> segment, ulong blockLow) {
         var patterns = SmallPrimePatterns.Periods;
 
         for (var group = 0; (group < patterns.Length); group += 4) {

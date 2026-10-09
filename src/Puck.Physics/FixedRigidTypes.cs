@@ -19,9 +19,8 @@ public readonly record struct FixedRigidScales(int InverseMass, int InverseInert
         InverseMass: 40
     );
 }
-
 /// <summary>How the solver activates a contact whose current separation is still positive.</summary>
-internal enum FixedSpeculativeActivation {
+public enum FixedSpeculativeActivation {
     /// <summary>Current separation minus a conservatively rounded-UP bound on the closing travel this step.</summary>
     Conservative,
     /// <summary>Current separation alone — the sabotage that removes the predicted term entirely.</summary>
@@ -30,7 +29,6 @@ internal enum FixedSpeculativeActivation {
     /// prediction but drops its direction.</summary>
     NearestRounded,
 }
-
 /// <summary>
 /// The production rigid solver's authored controls. Mechanism-isolation switches used by its retained promotion
 /// battery remain internal and the public surface always selects the intended deterministic path.
@@ -75,18 +73,16 @@ public sealed class FixedRigidSolverOptions {
     public FixedQ4816 RecoverySpeed { get; init; } = FixedQ4816.FromInteger(value: 2L);
     /// <summary>Whether stored impulses are re-applied at the head of each substep.</summary>
     public bool WarmStart { get; init; } = true;
-
     /// <summary>Whether candidates are canonically ordered before they are associated into slots.</summary>
-    internal bool CanonicalOrder { get; init; } = true;
+    public bool CanonicalOrder { get; init; } = true;
     /// <summary>Whether a candidate is associated by its composite identity plus deterministic geometric matching.
     /// Turning it off keys a slot by the BODY FEATURE index alone — the refuted scheme in which one sphere touching a
     /// floor and a wall at once collapses into a single cache entry.</summary>
-    internal bool CompositeIdentity { get; init; } = true;
+    public bool CompositeIdentity { get; init; } = true;
     /// <summary>How a positive current separation is turned into an activation decision.</summary>
-    internal FixedSpeculativeActivation Activation { get; init; } = FixedSpeculativeActivation.Conservative;
+    public FixedSpeculativeActivation Activation { get; init; } = FixedSpeculativeActivation.Conservative;
     /// <summary>Whether a candidate past <see cref="RecoveryThreshold"/> is routed to the bounded extraction path.</summary>
-    internal bool DeepRecovery { get; init; } = true;
-
+    public bool DeepRecovery { get; init; } = true;
     /// <summary>The largest accumulated impulse change, in raw Q48.16 units, an iteration may leave and still be read
     /// as converged. It is a READING, never a control: the solve always runs its full iteration budget, so changing
     /// this cannot change a trajectory.</summary>

@@ -589,7 +589,7 @@
             "id": "state.expression.binary",
             "entryPoint": "Puck.State.ExpressionArithmetic.TryBinary(ExpressionOp, CellKind, long, long, out long)",
             "symbol": "Puck_State_Puck_State_ExpressionArithmetic__TryBinary",
-            "sources": [{"path": "src/Puck.State/Expressions/Runtime/ExpressionArithmetic.cs", "sha256": "0e15bbf3f460ddf1eff724e227ebbafcf76d17a4413c63fdce61253eb78fa357"}, {"path": "src/Puck.Maths/FixedPoint/FusedArithmetic.cs", "sha256": "49fd2d8fccd4b6e253706a1732936bfe2009d63d8c7454812531890a611d5439"}],
+            "sources": [{"path": "src/Puck.State/Expressions/Runtime/ExpressionArithmetic.cs", "sha256": "0e15bbf3f460ddf1eff724e227ebbafcf76d17a4413c63fdce61253eb78fa357"}, {"path": "src/Puck.Maths/FixedPoint/FusedArithmetic.cs", "sha256": "2c8c872c853cc677a9900c2fb6f8db5d5bbb62110084d27bd499d1baaf59c8ee"}],
             "formula": "one call; maximum over the dispatcher's permitted arms, including the Fixed multiply and divide arms' calls into Puck.Maths",
             "loopBounds": [
                 {"symbol": "Puck_Maths_Puck_Maths_FusedArithmetic__TryDivideMagnitudeRounded", "iterations": 127, "contract": "the restoring-division loop runs fractionBitCount times, and the preceding width guard refuses whenever BitLength(integer) + fractionBitCount exceeds 127"},

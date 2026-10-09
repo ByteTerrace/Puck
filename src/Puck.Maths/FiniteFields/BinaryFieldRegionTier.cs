@@ -9,7 +9,7 @@ namespace Puck.Maths;
 /// separately named kernel that queries no instruction-set support of its own, so a verifier holding the matching
 /// support flag can execute any two rungs over the same region inside one process and compare them.
 /// </remarks>
-internal enum BinaryFieldRegionTier {
+public enum BinaryFieldRegionTier {
     /// <summary>The element-at-a-time loop over the scalar field multiply, available on every machine.</summary>
     Scalar = 0,
     /// <summary>The 128-bit nibble-split byte shuffle.</summary>

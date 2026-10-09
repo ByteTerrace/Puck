@@ -49,10 +49,10 @@ public static class HostCommand {
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = _ => 10, Description = "Seconds between readings with --watch." };
         var windowOption = new Option<int>(name: "--window") { DefaultValueFactory = _ => 6, Description = "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist." };
-        var capacityCpuOption = new Option<double?>(name: "--capacity-cpu") { DefaultValueFactory = _ => HostLoadThresholds.Default.CapacityCpuPercent, Description = "CAPACITY needs the CPU mean below this percentage (with --capacity-ram)." };
-        var capacityRamOption = new Option<double?>(name: "--capacity-ram") { DefaultValueFactory = _ => HostLoadThresholds.Default.CapacityRamGb, Description = "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu)." };
-        var pressureRamOption = new Option<double?>(name: "--pressure-ram") { DefaultValueFactory = _ => HostLoadThresholds.Default.PressureRamGb, Description = "PRESSURE when free memory is below this many gigabytes." };
-        var pressureDiskOption = new Option<double?>(name: "--pressure-disk") { DefaultValueFactory = _ => HostLoadThresholds.Default.PressureDiskGb, Description = "PRESSURE when free disk on the working directory's drive is below this many gigabytes." };
+        var capacityCpuOption = new Option<double?>(name: "--capacity-cpu") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityCpuPercent, Description = "CAPACITY needs the CPU mean below this percentage (with --capacity-ram)." };
+        var capacityRamOption = new Option<double?>(name: "--capacity-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityRamGb, Description = "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu)." };
+        var pressureRamOption = new Option<double?>(name: "--pressure-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureRamGb, Description = "PRESSURE when free memory is below this many gigabytes." };
+        var pressureDiskOption = new Option<double?>(name: "--pressure-disk") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureDiskGb, Description = "PRESSURE when free disk on the working directory's drive is below this many gigabytes." };
 
         ValidateThreshold(maximum: 100, option: capacityCpuOption);
         ValidateThreshold(option: capacityRamOption);
@@ -72,8 +72,11 @@ public static class HostCommand {
                                                        memory over --capacity-ram, once --window readings exist
                 LOADED                                 otherwise, once --window readings exist: capacity ended
               One line per transition: a state that holds prints nothing more.
-              PRESSURE wins over CAPACITY within one reading. Defaults: CPU below {HostLoadThresholds.Default.CapacityCpuPercent}%,
-              free RAM above {HostLoadThresholds.Default.CapacityRamGb}GB; pressure below {HostLoadThresholds.Default.PressureRamGb}GB RAM or {HostLoadThresholds.Default.PressureDiskGb}GB disk. Options override these defaults; gate uses them unchanged.
+              PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs free
+              RAM above 5/16 of the installed memory (rounded up to whole gigabytes) and three logical processors
+              idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM below 1/8 of the
+              installed memory or free disk below {HostLoadThresholds.DiskPressureGb}GB. Here: CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, free RAM above
+              {HostLoadThresholds.ThisMachine.CapacityRamGb:0.##}GB; pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate uses them unchanged.
 
               GPU work is the World (Puck.World or Puck.World.dll), a canary, parity or counters verb,
               or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests, Puck.World.Tests or Puck.Platform.Windows.Tests

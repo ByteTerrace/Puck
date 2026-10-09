@@ -5,12 +5,12 @@ namespace Puck.Physics;
 /// <summary>The push-resolution arithmetic shared by every contact-source solver over <see cref="IContactField"/>:
 /// displace out of penetration, latch the grounded/obstruction witness by the normal's walkable alignment, and clamp
 /// approach velocity along the normal. One home so a correction to it reaches every caller in the same change.</summary>
-internal static class FixedContactPushMath {
+public static class FixedContactPushMath {
     /// <summary>The uncommitted outcome of resolving one confirmed contact push: the position/velocity deltas a
     /// caller adds, whether the push reads as walkable, and the measured surface normal. <see cref="Normal"/> is
     /// <see langword="null"/> exactly for a degenerate-gradient push (<see cref="ComputeDegenerate"/>), which
     /// fabricates no normal and so never latches an obstruction witness.</summary>
-    internal readonly record struct Trial(FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
+    public readonly record struct Trial(FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
 
     /// <summary>Applies a trial: displaces position, clamps velocity, and latches the walkable/obstruction witness.
     /// <paramref name="grounded"/> is a one-way latch — never cleared here — matching every caller's per-iteration
@@ -55,6 +55,7 @@ internal static class FixedContactPushMath {
             VelocityDelta: FixedVector3.Zero
         );
     }
+
     /// <summary>Computes the trial for an ordinary push against a MEASURED surface normal: displacement along the
     /// normal, the walkable test against <paramref name="up"/>, and the approach-velocity clamp.</summary>
     /// <param name="normal">The measured contact normal.</param>
@@ -63,7 +64,7 @@ internal static class FixedContactPushMath {
     /// <param name="up">The body's up axis the walkable test measures alignment against.</param>
     /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> <paramref name="normal"/>'s alignment with
     /// <paramref name="up"/> must clear to read as walkable.</param>
-    internal static Trial ComputeOrdinary(FixedVector3 normal, FixedQ4816 penetration, in FixedVector3 velocity, FixedVector3 up, FixedQ4816 groundedThreshold) {
+    public static Trial ComputeOrdinary(FixedVector3 normal, FixedQ4816 penetration, in FixedVector3 velocity, FixedVector3 up, FixedQ4816 groundedThreshold) {
         var alignment = FixedVector3.Dot(
             left: normal,
             right: up

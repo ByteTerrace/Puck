@@ -172,12 +172,12 @@ public enum RenderGraphInstanceRefusalCode : byte {
     KindMismatch = 8,
     /// <summary>An instance carries settings but is no source, or a source names no producer id, refreshes other than on
     /// every frame its cadence allows, or declares an output that is not an image.</summary>
-    SourceDeclaration = 11,
+    SourceDeclaration = 9,
     /// <summary>An authored output extent is non-positive, or belongs to a buffer or negotiated source.</summary>
-    ExtentInvalid = 12,
+    ExtentInvalid = 10,
     /// <summary>The set's declared nesting depth is negative or past
     /// <see cref="RenderGraphInstanceSet.MaxNestingDepth"/>.</summary>
-    NestingDepthInvalid = 13,
+    NestingDepthInvalid = 11,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>

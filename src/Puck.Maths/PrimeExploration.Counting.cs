@@ -13,7 +13,7 @@ public static partial class PrimeExploration {
     // stores all primes through sqrt(x), and the +1 retains the square p_i*p_i on the diagonal.
     // Formula and streamed quotient ordering: primecount src/P2.cpp, BSD-2-Clause; see the notices.
     // The Gourdon caller supplies cutoff >= floor(cuberoot(value)), making the upper scan O(value^(2/3)).
-    internal static ulong CountSemiprimes(ulong value, uint cutoff, CancellationToken cancellationToken, PrimeCountWorkBuilder? profile = null) {
+    public static ulong CountSemiprimes(ulong value, uint cutoff, CancellationToken cancellationToken, PrimeCountWorkBuilder? profile = null) {
         cancellationToken.ThrowIfCancellationRequested();
         var root = ((uint)value.SquareRoot());
 
@@ -37,6 +37,7 @@ public static partial class PrimeExploration {
             segmentBytes: CacheSegmentBytes, work: profile?.SemiprimeForwardBitmap);
         return counter.Sum;
     }
+
     // One-based selection from an inclusive interval. Count is the ordinal consumed in traversal order,
     // or the exact interval count when Selected is zero. Neither direction repeats survivor decisions.
     internal static ulong SelectPrime(ulong low, ulong high, ulong ordinal, CancellationToken cancellationToken, PrimeRequestWorkBuilder? profile = null) =>

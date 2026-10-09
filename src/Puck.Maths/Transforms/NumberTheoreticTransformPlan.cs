@@ -82,8 +82,9 @@ public sealed class NumberTheoreticTransformPlan {
         );
     }
 
-    internal ReadOnlySpan<ulong> ForwardTwiddles => m_forwardTwiddles;
-    internal ReadOnlySpan<ulong> InverseTwiddles => m_inverseTwiddles;
+    public ReadOnlySpan<ulong> ForwardTwiddles => m_forwardTwiddles;
+    public ReadOnlySpan<ulong> InverseTwiddles => m_inverseTwiddles;
+
     internal ulong LengthInverse => m_lengthInverse;
 
     /// <summary>Gets the transform length this plan was built for.</summary>

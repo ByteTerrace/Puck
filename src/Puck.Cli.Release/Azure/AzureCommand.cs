@@ -47,7 +47,7 @@ public static partial class AzureCommand {
         ) {
             buildOutput,
             new Option<string?>(name: "--runtime-artifacts") { Description = "This commit's compiled Functions and browser payloads, when a producer job already built them." },
-            new Option<string?>(name: "--documentation") { Description = "This commit's DocFX site, when the documentation producer already generated it." },
+            new Option<string?>(name: "--documentation") { Description = "This commit's DocFX site, when the documentation producer already generated it: any form puck docs build --site takes, its downloaded archive included." },
         };
         var buildInfrastructure = new Command(
             description: "Compile the platform and world-compute templates and the parameters for this commit.",

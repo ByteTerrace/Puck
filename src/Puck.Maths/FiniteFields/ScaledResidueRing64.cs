@@ -14,9 +14,9 @@ namespace Puck.Maths;
 /// one masked correction — instead of by the <c>128 / 64</c> divide a direct <c>(a * b) % n</c> costs. The saving
 /// belongs to the chain, not to one product: <see cref="Encode(ulong)"/> and <see cref="Decode(ulong)"/> each spend a
 /// REDC of their own, so a lone product is cheaper left on the divide. Convert once, stay in the ring, convert back
-/// once. The additive operations — <see cref="Add(ulong, ulong)"/>, <see cref="Subtract(ulong, ulong)"/>, and
-/// <see cref="Halve(ulong)"/> — are linear in the representation, so they apply to Montgomery-form elements unchanged
-/// and a recurrence mixing them with products never has to leave the ring.
+/// once. The additive operations — <see cref="Add(ulong, ulong)"/> and <see cref="Subtract(ulong, ulong)"/> — are
+/// linear in the representation, so they apply to Montgomery-form elements unchanged and a recurrence mixing them with
+/// products never has to leave the ring.
 /// </para>
 /// <para>
 /// Only oddness is required — nothing here presumes the modulus prime, which is what admits the ring as the arithmetic
@@ -30,7 +30,7 @@ namespace Puck.Maths;
 /// of being re-read through the ring on every product.
 /// </para>
 /// </remarks>
-internal readonly struct ScaledResidueRing64 {
+public readonly struct ScaledResidueRing64 {
     /// <summary>Creates the ring over an odd modulus.</summary>
     /// <param name="modulus">The modulus, which must be odd and greater than one. The precondition is not enforced.</param>
     /// <remarks>
@@ -112,20 +112,6 @@ internal readonly struct ScaledResidueRing64 {
             left: value,
             right: RadixSquared
         );
-    /// <summary>Halves a ring element.</summary>
-    /// <param name="value">The reduced element to halve, in Montgomery form.</param>
-    /// <returns>The reduced product of <paramref name="value"/> and the inverse of two.</returns>
-    /// <remarks>
-    /// Halving is a multiplication by the inverse of two, which for an odd modulus is <c>(Modulus + 1) / 2</c>, and the
-    /// representation is linear, so it applies to a Montgomery-form element unchanged. An even element halves outright;
-    /// an odd one is lifted by the odd modulus first, which changes nothing modulo it. Folding the lift into the shifted
-    /// half — rather than adding the modulus and then shifting — is what keeps the whole operation inside the carrier
-    /// for a modulus above <c>2^63</c>, and <c>(Modulus &gt;&gt; 1) + 1</c> is <c>(Modulus + 1) / 2</c> written so that
-    /// the largest odd modulus does not overflow it either.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ulong Halve(ulong value) =>
-        ((value >>> 1) + (((Modulus >>> 1) + 1UL) & unchecked((0UL - (value & 1UL)))));
     /// <summary>Multiplies two ring elements.</summary>
     /// <param name="left">The first factor, in Montgomery form.</param>
     /// <param name="right">The second factor, in Montgomery form.</param>

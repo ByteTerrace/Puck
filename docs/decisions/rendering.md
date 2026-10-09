@@ -36,6 +36,17 @@ contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
 
+**The frame-rate bar is the slowest frame at high quality.** On the RTX 2060,
+the lowest-powered desktop the programme targets, a shipped world at high
+quality (shadows high, ambient occlusion on, native render scale) holds a steady
+60 FPS: every frame under 16.7 ms, not the average. The RTX 4070 holds the same
+quality at a steady 120 FPS, every frame under 8.3 ms. An average hides the
+hitch a player feels, so a periodic stall (a camera enumeration, a live
+mutation's apply, a pipeline compile) misses the bar even when the mean is
+fast, and a lower tier is never the fix for a missed bar. Counted work still
+decides each change; the bar itself is read with `puck bench` when the owner
+asks.
+
 **P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
 deterministic counters, dispatches, march steps, texels written and bytes
 uploaded, is recorded over one pinned workload, `puck counters`' world with its

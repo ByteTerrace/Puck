@@ -5,12 +5,13 @@ using System.Runtime.CompilerServices;
 namespace Puck.Maths;
 
 /// <summary>
-/// The single internal substrate for the fused one-rounding discipline over <see cref="FixedQ4816"/>: the
+/// The single substrate for the fused one-rounding discipline over <see cref="FixedQ4816"/>: the
 /// sign-magnitude product accumulation, exact restoring division, power-of-two scaling, and Q48 rounding shared by the
 /// hand-written planar and quaternion types and by the generic algebra descriptors. Every helper is exact integer
 /// arithmetic on raw carrier bits, so the callers that once carried private copies of these kernels now round each
-/// returned component identically. Public refusing faces expose complete mixed-scale operations to other assemblies;
-/// the sign-magnitude building blocks and wrapping kernels remain internal to the fixed-point family.
+/// returned component identically. The refusing faces, the wrapping
+/// <see cref="MixedScaleProduct"/> and <see cref="RawMagnitude"/> are public; the remaining sign-magnitude building blocks
+/// and wrapping kernels are internal to the fixed-point family.
 /// </summary>
 public static class FusedArithmetic {
     /// <summary>Accumulates the exact signed sum <c>firstLeft·firstRight ± secondLeft·secondRight</c> of two raw Q32 products as sign plus <see cref="UInt128"/> magnitude.</summary>
@@ -95,6 +96,7 @@ public static class FusedArithmetic {
             numerator: numerator,
             resultNegative: numerator.Negative ^ denominator.Negative
         );
+
     /// <summary>Multiplies two raws carried at DIFFERENT fixed-point scales and rounds the result to a third scale
     /// exactly once, to nearest with ties to even, wrapping on overflow.</summary>
     /// <param name="a">The first factor's raw.</param>
@@ -108,7 +110,7 @@ public static class FusedArithmetic {
     /// formed exactly (two 64-bit factors reach at most <c>2^126</c>, inside <see cref="UInt128"/>) and the single
     /// rounding happens at <c>2^(fractionBitsOut − fractionBitsA − fractionBitsB)</c>. The three counts are combined in
     /// <see cref="long"/> so no combination of <see cref="int"/> extremes can wrap the exponent.</remarks>
-    internal static long MixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut) {
+    public static long MixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut) {
         var product = Product(
             left: a,
             right: b
@@ -127,6 +129,7 @@ public static class FusedArithmetic {
             negative: product.Negative
         );
     }
+
     // The exponent every mixed-scale kernel rounds at, formed in long so no combination of int extremes wraps it.
     internal static long MixedScaleShift(int fractionBitsOut, int first, int second) =>
         ((((long)fractionBitsOut) - first) - second);
@@ -142,15 +145,17 @@ public static class FusedArithmetic {
             ? -product
             : product)));
     }
+
     /// <summary>Returns the unsigned magnitude of a raw carrier value by the branchless sign trick.</summary>
     /// <param name="value">The signed raw value.</param>
     /// <returns><c>|value|</c> as an unsigned magnitude (<c>long.MinValue</c> maps exactly to <c>2^63</c>).</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    internal static ulong RawMagnitude(long value) {
+    public static ulong RawMagnitude(long value) {
         var sign = (value >> 63);
 
         return unchecked((ulong)((value ^ sign) - sign));
     }
+
     /// <summary>Rounds a Q48-scaled product sum to raw Q16, once, to nearest with ties to even, wrapping to the signed 64-bit carrier.</summary>
     /// <param name="productSum">The exact (or unchecked-<see cref="Int128"/>-congruent) Q48 sum.</param>
     /// <returns>The raw Q16 result.</returns>

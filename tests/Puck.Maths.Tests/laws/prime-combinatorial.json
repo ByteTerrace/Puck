@@ -2,7 +2,140 @@
   {
     "Id": "prime-selection.ulong-combinatorial-count-1e14",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ResolveGourdonCutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "DirectPrimalityRequests"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CountOnly"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Gourdon"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Bound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CachedQuotientDivisions"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Cutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "OrdinaryFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SpecialFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableBuilt"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableCapacity"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -27,7 +160,28 @@
   {
     "Id": "prime-selection.ulong-combinatorial-checkpoint-interval",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Gourdon"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -52,7 +206,76 @@
   {
     "Id": "prime-selection.gourdon-hard-leaf-filter-rungs",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "FilterGourdonHardLeaves"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "FilterGourdonHardLeavesScalar"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "GreaterThanInt16Mask"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "GreaterThanInt16Mask"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "GreaterThanInt16Mask"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Load"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -68,7 +291,40 @@
   {
     "Id": "prime-selection.gourdon-leaf-sieve-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": "Reset"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": "Initialize"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": "TotalCount"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": "StartPrefix"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Name": "CrossOff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialPrefixCursor",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialPrefixCursor",
+        "Name": "Count"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -84,7 +340,28 @@
   {
     "Id": "prime-selection.gourdon-quotient-rungs",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "DivideGourdonQuotients128"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "DivideGourdonQuotients256"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "DivideGourdonQuotients512"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "DivideGourdonQuotientsScalar"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "GourdonQuotientLimit"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -100,7 +377,12 @@
   {
     "Id": "prime-selection.gourdon-semiprime-count-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "CountSemiprimes"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",

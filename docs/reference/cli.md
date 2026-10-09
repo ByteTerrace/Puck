@@ -266,7 +266,7 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 puck artifacts capture | restore | test-world
 puck artifacts test-windows [--shard <index> --shards <count>]
 puck artifacts durations <directory>
-puck docs build [--output <directory>] [--site <directory>]
+puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <worlds-directory> --output <directory>
@@ -1142,10 +1142,20 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
 - Each line marks a transition: while a state holds, `--watch` prints nothing
   more, so a watcher sees each change once.
 
-The default thresholds require CPU below 50% and free RAM above 5GB for capacity;
-pressure means free RAM below 2GB or free disk below 10GB. Options override these defaults. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
-documents the thresholds for each machine class and what an agent does on each
-line. `reuseNodes` counts MSBuild nodes a build or restore left running because
+The default thresholds scale with the machine (`HostLoadThresholds.For`).
+Memory thresholds are fractions of the installed memory, rounded up to whole
+gigabytes: capacity needs more than five sixteenths of it free, and pressure
+begins below one eighth. Capacity also needs idle logical processors for the
+work being admitted: three, but never fewer than 40% of them nor more than half.
+Free disk below 10GB is pressure on every machine, because a build writes the
+same outputs whatever the machine's size. A 16GB, six-thread machine therefore
+has capacity with CPU below 50% and more than 5GB free, and is under pressure
+below 2GB; a 32GB, 16-thread machine has capacity with CPU below 60% and more
+than 10GB free, and is under pressure below 4GB. Options override these
+defaults, and `puck gate` and `puck affected` admit their heavy steps by the
+same machine thresholds. A machine that cannot report its installed memory is
+judged as a 16GB one. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
+documents what an agent does on each line. `reuseNodes` counts MSBuild nodes a build or restore left running because
 it ran without `-nodeReuse:false`.
 
 Without `--watch` the verb takes one reading over one second, judges that
@@ -2415,7 +2425,7 @@ refused profile, package or plan, or for a blocked check when nothing failed.
 ## `puck docs`—the documentation family
 
 ```text
-puck docs build [--output <directory>] [--site <directory>]
+puck docs build [--output <directory>] [--site <path>]
                                             stage the website reference (default <repo>/artifacts/docs)
 puck docs links [<document> ...]            check relative links, heading anchors, and cited repository paths
 puck docs citations [--enumeration <path>]  check the console-verb tokens skills and XML docs cite
@@ -2426,10 +2436,12 @@ puck docs citations [--enumeration <path>]  check the console-verb tokens skills
 Runs the pinned DocFX tool and stages `reference/` (with the site overview as
 `reference/overview.html`) and `_theme/` under the output directory, which
 defaults to `artifacts/docs` at the repository root. An output directory that
-already holds `reference/` or `_theme/` is refused. `--site <directory>` stages
-a site DocFX already generated from this checkout instead of running it, and is
-refused when that directory holds no `index.html`; the application bundle
-stages the documentation workflow's site this way
+already holds `reference/` or `_theme/` is refused. `--site <path>` stages a
+site DocFX already generated from this checkout instead of running it: the
+site's directory, a zip archive of it, or a directory holding only that archive,
+which is how a workflow artifact downloaded without extraction arrives. A site
+without `index.html` is refused, and so is an archive that is not a zip; the
+application bundle stages the documentation workflow's site this way
 (`puck azure build --documentation`).
 
 ### `docs links`—relative link and path check

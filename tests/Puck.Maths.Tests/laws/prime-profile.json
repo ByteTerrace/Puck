@@ -6,6 +6,150 @@
       {
         "Type": "Puck.Maths.PrimeExtensions",
         "Name": "PrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "DirectPrimalityRequests"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CountOnly"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Narrow32"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Quotient64"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Checkpoint"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "CheckpointInterval"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Bound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CachedQuotientDivisions"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Cutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "EasyLeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "LeafSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "OrdinaryFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardFrontier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeForwardSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SemiprimeReverseWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "SpecialFactorCoordinates"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableBuilt"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "TableCapacity"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWorkBuilder",
+        "Name": ".ctor"
       }
     ],
     "Legs": [
@@ -45,6 +189,54 @@
       {
         "Type": "Puck.Maths.PrimeExtensions",
         "Name": "NthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionBitmapBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "DirectPrimalityRequests"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "Narrow32"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "OutOfRange"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CheckpointSelection"
       }
     ],
     "Legs": [
@@ -80,7 +272,36 @@
   {
     "Id": "prime-selection.profile-snapshot-and-cancellation",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Bound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Narrow32"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",

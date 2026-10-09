@@ -10,9 +10,7 @@ public enum SdfShapeType : uint {
     Torus = 3, // Data0 = (majorRadius, minorRadius, _, _)
     Cylinder = 4, // Data0 = (radius, halfHeight, _, _) inset by Data1.w, Data1.w = edge-rounding radius; upright, centered on the local origin
     Plane = 5, // Data0 = (normalX, normalY, normalZ, offset)
-    // 6 is retired: the approximate iq ellipsoid it named is gone. Every ellipsoid is a Superellipsoid (18) at
-    // exponent 2, the exact 1-Lipschitz gauge. The id stays unassigned rather than renumbering its neighbours.
-    Vesica = 7, // Data0 = (radius, halfSeparation, halfHeight[baked √(r²−d²)], _); exact 2D vesica revolved to a lens (d < r)
+    Vesica = 6, // Data0 = (radius, halfSeparation, halfHeight[baked √(r²−d²)], _); exact 2D vesica revolved to a lens (d < r)
     // --- The 2D-primitive family (an exact 2D SDF lifted to 3D by revolve/extrude). SHARED lane layout for all of
     // them: Data0.xyz = the 2D shape params, Data0.w = the lift amount (revolve offset o OR extrude half-height h),
     // Data1.x = smooth radius, Data1.y = the lift MODE (0 = revolve around Y, 1 = extrude along Z), Data1.z = per shape
@@ -23,20 +21,20 @@ public enum SdfShapeType : uint {
     // field back out by it).
     // Each is exact + 1-Lipschitz (no step clamp): extrusion is always exact; revolution is exact
     // when the profile clears the axis (offset ≥ its radial extent) and a harmless conservative bound near the axis.
-    RoundedRectangle = 8, // Data0 = (halfX, halfY, cornerRadius, lift), Data1.z = cap chamfer; exact rounded-box 2D SDF
-    RegularPolygon = 9,   // Data0 = (circumRadius, π/n[baked], 0[ecs.x], lift), Data1.z = 1[ecs.y]; exact star-polygon SDF with m=2
-    Star = 10,            // Data0 = (outerRadius, π/n[baked], cos(π/m)[baked ecs.x], lift), Data1.z = sin(π/m)[baked ecs.y]; exact star-polygon SDF
-    RoundCone = 11, // Data0 = (lowerRadius, upperRadius, height, _)
-    Trapezoid = 12,       // Data0 = (bottomHalfWidth r1, topHalfWidth r2, halfHeight, lift), Data1.z = cap chamfer; exact isosceles-trapezoid 2D SDF
-    Ellipse = 13,         // Data0 = (semiX, semiY, _, lift), Data1.z = cap chamfer; exact ellipse 2D SDF (revolve→spheroid, extrude→elliptic prism)
-    ScreenSlab = 14, // Data0 = (halfX, halfY, halfZ, roundingRadius)
+    RoundedRectangle = 7, // Data0 = (halfX, halfY, cornerRadius, lift), Data1.z = cap chamfer; exact rounded-box 2D SDF
+    RegularPolygon = 8,   // Data0 = (circumRadius, π/n[baked], 0[ecs.x], lift), Data1.z = 1[ecs.y]; exact star-polygon SDF with m=2
+    Star = 9,             // Data0 = (outerRadius, π/n[baked], cos(π/m)[baked ecs.x], lift), Data1.z = sin(π/m)[baked ecs.y]; exact star-polygon SDF
+    RoundCone = 10, // Data0 = (lowerRadius, upperRadius, height, _)
+    Trapezoid = 11,       // Data0 = (bottomHalfWidth r1, topHalfWidth r2, halfHeight, lift), Data1.z = cap chamfer; exact isosceles-trapezoid 2D SDF
+    Ellipse = 12,         // Data0 = (semiX, semiY, _, lift), Data1.z = cap chamfer; exact ellipse 2D SDF (revolve→spheroid, extrude→elliptic prism)
+    ScreenSlab = 13, // Data0 = (halfX, halfY, halfZ, roundingRadius)
     // A glyph SAMPLED FROM A FONT ATLAS as a DISTANCE-level field (not material-level like ScreenSlab): text becomes
     // real world geometry that marches, blends, extrudes, engraves (Subtraction) and takes shadows/AO. Data0 =
     // (packedUvMin, packedUvMax [each unorm2x16-packed atlas UV, host-baked], distanceScale, extrudeHalfDepth); Data1 =
     // (smooth [ISA-wide, header/Data1.x], halfWidth, halfHeight, samplingCorrection in (0,1]). Evaluated only where the glyph atlas is bound (the
     // world-views kernel, SDF_GLYPH_ATLAS); every other kernel falls back to the exact 2D quad's extruded box — a
     // conservative underestimate, since the glyph is strictly inside its cell.
-    Glyph = 15,
+    Glyph = 14,
     // A SAMPLED distance-field brick: the settled-carve UNION field (min_i(|p-c_i|-r_i)), baked once into a cubic-voxel
     // lattice the kernels sample O(1) with manual trilinear interpolation, composed into the analytic program as ONE
     // ordinary Subtraction-blend instance so the primary/shadow/AO marches stop paying O(carve-count). Data0 =
@@ -49,7 +47,7 @@ public enum SdfShapeType : uint {
     // kernels); every other kernel falls back to the conservative UNION
     // HULL - SDF_FAR_DISTANCE, so the subtraction never bites and the region renders uncarved (the Glyph quad-fallback
     // precedent: solid, never a hole).
-    SampledRegion = 16,
+    SampledRegion = 15,
     // A member of the 2D-primitive family (SAME lane layout as RoundedRectangle): a 45-degree-beveled rectangle (the
     // box field intersected with a diagonal bevel half-plane per corner) lifted to 3D by revolve/extrude. Data0 =
     // (halfX, halfY, chamfer c, lift); Data1 = (smooth, lift mode, UNUSED, edge-rounding radius r — the family-wide
@@ -59,16 +57,16 @@ public enum SdfShapeType : uint {
     // rectangle/box forms to the bit — so an unchamfered program stays byte-identical. The field is exact inside and
     // on the surface and a conservative lower bound outside in the wedge past each bevel vertex (like the chamfer
     // blend); 1-Lipschitz (no AnalyzeLipschitz step clamp), like the rest of the family.
-    ChamferedRectangle = 17,
-    // Superellipsoid = 18: NOT a member of the 2D-primitive family above (it lifts nothing — a solid 3D formula
+    ChamferedRectangle = 16,
+    // Superellipsoid: NOT a member of the 2D-primitive family above (it lifts nothing — a solid 3D formula
     // directly). Data0 = (radiusX, radiusY, radiusZ, exponent e in [2, 8]); Data1 = (smooth [ISA-wide], 1/radiusX,
     // 1/radiusY, 1/radiusZ [host-baked, KEEP IN SYNC with sdfSuperellipsoid]). e = 2 is the ellipsoid
     // (the scaled L2 gauge (|p/r| - 1) * min(r), exactly 1-Lipschitz like every admitted exponent), and this id is the
     // ISA's ONE ellipsoid: every builder, creation, and debug path emits it at e == 2, which both evaluators take on a
     // pow-free fast path. KEEP IN SYNC with SdfViewsKernelVariants, which classifies an e == 2 instance as the fold
     // tier and every other exponent as heavy.
-    Superellipsoid = 18,
-    // ConvexPolygon = 19: a member of the 2D-primitive family (revolve/extrude lift, family-wide smooth/lift-mode/
+    Superellipsoid = 17,
+    // ConvexPolygon: a member of the 2D-primitive family (revolve/extrude lift, family-wide smooth/lift-mode/
     // cap-chamfer/edge-rounding lanes), but its 2D profile is a validated convex vertex list too large to fit inline
     // — the vertices live in a side table appended to the packed program's own word stream (the SAME sdfWords buffer
     // every other table already lives in, so no new GPU binding is needed), and the shape instruction carries only a
@@ -77,8 +75,8 @@ public enum SdfShapeType : uint {
     // family lanes RoundedRectangle carries. The table itself is <c>ceil(vertexCount/2)</c> uvec4 entries, two
     // packed (x, y) float-bit vertices each, vertices in the shape's local XY plane, clockwise. KEEP IN SYNC with
     // SDF_SHAPE_CONVEX_POLYGON / sdfConvexPolygon2D / sdfPolygonVertex.
-    ConvexPolygon = 19,
-    // Sweep = 20: a quadratic Bezier curve (control points A, B, C, in the shape's local frame) swept with a radius
+    ConvexPolygon = 18,
+    // Sweep: a quadratic Bezier curve (control points A, B, C, in the shape's local frame) swept with a radius
     // that tapers linearly between two endpoints plus a mid-span bulge, optionally as 1-4 helical strands orbiting
     // the curve. Too much data to pack inline (9 floats for the control points alone) — the points and the per-strand
     // radius endpoints live in a side table appended to the packed program's own word stream, the SAME door
@@ -106,11 +104,11 @@ public enum SdfShapeType : uint {
     // closed-form closest point on a Bezier is fine in fixed point (FixedQ4816.Pow/Sin/Cos are available), but the
     // multi-strand orbit and its per-strand min are RENDER-ONLY and refused for deterministic field contact by name,
     // exactly like Glyph/SampledRegion are refused for reasons of their own.
-    Sweep = 20,
-    // Path = 21: bounded line-edge table, two uvec4 per edge: (A.xy, B.xy), (radiusA, radiusB, 0, 0).
+    Sweep = 19,
+    // Path: bounded line-edge table, two uvec4 per edge: (A.xy, B.xy), (radiusA, radiusB, 0, 0).
     // Data0 = (asfloat(tableOffset), edgeCount, enclosingRadius2D, halfDepth); Data1 = (smooth, stroke?1:0, 0, 0).
     // Filled paths use even/odd parity and distance to all boundaries; strokes union the convex hulls of endpoint
     // disks. Both are 1-Lipschitz. Curves are flattened once by SdfPathCompiler to an explicit author tolerance.
     // Extrusion only; presentation-only until a deterministic query interpreter is supplied.
-    Path = 21,
+    Path = 20,
 }

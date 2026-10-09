@@ -40,7 +40,64 @@
   {
     "Id": "prime-selection.ulong-windowed-checkpoint-selection",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfilePrimeCountingFunction"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "DirectPrimalityRequests"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CheckpointSelection"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "CheckpointInterval"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "CheckpointWindowedSegments"
+      }
+    ],
     "Legs": [
       {
         "Kind": "InTreeIndependent",
@@ -65,7 +122,44 @@
   {
     "Id": "deep.prime-selection-ulong-windowed-rank-1e15",
     "Tier": "Deep",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CountedSelection"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Gourdon"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -90,7 +184,44 @@
   {
     "Id": "exhaustive.prime-selection-ulong-windowed-rank-1e16",
     "Tier": "Exhaustive",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ProfileNthPrime"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Result"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Route"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindows"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestProfile",
+        "Name": "SelectionWindowedSegments"
+      },
+      {
+        "Type": "Puck.Maths.PrimeRequestRoute",
+        "Name": "CountedSelection"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountRoute",
+        "Name": "Gourdon"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWork",
+        "Name": "Route"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -115,12 +246,17 @@
   {
     "Id": "prime-selection.ulong-local-sieve-budget",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "LocalSieveBudget64"
+      }
+    ],
     "Legs": [
       {
         "Kind": "SharedSubstrate",
         "Flavor": "SharedUpstream",
-        "Subject": "The internal local sieve budget equals the widest width W with ceil(W/span)*pass + W <= floor at ten bounds: quotient bounds beside 2^32 and 2^33, at 10^12 and on both sides of the counting limit 4194303^2, and Gourdon bounds at 10^15, 10^16, 2^55, near 3.9*10^17 and ulong.MaxValue. The fixtures include budgets of whole windows only and of whole windows plus a partial window.",
+        "Subject": "PrimeExtensions.LocalSieveBudget64 equals the widest width W with ceil(W/span)*pass + W <= floor at ten bounds: quotient bounds beside 2^32 and 2^33, at 10^12 and on both sides of the counting limit 4194303^2, and Gourdon bounds at 10^15, 10^16, 2^55, near 3.9*10^17 and ulong.MaxValue. The fixtures include budgets of whole windows only and of whole windows plus a partial window.",
         "Against": "Oracles.PrimeLocalSieveBudget forms the root by exact squaring, the Rosser-Schoenfeld prime bound from the bit length, the pass, the span and the floor in BigInteger, then binary-searches the monotone cost predicate rather than evaluating the subject's closed whole-window form.",
         "Shared": "Both read the identical PrimeExtensions.ResolveGourdonCutoff value y for Gourdon bounds; the floating-point cutoff tuning itself is not under test, and floor(x/(y+1)) is formed independently from it.",
         "Citation": "",
