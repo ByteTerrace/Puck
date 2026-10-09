@@ -8,6 +8,6 @@ namespace Puck.Machines {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>QueuedMachineCheckpoint.Format</c>, declared in <c>src/Puck.Machines/QueuedMachineCheckpoint.cs</c>.</summary>
-        public const string QueuedMachineCheckpointFormat = "1caaa07ff7152654";
+        public const string QueuedMachineCheckpointFormat = "8c238ce6135245fb";
     }
 }

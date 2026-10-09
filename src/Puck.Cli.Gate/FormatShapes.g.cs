@@ -8,6 +8,6 @@ namespace Puck.Cli.Affected {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AffectedCoverage.Schema</c>, declared in <c>src/Puck.Cli.Gate/Affected/AffectedCoverage.cs</c>.</summary>
-        public const string AffectedCoverageSchema = "89e586043b083d37";
+        public const string AffectedCoverageSchema = "6701248acb0a54fc";
     }
 }

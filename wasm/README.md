@@ -146,9 +146,16 @@ Then, from the repository root:
 puck wasm build
 ```
 
-The command wraps `cargo build --release`, run from `wasm/`. `.cargo/config.toml` already pins the
-default target, so no `--target` flag is needed. This builds every workspace member; `puck-stdlib`
-has no standalone artifact (it is an `rlib`), so the interesting output is:
+The command builds every committed guest. Each crate that has committed modules declares them in its
+`Cargo.toml` under `[package.metadata.puck]`: one `builds` entry per variant, naming the repository
+paths its module is written to and, for a variant other than the crate's default, its `features`.
+`puck wasm build` reads those entries through `cargo metadata`, runs `cargo build --release
+--package <crate> [--no-default-features --features <variant>]` from `wasm/` once per entry, writes
+the module to each path the entry names, and prints each module's `sha256-64/{16 hex}` content hash.
+`.cargo/config.toml` already pins the default target, so no `--target` flag is needed. The verb
+refuses before building when a tracked `.wasm` under `wasm/` or `src/` is no entry's output, so a new
+committed guest needs its entry first. Plain `cargo build --release` from `wasm/` builds every
+crate's default variant into `target/wasm32-unknown-unknown/release/`, for example:
 
 ```text
 target/wasm32-unknown-unknown/release/puck_addon_default.wasm
@@ -157,24 +164,24 @@ target/wasm32-unknown-unknown/release/puck_addon_default.wasm
 Point a world document's `addons` entry at that file, or at your own crate's build output, the same
 way—see "Drop it into a world document" below.
 
-### Refreshing the copy Puck.World ships
+### Refreshing the committed modules
 
-`src/Puck.World/Assets/addons/puck-addon-default.wasm` is a **committed binary**, not something
-Puck.World builds from this workspace at its own build time. An `addons` row points at that
-committed copy and pins its content hash in the row's own `hash` field. After the `cargo build`,
-`puck wasm build` copies the freshly built module over that path and prints its new
-`sha256-64/{16 hex}` hash to paste into every such row.
+The modules Puck.World ships (`src/Puck.World/Assets/addons/puck-addon-default.wasm` and
+`puck-addon-hudbuilder.wasm`) and each verification guest's `dist/` builds are **committed
+binaries**, not something a .NET build makes from this workspace. An `addons` row points at a
+committed module and pins its content hash in the row's own `hash` field.
 
-Update every authored document's `addons` row that pins the changed module.
+Update every authored document's `addons` row that pins a module whose printed hash moved.
 
-**The committed bytes' provenance is not gate-enforced.** No build step proves the `.wasm` sitting
-in `src/Puck.World/Assets/addons/` was actually built from the Rust sitting beside it here—they
-can drift silently if someone edits one without the other. Refreshing the artifact is therefore a
-**deliberate step**: run `puck wasm build` whenever `puck-addon-default`'s (or a `puck-stdlib`
-dependency's) source changes, then update every pinning row's `hash` to match the printed value **in
-the same change**. An unrefreshed hash after a real source change means the host is running stale
-bytes under a pin that no longer describes them; a refreshed artifact with a stale hash means the
-host refuses to load it at all. Neither is silent, but only the first is wrong.
+**The committed bytes' provenance is not gate-enforced.** No build step proves a committed `.wasm`
+was built from the Rust beside it here; they can drift silently if someone edits one without the
+other. `Puck.World.Server.Tests` does refuse every committed module that reports an ABI shape other
+than the host's (`ACommittedGuestBinaryReportsTheHostsAbiShape`). Refreshing the modules is therefore
+a **deliberate step**: run `puck wasm build` whenever a guest's (or a `puck-stdlib` dependency's)
+source or the host's ABI shape changes, then update every pinning row's `hash` to match the printed
+value **in the same change**. An unrefreshed hash after a real source change means the host is
+running stale bytes under a pin that no longer describes them; a refreshed module with a stale hash
+means the host refuses to load it at all. Neither is silent, but only the first is wrong.
 
 Cargo embeds absolute paths, so a rebuild from a different checkout produces different bytes—and
 therefore a different hash—even when the sources are identical. Read a changed hash as "these are

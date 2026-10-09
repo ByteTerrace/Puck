@@ -18,20 +18,19 @@ Three build-time variants (Cargo features—see `Cargo.toml`; exactly one select
 - `bound64`: declares exactly 64 (`AddonAbi.MaxChannelNames`) channel names—must mount.
 - `bound65`: declares 65—must fault `BadExport` at handshake, naming the bound.
 
-Build: `cargo build --release --target wasm32-unknown-unknown -p puck-addon-channelwalk [--no-default-features
---features bound64|bound65]`, then copy `target/wasm32-unknown-unknown/release/puck_addon_channelwalk.wasm` to
-`dist/<name>.wasm`. There is no build script (unlike `puck-addon-default`'s `puck wasm build` command)—this crate is
-never shipped, so nothing refreshes a committed copy automatically; re-run the three builds by hand after any
-source change and re-learn each hash (see below).
+Build: `puck wasm build` builds all three into `dist/` (`channelwalk.wasm`, `channelwalk-bound64.wasm`,
+`channelwalk-bound65.wasm`) from the builds `Cargo.toml` declares under `[package.metadata.puck]`, with every other
+committed guest, and prints each module's hash. Run it after any source change and re-pin each hash it prints (see
+below).
 
 ## Learning a module's content hash
 
-Same recipe every guest crate here uses: mount with a deliberately wrong `hash` in the world document, boot,
-and read the printed computed value off the `HashMismatch` line
-(`content sha256-64/{hex} does not match the declared moduleHash pin sha256-64/{pin}`), then paste the printed
-`content` value into the row's `hash` field. `worlds/channel-walk-world.json`'s three addon rows are pinned to
-the hashes of the committed `dist/` builds; re-learn all three after touching `src/lib.rs` (the `main`
-feature)—`bound64`/`bound65` are unaffected by `main`-only changes.
+`puck wasm build` prints each module's `sha256-64/{hex}` hash; paste it into the row's `hash` field. A module
+built some other way has its hash learned by mounting it with a deliberately wrong `hash` in the world document,
+booting, and reading the computed value off the `HashMismatch` line
+(`content sha256-64/{hex} does not match the declared moduleHash pin sha256-64/{pin}`).
+`worlds/channel-walk-world.json`'s three addon rows are pinned to the hashes of the committed `dist/` builds;
+re-pin all three whenever the build rewrites them.
 
 ## Test world
 

@@ -29,8 +29,9 @@ body—using `puck_stdlib::Inputs` to drain the host's batch and
 `puck_stdlib::Outputs`'s `act_bipolar`/`act_binary`/`act_unipolar` methods
 against your declared channel handles, never a raw byte offset.
 
-Build it with `puck wasm build` (or plain
-`cargo build --release` run from `wasm/`); the compiled module lands at
+Build it with `puck wasm build`, which writes the shipped copy
+`src/Puck.World/Assets/addons/puck-addon-default.wasm` that `Cargo.toml` declares under
+`[package.metadata.puck]`, or with plain `cargo build --release` run from `wasm/`, whose module lands at
 `../target/wasm32-unknown-unknown/release/puck_addon_default.wasm`.
 
 ## Documentation

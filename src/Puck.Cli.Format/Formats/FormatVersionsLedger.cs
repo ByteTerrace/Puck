@@ -19,7 +19,7 @@ namespace Puck.Cli.Formats;
 public sealed record FormatEntry(string Id, string Source, string Shape, string Token, IReadOnlyList<string> Open);
 /// <summary>
 /// <c>FormatVersions.json</c>: every strictly versioned wire, persisted, or cache format the source declares, its current
-/// token, and the file that declares it. The ledger is generated from the source: <see cref="Discover"/> reads every
+/// token, and the file that declares it. The ledger is generated from the source: <see cref="Discover(FormatShapeSources)"/> reads every
 /// declaration of a recognized shape and <c>puck formats</c> writes the result, so the constants stay the one source
 /// of truth and the ledger is their checked-in mirror.
 /// <para>
@@ -154,16 +154,39 @@ public static partial class FormatVersionsLedger {
     }
 
     /// <summary>Finds every strict format the source declares.</summary>
-    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <param name="sources">The sources and each one's compile context (<see cref="FormatsCommand.ReadSources"/>).</param>
     /// <returns>The formats in ordinal id order. A declaring type and member that two files share are told apart by
     /// appending <c>@</c> and the path to both ids.</returns>
-    public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) => Close(files: files, only: null).Select(selector: static pair => pair.Entry).ToArray();
+    /// <exception cref="FormatBoundaryException">A seam gives no reason, a part names no format, or a closure cannot bind
+    /// a repository type it names.</exception>
+    public static IReadOnlyList<FormatEntry> Discover(FormatShapeSources sources) => Close(only: null, sources: sources).Select(selector: static pair => pair.Entry).ToArray();
+    /// <summary>Finds every strict format sources written without a project declare, compiled as one SDK project with
+    /// implicit usings (<see cref="FormatShapeSources.InOneProject"/>).</summary>
+    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <returns>The formats in ordinal id order.</returns>
+    public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) => Discover(sources: FormatShapeSources.InOneProject(files: files));
     /// <summary>Closes one format over its boundary, to show what its shape covers and what it leaves open.</summary>
+    /// <param name="sources">The sources and each one's compile context.</param>
+    /// <param name="id">The format's ledger id.</param>
+    /// <returns>The entry and its closure, or <see langword="null"/> when no format has that id.</returns>
+    /// <exception cref="FormatBoundaryException">A seam gives no reason, or the closure cannot bind a repository type it
+    /// names.</exception>
+    public static (FormatEntry Entry, FormatClosure Closure)? Explain(FormatShapeSources sources, string id) => Close(only: id, sources: sources).Select(selector: static pair => (((FormatEntry, FormatClosure)?)pair)).FirstOrDefault();
+    /// <summary>Closes one format of sources written without a project (<see cref="FormatShapeSources.InOneProject"/>).</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
     /// <param name="id">The format's ledger id.</param>
     /// <returns>The entry and its closure, or <see langword="null"/> when no format has that id.</returns>
-    /// <exception cref="FormatBoundaryException">A seam gives no reason.</exception>
-    public static (FormatEntry Entry, FormatClosure Closure)? Explain(IReadOnlyDictionary<string, string> files, string id) => Close(files: files, only: id).Select(selector: static pair => (((FormatEntry, FormatClosure)?)pair)).FirstOrDefault();
+    public static (FormatEntry Entry, FormatClosure Closure)? Explain(IReadOnlyDictionary<string, string> files, string id) => Explain(id: id, sources: FormatShapeSources.InOneProject(files: files));
+    /// <summary>The names each format's closure writes that bind to nothing: the repository types it fails to see, which
+    /// <see cref="Discover(FormatShapeSources)"/> refuses, and the package names it leaves outside by design.</summary>
+    /// <param name="sources">The sources and each one's compile context.</param>
+    /// <returns>Each format's id and unbound names, by id in ordinal order.</returns>
+    public static IReadOnlyList<(string Id, FormatUnbound Unbound)> Unbound(FormatShapeSources sources) {
+        var (trees, named, all) = Declared(only: null, sources: sources);
+        var formats = named.Select(selector: static pair => pair.Format).ToArray();
+
+        return [.. formats.Zip(second: new FormatShapeClosure(declared: all, sources: sources, trees: trees).UnboundOf(formats: formats)).Select(selector: static pair => (pair.First.Id, pair.Second))];
+    }
 
     // Every token one file declares, in member order.
     private static List<(string Id, string Source, string Token, string Owner, string Member)> Tokens(string path, SyntaxTree tree) {
@@ -189,8 +212,21 @@ public static partial class FormatVersionsLedger {
     }
     // Every file is parsed once, on every core, and the token scan and the shape closure both read those trees; the
     // tokens are gathered per file and joined in ordinal path order, so the result never depends on the schedule.
-    private static IReadOnlyList<(FormatEntry Entry, FormatClosure Closure)> Close(IReadOnlyDictionary<string, string> files, string? only) {
-        var trees = FormatShapeClosure.Parse(files: files);
+    private static IReadOnlyList<(FormatEntry Entry, FormatClosure Closure)> Close(FormatShapeSources sources, string? only) {
+        var (trees, named, all) = Declared(only: only, sources: sources);
+        var closures = new FormatShapeClosure(declared: all, sources: sources, trees: trees).Of(formats: [.. named.Select(selector: static pair => pair.Format)], allIds: [.. all.Select(selector: static format => format.Id)]);
+
+        return [.. named.Select(selector: (pair, index) => (new FormatEntry(
+            Id: pair.Format.Id,
+            Open: closures[index].Open,
+            Shape: closures[index].Shape,
+            Source: pair.Format.Source,
+            Token: pair.Token
+        ), closures[index]))];
+    }
+    // Every format the sources declare, and those `only` selects, in ordinal id order.
+    private static (Dictionary<string, SyntaxTree> Trees, (FormatRef Format, string Token)[] Named, FormatRef[] All) Declared(FormatShapeSources sources, string? only) {
+        var trees = FormatShapeClosure.Parse(files: sources.Files);
         // A Post stage's magic numbers frame its test ROMs and probes, not a format the engine reads back.
         var found = trees.Where(predicate: static pair => !pair.Key.Contains(
             comparisonType: StringComparison.Ordinal,
@@ -206,21 +242,15 @@ public static partial class FormatVersionsLedger {
             comparer: StringComparer.Ordinal
         ).Where(predicate: static group => (group.Count() > 1)).Select(selector: static group => group.Key).ToHashSet(comparer: StringComparer.Ordinal);
 
-        var named = found.Select(selector: item => (Item: item, Id: (shared.Contains(item: item.Id)
+        var all = found.Select(selector: item => (Format: new FormatRef(Id: (shared.Contains(item: item.Id)
             ? $"{item.Id}@{item.Source}"
-            : item.Id))).Where(predicate: pair => ((only is null) || (pair.Id == only))).OrderBy(
+            : item.Id), Member: item.Member, Owner: item.Owner, Source: item.Source), item.Token)).ToArray();
+        var named = all.Where(predicate: pair => ((only is null) || (pair.Format.Id == only))).OrderBy(
             comparer: StringComparer.Ordinal,
-            keySelector: static pair => pair.Id
+            keySelector: static pair => pair.Format.Id
         ).ToArray();
-        var closures = new FormatShapeClosure(files: files, trees: trees).Of(formats: [.. named.Select(selector: static pair => new FormatRef(Id: pair.Id, Member: pair.Item.Member, Owner: pair.Item.Owner, Source: pair.Item.Source))], allIds: [.. found.Select(selector: item => (shared.Contains(item: item.Id) ? $"{item.Id}@{item.Source}" : item.Id))]);
 
-        return [.. named.Select(selector: (pair, index) => (new FormatEntry(
-            Id: pair.Id,
-            Open: closures[index].Open,
-            Shape: closures[index].Shape,
-            Source: pair.Item.Source,
-            Token: pair.Item.Token
-        ), closures[index]))];
+        return (trees, named, [.. all.Select(selector: static pair => pair.Format)]);
     }
 
     /// <summary>Renders the ledger in its one spelling: entries in ordinal id order, members in ordinal order, four-space
@@ -332,7 +362,7 @@ public static partial class FormatVersionsLedger {
     /// <summary>The <c>--check</c> verdict on a recorded ledger against what the source declares now.</summary>
     /// <param name="recorded">The recorded formats.</param>
     /// <param name="recordedText">The ledger file's text.</param>
-    /// <param name="current">The formats <see cref="Discover"/> finds now.</param>
+    /// <param name="current">The formats <see cref="Discover(FormatShapeSources)"/> finds now.</param>
     /// <returns>Every problem, each naming its fix; empty when the ledger holds.</returns>
     public static IReadOnlyList<string> Check(IReadOnlyList<FormatEntry> recorded, string recordedText, IReadOnlyList<FormatEntry> current) {
         var problems = new List<string>();

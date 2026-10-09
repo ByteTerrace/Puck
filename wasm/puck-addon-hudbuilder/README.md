@@ -7,7 +7,10 @@ report the verdict observed by the guest. It is a test fixture and is not shippe
 as the default addon.
 
 The crate requires one of its feature-selected variants; see
-[Cargo.toml](Cargo.toml) and the module comments for each case. The
+[Cargo.toml](Cargo.toml) and the module comments for each case. `puck wasm build`
+builds each variant into `dist/hudbuilder-<variant>.wasm`, and the main variant
+also into `src/Puck.World/Assets/addons/puck-addon-hudbuilder.wasm`, from the
+builds `Cargo.toml` declares under `[package.metadata.puck]`. The
 [host ABI reference](../../docs/reference/scripting.md) owns the mutation
 protocol, and the [World addon reference](../../src/Puck.World.Addons/README.md)
 explains the host integration. No automated gate runs this fixture.

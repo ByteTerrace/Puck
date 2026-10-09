@@ -8,7 +8,7 @@ namespace Puck.Networking {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>LocalEndpointCapability.Revision</c>, declared in <c>src/Puck.Networking/LocalEndpointCapability.cs</c>.</summary>
-        public const string LocalEndpointCapabilityRevision = "fbe066691912d799";
+        public const string LocalEndpointCapabilityRevision = "ac7e7333e819b159";
     }
 }
 
