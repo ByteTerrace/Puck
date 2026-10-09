@@ -72,6 +72,8 @@ the NuGet release call it beside the artifact producer; a standalone
 `verify.yml` run calls it too. Native compilation and trimming remain part of its
 one publish operation. The solution build's own browser AppBundle, the one the
 compiled archive carries, is the build's rather than the AOT publish's.
+Its duration is not a CI-time target: it runs in parallel and is off the
+critical path, so CI speed work leaves its AOT and optimisation settings alone.
 
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
 a fresh Windows checkout on each of four runners, verifies its commit and
