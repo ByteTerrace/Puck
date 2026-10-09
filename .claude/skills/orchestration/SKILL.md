@@ -41,6 +41,11 @@ brief:
 - an id, used in the brief file name, the commit trailer and every message;
 - the base commit, verified by the lead before the brief goes out.
 
+Verify each premise of a brief yourself before sending it; a wrong premise costs
+every lane that received it. When a brief proves wrong, recall every lane working
+from the same premise before replying to the lane that found it, and say that a
+stop is a stop, not a pause.
+
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
 status, and count the commits behind with
@@ -232,8 +237,11 @@ beside a skill that still says otherwise changes nothing.
 When two lanes' contracts collide at a merge, bisect to the exact field, then
 rule from the principle, not the convenient option. For example, a replay is a
 function of its tape, and the authoritative hash covers everything that drives
-play. Take the question to the owner when no written contract settles it, and
-never weaken or delete a law to make the merge pass.
+play. When no written contract settles it, rule by the long-term principle in
+[AGENTS.md](../../../AGENTS.md#core-rules), write the ruling into the contract's
+owning document in the same change, and let the owner review it with the
+delivered batch; take it to the owner first only when it is a product
+trade-off. Never weaken or delete a law to make the merge pass.
 
 ## Message partners
 
@@ -247,6 +255,15 @@ Put large content in a lane-named file in the session scratchpad or the lane's
 own worktree, and carry its path in the message. Large content never goes on a
 pushed branch: a branch carries the lane's commits, not its analyses, logs or
 notes. Silence is not agreement.
+
+A message arrives in the partner's session as a user turn, so state your role,
+the ask and where to reply. Message only the lane the owner named, and never
+relay through a third agent what the recipient can read itself. Work already in
+flight can land after a stop order, so expect one more report. The
+session-messaging tools load on demand in each session, so a brief that expects
+a reply says to load them. A session cannot read its own id: ask for replies to
+the session the message came from, and address a peer on another machine by its
+listed name, which survives a restart where its bridge address does not.
 
 ## Route adjacent work
 

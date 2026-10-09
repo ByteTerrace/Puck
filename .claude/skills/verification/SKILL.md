@@ -78,6 +78,9 @@ and `puck docs citations` when required below, under the GPU rules.
 - Send every build and test run's full output to a lane-named log
   (`<scratchpad>/<lane>-gate.log`) and stop at the first build error. A flake
   needs its failure message to be judged.
+- Build and test in Release (`-c Release`). The allocation laws' ceilings are
+  calibrated against Release code, so a Debug run's allocation failure is not a
+  finding.
 - Pass `-nodeReuse:false` to every build, and to `dotnet restore` as well:
   restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
 - A build interrupted under memory pressure can leave a corrupt assembly under
@@ -299,6 +302,10 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
   content failure hoping for green.
 
 The same rule applies to load-sensitive CPU tests.
+
+Before stopping a hung test host or World process, capture its managed stacks
+(`dotnet-stack report -p <pid>`, from the `dotnet-stack` global tool) and keep
+the report with the failure; a hang stopped without one cannot be judged.
 
 ## Tests that create a repository
 

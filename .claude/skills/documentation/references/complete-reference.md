@@ -449,10 +449,17 @@ document under `docs/` that names the skill.
    token audit against the pre-edit copy: keep a copy in the scratchpad, then
    diff the claim inventory. A voice edit that drops a fact has changed the
    content, and a heading edit requires checking and repairing its incoming links.
+   A rewrite tends to drop the sentence that says why and keep the one that says
+   what, so read its deleted lines for causes first.
 7. **`dotnet build Puck.slnx -c Release`** when the edit touched XML
    documentation — required for a changed `cref`, and the only check that the
    structural diagnostics in §4 still pass. A pure Markdown edit does not owe a
    build.
+8. **A retired verb is gone from runtime strings first.** `puck docs
+   citations` resolves a cited token against every verb-shaped string literal
+   under `src/`, so a stale refusal or help message keeps a dead verb's
+   citations green. When retiring a console verb, search `src/` for its name
+   and remove it there before trusting a citations pass.
 
 ---
 
