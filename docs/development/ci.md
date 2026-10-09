@@ -287,7 +287,7 @@ the step in the same change.
 | `puck derivations --check` | `artifacts.yml` | `derivations` |
 | `puck schema`, `registry`, `architecture`, `branding`, `formats` and `canary-ceilings --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
-| Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches, with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
+| Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, Linux DXC

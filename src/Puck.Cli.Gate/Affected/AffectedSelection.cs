@@ -43,10 +43,14 @@ public static class AffectedSelection {
     // Changing any of these changes how every project builds, so it reaches every suite; it reaches the canaries only
     // when it is an input of the World build (worldInput), since a canary runs nothing but that build.
     private static readonly string[] BuildInfrastructure = ["build/", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", "global.json", "Puck.slnx", "NuGet.config"];
-    // Trees whose changes choose nothing: prose, agent material, CI orchestration, editors, quarantine. Only
-    // Puck.Cli.Release.Tests' workflow graph laws read CI orchestration, and CI's test job runs them on every change; a
-    // selection would also reach every suite of the CLI projects whose sources mention a workflow.
-    private static readonly string[] Inert = ["docs/", ".claude/", ".github/", "editors/", "experimental/"];
+    // Trees whose changes no suite or canary observes: prose, agent material, editors, quarantine.
+    private static readonly string[] Inert = ["docs/", ".claude/", "editors/", "experimental/"];
+
+    /// <summary>Trees a change in which reaches only the projects whose project files declare them, with an item that
+    /// includes the changed file (<c>PuckAffectedInput</c>), never the projects whose sources merely name them: the
+    /// GitHub Actions workflows and composite actions, which a few laws read and many sources mention in prose or as a
+    /// path a test compares.</summary>
+    public static readonly IReadOnlyList<string> DeclaredOnly = [".github/"];
 
     private static bool StartsWithAny(string path, string[] prefixes) => prefixes.Any(predicate: prefix => path.StartsWith(
         comparisonType: StringComparison.Ordinal,
@@ -249,7 +253,9 @@ public static class AffectedSelection {
             }
 
             if (owner is null) {
-                seeds.UnionWith(other: consumersOf(arg: path));
+                if (!DeclaredOnly.Any(predicate: tree => path.StartsWith(comparisonType: StringComparison.Ordinal, value: tree))) {
+                    seeds.UnionWith(other: consumersOf(arg: path));
+                }
 
                 continue;
             }

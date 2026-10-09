@@ -23,6 +23,11 @@
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- AffectedWorkflowReadersLawTests selects over every workflow and composite action: a change under .github/ selects
+             this suite in `puck affected`, which reaches that tree through such a declaration alone. -->
+        <PuckAffectedInput Include="../../.github/**" />
+    </ItemGroup>
+    <ItemGroup>
         <Using Include="Puck.Cli.Testing" />
     </ItemGroup>
 </Project>
