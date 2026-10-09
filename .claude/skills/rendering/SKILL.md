@@ -478,10 +478,12 @@ reintroduce `[noinline]`.
   stack at most once at a time. Each marcher procedure asks its sample at one
   point (`SdfIndirectMarcherCallSiteLawTests`); a probe kernel's reference reads
   are plain queries (`SDF_INDIRECT_PLAIN_QUERIES`) through the same site. A new
-  probe or procedure joins those, never a call of its own. The tape build
-  comes in pieces (`sdfTapeBuildBegin`, `sdfTapeSlabCentre`, `sdfTapeSlabEnd`,
-  `sdfTapeBuildEnd` in `field/sdf-tape-build.hlsli`) so a kernel that also
-  reads the field runs each slab through its own one site.
+  probe or procedure joins those, never a call of its own. A tape build
+  (`sdfBuildTileTape`) runs in a kernel of its own, as the tape pass does:
+  folding it into a reading kernel's one site puts the interpreter's
+  tape-recording paths behind a runtime flag in every read, and the World.Tests
+  tape probes then exceed the device timeout. Those probes build in a
+  `*-build.comp` kernel dispatched ahead of the walk.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.

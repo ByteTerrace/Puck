@@ -120,9 +120,15 @@ public sealed partial class SdfFieldDeviceLawTests {
         );
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
-    // results back, one per case in leg order.
+    // results back, one per case in leg order. A tape probe passes its build kernel, which runs ahead of the probe on
+    // each leg as the engine's tape pass runs ahead of the views, behind a barrier on the tapes and the results.
     private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null,
-        Vector3[]? points = null, Vector4[]? parameters = null, int tapeWordsPerCase = 0, uint[]? instanceMasks = null) {
+        Vector3[]? points = null, Vector4[]? parameters = null, int tapeWordsPerCase = 0, uint[]? instanceMasks = null,
+        byte[]? tapeBuildKernel = null) {
+        if ((tapeWordsPerCase == 0) != (tapeBuildKernel is null)) {
+            throw new ArgumentException(message: "A tape probe passes both its tape words and its build kernel.", paramName: nameof(tapeBuildKernel));
+        }
+
         points ??= Points;
         var caseCount = checked((legs.Count * points.Length));
 
@@ -189,6 +195,11 @@ public sealed partial class SdfFieldDeviceLawTests {
             description: description,
             name: default
         );
+        using var buildModule = ((tapeBuildKernel is null) ? null : services.ShaderModuleFactory.Create(
+            bytecode: tapeBuildKernel, stage: GpuShaderStage.Compute));
+        using var buildPipeline = ((buildModule is null) ? null : services.PipelineFactory.Create(
+            computeShaderModule: buildModule, description: description, name: default));
+        IGpuComputePipeline[] stages = ((buildPipeline is null) ? [pipeline] : [buildPipeline, pipeline]);
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var output = services.ImageFactory.Create(
             format: GpuPixelFormat.R32G32B32A32Float,
@@ -281,19 +292,6 @@ public sealed partial class SdfFieldDeviceLawTests {
                 sourceAccessMask: GpuAccess.None,
                 sourceStageMask: GpuStage.TopOfPipe
             );
-            recorder.BindPipeline(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: command,
-                pipelineHandle: pipeline.Handle
-            );
-            recorder.BindDescriptorSet(
-                bindPoint: GpuBindPoint.Compute,
-                commandBufferHandle: command,
-                descriptorSetHandle: passSet,
-                group: PassGroup,
-                pipelineLayoutHandle: pipeline.LayoutHandle
-            );
-
             for (var index = 0; (index < legs.Count); index++) {
                 var words = legs[index].Words;
                 var program = services.BufferFactory.CreateHostVisible(
@@ -323,37 +321,58 @@ public sealed partial class SdfFieldDeviceLawTests {
                     elementStride: (4U * sizeof(uint)),
                     kind: GpuBindingKind.ReadOnlyBuffer
                 );
-                recorder.BindDescriptorSet(
-                    bindPoint: GpuBindPoint.Compute,
-                    commandBufferHandle: command,
-                    descriptorSetHandle: worldSet,
-                    group: WorldGroup,
-                    pipelineLayoutHandle: pipeline.LayoutHandle
-                );
-
                 ReadOnlySpan<uint> pushed = [(((uint)(index * points.Length)) | (((uint)points.Length) << 16))];
 
-                recorder.PushConstants(
-                    bindPoint: GpuBindPoint.Compute,
-                    commandBufferHandle: command,
-                    data: MemoryMarshal.AsBytes(span: pushed),
-                    offset: 0U,
-                    pipelineLayoutHandle: pipeline.LayoutHandle,
-                    stageFlags: GpuShaderStage.Compute
-                );
-                if (tapes is not null) {
-                    recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: tapes.BufferHandle,
-                        sourceAccessMask: ((index == 0) ? GpuAccess.None : GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
-                        destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-                        sourceStageMask: ((index == 0) ? GpuStage.TopOfPipe : GpuStage.ComputeShader),
-                        destinationStageMask: GpuStage.ComputeShader);
+                for (var stage = 0; (stage < stages.Length); stage++) {
+                    var stagePipeline = stages[stage];
+
+                    recorder.BindPipeline(
+                        bindPoint: GpuBindPoint.Compute,
+                        commandBufferHandle: command,
+                        pipelineHandle: stagePipeline.Handle
+                    );
+                    recorder.BindDescriptorSet(
+                        bindPoint: GpuBindPoint.Compute,
+                        commandBufferHandle: command,
+                        descriptorSetHandle: passSet,
+                        group: PassGroup,
+                        pipelineLayoutHandle: stagePipeline.LayoutHandle
+                    );
+                    recorder.BindDescriptorSet(
+                        bindPoint: GpuBindPoint.Compute,
+                        commandBufferHandle: command,
+                        descriptorSetHandle: worldSet,
+                        group: WorldGroup,
+                        pipelineLayoutHandle: stagePipeline.LayoutHandle
+                    );
+                    recorder.PushConstants(
+                        bindPoint: GpuBindPoint.Compute,
+                        commandBufferHandle: command,
+                        data: MemoryMarshal.AsBytes(span: pushed),
+                        offset: 0U,
+                        pipelineLayoutHandle: stagePipeline.LayoutHandle,
+                        stageFlags: GpuShaderStage.Compute
+                    );
+                    if ((tapes is not null) && (stage == 0)) {
+                        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: tapes.BufferHandle,
+                            sourceAccessMask: ((index == 0) ? GpuAccess.None : GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                            sourceStageMask: ((index == 0) ? GpuStage.TopOfPipe : GpuStage.ComputeShader),
+                            destinationStageMask: GpuStage.ComputeShader);
+                    }
+                    if (stage > 0) {
+                        // The probe reads the tapes and the build's result texel the build kernel just wrote.
+                        recorder.MemoryBarrier(commandBufferHandle: command,
+                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
+                            sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
+                    }
+                    recorder.Dispatch(
+                        commandBufferHandle: command,
+                        groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
+                        groupCountY: 1U,
+                        groupCountZ: 1U
+                    );
                 }
-                recorder.Dispatch(
-                    commandBufferHandle: command,
-                    groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
-                    groupCountY: 1U,
-                    groupCountZ: 1U
-                );
             }
 
             recorder.EndCommandBuffer(commandBufferHandle: command);

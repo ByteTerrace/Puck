@@ -67,6 +67,7 @@ public sealed partial class SdfFieldDeviceLawTests {
             new(w: hiddenMaterial, x: -1, y: worldMaterial, z: 0),
         ];
         var results = Run(kernel: GradientKernel(extension: extension, name: "sdf-tape-sparse-masks.comp"), services: services,
+            tapeBuildKernel: GradientKernel(extension: extension, name: "sdf-tape-sparse-masks-build.comp"),
             legs: [GradientLeg(name: "sparse camera masks", program: program)], points: points, parameters: expected,
             transforms: GradientTransforms, instanceMasks: masks,
             tapeWordsPerCase: SdfWorldPackage.SegmentTapeWordCountFor(segments: program.SkipSegmentCount, tokens: program.TapeTokenCount));

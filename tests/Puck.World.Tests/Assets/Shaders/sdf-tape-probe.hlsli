@@ -9,8 +9,11 @@
 struct TapeProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<TapeProbeIndex> fieldProbeIndex : register(b0, space4);
 
-// One probe builds its tile's tape, then walks each sample in six modes, the full walk and then the pruned walk per
-// mode. Every field evaluation, the build's slabs included, runs through the loop's one interpreter call site.
+// A tape probe runs as two dispatches of one case, as the engine runs its tape pass ahead of the views that read the
+// tapes. The build kernel (SDF_TAPE_PROBE_BUILD) builds the case's tile tape and stores the shape evaluations the build
+// counted in its result's w. The walk kernel then walks each sample in six modes, the full walk and then the pruned
+// walk per mode, through its one interpreter call site, and keeps that w. Building in the walk's loop would put the
+// interpreter's tape-recording paths behind a runtime flag in every walk sample.
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint first = fieldProbeIndex.index & 0xFFFFu;
@@ -18,6 +21,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (id.x >= count) return;
     float4 probe = fieldCases[first + id.x];
     uint slot = asuint(probe.w);
+    uint2 texel = uint2(slot % 256u, slot / 256u);
     sdfProgramLayout = sdfLoadProgramLayout();
     uint instanceMask = SDF_INSTANCE_MASK_ALL;
     uint modes = 6u;
@@ -40,12 +44,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     farBound = lens.w;
     chord = fieldCases[first + count + 2u].x;
 #endif
+#ifdef SDF_TAPE_PROBE_BUILD
     sdfWorkShapes = 0u;
-    bool building = sdfTapeBuildBegin(slot, instanceMask, entry, farBound);
-    bool walking = false;
-    uint slab = 0u;
-    uint tapeShapes = 0u;
-    uint enabled = 0u;
+    sdfBuildTileTape(slot, instanceMask, origin, direction, chord, entry, farBound);
+    fieldResults[texel] = float4(0.0, 0.0, 0.0, float(sdfWorkShapes));
+#else
+    float tapeShapes = fieldResults[texel].w;
+    sdfTapeBase = slot * sdfTapeStride();
+    sdfTapeInstanceMask = instanceMask;
+    uint enabled = sdfSegmentTapesRW[sdfTapeBase];
     float traveled = entry;
     float saved = 0.0;
     uint misses = 0u;
@@ -60,48 +67,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint fullShapes = 0u;
     float fullWeight = 0.0;
     int fullOther = 0;
+    // One sample's six modes, each walked full and then pruned, are consecutive turns of this loop.
     [loop]
-    for (;;) {
-        if (!building && !walking) {
-            tapeShapes = sdfWorkShapes;
-            DeviceMemoryBarrier();
-            sdfTapeBase = slot * sdfTapeStride();
-            sdfTapeInstanceMask = instanceMask;
-            enabled = sdfSegmentTapesRW[sdfTapeBase];
-            walking = true;
-            if (!(traveled <= farBound)) { break; }
+    for (bool walking = traveled <= farBound; walking;) {
+        if (mode == 0u && pass == 0u) {
+            samplePosition = origin + traveled * direction;
+            next = traveled;
+            primaryDistance = SDF_FAR_DISTANCE;
         }
-        float3 at = samplePosition;
-        uint queryMask = instanceMask;
-        bool track = true;
-        if (building) {
-            at = sdfTapeSlabCentre(slab, origin, direction, chord, entry, farBound);
-            track = false;
-        } else {
-            if (mode == 0u && pass == 0u) {
-                samplePosition = origin + traveled * direction;
-                next = traveled;
-                primaryDistance = SDF_FAR_DISTANCE;
-                at = samplePosition;
-            }
-            queryMask = mode == 4u ? SDF_INSTANCE_MASK_ALL : instanceMask;
-            sdfDetailShadingActive = mode == 1u;
-            sdfSecondaryMarchActive = mode == 2u;
-            sdfShadowParticipationActive = mode == 3u;
-            sdfPrimaryOmitParts = mode == 5u;
-            sdfTapeActive = (pass == 1u) && (enabled != 0u);
-            sdfWorkShapes = 0u;
-        }
-        SdfHit hit = mapCore(at, queryMask, track);
-        if (building) {
-            sdfTapeSlabEnd();
-            slab++;
-            if (slab == SDF_TAPE_SLAB_COUNT) {
-                sdfTapeBuildEnd();
-                building = false;
-            }
-            continue;
-        }
+        uint queryMask = mode == 4u ? SDF_INSTANCE_MASK_ALL : instanceMask;
+        sdfDetailShadingActive = mode == 1u;
+        sdfSecondaryMarchActive = mode == 2u;
+        sdfShadowParticipationActive = mode == 3u;
+        sdfPrimaryOmitParts = mode == 5u;
+        sdfTapeActive = (pass == 1u) && (enabled != 0u);
+        sdfWorkShapes = 0u;
+        SdfHit hit = mapCore(samplePosition, queryMask, true);
         if (pass == 0u) {
             full = hit;
             fullShapes = sdfWorkShapes;
@@ -151,7 +132,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         traveled = lerp(entry, farBound, float(sample + 1u) / 64.0);
 #endif
         sample++;
-        if (sample >= 1024u || !(traveled <= farBound)) { break; }
+        walking = sample < 1024u && traveled <= farBound;
     }
-    fieldResults[uint2(slot % 256u, slot / 256u)] = float4(saved, float(misses), float(covered), float(tapeShapes));
+    fieldResults[texel] = float4(saved, float(misses), float(covered), tapeShapes);
+#endif
 }
