@@ -140,7 +140,9 @@ SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float
         uint4 segmentMeta = sdfProgramWord(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u);
         if (segmentMeta.z > segmentMeta.w || segmentMeta.w > sdfProgramLayout.instructionCount) { return sdfIsaErrorHit(); }
         if (sdfTapeNextSegment(segment, segment + 1u) != segment) { continue; }
+        sdfFieldVisits++;
         uint segmentBoundMode = (segmentMeta.x & SDF_SEGMENT_BOUND_MASK);
+        if (sdfIndirectParticipationActive && sdfIndirectStaticField && (segmentBoundMode == SDF_BOUND_DYNAMIC)) { continue; }
 
         [branch]
         if (sdfGradientMode != 2u && segmentBoundMode != SDF_BOUND_NONE) {
@@ -172,6 +174,7 @@ SdfHit sdfMapGradientWalk(float3 worldPosition, uint instanceMaskBase, out float
         // — the baked leaf quaternion for a static leaf, the composition dynamicOrientation ∘ leafQuat for a
         // TransformDynamic leaf (mirroring the inverse rotations the point walk applies). The candidate then feeds the
         // SAME sdfComposeDualCandidate tail the interpreted dual uses, so blend order/material semantics are identical.
+        sdfFieldVisits += (segmentMeta.w - segmentMeta.z);
 #ifndef SDF_VM_DISABLE_RIGID_PLAN
         [branch]
         if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) != 0u) {

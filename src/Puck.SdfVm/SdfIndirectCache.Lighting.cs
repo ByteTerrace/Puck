@@ -42,7 +42,7 @@ public sealed partial class SdfIndirectCache {
     /// this keeps the preceding source instead of relabeling the still visible irradiance.</summary>
     public SdfIndirectLightingSnapshot? PublishedLightingSource { get; private set; }
 
-    internal bool CanBeginLighting => (IsComplete && !Frozen && ((m_solve is null) || m_solve.IsComplete));
+    internal bool CanBeginLighting => (TransportComplete && !Frozen && ((m_solve is null) || m_solve.IsComplete));
     internal bool HasLightingCycle => (m_solve is not null);
     internal IrradianceSolveBatch? ShadeBatch => m_shade;
 
@@ -85,7 +85,8 @@ public sealed partial class SdfIndirectCache {
         ArgumentOutOfRangeException.ThrowIfNegative(bounces);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(bounces, SdfIndirectLayout.MaximumBounces);
         if ((frame is not null) && (((frame.IndirectSources & SdfIndirectSources.Feedback) == 0) || (frame.IndirectGains.Feedback == 0f))) { bounces = 0; }
-        var probeBudget = ((frame is null) ? Layout.ShadeBudget : SdfIndirectWork.ShadeProbeBudget(frame: frame, layout: Layout));
+        // Each batch takes its probe allowance from the prices current when it is planned (PlanLighting).
+        var probeBudget = Math.Max(val1: 1, val2: Layout.ShadeBudget);
 
         m_solve = new IrradianceSolveSchedule(levels, Math.Min(val1: bounces, val2: Layout.BounceLimit), probeBudget, PublishedGeneration);
         m_writeLightingStamp = checked(++m_nextLightingStamp);
@@ -93,13 +94,15 @@ public sealed partial class SdfIndirectCache {
     }
     /// <summary>Retains the next bounded shade batch until submission. A frozen cache admits no new batch.</summary>
     public void PlanLighting() {
-        if ((m_shade is not null) || Frozen || (m_solve is null) || (m_changedGeometry is not null)) { return; }
-        m_shade = m_solve.Plan();
+        if ((m_shade is not null) || Frozen || (m_solve is null)) { return; }
+        var pinned = Lighting?.Frame;
+
+        m_shade = m_solve.Plan(probeBudget: ((pinned is null) ? null : SdfIndirectWork.ShadeProbeBudget(frame: pinned, layout: Layout, measuredFieldCost: MeasuredFieldCost(kind: SdfIndirectLayout.CostShade))));
         if (m_shade is not { } batch) { return; }
         var source = Lighting?.Frame;
 
         m_shadeUnits = ((source is null) ? new SdfIndirectUnits(UnitsPerItem: Math.Max(val1: 1, val2: Layout.RaysPerProbe), QueriesPerUnit: 0)
-            : SdfIndirectCost.ShadeUnits(frame: source, layout: Layout));
+            : ShadeUnitsOf(frame: source));
         m_shadeInstructions = (source?.Program.InstructionCount ?? 1);
         m_shadeChunks = SdfIndirectCost.Admit(count: batch.Probes.Count, instructionCount: m_shadeInstructions, units: m_shadeUnits);
         m_shadeChunk = 0;

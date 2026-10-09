@@ -32,4 +32,5 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     sdfIndirectShadeProbe(index, update.z, lattice, lane, passGroup.indirectReadGeneration,
         passGroup.indirectReadPublication, passGroup.indirectWriteGeneration,
         passGroup.indirectWritePublication, passGroup.indirectFeedback, rayFirst, rayEnd);
+    sdfIndirectReportCost(SdfIndirectCostShade, sdfFieldVisits, (lane == 0u && rayEnd > rayFirst) ? rayEnd - rayFirst : 0u);
 }

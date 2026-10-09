@@ -38,6 +38,14 @@ static const uint SdfIndirectTraceSupported = 2u;
 static const uint SdfIndirectTraceLaunched = 3u;
 static const uint SdfIndirectTraceFedBack = 4u;
 
+// Whether a query at this distance along a probe's ray sees the static far field (sdfIndirectStaticField): everything past
+// the first, near segment of a level with a coarser level, and all of the coarsest level's transport. Its moving casters
+// then reach only the probes within that near reach of them, plus the placement and partitions of their own bricks.
+bool sdfIndirectTraceStatic(uint level, float distance, float reach) {
+    if (passGroup.indirectStaticFar == 0u) { return false; }
+    return !((reach > 0.0) && ((level + 1u) < sdfIndirectLevelCount()) && (distance < reach));
+}
+
 uint sdfIndirectTraceBegin(float3 origin, float3 direction, float reach, uint gather, uint level) {
     sdfIndirectTraceProc.origin = origin;
     sdfIndirectTraceProc.direction = direction;
@@ -71,6 +79,7 @@ uint sdfIndirectKernelStep() {
             sdfIndirectTraceProc.travel = sdfIndirectTraceProc.ray.distance;
             sdfIndirectTraceProc.proofLevel = level + 1u;
             sdfIndirectTraceProc.phase = SdfIndirectTraceSupported;
+            sdfIndirectStaticField = sdfIndirectTraceStatic(level, sdfIndirectTraceProc.travel, sdfIndirectTraceProc.reach);
             return sdfIndirectCall(sdfIndirectProveBegin(origin + direction * sdfIndirectTraceProc.travel, sdfIndirectTraceProc.proofLevel, sdfIndirectTraceProc.budget, 0.0));
         }
     } else if (phase == SdfIndirectTraceSupported) {
@@ -91,6 +100,7 @@ uint sdfIndirectKernelStep() {
             sdfIndirectTraceProc.ray.launchHeight = sdfIndirectQuantizeLaunch(sdfIndirectTraceProc.surface, sdfIndirectTraceProc.ray.normal, sdfIndirectTraceProc.spacing, position, clearance);
             if (clearance > 0.0) {
                 sdfIndirectTraceProc.phase = SdfIndirectTraceFedBack;
+                sdfIndirectStaticField = sdfIndirectTraceStatic(level, sdfIndirectTraceProc.ray.distance, sdfIndirectTraceProc.reach);
                 return sdfIndirectCall(sdfIndirectProveBegin(position, level, sdfIndirectTraceProc.feedback, clearance));
             }
         }
@@ -107,6 +117,7 @@ uint sdfIndirectKernelStep() {
             ? min(passGroup.farDistance, travel == 0.0 ? reach : travel + sdfIndirectSpacing(passGroup.indirectTier, level + 1u))
             : passGroup.farDistance;
         sdfIndirectTraceProc.phase = SdfIndirectTraceMarched;
+        sdfIndirectStaticField = sdfIndirectTraceStatic(level, travel, reach);
         return sdfIndirectCall(sdfIndirectMarchBegin(origin + direction * travel, direction, travel == 0.0 ? reach : 0.0,
             segmentEnd - travel, travel == 0.0 ? sdfIndirectTraceProc.gather : SDF_INSTANCE_MASK_ALL, 0.0, sdfIndirectTraceProc.budget));
     }
@@ -116,6 +127,7 @@ uint sdfIndirectKernelStep() {
         sdfIndirectTraceProc.surface = origin + direction * sdfIndirectTraceProc.ray.distance;
         sdfIndirectTraceProc.spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
         sdfIndirectTraceProc.phase = SdfIndirectTraceLaunched;
+        sdfIndirectStaticField = sdfIndirectTraceStatic(level, sdfIndirectTraceProc.ray.distance, sdfIndirectTraceProc.reach);
         return sdfIndirectCall(sdfIndirectLaunchBegin(sdfIndirectTraceProc.surface, sdfIndirectTraceProc.ray.normal, sdfIndirectTraceProc.spacing, SdfIndirectLaunchSteps));
     }
     return SdfIndirectStepReturn;
@@ -153,7 +165,6 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     ray.kind = SdfIndirectKindUnresolved;
     if (active) {
         uint ordinal = lane * (sdfIndirectRaysPerProbe(passGroup.indirectTier) / 64u) + update.y;
-        sdfIndirectProofOwner = ordinal == 0u ? index : 0xffffffffu;
         float3 direction = sdfIndirectDirection(lattice, level, ordinal);
         sdfIndirectRun(sdfIndirectTraceBegin(probe.position, direction, reach, gather, level));
         ray = sdfIndirectTraceProc.ray;
@@ -170,6 +181,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     DeviceMemoryBarrierWithGroupSync();
     // The stratum's last ray marks it traced: every earlier ray was written by this group or an earlier chunk.
     if (active && lane == 63u) { InterlockedOr(indirectCacheRW[index * SdfIndirectProbeWords + 3u], 1u << (SdfIndirectTracedShift + update.y)); }
+    sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits, active ? 1u : 0u);
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
     sdfWorkTexels = active ? 1u : 0u;
     puckCountDetail(detail, sdfIndirectEvaluations - sdfIndirectLaunchEvaluations - sdfIndirectProofEvaluations, sdfWorkTexels, 0u, 0u, 0u);

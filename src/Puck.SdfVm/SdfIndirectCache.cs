@@ -76,7 +76,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the current complete field's instruction count, used by every admission path.</summary>
     public int InstructionCount { get; private set; } = 1;
     /// <summary>Gets the shared receiver admission for this field across all views in one frame.</summary>
-    public int ReceiverProofBudget => SdfIndirectCost.WholeItems(count: Layout.ReceiverProofBudget, instructionCount: InstructionCount, units: SdfIndirectCost.ReceiverUnits);
+    public int ReceiverProofBudget => SdfIndirectCost.WholeItems(count: Layout.ReceiverProofBudget, instructionCount: InstructionCount, units: ReceiverUnits);
     /// <summary>Gets the residency-owned allocation published by the graph.</summary>
     public IGpuBuffer Buffer { get; }
     /// <summary>Gets the brick, transport-update, direction, submitted-strata and shade-update regions.</summary>
@@ -103,7 +103,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
-    public bool IsComplete => (m_schedule.IsComplete && (m_pending is null) && (m_changedGeometry is null));
+    public bool IsComplete => (TransportComplete && (m_changedGeometry.Count == 0));
+    /// <summary>Gets whether the admitted transport is complete, even while geometry changes queue for the next plan.</summary>
+    public bool TransportComplete => (m_schedule.IsComplete && (m_pending is null));
 
     /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
     /// <param name="level">The running level index.</param>
@@ -153,12 +155,14 @@ public sealed partial class SdfIndirectCache : IDisposable {
         CertificateRevision = checked((CertificateRevision + 1u));
         Epoch = epoch;
         Frame = 1;
+        ClearCostCounters();
+        CountInvalidation();
         InvalidateLighting();
         m_schedule = NewSchedule();
         m_pending = null;
         ClearTransportChunks();
         m_receiverAdmission = false;
-        m_changedGeometry = null;
+        m_changedGeometry.Clear();
         m_slots.Clear();
         m_placed.Clear();
         Array.Clear(array: m_traceStates);
@@ -179,15 +183,14 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// the residency refuses such a field before planning.</exception>
     public void Plan(IrradianceFrameInputs inputs, int instructionCount = 1) {
         if (m_pending is not null) {
-            if (!Frozen && (instructionCount != InstructionCount)) { RechunkTransport(instructionCount: instructionCount); }
+            if (!Frozen && ((instructionCount != InstructionCount) || (m_transportPrices != PriceRevision))) { RechunkTransport(instructionCount: instructionCount); }
             PlanTransportStep();
             return;
         }
         if (Frozen) { return; }
-        if ((m_changedGeometry is not null) && (m_shade is not null)) { return; }
         InstructionCount = instructionCount;
         ApplyGeometryChanges();
-        m_pending = m_schedule.Frame(inputs: inputs, evaluationBudget: PlanEvaluations(instructionCount: instructionCount));
+        m_pending = m_schedule.Frame(inputs: inputs, prices: PlanPrices(instructionCount: instructionCount));
         if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Placed.Count != 0) ||
             (m_pending.Classified.Count != 0) || (m_pending.Traces.Count != 0)) {
             CertificateRevision = checked((CertificateRevision + 1u));

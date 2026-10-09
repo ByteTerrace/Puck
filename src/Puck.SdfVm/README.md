@@ -138,8 +138,8 @@ The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
 `SdfWorldPackage.VisibilityRecordByteLength`, 96 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
-data, dynamic frame/lanes, primary iteration/evaluation counts, and the
-indirect receiver's certified camera-ray approach in L.y. Surface adds
+data, dynamic frame/lanes and primary iteration/evaluation counts, and keeps
+a spare L.y word. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
 shadow four 8-bit stable visibilities in the one K word, each adding its queries
 to the combined count. Active handoffs add incoming marches, bounded by K + F,
@@ -640,8 +640,8 @@ names still reports an unavailable name.
 The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
 travels with the request. SDF identity names a program instance ordinal plus one,
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
-L.x, separate from its instance's conservative bound slot. L.y carries the certified
-indirect receiver approach, and anonymous lanes read the existing transform row. The record
+L.x, separate from its instance's conservative bound slot. L.y is spare,
+and anonymous lanes read the existing transform row. The record
 has a 64-byte surface prefix and a 32-byte retained indirect receiver certificate,
 for 96 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
 authority.

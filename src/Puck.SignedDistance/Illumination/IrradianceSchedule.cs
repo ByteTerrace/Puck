@@ -34,6 +34,28 @@ public sealed record IrradianceFramePlan(IReadOnlyList<IrradianceBrickKey> Alloc
     /// <summary>Gets the bricks whose probe placements precede this frame's partitions.</summary>
     public IReadOnlyList<IrradianceBrickKey> Placed { get; init; } = [];
 }
+/// <summary>One queued change of geometry.</summary>
+/// <param name="Sphere">The bounds the change lies within.</param>
+/// <param name="Near">Whether only near transport sees it: a moving caster under the static far field.</param>
+public readonly record struct IrradianceGeometryChange(IrradianceSphere Sphere, bool Near);
+/// <summary>The transport an allocation still owes.</summary>
+/// <param name="Placements">Bricks whose probes are not placed.</param>
+/// <param name="Partitions">Bricks whose cells are not partitioned.</param>
+/// <param name="Strata">Probe strata not traced.</param>
+public readonly record struct IrradianceRemainingWork(int Placements, int Partitions, int Strata);
+/// <summary>One plan's admission: an allowance and the price of each kind's item against it, in the same unit (the
+/// residency prices instruction visits). A plan always admits at least one item of each kind it has work for.</summary>
+/// <param name="Allowance">The plan's combined allowance.</param>
+/// <param name="Place">One brick's placement.</param>
+/// <param name="Classify">One brick's partition.</param>
+/// <param name="Trace">One probe stratum's trace.</param>
+public readonly record struct IrradiancePlanPrices(long Allowance, long Place, long Classify, long Trace) {
+    /// <summary>Gets the prices in counted field evaluations, the schedule's own item bounds.</summary>
+    /// <param name="allowance">The evaluation allowance.</param>
+    /// <returns>The prices.</returns>
+    public static IrradiancePlanPrices Evaluations(long allowance) =>
+        new(Allowance: allowance, Classify: IrradianceSchedule.ClassifyEvaluations, Place: IrradianceSchedule.PlaceEvaluations, Trace: IrradianceSchedule.TraceEvaluations);
+}
 /// <summary>
 /// The host's schedule for a residency's cache: which bricks each level allocates from its pool, which it classifies and
 /// which probe strata it traces each frame, within fixed budgets. It is a pure function of its inputs and its own state:
@@ -47,6 +69,9 @@ public sealed class IrradianceSchedule {
     public const int ClassifyEvaluations = (((SdfIndirectLayout.ProbesPerBrick * IrradianceLattice.CellSegments) * 2) * SdfIndirectLayout.SegmentSteps);
     /// <summary>Field evaluations for one stratum, its hit gradients and feedback proofs.</summary>
     public const int TraceEvaluations = (IrradianceLattice.RaysPerStratum * ((SdfIndirectLayout.TraceSteps + 1) + SdfIndirectLayout.FeedbackSteps));
+    /// <summary>The spacings past a level's near reach that its hits' launch and feedback proofs read: the hit's cell's
+    /// farthest corner and the launch above it.</summary>
+    public const double NearProofSpacings = 2.0;
 
     private sealed class Brick {
         public bool Classified { get; set; }
@@ -95,6 +120,22 @@ public sealed class IrradianceSchedule {
     public IReadOnlyList<IrradianceBrickKey> Allocated => m_bricks.Keys.ToArray();
     /// <summary>Gets whether every allocated brick is classified and every probe stratum traced.</summary>
     public bool IsComplete => m_bricks.Values.All(predicate: static brick => (brick.Classified && brick.Traced.All(predicate: static traced => traced)));
+    /// <summary>Gets the work the allocated bricks still owe: unplaced bricks, unpartitioned bricks and untraced strata.
+    /// Demand not yet allocated is absent; the next plan's allocation adds it.</summary>
+    public IrradianceRemainingWork Remaining {
+        get {
+            var placements = 0;
+            var partitions = 0;
+            var strata = 0;
+
+            foreach (var brick in m_bricks.Values) {
+                if (!brick.Placed) { placements++; }
+                if (!brick.Classified) { partitions++; }
+                foreach (var traced in brick.Traced) { if (!traced) { strata++; } }
+            }
+            return new IrradianceRemainingWork(Partitions: partitions, Placements: placements, Strata: strata);
+        }
+    }
 
     /// <summary>Returns whether this brick's cell partitions have been admitted after their latest invalidation.
     /// The GPU may read them only after the admitted classification pass in the same ordered submission.</summary>
@@ -109,6 +150,17 @@ public sealed class IrradianceSchedule {
     /// <returns><see langword="true"/> when the probe must be traced again.</returns>
     public static bool Dirties(Double3 probe, double reach, IrradianceSphere changed) =>
         ((probe - changed.Center).Length <= (reach + changed.Radius));
+    /// <summary>Gets how far a level's transport sees a change only near transport can see (<see cref="IrradianceGeometryChange.Near"/>):
+    /// the level's first, near segment and the launch and feedback proofs of hits within it, widened by the probe's
+    /// relocation allowance; the coarsest level's probes see it only through their own placement and partitions.</summary>
+    /// <param name="level">The level index.</param>
+    /// <returns>The reach, in world units.</returns>
+    public double NearReach(int level) {
+        var lattice = m_levels[level];
+        var near = (((level + 1) < m_levels.Count) ? lattice.Reach : 0.0);
+
+        return (near + ((NearProofSpacings + IrradianceCells.RelocationAllowance) * lattice.Spacing));
+    }
     /// <summary>Marks a change of geometry: every probe whose possible path meets the bounds before or after the change
     /// is traced again, and every brick the change can reach is classified again. Without stored path bounds, every
     /// level uses the far distance because support-seeking can march beyond its nominal reach, widened by the probe's
@@ -117,21 +169,37 @@ public sealed class IrradianceSchedule {
     /// <param name="previous">The changed geometry's bounds before the change.</param>
     /// <param name="current">Its bounds after the change.</param>
     /// <returns>The dirty placement bricks, in key order; their submitted trace masks must be withdrawn together.</returns>
-    public IReadOnlyList<IrradianceBrickKey> MarkGeometry(IrradianceSphere previous, IrradianceSphere current) {
+    public IReadOnlyList<IrradianceBrickKey> MarkGeometry(IrradianceSphere previous, IrradianceSphere current) =>
+        MarkGeometry(changes: [new IrradianceGeometryChange(Near: false, Sphere: previous), new IrradianceGeometryChange(Near: false, Sphere: current)]);
+    /// <summary>Marks changes of geometry, each withdrawing the transport that can see it: a far change every probe
+    /// within the far distance, a near change only the probes within their level's <see cref="NearReach"/>.</summary>
+    /// <param name="changes">The changed bounds.</param>
+    /// <returns>The dirty placement bricks, in key order; their submitted trace masks must be withdrawn together.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="changes"/> is <see langword="null"/>.</exception>
+    public IReadOnlyList<IrradianceBrickKey> MarkGeometry(IReadOnlyList<IrradianceGeometryChange> changes) {
+        ArgumentNullException.ThrowIfNull(argument: changes);
         var changed = new List<IrradianceBrickKey>();
 
         foreach (var (key, brick) in m_bricks) {
             var level = m_levels[key.Level];
-            var reach = (m_exitDistance + (IrradianceCells.RelocationAllowance * level.Spacing));
+            var far = (m_exitDistance + (IrradianceCells.RelocationAllowance * level.Spacing));
+            var near = NearReach(level: key.Level);
+
+            IrradianceLattice.BrickBox(brick: key, level: level, max: out var max, min: out var min);
             var any = false;
 
-            foreach (var probe in IrradianceLattice.ProbesOf(brick: key)) {
-                var position = IrradianceLattice.Position(key: probe, level: level);
+            foreach (var change in changes) {
+                var reach = (change.Near ? near : far);
 
-                if (Dirties(changed: previous, probe: position, reach: reach) || Dirties(changed: current, probe: position, reach: reach)) {
-                    any = true;
-                    break;
+                // A brick whose box the change cannot reach holds no probe it can reach.
+                if (BoxDistance(max: max, min: min, point: change.Sphere.Center) > (reach + change.Sphere.Radius)) { continue; }
+                foreach (var probe in IrradianceLattice.ProbesOf(brick: key)) {
+                    if (Dirties(changed: change.Sphere, probe: IrradianceLattice.Position(key: probe, level: level), reach: reach)) {
+                        any = true;
+                        break;
+                    }
                 }
+                if (any) { break; }
             }
 
             if (any) {
@@ -160,14 +228,19 @@ public sealed class IrradianceSchedule {
 
     /// <summary>Schedules one frame.</summary>
     /// <param name="inputs">What the frame sees.</param>
-    /// <param name="evaluationBudget">The combined field-evaluation allowance for this submission.</param>
+    /// <param name="prices">The plan's allowance and each kind's item price; absent admits every kind's count budget.</param>
     /// <returns>The frame's plan; the schedule assumes it is carried out.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="inputs"/> is <see langword="null"/>.</exception>
-    public IrradianceFramePlan Frame(IrradianceFrameInputs inputs, int? evaluationBudget = null) {
+    /// <exception cref="ArgumentOutOfRangeException">The allowance is negative or an item price is not positive.</exception>
+    public IrradianceFramePlan Frame(IrradianceFrameInputs inputs, IrradiancePlanPrices? prices = null) {
         ArgumentNullException.ThrowIfNull(argument: inputs);
-        var remaining = (evaluationBudget ?? int.MaxValue);
+        var price = (prices ?? IrradiancePlanPrices.Evaluations(allowance: long.MaxValue));
+        var remaining = price.Allowance;
 
         ArgumentOutOfRangeException.ThrowIfNegative(remaining);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(price.Place);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(price.Classify);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(price.Trace);
 
         var demand = DemandFor(inputs: inputs);
         var desired = demand.Desired;
@@ -201,10 +274,10 @@ public sealed class IrradianceSchedule {
             .OrderByDescending(keySelector: static key => key.Level)
             .ThenBy(keySelector: key => ranks.GetValueOrDefault(defaultValue: double.MaxValue, key: key))
             .ThenBy(keySelector: static key => key)
-            .Take(count: Math.Min(val1: m_classifyBudget, val2: (remaining / PlaceEvaluations)))
+            .Take(count: ((int)Math.Min(val1: m_classifyBudget, val2: (remaining / price.Place))))
             .ToList();
 
-        remaining -= (placed.Count * PlaceEvaluations);
+        remaining -= (placed.Count * price.Place);
         foreach (var key in placed) { m_bricks[key].Placed = true; }
 
         var classified = m_bricks
@@ -214,19 +287,23 @@ public sealed class IrradianceSchedule {
             .OrderByDescending(keySelector: static key => key.Level)
             .ThenBy(keySelector: key => ranks.GetValueOrDefault(defaultValue: double.MaxValue, key: key))
             .ThenBy(keySelector: static key => key)
-            .Take(count: Math.Min(val1: m_classifyBudget, val2: (remaining / ClassifyEvaluations)))
+            .Take(count: ((int)Math.Min(val1: m_classifyBudget, val2: (remaining / price.Classify))))
             .ToList();
 
-        remaining -= (classified.Count * ClassifyEvaluations);
+        remaining -= (classified.Count * price.Classify);
         foreach (var key in classified) {
             m_bricks[key].Classified = true;
         }
 
         var candidates = new List<(int Stratum, int Level, double Rank, IrradianceProbeKey Probe, IrradianceUpdateReason Reason, IrradianceBrickKey Brick, int Slot)>();
+        // A ray's support, launch and feedback proofs read whichever cells its path reaches, at its own and coarser
+        // levels. Tracing only once every allocated brick is placed and partitioned makes each stored ray a function of
+        // the complete lattice, never of how far the remaining placements and partitions had progressed.
+        var latticeComplete = m_bricks.Values.All(predicate: static brick => (brick.Placed && brick.Classified));
 
         foreach (var (key, brick) in m_bricks) {
-            if (!brick.Classified) {
-                continue;
+            if (!latticeComplete) {
+                break;
             }
 
             var strata = m_levels[key.Level].Strata;
@@ -253,7 +330,7 @@ public sealed class IrradianceSchedule {
             .ThenByDescending(keySelector: static candidate => candidate.Level)
             .ThenBy(keySelector: static candidate => candidate.Rank)
             .ThenBy(keySelector: static candidate => candidate.Probe)
-            .Take(count: Math.Min(val1: m_traceBudget, val2: (remaining / TraceEvaluations)))
+            .Take(count: ((int)Math.Min(val1: m_traceBudget, val2: (remaining / price.Trace))))
             .ToList();
 
         foreach (var trace in traces) {

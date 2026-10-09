@@ -80,7 +80,7 @@ public sealed partial class SdfWorldPassesLawTests {
                     Assert.True(condition: (cursors[earlier] == totals[earlier]), userMessage: $"A {parts[kind]} chunk must follow every {parts[earlier]} chunk of its plan.");
                 }
                 Assert.Equal(expected: cursors[kind], actual: ((chunk.ItemFirst * 64) + chunk.UnitFirst));
-                Assert.InRange(actual: SdfIndirectCache.TransportUnits(part: parts[kind]).CostOf(chunk: chunk, instructionCount: instructions),
+                Assert.InRange(actual: cache.TransportUnits(part: parts[kind]).CostOf(chunk: chunk, instructionCount: instructions),
                     high: SdfIndirectCost.SubmissionCostLimit, low: 1);
                 if (chunk.PartialItems(unitsPerItem: 64) != 0) { splitChunks++; splitInPlan = true; }
                 cursors[kind] += chunk.UnitCount;
@@ -147,6 +147,8 @@ public sealed partial class SdfWorldPassesLawTests {
     private static SdfIndirectUnits UnitsOf(string kind) => kind switch {
         SdfWorldPackage.IndirectShade => (SdfIndirectCost.ShadeUnits(frame: CostFrame(shapes: 1), layout: new SdfIndirectLayout(tier: SdfIndirectTier.Medium))
             with { QueriesPerUnit = SdfIndirectLightLayout.MarchSteps }),
-        _ => SdfIndirectCache.TransportUnits(part: kind),
+        SdfWorldPackage.IndirectPlace => SdfIndirectCost.PlaceUnits,
+        SdfWorldPackage.IndirectClassify => SdfIndirectCost.ClassifyUnits,
+        _ => SdfIndirectCost.TraceUnits,
     };
 }

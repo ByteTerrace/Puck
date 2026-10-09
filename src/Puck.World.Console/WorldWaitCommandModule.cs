@@ -174,9 +174,13 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
         if (!indirect.TryBegin(reason: out var reason, wait: out var wait)) {
             return CommandResult.Error(output: $"[world.wait: indirect refused ({reason})]");
         }
-        return ArmUntil(context: context, args: args, done: () => wait.IsSettled,
-            readyLine: tick => string.Create(CultureInfo.InvariantCulture, $"[indirect: settled at tick {tick}: {string.Join(separator: " | ", values: wait.Identities.Select(selector: identity =>
-                string.Create(CultureInfo.InvariantCulture, $"residency={identity.Residency} allocation={identity.Allocation} epoch={identity.Epoch} generation={identity.Generation} stamp={identity.Stamp} source={identity.Source}")))}]"),
+        // A solve that cannot finish releases the wait at once, naming why, rather than holding it to the deadline.
+        string? refused = null;
+
+        return ArmUntil(context: context, args: args, done: () => (wait.IsSettled || ((refused = wait.Refusal) is not null)),
+            readyLine: tick => ((refused is { } reason) ? string.Create(CultureInfo.InvariantCulture, $"[indirect: refused at tick {tick}: {reason}]")
+                : string.Create(CultureInfo.InvariantCulture, $"[indirect: settled at tick {tick}: {string.Join(separator: " | ", values: wait.Identities.Select(selector: identity =>
+                string.Create(CultureInfo.InvariantCulture, $"residency={identity.Residency} allocation={identity.Allocation} epoch={identity.Epoch} generation={identity.Generation} stamp={identity.Stamp} source={identity.Source}")))}]")),
             releasedLine: seconds => $"[indirect: not settled after {seconds} seconds, so world.wait released",
             what: "the current shared indirect caches have completed their source fences", reason: null);
     }

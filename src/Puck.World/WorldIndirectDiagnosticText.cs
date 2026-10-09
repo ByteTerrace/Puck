@@ -64,7 +64,14 @@ public static class WorldIndirectDiagnosticText {
         });
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"indirect {residency.Name} tier={snapshot.Tier.ToString().ToLowerInvariant()} allocation={snapshot.Allocation} epoch={snapshot.Epoch} submission={snapshot.Submission} lighting-publication={cache.LightingPublication} {control} trace-complete={snapshot.TraceComplete} pending-place={snapshot.PendingPlacements} pending-classify={snapshot.PendingClassifications} pending-trace={snapshot.PendingTraces} pending-transport-chunks={cache.PendingTransportChunks} pending-shade={snapshot.PendingShades} sweeps={snapshot.CompletedSweeps} lighting-complete={snapshot.LightingComplete} published-generation={snapshot.PublishedGeneration} published-stamp={snapshot.PublishedStamp} published-source={(cache.PublishedLightingSource?.Sequence ?? 0)} levels={string.Join(separator: ',', values: levels)} light-maps={valid}/{maps.MapCount} light-pending={maps.Pending} light-publications={maps.Publications} maps={string.Join(separator: ',', values: mapRows)} gpu-probe-classes=unread gpu-irradiance=unread {memory}");
+            $"indirect {residency.Name} tier={snapshot.Tier.ToString().ToLowerInvariant()} allocation={snapshot.Allocation} epoch={snapshot.Epoch} submission={snapshot.Submission} lighting-publication={cache.LightingPublication} {control} trace-complete={snapshot.TraceComplete} pending-place={snapshot.PendingPlacements} pending-classify={snapshot.PendingClassifications} pending-trace={snapshot.PendingTraces} pending-transport-chunks={cache.PendingTransportChunks} pending-shade={snapshot.PendingShades} invalidations={cache.Invalidations} remaining-frames={(cache.RemainingFrames?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "unmeasured")} prices={Prices(cache: cache)} sweeps={snapshot.CompletedSweeps} lighting-complete={snapshot.LightingComplete} published-generation={snapshot.PublishedGeneration} published-stamp={snapshot.PublishedStamp} published-source={(cache.PublishedLightingSource?.Sequence ?? 0)} levels={string.Join(separator: ',', values: levels)} light-maps={valid}/{maps.MapCount} light-pending={maps.Pending} light-publications={maps.Publications} maps={string.Join(separator: ',', values: mapRows)} gpu-probe-classes=unread gpu-irradiance=unread {memory}");
+    }
+    // Each measured kind's field visits per unit, or "-" before its first measurement: what admission prices it at.
+    private static string Prices(SdfIndirectCache cache) {
+        string[] names = ["place", "classify", "trace", "shade", "receiver"];
+
+        return string.Join(separator: ',', values: names.Select(selector: (name, kind) => string.Create(CultureInfo.InvariantCulture,
+            $"{name}:{(cache.MeasuredFieldCost(kind: kind)?.ToString(provider: CultureInfo.InvariantCulture) ?? "-")}")));
     }
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
@@ -90,13 +97,14 @@ public static class WorldIndirectDiagnosticText {
         var irradiance = ((layout is null) ? 0UL : Slice(layout.IrradianceWordOffset, layout.PublicationWordOffset));
         var publication = ((layout is null) ? 0UL : Slice(layout.PublicationWordOffset, layout.ReceiverProofWordOffset));
         var receiverProofs = ((layout is null) ? 0UL : Slice(layout.ReceiverProofWordOffset, layout.ShadeScratchWordOffset));
-        var shadeScratch = ((layout is null) ? 0UL : Slice(layout.ShadeScratchWordOffset, layout.WordCount));
+        var shadeScratch = ((layout is null) ? 0UL : Slice(layout.ShadeScratchWordOffset, layout.CostWordOffset));
+        var costCounters = ((layout is null) ? 0UL : Slice(layout.CostWordOffset, layout.WordCount));
         var regions = checked(((activeCache.DeviceLocal - (layout?.ByteLength ?? 0UL)) - lightDepth));
         var retiringDevice = checked((allCaches.DeviceLocal - activeCache.DeviceLocal));
         var retiringHost = checked((allCaches.HostVisible - activeCache.HostVisible));
         var total = checked(((allCaches.DeviceLocal + allCaches.HostVisible) + lightFragment));
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} receiver-proofs={receiverProofs} shade-scratch={shadeScratch} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
+            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} receiver-proofs={receiverProofs} shade-scratch={shadeScratch} cost-counters={costCounters} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
     }
 }

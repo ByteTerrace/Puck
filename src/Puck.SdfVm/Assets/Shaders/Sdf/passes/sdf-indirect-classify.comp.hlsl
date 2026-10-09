@@ -65,6 +65,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     } else {
         sdfIndirectStoreCell(cell, proof, sdfIndirectPartitionProc.result);
     }
+    sdfIndirectReportCost(placing ? SdfIndirectCostPlace : SdfIndirectCostClassify, sdfFieldVisits, 1u);
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
     sdfWorkTexels = 1u;
     puckCountDetail(detail, sdfWorkSteps, sdfWorkTexels, 0u, 0u, 0u);

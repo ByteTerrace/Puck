@@ -194,6 +194,19 @@ uint sdfIndirectKernelStep() {
 }
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 
+// A receiver's read of a published canonical record, exactly as the shared proof takes it: a readable earlier
+// publication of its key whose anchor ball its certified ball reaches.
+bool fixtureReuseProof(uint proof, uint key, uint frame, float3 position, float certifiedClearance, float spacing, out uint mask) {
+    uint cachedMask;
+    float3 anchor;
+    float clearance;
+    mask = 0u;
+    if (!sdfIndirectCanonicalProof(proof, key, frame, cachedMask, anchor, clearance)
+        || !sdfIndirectProofReusable(position, certifiedClearance, anchor, clearance, spacing)) { return false; }
+    mask = cachedMask;
+    return true;
+}
+
 [numthreads(64, 1, 1)]
 void CSMain(uint lane : SV_GroupIndex) {
     uint index = traceProbeIndex.index;
@@ -259,13 +272,13 @@ void CSMain(uint lane : SV_GroupIndex) {
         indirectCacheRW[proofAddress + 6u] = publishedFrame;
         DeviceMemoryBarrier();
         uint earlierMask, sameMask, futureMask, wrongKeyMask, emptyMask;
-        bool earlier = sdfIndirectReuseProof(proofAddress, key, publishedFrame + 1u, position.xyz, 0.0, spacing, earlierMask);
-        bool same = sdfIndirectReuseProof(proofAddress, key, publishedFrame, position.xyz, 0.0, spacing, sameMask);
-        bool future = sdfIndirectReuseProof(proofAddress, key, publishedFrame - 1u, position.xyz, 0.0, spacing, futureMask);
-        bool wrongKey = sdfIndirectReuseProof(proofAddress, key ^ 1u, publishedFrame + 1u, position.xyz, 0.0, spacing, wrongKeyMask);
+        bool earlier = fixtureReuseProof(proofAddress, key, publishedFrame + 1u, position.xyz, 0.0, spacing, earlierMask);
+        bool same = fixtureReuseProof(proofAddress, key, publishedFrame, position.xyz, 0.0, spacing, sameMask);
+        bool future = fixtureReuseProof(proofAddress, key, publishedFrame - 1u, position.xyz, 0.0, spacing, futureMask);
+        bool wrongKey = fixtureReuseProof(proofAddress, key ^ 1u, publishedFrame + 1u, position.xyz, 0.0, spacing, wrongKeyMask);
         indirectCacheRW[proofAddress + 6u] = 0u;
         DeviceMemoryBarrier();
-        bool empty = sdfIndirectReuseProof(proofAddress, key, publishedFrame + 1u, position.xyz, 0.0, spacing, emptyMask);
+        bool empty = fixtureReuseProof(proofAddress, key, publishedFrame + 1u, position.xyz, 0.0, spacing, emptyMask);
         traceResults[uint2(index, 0u)] = float4(earlier ? 1.0 : 0.0, same ? 1.0 : 0.0, future ? 1.0 : 0.0, empty ? 1.0 : 0.0);
         traceResults[uint2(index, 1u)] = float4((float)earlierMask, (float)(sameMask | futureMask | wrongKeyMask | emptyMask), wrongKey ? 1.0 : 0.0, 0.0);
     }

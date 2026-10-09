@@ -47,6 +47,7 @@ public sealed partial class SdfWorldTables {
 
         cache.MarkGeometry(
             new IrradianceSphere(Center: (center + new Double3(X: previous[0], Y: previous[1], Z: previous[2])), Radius: bound.Radius),
-            new IrradianceSphere(Center: (center + new Double3(X: current[0], Y: current[1], Z: current[2])), Radius: bound.Radius));
+            new IrradianceSphere(Center: (center + new Double3(X: current[0], Y: current[1], Z: current[2])), Radius: bound.Radius),
+            near: ((m_indirectPolicyProgram is { } program) && SdfIndirectCache.StaticFarField(program: program)));
     }
 }

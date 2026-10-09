@@ -3,6 +3,9 @@
 #define FIELD_SDF_PROGRAM_HLSLI
 static uint sdfWorkShapes = 0u;
 static uint sdfWorkGradients = 0u;
+// The field walk's instruction visits: one per directory segment it tests and every instruction of each segment it
+// does not cull. The indirect kernels report them so the cache admits its work at its measured price (SdfIndirectCost).
+static uint sdfFieldVisits = 0u;
 uint sdfProgramVectorCount() {
     uint count;
     uint stride;
@@ -112,6 +115,10 @@ static bool sdfShadowParticipationActive = false;
 
 // Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
 static bool sdfIndirectParticipationActive = false;
+// The static far field: a probe's transport past its level's near reach, and every query of the coarsest level, sees the
+// field without its moving casters, so a moving body only reaches the transport of probes near it
+// (SdfIndirectCache.MarkGeometry). Set only for a program whose root operands are independently unioned.
+static bool sdfIndirectStaticField = false;
 uint sdfIndirectPolicy(uint policy, bool isDynamic) {
     if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
     if (!isDynamic) { return SDF_INDIRECT_PARTICIPATION_CAST; }

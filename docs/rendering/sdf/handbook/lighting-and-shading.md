@@ -261,10 +261,22 @@ therefore advances the light-map geometry identity even when no transport brick
 overlaps its changed bound. The CPU invalidation witnesses compare relit stored
 hits with a cold solve for both cases; they do not stand in for GPU qualification.
 
-The cache's geometry-change entry point coalesces old and new casting bounds while
-an admitted batch finishes or admission is frozen. On resumption, the existing
-schedule withdraws every trace stratum in each affected placement brick and
-invalidates neighboring cell partitions. A validity bit in the existing brick
+The cache's geometry-change entry point queues old and new casting bounds, one
+covering sphere per eight-metre cell, so bodies moving in separate places never
+merge into one sphere that covers the world. Queued changes wait for the current
+cycle to complete, its transport traced and its finite solve published, and the
+next plan applies them all at once: static transport stands, the transport they
+reach is traced once per cycle rather than once per frame, and every cycle
+publishes while bodies move. A change reaches every probe within the far
+distance, except a moving caster of a program whose root operands are
+independently unioned: past its first, near segment a probe's ray sees the
+static far field, which omits moving instances and segments, and the coarsest
+level sees it throughout, so such a change withdraws only the probes within
+their level's near reach of it (`IrradianceSchedule.NearReach`: the level's
+reach, none for the coarsest, plus two spacings for its hits' launch and
+feedback proofs and the relocation allowance). The schedule then withdraws every
+trace stratum in each affected placement brick and invalidates neighboring cell
+partitions. A validity bit in the existing brick
 record keeps an old partition unavailable until the ordered classification pass
 replaces it; placement lookup can still find the neighboring probes it needs.
 The change also withdraws the lighting publication and receiver certificates.
@@ -356,15 +368,43 @@ publication. Disabled Direct lighting and an exactly zero light gain contribute
 no shadow queries. Exactly zero material reflectance also skips
 visibility at that hit, preserving emission, attenuation and feedback.
 
-Admission multiplies counted field evaluations (including each march's step cap)
-by the complete program's instruction count. Each cache-producing submission is
-limited to 67,108,864 estimated instruction visits; placement, classification
-and tracing share that allowance. Shade also counts continuation-record
-searches and irradiance reduction, including when direct lighting is disabled.
-Transport, light rectangles and the shared receiver allowance advance across
-frames; a frame never drains a pending queue in a loop. The tier's existing count
-ceilings remain additional limits. These counts estimate work, not elapsed GPU time;
-device qualification must establish the margin below its watchdog.
+Admission prices each kind's unit (a probe's placement, a cell's partition, a
+ray's trace, a ray's shading and an admitted receiver) at the field instruction
+visits the device measured for it. The field walk counts its visits: one per
+instance it reads (parked and non-casting instances included), one per
+directory segment it tests, every instruction of a segment it does not cull and
+every leaf of a part program it composes.
+Every indirect kernel adds its lanes' visits and units to monotonic counters at
+the end of the cache allocation; the trace recorder copies them after its
+dispatch, and the residency's produced-frame boundary reads every fenced copy, in
+submission order, as differences. A kind is priced at the largest of its last
+four measurements, never above the conservative price, every counted evaluation
+(each march's step cap included) against the complete program's instruction
+count, which still prices a kind before its first measurement. A cleared cache
+restarts the counter baseline; prices change only at a produced-frame boundary,
+where a pending plan's unsubmitted units are admitted again at the new prices. A
+measured shade unit replaces the evaluation-count batch ceiling, which stood in
+for that price. `world.lighting` echoes each kind's price (`prices=`).
+Each cache-producing submission is limited to 67,108,864 estimated instruction
+visits; placement, classification and tracing share that allowance. Shade also
+counts continuation-record searches and irradiance reduction, including when
+direct lighting is disabled. Transport, light rectangles and the shared receiver
+allowance advance across frames; a frame never drains a pending queue in a loop.
+The tier's existing count ceilings remain additional limits. These counts
+estimate work, not elapsed GPU time; device qualification must establish the
+margin below its watchdog. A schedule traces no ray until every allocated brick is
+placed and partitioned, so each stored ray reads the complete lattice rather than
+however far placement had progressed.
+
+Readiness and captures never wait for a solve that cannot finish. A capture, and
+a `world.wait indirect`, is refused by name at once when the scene withdrew its
+admitted transport more than once since it began (a held capture pins the
+simulation, so that is a scene changing on its own), or when the remaining
+transport and finite solve, at the measured prices and the plan's item budgets,
+need more than `SdfIndirectCache.FinishFrameBound` (4,096) produced frames.
+Before every kind with work left has a measurement the estimate is unknown and
+the solve is presumed finishable. `world.lighting` echoes the estimate
+(`remaining-frames=`) and the invalidation count (`invalidations=`).
 
 A work item above the cost limit is split across submissions, never refused whole.
 `SdfIndirectCost.Admit` partitions each kind's scheduled items into chunks of
@@ -526,28 +566,48 @@ shadow queries remain in the ordinary indirect row. Fenced inspection reports
 the actual Near outcome. The cache CPU estimate names a Near replacement as
 unsupported instead of reporting a misleading cache divergence.
 
-Primary traversal publishes a receiver approach in the existing visibility
-record. It keeps a positive complete-field sample whose clear ball joins the
-accepted sample, at most half the finest spacing away. The packed retreat and
-clearance use one word: moving the point onto the half-float grid subtracts
-the reconstruction error from its radius, and the radius rounds downward.
-Misses, meshes and uncertified approaches publish zero. With indirect enabled,
-primary evaluates its existing interpreter over the complete field instead of
-independent parts and camera masks, whose exclusions cannot certify that ball.
-This adds no launch query, but the primary shape count can increase.
+The receiver pass certifies each field receiver's approach before its proof.
+Primary keeps its camera masks, tape and independent parts whatever the tier,
+so it marches alike with indirect on and off; those exclusions cannot certify a
+ball, so the approach takes the complete field. It samples the surface, then
+sphere-traces along the camera ray from half the finest spacing back, each step
+landing on the previous sample's clear ball, so consecutive balls overlap. The
+chain joins the receiver when a sample's ball reaches the surface point within
+its slack: the larger of the surface sample's clearance and the threshold
+primary accepted the surface within. The chain's first sample, the widest ball,
+is then the receiver's launch. The approach takes the surface sample and at
+most eight chain samples per uncertified receiver, a fixed per-pixel cost
+outside the shared receiver admission, so a receiver whose canonical proof is
+published spends no admitted work. A receiver whose chain never joins, at a
+grazing angle or behind thin geometry, and a mesh receiver take the bounded
+normal launch under that admission.
+
+A converging capture counts a sample, and is served, only once the fenced
+receiver scope belongs to the sample its next render takes. Completion of the
+preceding sample says nothing about a new sample's certificates, which its
+first render proves afresh; serving that first render would read pixels whose
+receivers deferred.
 
 The views pass applies the complete lighting bank through the same certified
 component proof and irradiance weights as the solve. A missing approach uses
 the bounded normal launch. All views share the tier's finite new-proof allowance;
 its admission counter resets once through the residency's existing trace pass,
-including frames with no new transport rays. Each view owns a separate eight-byte deferred/reader census. Before evaluating a shared component proof, a receiver claims
-its empty hash slot. A pending or same-submission publication defers without
-reading its partial key or anchor; readers reuse only earlier complete positive
-proofs. An older occupied slot whose key or anchor does not support this receiver
-keeps the admitted uncached fallback, so hash collisions cannot starve it.
-Failed support, missing clearance or denied admission releases the transient
-claim. Failure does not become a shared negative proof; another receiver may
-try again within the unchanged admission allowance. Each view's
+including frames with no new transport rays. Each view owns a separate eight-byte deferred/reader census.
+A shared proof is canonical: its record belongs to an anchor bin, not to a
+receiver. It is proved from the bin's centre within a fixed allowance, two
+component attempts and that anchor's clearance, so the record is a pure
+function of the bin whichever receiver computes or reads it. A receiver whose
+certified ball reaches the anchor's ball inherits the record's mask; every other
+receiver proves its own point within its own allowance and publishes nothing.
+Before computing a missing record, a receiver claims its empty hash slot. A
+pending or same-submission publication defers without reading its partial key
+or anchor. A slot holding another bin's older record is no obstacle: the
+receiver computes its own bin's record again, unpublished, and reaches the same
+answer. A record whose anchor has no clearance or no clear component transfers
+nothing; its readers prove their own points. Denied admission releases the
+transient claim. Which receiver claims a slot, and when, therefore never changes
+any receiver's answer. Transport proofs (support, feedback and Near) are always
+the caller's own and are never shared. Each view's
 deferred counter has an explicit transfer reset before its receiver pass, whose preserving
 compute-written version views reads and supplies that view's fenced readback. A different camera's
 deferred work never delays this view's completion. Each receiver retains

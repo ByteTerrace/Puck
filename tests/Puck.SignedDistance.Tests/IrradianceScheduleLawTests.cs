@@ -119,6 +119,37 @@ public sealed class IrradianceScheduleLawTests {
         Assert.Equal(expected: expected, actual: room.Select(selector: static update => update.Probe).Distinct().Order().ToArray());
         Assert.Contains(collection: room, filter: static update => (update.Reason == IrradianceUpdateReason.Geometry));
     }
+    [Fact]
+    public void ANearChangeWithdrawsOnlyTheProbesWithinTheirLevelsNearReach() {
+        var schedule = Schedule(classifyBudget: 1_000, pools: [512, 256], traceBudget: 1_000_000);
+        var camera = new Double3(X: 0.0, Y: 1.0, Z: 0.0);
+
+        do {
+            _ = schedule.Frame(inputs: Inputs(cameras: [camera]));
+        } while (!schedule.IsComplete);
+
+        var moved = new IrradianceSphere(Center: new Double3(X: -10.0, Y: 2.0, Z: 6.0), Radius: 0.5);
+        var near = schedule.MarkGeometry(changes: [new IrradianceGeometryChange(Near: true, Sphere: moved)]);
+
+        Assert.NotEmpty(collection: near);
+        Assert.True(condition: (near.Count < schedule.Allocated.Count), userMessage: "A near change must leave the static far field standing.");
+        foreach (var key in schedule.Allocated) {
+            var reach = schedule.NearReach(level: key.Level);
+            var reached = IrradianceLattice.ProbesOf(brick: key).Any(predicate: probe =>
+                IrradianceSchedule.Dirties(changed: moved, probe: IrradianceLattice.Position(key: probe, level: Levels[key.Level]), reach: reach));
+
+            Assert.Equal(expected: reached, actual: near.Contains(value: key));
+        }
+        // The coarsest level sees a moving caster only through its own placement and partitions.
+        Assert.Equal(expected: ((2.0 + IrradianceCells.RelocationAllowance) * Levels[1].Spacing), actual: schedule.NearReach(level: 1));
+        Assert.Equal(expected: (9.0 + ((2.0 + IrradianceCells.RelocationAllowance) * Levels[0].Spacing)), actual: schedule.NearReach(level: 0));
+
+        do {
+            _ = schedule.Frame(inputs: Inputs(cameras: [camera]));
+        } while (!schedule.IsComplete);
+        // A far change of the same bounds reaches every probe within the far distance.
+        Assert.Equal(expected: schedule.Allocated.Count, actual: schedule.MarkGeometry(changes: [new IrradianceGeometryChange(Near: false, Sphere: moved)]).Count);
+    }
     [InlineData(0, 8.0)]
     [InlineData(1, 10.25)]
     [Theory]
