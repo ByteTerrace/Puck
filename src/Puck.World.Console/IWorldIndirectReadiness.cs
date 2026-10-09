@@ -5,7 +5,11 @@ namespace Puck.World;
 /// <summary>Arms a wait for the current shared indirect caches on the render/console owner thread. This is cache
 /// convergence, not admission of every view's independent receiver certificate.</summary>
 public interface IWorldIndirectReadiness {
-    /// <summary>Captures the current produced-frame boundary and starts a wait, or refuses when no active cache exists.</summary>
+    /// <summary>Gets the produced frames a wait holds for at most: past it, a solve the caches still presume finishable
+    /// has not finished, and the wait releases naming the count.</summary>
+    long FrameBound { get; }
+    /// <summary>Captures the current produced-frame boundary and starts a wait, or refuses when no renderer exists. A
+    /// cache the renderer has not activated yet (a tier just selected) is awaited like any other.</summary>
     /// <param name="wait">The owner-thread wait, or null on refusal.</param>
     /// <param name="reason">The named refusal, or empty.</param>
     /// <returns>Whether a rendered indirect wait was armed.</returns>
@@ -21,6 +25,8 @@ public interface IWorldIndirectWait {
     /// <summary>Gets why an unsettled wait can never settle: an active cache's solve cannot finish. A wait never holds
     /// for such a solve; it releases at once with this reason.</summary>
     string? Refusal { get; }
+    /// <summary>Gets the frames the renderer has produced since the wait was armed.</summary>
+    long FramesSinceArmed { get; }
 }
 /// <summary>The actual cache publication that completed a warm-up.</summary>
 /// <param name="Residency">The residency's live name.</param>
@@ -45,6 +51,8 @@ public sealed class WorldIndirectWait(Func<long> framesProduced, Func<IReadOnlyL
     public IReadOnlyList<WorldIndirectReadyIdentity> Identities => (m_identities ?? []);
     /// <inheritdoc/>
     public string? Refusal => ((m_identities is null) ? refusal?.Invoke() : null);
+    /// <inheritdoc/>
+    public long FramesSinceArmed => Math.Max(val1: 0L, val2: (framesProduced() - m_armedFrame));
     /// <inheritdoc/>
     public bool IsSettled {
         get {

@@ -62,9 +62,11 @@ public static class CountersBatchInput {
             if (Commands(script: prelude).Any(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.counters"))) {
                 throw new FormatException(message: $"group {group.Name}'s prelude contains a counters response");
             }
-            var waitPrefix = ((group.Completion == "engine") ? "world.wait ready " : "world.wait indirect ");
+            // The completion wait: the engine form takes a deadline in seconds, the indirect form none (produced frames bound it).
+            Func<string, bool> completes = ((group.Completion == "engine") ? static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ready ")
+                : static line => (line == "world.wait indirect"));
 
-            if (Commands(script: prelude).Any(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: waitPrefix))) {
+            if (Commands(script: prelude).Any(predicate: completes)) {
                 throw new FormatException(message: $"group {group.Name}'s prelude contains an observation completion wait");
             }
             var observations = new List<PreparedCountersObservation>();
@@ -85,7 +87,7 @@ public static class CountersBatchInput {
                 var commands = Commands(script: script).ToArray();
                 var selected = Array.IndexOf(array: commands, value: $"world.indirect-method {observation.Method}");
                 var paused = Array.IndexOf(array: commands, value: "world.rate pause");
-                var warmed = Array.FindIndex(array: commands, match: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: waitPrefix));
+                var warmed = Array.FindIndex(array: commands, match: line => completes(line));
                 var resumed = Array.IndexOf(array: commands, value: "world.rate resume");
                 var advanced = Array.IndexOf(array: commands, value: "world.wait 120");
                 // Completion must describe the selected method, before the active input begins.
@@ -93,7 +95,7 @@ public static class CountersBatchInput {
                     || (commands.LastOrDefault() != "world.counters --json")
                     || (commands.Count(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.indirect-method")) != 1)
                     || (selected < 0) || (selected >= warmed)
-                    || (commands.Count(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: waitPrefix)) != 1)
+                    || (commands.Count(predicate: completes) != 1)
                     || (commands.Count(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ")) != 2)
                     || (commands.Count(predicate: line => (line == "world.wait 120")) != 1)
                     || (commands.Count(predicate: line => (line == "world.rate pause")) != 1)

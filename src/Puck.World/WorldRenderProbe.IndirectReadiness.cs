@@ -6,26 +6,49 @@ namespace Puck.World;
 
 public sealed partial class WorldRenderProbe : IWorldIndirectReadiness {
     /// <inheritdoc/>
+    public long FrameBound => SdfIndirectCache.FinishFrameBound;
+
+    /// <inheritdoc/>
     public bool TryBegin([NotNullWhen(true)] out IWorldIndirectWait? wait, out string reason) {
         wait = null;
-        if ((Root is null) || !m_indirectResidencies.Any(predicate: entry => (entry.Value && (entry.Key.IndirectTier != SdfIndirectTier.Off)))) {
-            reason = "no active indirect residency — select medium or high and wait for the renderer";
+        if (Root is null) {
+            reason = "no renderer — indirect lighting needs a rendered host";
             return false;
         }
-        var armed = m_indirectResidencies.Where(predicate: entry => entry.Value).Select(selector: entry =>
-            (Residency: entry.Key, Cache: entry.Key.Tables?.Indirect, Since: (entry.Key.Tables?.Indirect?.Invalidations ?? 0L))).ToArray();
+        // Each cache is judged from the invalidations it had when the wait first saw it: at arming, or when the renderer
+        // activates it later (a tier just selected).
+        var since = new Dictionary<SdfIndirectCache, long>(comparer: ReferenceEqualityComparer.Instance);
 
-        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady, () => CannotFinish(armed: armed));
+        foreach (var entry in m_indirectResidencies) {
+            if (entry.Value && (entry.Key.Tables?.Indirect is { } cache)) { since[cache] = cache.Invalidations; }
+        }
+        var armed = Root.FramesProduced;
+
+        wait = new WorldIndirectWait(() => (Root?.FramesProduced ?? 0L), CaptureIndirectReady, () => CannotFinish(since: since, armed: armed));
         reason = string.Empty;
         return true;
     }
 
-    // The first active cache, armed with the wait, whose solve cannot finish; a cache replaced since arming is judged
-    // from its own start.
-    private static string? CannotFinish((SdfWorldResidency Residency, SdfIndirectCache? Cache, long Since)[] armed) {
-        foreach (var (residency, cache, since) in armed) {
-            if ((residency.IndirectTier == SdfIndirectTier.Off) || residency.IsIndirectReady || (residency.Tables?.Indirect is not { } current)) { continue; }
-            if (current.CannotFinishReason(since: (ReferenceEquals(objA: current, objB: cache) ? since : 0L)) is { } reason) {
+    // The produced frames a wait gives the renderer to activate a cache (a tier selected just before arming) before it
+    // refuses as having none.
+    private const long IndirectActivationFrames = 2;
+
+    // Why the wait can never settle: no cache active once the renderer had frames to activate one, or the first active
+    // cache whose solve cannot finish since the wait first saw it.
+    private string? CannotFinish(Dictionary<SdfIndirectCache, long> since, long armed) {
+        if (!m_indirectResidencies.Any(predicate: entry => (entry.Value && (entry.Key.IndirectTier != SdfIndirectTier.Off))) &&
+            (((Root?.FramesProduced ?? 0L) - armed) > IndirectActivationFrames)) {
+            return "no active indirect residency — select medium or high";
+        }
+        foreach (var entry in m_indirectResidencies) {
+            var residency = entry.Key;
+
+            if (!entry.Value || (residency.IndirectTier == SdfIndirectTier.Off) || residency.IsIndirectReady || (residency.Tables?.Indirect is not { } current)) { continue; }
+            if (!since.TryGetValue(key: current, value: out var first)) {
+                first = current.Invalidations;
+                since[current] = first;
+            }
+            if (current.CannotFinishReason(since: first) is { } reason) {
                 return $"residency={residency.Name} {reason}";
             }
         }

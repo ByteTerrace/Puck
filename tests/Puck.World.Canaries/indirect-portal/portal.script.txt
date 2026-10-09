@@ -3,7 +3,7 @@ world.cadence off
 world.quality medium
 world.indirect medium
 world.wait ready 25
-world.wait indirect 25
+world.wait indirect
 world.view.pointer 48 48
 world.wait 4
 world.explain

@@ -192,9 +192,9 @@ public sealed partial class CountersLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-gfx-batch-input-law-");
         var script = Path.Combine(path1: directory.RootPath, path2: "cache.script.txt");
 
-        File.WriteAllText(contents: ("world.indirect-method cache\nworld.rate pause\nworld.wait indirect 180\nworld.rate resume\nworld.wait 120\nworld.counters --json\n"
+        File.WriteAllText(contents: ("world.indirect-method cache\nworld.rate pause\nworld.wait indirect\nworld.rate resume\nworld.wait 120\nworld.counters --json\n"
             + ((defect == "terminal") ? "quit\n" : "")), path: script);
-        if (defect == "warm-order") { File.WriteAllText(script, File.ReadAllText(path: script).Replace(comparisonType: StringComparison.Ordinal, newValue: "world.wait indirect 180\nworld.rate pause\n", oldValue: "world.rate pause\nworld.wait indirect 180\n")); }
+        if (defect == "warm-order") { File.WriteAllText(script, File.ReadAllText(path: script).Replace(comparisonType: StringComparison.Ordinal, newValue: "world.wait indirect\nworld.rate pause\n", oldValue: "world.rate pause\nworld.wait indirect\n")); }
         File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: "prelude.script.txt"), "world.wait ready 180\n");
         var observation = new CountersBatchObservation(Ceilings: "medium-cache-pan.ceilings.json", Method: "cache", Name: "medium-cache-pan",
             Report: defect switch {
@@ -232,7 +232,7 @@ public sealed partial class CountersLawTests {
 
             Assert.Equal("medium-cache-pan", selected.Definition.Name);
             Assert.Equal(Path.GetFullPath(path: script).Replace(newChar: '/', oldChar: '\\'), selected.ScriptPath);
-            Assert.Contains("world.wait indirect 180", selected.Script, StringComparison.Ordinal);
+            Assert.Contains("world.wait indirect", selected.Script, StringComparison.Ordinal);
         } else {
             if (defect == "unknown") { Assert.Throws<JsonException>(testCode: () => CountersBatchInput.Read(output: output, path: path)); } else { Assert.Throws<FormatException>(testCode: () => CountersBatchInput.Read(output: output, path: path)); }
         }

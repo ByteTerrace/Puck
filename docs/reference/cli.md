@@ -2166,7 +2166,7 @@ report paths and ceiling paths are distinct. Unknown manifest fields refuse.
 The collector launches Vulkan then Direct3D 12 for each group, serially, with
 that prelude followed by its observation scripts in the same World session.
 Each script selects its declared method, pauses simulation through one
-`world.wait indirect <seconds>`, resumes, advances `world.wait 120` and ends
+`world.wait indirect`, resumes, advances `world.wait 120` and ends
 with its only `world.counters --json` read. The indirect wait requires a newer
 produced frame and the actual current shared-cache source fence; it does not
 promise admission of every view's receiver. Keeping simulation paused through

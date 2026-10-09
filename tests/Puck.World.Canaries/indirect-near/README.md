@@ -55,7 +55,7 @@ before specular and fog composition against G1's diffuse reference. Equality of
 the final fogged and unfogged images would be the wrong assertion.
 
 The sources and scripts have not been compiled or run yet. The executable
-canaries use `world.wait indirect 25`: a newer produced frame and every active shared cache's
+canaries use `world.wait indirect`: a newer produced frame and every active shared cache's
 current source fence, rather than a fixed elapsed tick count. Cadence is off so
 the bounded Near phase sequence continues to render. The actual GPU detail row
 is `indirect-near`; it counts field queries, loads, hashes and indirect

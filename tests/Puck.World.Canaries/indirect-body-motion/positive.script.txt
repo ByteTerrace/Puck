@@ -5,12 +5,12 @@ world.indirect high
 world.wait ready 25
 body.pose 0 0 0 0 0 0 0
 world.wait 2
-world.wait indirect 25
+world.wait indirect
 world.counters sdf.indirect
 body.pose 2 0 0 0 0 0 0
 world.wait 2
 body.where 0
-world.wait indirect 25
+world.wait indirect
 world.counters sdf.indirect
 world.screenshot {run}/changed.png
 world.wait captures 5

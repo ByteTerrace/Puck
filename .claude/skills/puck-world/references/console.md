@@ -236,14 +236,16 @@ reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
 
-`world.wait indirect <seconds>` uses the existing session hold to await a newer
-produced frame and every active shared indirect cache's current-source fence.
+`world.wait indirect` uses the existing session hold to await a newer produced
+frame and every active shared indirect cache's current-source fence. It takes no
+deadline: produced frames bound it (`SdfIndirectCache.FinishFrameBound`), a solve
+that cannot finish refuses at once by name, and a seconds argument is refused.
 Its stderr settlement names the actual residency/allocation/epoch/generation/
 stamp/source identities once. It proves shared-cache completion, not each
 view's independent receiver admission. Pause simulation while warming, then
 resume for fixed input ticks; never replace the fence with guessed warm ticks.
-A deadline's not-settled verdict is diagnostic evidence and cannot qualify a
-counter observation.
+A not-settled verdict past the frame bound, or a refusal, is diagnostic evidence
+and cannot qualify a counter observation.
 
 Silo row retirement disposes its `TextCommandSession`, refusing work still
 queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`

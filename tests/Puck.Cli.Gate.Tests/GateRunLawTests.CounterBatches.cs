@@ -51,7 +51,7 @@ public sealed partial class GateRunLawTests {
 
         foreach (var method in methods) {
             directory.WriteText(name: ((Home + method) + ".script.txt"),
-                text: $"world.indirect-method {method}\nworld.rate pause\nworld.wait indirect 180\nworld.rate resume\nworld.wait 120\nworld.counters --json\n");
+                text: $"world.indirect-method {method}\nworld.rate pause\nworld.wait indirect\nworld.rate resume\nworld.wait 120\nworld.counters --json\n");
             directory.WriteText(name: ((Home + method) + ".ceilings.json"), text: JsonSerializer.Serialize(new {
                 workload = (Home + "fixture.puck"),
                 script = ((Home + method) + ".script.txt"),

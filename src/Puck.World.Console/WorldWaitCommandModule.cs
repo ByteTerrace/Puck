@@ -32,7 +32,7 @@ namespace Puck.World;
 /// that bakes nothing, where that form refuses.</param>
 /// <param name="indirect">The active shared caches' current-source fence readiness, or null without a rendered host.</param>
 public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWorldWaitGateResolver gates, IWorldEngineReadiness? readiness = null, IWorldBakeReadiness? bakes = null, IWorldIndirectReadiness? indirect = null) : ICommandModule {
-    /// <summary>The longest deadline, in seconds, a readiness, bake, capture or indirect wait may hold a
+    /// <summary>The longest deadline, in seconds, a readiness, bake or capture wait may hold a
     /// session for.</summary>
     public const int MaxReadySeconds = 600;
 
@@ -45,10 +45,13 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.wait",
-            description: "Suspends only the issuing text session until the addressed world's simulation has advanced a number of fixed ticks, or until its rendering engine is ready, or until its creation bakes are settled. world.wait ready <seconds> holds the session until the engine has installed its pipeline set, produced its first frame, seen the GPU complete a frame of every instance that has rendered and produced one frame more, so a windowed host has caught up the ticks its slowest frame cost before the next line runs, or the deadline (1..600 seconds) passes, whichever comes first, and reports which on stderr as a line of its own, not a second world.wait answer: '[engine: ready at tick T]', or '[engine: not ready after N seconds, so world.wait released: <reason naming the pipeline build and its progress>]'. The command's one answer is its arming line on stdout, as world.wait <ticks> answers with its release tick. It refuses on a host that composes no renderer. world.wait bakes <seconds> holds the same way until every prototype the presentation last saw is baked, held or refused and none is queued or baking, and reports '[bakes: settled at tick T]' or '[bakes: not settled after N seconds, so world.wait released]'; it refuses on a host that bakes nothing. world.wait captures <seconds> holds the same way until every capture world.screenshot armed on the render graph's root has written its file or been refused, and reports '[captures: settled at tick T]' or '[captures: not settled after N seconds, so world.wait released]'; a script that arms one capture after another waits on it between them, since a still-pending capture refuses the next; it refuses on a host that composes no renderer. world.wait indirect <seconds> requires a produced frame after arming and every active shared cache's current geometry, lighting source and completed publication fence. It reports '[indirect: settled at tick T: residency=... allocation=... epoch=... generation=... stamp=... source=... | ...]' on stderr, retaining the exact identities once, or a named not-settled deadline verdict. It proves shared-cache convergence, not every view's receiver admission, and refuses when no active indirect cache exists. A script may pause simulation through this warm-up, then resume for its fixed input ticks. A script that reads rendered work (world.counters gpu) waits on it rather than on a tick count, since a cold driver cache can hold the first frame back for many ticks. world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). Later work in that session resumes in order right after the release tick completes and before the next tick steps, since the console drains before every step. On the offscreen host every one of those ticks composed and rendered its own frame, so a wait of N ticks has N frames behind it; a windowed host may compose one frame for several ticks it catches up. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
+            description: "Suspends only the issuing text session until the addressed world's simulation has advanced a number of fixed ticks, or until its rendering engine is ready, or until its creation bakes are settled. world.wait ready <seconds> holds the session until the engine has installed its pipeline set, produced its first frame, seen the GPU complete a frame of every instance that has rendered and produced one frame more, so a windowed host has caught up the ticks its slowest frame cost before the next line runs, or the deadline (1..600 seconds) passes, whichever comes first, and reports which on stderr as a line of its own, not a second world.wait answer: '[engine: ready at tick T]', or '[engine: not ready after N seconds, so world.wait released: <reason naming the pipeline build and its progress>]'. The command's one answer is its arming line on stdout, as world.wait <ticks> answers with its release tick. It refuses on a host that composes no renderer. world.wait bakes <seconds> holds the same way until every prototype the presentation last saw is baked, held or refused and none is queued or baking, and reports '[bakes: settled at tick T]' or '[bakes: not settled after N seconds, so world.wait released]'; it refuses on a host that bakes nothing. world.wait captures <seconds> holds the same way until every capture world.screenshot armed on the render graph's root has written its file or been refused, and reports '[captures: settled at tick T]' or '[captures: not settled after N seconds, so world.wait released]'; a script that arms one capture after another waits on it between them, since a still-pending capture refuses the next; it refuses on a host that composes no renderer. world.wait indirect takes no deadline: it requires a produced frame after arming and every active shared cache's current geometry, lighting source and completed publication fence, and is bounded by produced frames, not seconds, so a slow or loaded machine only takes longer. It reports '[indirect: settled at tick T: residency=... allocation=... epoch=... generation=... stamp=... source=... | ...]' on stderr, retaining the exact identities once; '[indirect: refused at tick T: <reason>]' at once when a cache's solve cannot finish (a scene that keeps withdrawing its transport, or remaining work beyond the frame bound at the measured prices); or '[indirect: not settled after N produced frames, so world.wait released]' past the caches' frame bound. A cache the renderer activates after arming (a tier just selected) is awaited like any other. It proves shared-cache convergence, not every view's receiver admission, and refuses a seconds argument by name. A script may pause simulation through this warm-up, then resume for its fixed input ticks. A script that reads rendered work (world.counters gpu) waits on it rather than on a tick count, since a cold driver cache can hold the first frame back for many ticks. world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). Later work in that session resumes in order right after the release tick completes and before the next tick steps, since the console drains before every step. On the offscreen host every one of those ticks composed and rendered its own frame, so a wait of N ticks has N frames behind it; a windowed host may compose one frame for several ticks it catches up. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
             handler: (context, args) => {
-                if ((args.Count == 2) && args.Is(index: 0, value: "indirect")) {
-                    return ArmIndirect(args: args, context: context);
+                if ((args.Count == 1) && args.Is(index: 0, value: "indirect")) {
+                    return ArmIndirect(context: context);
+                }
+                if ((args.Count > 1) && args.Is(index: 0, value: "indirect")) {
+                    return CommandResult.Error(output: "[world.wait: indirect takes no deadline: produced frames bound it, so write world.wait indirect]");
                 }
                 if (
                     (args.Count == 2) &&
@@ -89,7 +92,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                 }
 
                 if (args.Count != 1) {
-                    return CommandResult.Error(output: "[world.wait: expected <ticks>, ready <seconds>, bakes <seconds>, captures <seconds>, or indirect <seconds>]");
+                    return CommandResult.Error(output: "[world.wait: expected <ticks>, ready <seconds>, bakes <seconds>, captures <seconds>, or indirect]");
                 }
 
                 if (!args.TryUnsignedDigits(
@@ -169,20 +172,41 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
             reason: () => (engine.NotReadyReason ?? "no reason given")
         );
     }
-    private CommandResult ArmIndirect(CommandContext context, WireArgs args) {
+    // Holds the issuing session until every active shared cache settles, bounded by produced frames rather than seconds: a
+    // solve that cannot finish refuses at once by name, and one still unsettled after the caches' frame bound releases
+    // naming that count, so a slow or loaded machine only takes longer.
+    private CommandResult ArmIndirect(CommandContext context) {
         if (indirect is null) { return CommandResult.Error(output: "[world.wait: indirect readiness is unavailable without a rendered host]"); }
+        if (!authority.TryResolve(context: context, instance: out var instance, refusal: out var refusal)) {
+            return CommandResult.Error(output: $"[world.wait: refused ({refusal})]");
+        }
+        if (context.TextSession is not { } session) {
+            return CommandResult.Error(output: "[world.wait: requires an originating text session]");
+        }
         if (!indirect.TryBegin(reason: out var reason, wait: out var wait)) {
             return CommandResult.Error(output: $"[world.wait: indirect refused ({reason})]");
         }
-        // A solve that cannot finish releases the wait at once, naming why, rather than holding it to the deadline.
-        string? refused = null;
+        var gate = gates.GateFor(instance: instance);
+        var bound = indirect.FrameBound;
+        var held = true;
 
-        return ArmUntil(context: context, args: args, done: () => (wait.IsSettled || ((refused = wait.Refusal) is not null)),
-            readyLine: tick => ((refused is { } reason) ? string.Create(CultureInfo.InvariantCulture, $"[indirect: refused at tick {tick}: {reason}]")
-                : string.Create(CultureInfo.InvariantCulture, $"[indirect: settled at tick {tick}: {string.Join(separator: " | ", values: wait.Identities.Select(selector: identity =>
-                string.Create(CultureInfo.InvariantCulture, $"residency={identity.Residency} allocation={identity.Allocation} epoch={identity.Epoch} generation={identity.Generation} stamp={identity.Stamp} source={identity.Source}")))}]")),
-            releasedLine: seconds => $"[indirect: not settled after {seconds} seconds, so world.wait released",
-            what: "the current shared indirect caches have completed their source fences", reason: null);
+        session.HoldWhile(hold: () => {
+            if (!held) { return false; }
+            if (wait.IsSettled) {
+                Console.Error.WriteLine(value: string.Create(CultureInfo.InvariantCulture, $"[indirect: settled at tick {gate.Tick}: {string.Join(separator: " | ", values: wait.Identities.Select(selector: identity =>
+                    string.Create(CultureInfo.InvariantCulture, $"residency={identity.Residency} allocation={identity.Allocation} epoch={identity.Epoch} generation={identity.Generation} stamp={identity.Stamp} source={identity.Source}")))}]"));
+            } else if (wait.Refusal is { } refused) {
+                Console.Error.WriteLine(value: string.Create(CultureInfo.InvariantCulture, $"[indirect: refused at tick {gate.Tick}: {refused}]"));
+            } else if (wait.FramesSinceArmed >= bound) {
+                Console.Error.WriteLine(value: string.Create(CultureInfo.InvariantCulture, $"[indirect: not settled after {bound} produced frames, so world.wait released]"));
+            } else {
+                return true;
+            }
+            held = false;
+            return false;
+        });
+        return new CommandResult(Output: string.Create(CultureInfo.InvariantCulture,
+            $"[world.wait: holding until the current shared indirect caches have completed their source fences, at most {bound} produced frames, from tick {gate.Tick}]"));
     }
     // Holds the issuing session until the bakes are settled or the deadline passes, and reports which, once.
     private CommandResult ArmBakes(CommandContext context, WireArgs args) {
