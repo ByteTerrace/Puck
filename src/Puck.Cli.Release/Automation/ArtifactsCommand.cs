@@ -27,6 +27,7 @@ public static class ArtifactsCommand {
         .. CliTestRun.Report(directory: results, fileName: report),
         .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15)),
     ];
+
     private const string Archive = "artifacts/compiled-windows.zip";
     private const string Identity = "source.json";
 

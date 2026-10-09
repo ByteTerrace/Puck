@@ -1,4 +1,3 @@
-using Puck.Cli.Affected;
 using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Xunit;

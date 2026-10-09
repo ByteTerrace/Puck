@@ -15,15 +15,15 @@ public sealed class ArtifactsTestSelectionLawTests {
         var arguments = ArtifactsCommand.TestWindowsArguments(assembly: "tests/A/bin/Release/net10.0/A.dll", report: "000-A.trx", results: "artifacts/test-results");
 
         Assert.Equal(expected: "tests/A/bin/Release/net10.0/A.dll", actual: arguments[0]);
-        Assert.Equal(expected: ["--filter-not-trait", "Category=Gpu"], actual: CliTestRun.CpuSelection);
-        Assert.Equal(expected: ["--filter-not-trait", "Category=BuildTree"], actual: CliTestRun.WithoutBuildTree);
+        Assert.Equal(actual: CliTestRun.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
+        Assert.Equal(actual: CliTestRun.WithoutBuildTree, expected: ["--filter-not-trait", "Category=BuildTree"]);
         foreach (var selection in ((string[][])[CliTestRun.CpuSelection, CliTestRun.WithoutBuildTree])) {
             Assert.Contains(
                 collection: Enumerable.Range(start: 1, count: (arguments.Length - 1)),
-                filter: index => ((arguments[index - 1] == selection[0]) && (arguments[index] == selection[1]))
+                filter: index => ((arguments[(index - 1)] == selection[0]) && (arguments[index] == selection[1]))
             );
         }
         // A trait the run includes would narrow it to that trait alone; the run excludes and never includes.
-        Assert.DoesNotContain(expected: "--filter-trait", collection: arguments);
+        Assert.DoesNotContain(collection: arguments, expected: "--filter-trait");
     }
 }
