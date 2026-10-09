@@ -38,7 +38,7 @@ public readonly partial record struct FixedQ4816(long Value)
     private const double RawOneInverse = (1d / RawOne);
 
     // Atan2 constant: the half turn at Q61 for the octant fold-back; the full turn is the public <see cref="PiQ61"/>.
-    internal const long Atan2HalfPiQ61 = 3622009729038561421L;  // round(π/2 · 2^61)
+    public const long Atan2HalfPiQ61 = 3622009729038561421L;  // round(π/2 · 2^61)
     // log2(e), the factor converting a natural-base argument into a base-2 exponent, at Q62: carried wide so a product
     // with a Q16 raw stays exact in Int128 and only the caller's own closing rounding remains.
     internal const long Log2EQ62 = 6653256548922161246L;         // round(log2(e) · 2^62)

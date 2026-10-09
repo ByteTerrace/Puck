@@ -289,6 +289,10 @@
       {
         "Type": "Puck.Maths.FixedVector3",
         "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVectorMath",
+        "Name": "TryMagnitude"
       }
     ],
     "Legs": [
@@ -899,6 +903,10 @@
       {
         "Type": "Puck.Maths.FixedVector3",
         "Name": "Z"
+      },
+      {
+        "Type": "Puck.Maths.FixedVectorMath",
+        "Name": "Normalize"
       }
     ],
     "Legs": [
@@ -906,7 +914,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedVector3.Normalize at full range",
-        "Against": "Oracles.IdealUnitVector \u2014 each component ONE ties-to-even rounding of the exact ratio raw\u1D62\u00B72\u00B9\u2076 / \u221A(\u03A3 raw\u2C7C\u00B2), bracketed in BigInteger by q\u00B2\u00B7S \u2264 (|raw\u1D62|\u00B72\u00B9\u2076)\u00B2 with the tie resolved against (2q\u002B1)\u00B2\u00B7S, forming no square root, no shift and no common denominator at all. ENVELOPE: an INEQUALITY, not a bit identity \u2014 agreement to within ONE raw per component, a bound that is proved from the two preconditioning regimes rather than observed. vector.normalize-ideal-bound-full-width-sweep measures the same bound over 200000 inline full-width draws at the Exhaustive tier, and holds the internal one-pass normalizer to it beside this one; that is corroboration at volume, not the evidence this leg rests on",
+        "Against": "Oracles.IdealUnitVector \u2014 each component ONE ties-to-even rounding of the exact ratio raw\u1D62\u00B72\u00B9\u2076 / \u221A(\u03A3 raw\u2C7C\u00B2), bracketed in BigInteger by q\u00B2\u00B7S \u2264 (|raw\u1D62|\u00B72\u00B9\u2076)\u00B2 with the tie resolved against (2q\u002B1)\u00B2\u00B7S, forming no square root, no shift and no common denominator at all. ENVELOPE: an INEQUALITY, not a bit identity \u2014 agreement to within ONE raw per component, a bound that is proved from the two preconditioning regimes rather than observed. vector.normalize-ideal-bound-full-width-sweep measures the same bound over 200000 inline full-width draws at the Exhaustive tier, and holds the one-pass normalizer FixedVectorMath.TryNormalizeWithMagnitude to it beside this one; that is corroboration at volume, not the evidence this leg rests on",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1006,12 +1014,17 @@
   {
     "Id": "vector.normalize-with-magnitude-full-unsigned-width",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVectorMath",
+        "Name": "TryNormalizeWithMagnitude"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedVectorMath.TryNormalizeWithMagnitude's RAW MAGNITUDE output, on BOTH branches - the narrow one, which roots the Q32-shifted squared sum once and settles the Q16 truncation against the exact halfway square, and the wide one past a 2^48 norm, which roots the exact sum and settles by remainder. The member is INTERNAL, so coverage-manifest.json cannot name it and the ratchet could not notice its only gate being deleted; it is reached here through Puck.Maths.Tests' InternalsVisibleTo and no public member is credited, because none is called",
+        "Subject": "FixedVectorMath.TryNormalizeWithMagnitude's RAW MAGNITUDE output, on BOTH branches - the narrow one, which roots the Q32-shifted squared sum once and settles the Q16 truncation against the exact halfway square, and the wide one past a 2^48 norm, which roots the exact sum and settles by remainder. The member is public and the coverage manifest credits it to this case, so the ratchet notices if its gate is deleted",
         "Against": "Oracles.NearestIntegerRoot of the exact BigInteger sum of squares - a bracketed integer search whose predicate is one exact squaring, forming no square root at all. This is an EXACT IDENTITY at every swept direction, not a tolerance: whichever branch runs, the returned magnitude IS the nearest integer root rather than a value inside a measured ULP band",
         "Shared": "",
         "Citation": "",
@@ -1065,6 +1078,10 @@
       {
         "Type": "Puck.Maths.FixedVector3",
         "Name": "Z"
+      },
+      {
+        "Type": "Puck.Maths.FixedVectorMath",
+        "Name": "TryNormalizeWithMagnitude"
       }
     ],
     "Legs": [

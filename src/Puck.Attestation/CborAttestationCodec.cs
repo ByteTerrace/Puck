@@ -35,7 +35,7 @@ public sealed class CborAttestationCodec : IAttestationCodec {
     /// byte lengths alone: a definite-length 2-element array of two definite-length byte strings has framing
     /// that depends only on those lengths.
     /// </summary>
-    internal static long EncodedAttestationLength(SignedAttestation attestation) =>
+    public static long EncodedAttestationLength(SignedAttestation attestation) =>
         ((((1 +
         ((long)ByteStringPrefixLength(contentLength: attestation.SignedPortionLength))) + attestation.SignedPortionLength) +
         ByteStringPrefixLength(contentLength: attestation.SignatureLength)) + attestation.SignatureLength);

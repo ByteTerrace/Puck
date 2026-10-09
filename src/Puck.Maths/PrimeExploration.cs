@@ -7,7 +7,7 @@ namespace Puck.Maths;
 
 /// <summary>Explores primes throughout the unsigned sixty-four-bit domain using thirty-wheel coordinates.</summary>
 public static partial class PrimeExploration {
-    internal static readonly byte[] ClearMasks = CreateClearMasks();
+    public static readonly byte[] ClearMasks = CreateClearMasks();
 
     // Row primeChannel clears, at each ascending multiplier phase, the numeric bit of the product's residue.
     private static byte[] CreateClearMasks() {
@@ -58,7 +58,6 @@ public static partial class PrimeExploration {
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
     public static ulong Count(ulong low, ulong high, CancellationToken cancellationToken = default) =>
         Count(cancellationToken: cancellationToken, high: high, low: low, mode: PrimeSieveMode.Automatic, segmentBytes: CacheSegmentBytes);
-
     /// <summary>Enumerates under an explicit policy and requested segment size.</summary>
     /// <param name="low">The inclusive lower bound.</param>
     /// <param name="high">The inclusive upper bound.</param>
@@ -69,7 +68,7 @@ public static partial class PrimeExploration {
     /// <exception cref="ArgumentNullException"><paramref name="onPrime"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside <c>[1, Array.MaxLength]</c>, or
     /// <paramref name="mode"/> is undefined.</exception>
-    internal static void Enumerate(ulong low, ulong high, Action<ulong> onPrime, int segmentBytes, PrimeSieveMode mode, CancellationToken cancellationToken = default) {
+    public static void Enumerate(ulong low, ulong high, Action<ulong> onPrime, int segmentBytes, PrimeSieveMode mode, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(onPrime);
         _ = Explore(cancellationToken: cancellationToken, high: high, low: low, mode: mode, onPrime: onPrime, segmentBytes: segmentBytes);
     }
@@ -82,8 +81,9 @@ public static partial class PrimeExploration {
     /// <returns>The number of primes in the interval.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="segmentBytes"/> is outside <c>[1, Array.MaxLength]</c>, or
     /// <paramref name="mode"/> is undefined.</exception>
-    internal static ulong Count(ulong low, ulong high, int segmentBytes, PrimeSieveMode mode, CancellationToken cancellationToken = default) =>
+    public static ulong Count(ulong low, ulong high, int segmentBytes, PrimeSieveMode mode, CancellationToken cancellationToken = default) =>
         Explore(cancellationToken: cancellationToken, high: high, low: low, mode: mode, onPrime: null, segmentBytes: segmentBytes);
+
     internal static ulong CountWithWork(ulong low, ulong high, CancellationToken cancellationToken, PrimeBitmapWork? work) =>
         Explore(cancellationToken: cancellationToken, high: high, low: low, mode: PrimeSieveMode.Automatic, onPrime: null,
             segmentBytes: CacheSegmentBytes, work: work);

@@ -22,7 +22,7 @@ namespace Puck.Maths;
 /// the operands fit a register, and none of that survives the move to <see cref="BigInteger"/>.
 /// </para>
 /// </remarks>
-internal static class PrimeKernels {
+public static class PrimeKernels {
     /// <summary>Gets the ascending odd primes below 65,536 — every base prime a 32-bit window sieve can need, since the largest such value's square root is 65,535.</summary>
     internal static ReadOnlySpan<uint> BasePrimes => WindowSieve.BasePrimes;
     /// <summary>Gets the odd primes through fifty-nine, paired index-for-index with <see cref="SmallFactorCeilings"/> and <see cref="SmallFactorInverses"/>.</summary>
@@ -57,7 +57,7 @@ internal static class PrimeKernels {
     /// the counterexample into the range this library promises to decide exactly; round a threshold like this down,
     /// or not at all.
     /// </remarks>
-    internal static BigInteger LeastWitnessFailure { get; } = BigInteger.Parse(value: "318665857834031151167461");
+    public static BigInteger LeastWitnessFailure { get; } = BigInteger.Parse(value: "318665857834031151167461");
 
     /// <summary>Gets the multiplicative inverses modulo 2⁶⁴ paired with <see cref="SmallFactorPrimes"/>.</summary>
     /// <remarks>Derived rather than transcribed: <see cref="UnsignedNumberFunctions.ModularInverse{T}(T)"/> is a division-free Newton–Hensel ladder, so a static initializer costs sixteen of them once and no table can fall out of step with the primes beside it.</remarks>
@@ -110,7 +110,8 @@ internal static class PrimeKernels {
     /// </remarks>
     private static class OddPrimeRanks {
         internal static readonly ulong[] Bits;
-        internal static readonly ushort[] Counts;
+
+        public static readonly ushort[] Counts;
 
         static OddPrimeRanks() {
             var primes = WindowSieve.BasePrimes;
@@ -355,18 +356,20 @@ internal static class PrimeKernels {
 
         return true;
     }
+
     /// <summary>Returns the number of odd primes strictly below a value no greater than 65,536.</summary>
     /// <param name="value">The exclusive bound, at most 65,536.</param>
     /// <returns>The count of odd entries of <see cref="BasePrimes"/> below <paramref name="value"/>, which is also the index of the first entry at or above it.</returns>
     /// <remarks>One masked population count over the odd-prime bitmap plus the cumulative count of the words before it.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int CountOddPrimesBelow(uint value) {
+    public static int CountOddPrimesBelow(uint value) {
         var position = (value >>> 1);
         var word = ((int)(position >>> RankWordShift));
         var below = OddPrimeRanks.Bits[word] & ((1UL << ((int)position)) - 1UL);
 
         return (OddPrimeRanks.Counts[word] + BitOperations.PopCount(value: below));
     }
+
     /// <summary>Runs the base-two strong-probable-prime round on an odd value, inside Montgomery constants the caller already holds.</summary>
     /// <param name="value">The odd value, at least three.</param>
     /// <param name="one">The radix reduced modulo the value, <see cref="ScaledResidueRing64.RadixResidue(ulong)"/>.</param>
@@ -743,7 +746,7 @@ internal static class PrimeKernels {
     /// <param name="residue">The residue, below <paramref name="magnitude"/>.</param>
     /// <returns>The symbol <c>(residue / magnitude)</c>: <c>-1</c>, <c>0</c> or <c>1</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int SelfridgeSymbol(ulong magnitude, ulong residue) {
+    public static int SelfridgeSymbol(ulong magnitude, ulong residue) {
         var masks = SelfridgeSymbols.Masks[((int)(magnitude >>> 1))];
         var bit = ((int)residue);
 

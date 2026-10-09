@@ -355,7 +355,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // storage is sampled and a storage image, which compute writes, zero clears and a publication in General need, and a
     // color attachment too when a planned access draws into it: a graphics pass's output or a package's color-attachment
     // port.
-    internal static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+    public static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
             ? GpuImageUsage.DepthAttachment
             : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => (
@@ -364,6 +364,7 @@ public sealed partial class ShaderPipelineRenderNode {
             )))
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+
     // The usages every instance of a buffer storage is created with: a storage buffer, and an indirect-argument buffer too
     // when a planned access reads it as an indirect dispatch's arguments.
     internal static GpuBufferUsage BufferUsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>

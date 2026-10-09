@@ -73,7 +73,7 @@ share, so agreement at that level is something the verification stage has to
 execute and compare—see [Verifying changes](#verifying-changes)—rather than
 something the structure supplies for free.
 
-Three internal types carry the engine, and the public types are thin fronts over
+Three substrate types carry the engine, and the field types are thin fronts over
 them.
 
 - `BinaryFieldKernels`—the free functions every binary-field operation
@@ -83,9 +83,10 @@ them.
   odd-characteristic multiplications runs in.
 
 A `BinaryField<T>` is its degree and its modulus tail plus delegation, and a
-`PrimeField64` is its modulus plus delegation. The three internal types are
+`PrimeField64` is its modulus plus delegation. The three substrate types are
 documented below as **substrate**—the machinery underneath—rather than as
-surface, because a consumer reaches them only through the public types.
+surface. They are public, so the law suite drives every rung and ring operation
+by name, but a consumer normally reaches them through the field types.
 
 The operation tables below carry the arithmetic surface only, so the plain
 accessors are not repeated in them: `BinaryPolynomial`'s packed-bits
@@ -99,7 +100,7 @@ declares as `MultiplicativeIdentity` and `AdditiveIdentity`; `BinaryField<T>`'s
 
 ## At a glance
 
-The six public types come first, then the three internal ones that
+The six field types come first, then the three substrate ones that
 [Substrate](#substrate) documents.
 
 | Type | Kind | What it's for |
@@ -110,9 +111,9 @@ The six public types come first, then the three internal ones that
 | `ReedSolomon` | `static` | Systematic Reed–Solomon coding over any `BinaryField<T>`: the generator polynomial whose roots are consecutive powers of a chosen element, the check symbols a message's division by it leaves behind, and the syndromes that read a codeword back. Generic in the carrier, span-based, and allocation-free. |
 | `PrimeField64` | `readonly record struct` | The prime field `F_p` for an odd prime `p < 2⁶²`, whose elements are bare `ulong` values in `[0, p)`. Field arithmetic, the quadratic character (the test for whether a value is a square), modular square roots, a batch inversion, and the static primality surface. |
 | `QuadraticExtensionField64` | `readonly record struct` | The extension `F_{p²} = F_p(√d)` over a fixed non-square `d`. An element is the pair `(A, B)`, standing for `A + B·√d`. It adds `Frobenius`, `Norm`, `Trace`, and a deterministic chooser for the smallest non-square. |
-| `BinaryFieldKernels` | `internal static` | The free functions beneath `BinaryField<T>`: both carryless-multiply tiers, tail-fold reduction, the inversion chain, the irreducibility criterion, and the region ladder. Seven named tiers become ten kernels, because the sixteen-bit width has a kernel of its own at each of the three affine tiers. The byte-wide affine, byte-wide nibble-split, and sixteen-bit affine kernels are each one body written over the internal `VectorLanes128`/`VectorLanes256`/`VectorLanes512` width structs and instantiated at each width, which compiles to the instructions a hand-written body per width would. |
-| `BinaryFieldRegionTier` | `internal enum` | Names the seven rungs of the bulk region-scaling ladder and does nothing else; dispatch lives in the kernels. |
-| `ScaledResidueRing64` | `internal readonly struct` | The residue ring `Z/nZ` for an odd `n` above one—the arithmetic of remainders modulo `n`—carried in Montgomery form so that a chain of modular multiplications performs no hardware division. It requires oddness only, never primality. |
+| `BinaryFieldKernels` | `static` | The free functions beneath `BinaryField<T>`: both carryless-multiply tiers, tail-fold reduction, the inversion chain, the irreducibility criterion, and the region ladder. Seven named tiers become ten kernels, because the sixteen-bit width has a kernel of its own at each of the three affine tiers. The byte-wide affine, byte-wide nibble-split, and sixteen-bit affine kernels are each one body written over the `VectorLanes128`/`VectorLanes256`/`VectorLanes512` width structs and instantiated at each width, which compiles to the instructions a hand-written body per width would. |
+| `BinaryFieldRegionTier` | `enum` | Names the seven rungs of the bulk region-scaling ladder and does nothing else; dispatch lives in the kernels. |
+| `ScaledResidueRing64` | `readonly struct` | The residue ring `Z/nZ` for an odd `n` above one—the arithmetic of remainders modulo `n`—carried in Montgomery form so that a chain of modular multiplications performs no hardware division. It requires oddness only, never primality. |
 
 ---
 
@@ -506,8 +507,8 @@ first.
 
 ## Substrate
 
-These are the internal pieces the public types are built out of. You never call
-them directly, but they are where the guarantees above actually come from, so
+These are the substrate pieces the field types are built out of. A consumer rarely
+calls them directly, but they are where the guarantees above actually come from, so
 they are worth reading if you intend to change anything here.
 
 ### The dual-tier carryless multiply
@@ -701,7 +702,7 @@ of by the 128-by-64 divide that a direct `(a * b) % n` costs. The saving belongs
 one product: `Encode` and `Decode` each spend a REDC of their own, so a lone
 product is cheaper left on the divide. The pattern is to convert once on the way
 in, stay in the ring for the whole chain, and convert back once at the end. The
-additive operations—`Add`, `Subtract`, and `Halve`—are linear in the
+additive operations—`Add` and `Subtract`—are linear in the
 representation, so they apply to Montgomery-form elements unchanged, and a
 recurrence that mixes them with products never has to leave the ring.
 
@@ -738,11 +739,7 @@ the radix vanishes modulo the carrier. `Multiply`'s difference of high halves is
 negative exactly when the correction's high half exceeds the product's, and the
 modulus is added back under that borrow mask; a branch there sits on the
 chain's critical path and mispredicts about half the time. `Subtract` adds the modulus back under a
-borrow mask, for the same reason. `Halve` folds the odd lift into the shifted
-half rather than adding the modulus and then shifting, which is what keeps the
-whole operation inside the carrier for a modulus above `2⁶³`, and it writes
-`(Modulus >> 1) + 1` for `(Modulus + 1) / 2` so that the largest odd modulus
-does not overflow it either. The high halves are separate high-half multiplies
+borrow mask, for the same reason. The high halves are separate high-half multiplies
 rather than a widened `UInt128` product, whose low half the JIT hands back through
 memory.
 

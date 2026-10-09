@@ -9,16 +9,16 @@ namespace Puck.Maths;
 /// against <see cref="FixedQ4816.PiQ61"/> (<see cref="SinCosExact"/>), at <see cref="GuardFractionBitCount"/>
 /// fraction bits — far past what the one Q32 rounding each caller performs at the end can see.
 /// </summary>
-internal static class SecondOrderExactMath {
+public static class SecondOrderExactMath {
     // Past this exponent, exp(-x) sits far below any Q32 rounding threshold; the series is skipped entirely rather
-    // than range-reduced for nothing. Internal (rather than private) so the test suite's guard-scale tie-discipline
+    // than range-reduced for nothing. Public so the test suite's guard-scale tie-discipline
     // search can replicate ExpNegative's own early exit and reduction exactly, from the live constant rather than a
     // transcribed copy that could silently drift.
-    internal const int ExpUnderflowExponent = 48;
+    public const int ExpUnderflowExponent = 48;
     /// <summary>The fraction bit count internal transcendental evaluation is carried at, well past the sixteen guard
     /// bits <see cref="SecondOrderDynamics.CoefficientFractionBitCount"/> itself carries over <see cref="FixedQ4816"/>.</summary>
-    internal const int GuardFractionBitCount = 128;
-    internal const int ResidualShift = 10; // range-reduce exp's argument below 2^-10 before the Taylor series runs.
+    public const int GuardFractionBitCount = 128;
+    public const int ResidualShift = 10; // range-reduce exp's argument below 2^-10 before the Taylor series runs.
 
     private const int AngleSeriesTermBudget = 160;
     private const int ExpSeriesTermBudget = 40;

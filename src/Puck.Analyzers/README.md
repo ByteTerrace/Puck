@@ -3,7 +3,8 @@
 Puck.Analyzers provides the Roslyn analyzers and code fixes used when building
 the repository. It checks verified-code declarations, source-file length
 limits, comment smells, strict-enum usage, unmanaged function-pointer calls,
-environment reads, any-address listeners, and the GPU trait on test classes. It is a
+environment reads, any-address listeners, the GPU trait on test classes, and
+`InternalsVisibleTo` grants. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -67,6 +68,12 @@ mentions a type parameter anywhere but behind a pointer, because that call throw
 `MarshalDirectiveException` at run time. The
 [code conventions](../../docs/development/contributing.md#code-and-documentation-conventions)
 state the rule.
+
+IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
+reads the compiled assembly's attributes, so it sees an
+`[assembly: InternalsVisibleTo(...)]` written in source and a csproj
+`<InternalsVisibleTo>` item alike, which the SDK generates into the same
+attribute. A member another assembly needs is public instead.
 
 ## Verification
 

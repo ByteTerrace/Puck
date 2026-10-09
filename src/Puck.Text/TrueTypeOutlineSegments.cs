@@ -4,7 +4,7 @@ namespace Puck.Text;
 
 /// <summary>One outline edge in atlas pixel space: a line when <see cref="IsCurve"/> is false (ignore
 /// <see cref="Control"/>), otherwise a quadratic Bézier.</summary>
-internal readonly record struct FontOutlineSegment(Vector2 Start, Vector2 Control, Vector2 End, bool IsCurve) {
+public readonly record struct FontOutlineSegment(Vector2 Start, Vector2 Control, Vector2 End, bool IsCurve) {
     public Vector2 DirectionAt(float t) {
         if (!IsCurve) {
             return (End - Start);
@@ -104,6 +104,7 @@ internal readonly record struct FontOutlineSegment(Vector2 Start, Vector2 Contro
         );
     }
 }
+
 /// <summary>Converts a parsed glyph outline into closed contours of pixel-space edge segments — the one place
 /// TrueType's implied on-curve midpoints and off-curve contour starts are resolved.</summary>
 /// <remarks>Pixel space is font units scaled by pixels-per-unit with Y negated (screen-down rows), matching the
@@ -287,9 +288,10 @@ internal static class TrueTypeOutlineSegments {
         );
     }
 }
+
 /// <summary>A glyph's pixel-space edge contours and point bounds (control points included, so the bounds are
 /// conservative for curves).</summary>
-internal sealed record FontGlyphGeometry(
+public sealed record FontGlyphGeometry(
     float Bottom,
     IReadOnlyList<IReadOnlyList<FontOutlineSegment>> Contours,
     float Left,

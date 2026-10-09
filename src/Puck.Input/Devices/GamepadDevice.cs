@@ -10,15 +10,15 @@ namespace Puck.Input.Devices;
 /// reads and writes for a device are serialized on it; input flows handle → coalescer, output flows queue →
 /// handle.
 /// </summary>
-internal sealed class GamepadDevice : IGamepadConnection {
+public sealed class GamepadDevice : IGamepadConnection {
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly CancellationTokenSource m_cancellation = new();
     private readonly Lock m_lifecycleGate = new();
     private readonly GamepadOutputQueue m_outputQueue = new();
     private long m_rumbleExpiry = long.MaxValue;
 
-    internal const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
-    internal const int SteadyStatePollMilliseconds = 16;     // services output/schedules even when input reports pause
+    public const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
+    public const int SteadyStatePollMilliseconds = 16;     // services output/schedules even when input reports pause
 
     private const int MaximumOutputCommandsPerIteration = 32;
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
@@ -111,6 +111,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     /// consumers) instead of holding a player identity nothing is behind.
     /// </summary>
     internal bool ActivateOnStream => m_activateOnStream;
+
     /// <summary>
     /// Whether the device is currently streaming parsed state. Set on the I/O thread by the first parsed report;
     /// cleared when the receiver announces the controller left the slot. The manager reconciles deferred devices'
@@ -118,8 +119,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     /// announces, so a reader that observes it finds output accepting (<see langword="true"/>) or suspended and
     /// reset (<see langword="false"/>).
     /// </summary>
-    internal bool HasStream => m_hasStream;
-
+    public bool HasStream => m_hasStream;
     public GamepadCoalescer Coalescer => m_coalescer;
     public InputDeviceId DeviceId { get; }
     /// <summary>The optional input features this device provides, from its parser.</summary>

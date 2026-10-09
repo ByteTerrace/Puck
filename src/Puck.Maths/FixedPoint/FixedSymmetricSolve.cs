@@ -80,7 +80,8 @@ public static class FixedSymmetricSolve {
     /// every preconditioned entry has magnitude at most <c>2⁶²</c> (one bit above this constant, reserved for a
     /// rounding carry), which keeps the two-term determinant and the two-term solve numerator inside
     /// <see cref="Int128"/>'s magnitude. See the type's remarks for the derivation.</summary>
-    internal const int Symmetric2TargetLeadingBit = 61;
+    public const int Symmetric2TargetLeadingBit = 61;
+
     /// <summary>The pre-rounding shift target for the 3×3 family. After <see cref="FixedVectorMath.ScaleRaw"/>,
     /// every preconditioned entry has magnitude at most <c>2⁴¹</c> (one bit above this constant, reserved for a
     /// rounding carry), which keeps the six-term triple-product determinant and the three-term solve numerator
@@ -106,7 +107,7 @@ public static class FixedSymmetricSolve {
     /// <param name="invF">The inverse's (2,2) entry on success; zero on refusal.</param>
     /// <returns><see langword="false"/> under the same conditions as <see cref="TryInvertSymmetric2"/>; every
     /// <see langword="out"/> parameter is zero in that case.</returns>
-    internal static bool TryInvertSymmetric3(
+    public static bool TryInvertSymmetric3(
         long a,
         long b,
         long c,
@@ -300,7 +301,7 @@ public static class FixedSymmetricSolve {
     /// <param name="y">The second solution component on success; zero on refusal.</param>
     /// <returns><see langword="false"/> when the matrix is exactly singular or a result does not fit the raw
     /// carrier; both <paramref name="x"/> and <paramref name="y"/> are zero in that case.</returns>
-    internal static bool TrySolveSymmetric2(long a, long b, long d, long rhsX, long rhsY, int outputFractionShift, out long x, out long y) {
+    public static bool TrySolveSymmetric2(long a, long b, long d, long rhsX, long rhsY, int outputFractionShift, out long x, out long y) {
         Debug.Assert(
             condition: (outputFractionShift >= 0),
             message: "TrySolveSymmetric2 requires a non-negative output fraction shift."
@@ -428,7 +429,7 @@ public static class FixedSymmetricSolve {
     /// <param name="z">The third solution component on success; zero on refusal.</param>
     /// <returns><see langword="false"/> when the matrix is exactly singular or a result does not fit the raw
     /// carrier; every <see langword="out"/> parameter is zero in that case.</returns>
-    internal static bool TrySolveSymmetric3(
+    public static bool TrySolveSymmetric3(
         long a,
         long b,
         long c,

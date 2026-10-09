@@ -16,7 +16,7 @@ namespace Puck.Maths;
 /// saturating decimal lanes share <see cref="ScaleDecimal"/> for the same reason, applying their own range policy to
 /// its single rounding.
 /// </remarks>
-internal static class FixedPointConvert {
+public static class FixedPointConvert {
     /// <summary>Determines whether <typeparamref name="TOther"/> is a BCL integer this helper converts without a
     /// decimal.</summary>
     /// <typeparam name="TOther">The type to test.</typeparam>
@@ -95,6 +95,7 @@ internal static class FixedPointConvert {
             : magnitude
         );
     }
+
     /// <summary>Scales a <see cref="decimal"/> to a fixed-point raw at an arbitrary fraction bit count, exactly and
     /// without a range clamp, using <see cref="BigInteger"/> for the wide intermediate.</summary>
     /// <param name="value">The value to scale.</param>
@@ -113,7 +114,7 @@ internal static class FixedPointConvert {
     /// intermediate is not wide enough to stay exact, and reusing it anyway would silently wrap instead of throwing
     /// — a correctness bug, not a documented policy. This overload is not on either Q48.16 carrier's hot path and is
     /// not called by either of them.</remarks>
-    internal static BigInteger ScaleDecimalWide(decimal value, int fractionBitCount) {
+    public static BigInteger ScaleDecimalWide(decimal value, int fractionBitCount) {
         Span<int> bits = stackalloc int[4];
 
         _ = decimal.GetBits(
@@ -139,6 +140,7 @@ internal static class FixedPointConvert {
             : magnitude
         );
     }
+
     /// <summary>Implements the checked inbound generic-math conversion shared by the signed fixed-point carriers.</summary>
     internal static bool TryConvertFromChecked<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
         where TSelf : struct, INumberBase<TSelf>

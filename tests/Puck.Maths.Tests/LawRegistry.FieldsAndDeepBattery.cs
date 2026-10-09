@@ -1406,6 +1406,10 @@ internal static partial class LawRegistry {
             id: "core.round-rational-scales-ties-and-refuses"
         ),
         ClaimCase(
+            claim: FixedPointContractClaims.RawMagnitudeMatchesBigIntegerAbs,
+            id: "core.raw-magnitude-vs-big-integer"
+        ),
+        ClaimCase(
             claim: FixedPointContractClaims.TryDurationEngineTicksExactAgainstDecimalBits,
             id: "core.fixed-tick-conversion-exact-refuses-inexact-decimals"
         ),

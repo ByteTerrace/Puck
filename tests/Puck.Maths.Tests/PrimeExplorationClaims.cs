@@ -250,7 +250,7 @@ internal static partial class Subjects {
             ?? (Refuses(() => new PrimeConstellation(offsets: [0, 0]), typeof(ArgumentException), "offsets", "duplicate offsets")
             ?? Refuses(() => new PrimeConstellation(offsets: [0, 2, 1]), typeof(ArgumentException), "offsets", "descending offsets"))));
     }
-    /// <summary>Pins validation before the empty-range return, including the internal policy and segment parameters.</summary>
+    /// <summary>Pins validation before the empty-range return, including the explicit policy and segment parameters.</summary>
     public static string? PrimeExplorationRefusals() {
         Action<ulong> callback = _ => { };
         var automatic = ((int)PrimeSieveMode.Automatic);

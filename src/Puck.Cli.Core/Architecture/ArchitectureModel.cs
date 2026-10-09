@@ -1,5 +1,3 @@
-using System.Reflection.Metadata;
-using System.Reflection.PortableExecutable;
 using System.Xml.Linq;
 
 namespace Puck.Cli.Architecture;
@@ -35,11 +33,9 @@ public sealed class ArchitectureModel {
     private ArchitectureModel(
         IReadOnlyDictionary<string, bool> kinds,
         IReadOnlyList<string> layers,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> friends,
         IReadOnlyDictionary<string, IReadOnlyList<string>> profiles,
         IReadOnlyDictionary<string, ArchitectureProject> projects,
         string repositoryRoot) {
-        Friends = friends;
         Kinds = kinds;
         Layers = layers;
         Profiles = profiles;
@@ -47,8 +43,6 @@ public sealed class ArchitectureModel {
         RepositoryRoot = repositoryRoot;
     }
 
-    /// <summary>Declared friend sets, project name to the assemblies it grants internals access.</summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> Friends { get; }
     /// <summary>The kind taxonomy: kind name to whether it is ranked.</summary>
     public IReadOnlyDictionary<string, bool> Kinds { get; }
     /// <summary>The layer rows, top first — the index is the rank.</summary>
@@ -149,7 +143,6 @@ public sealed class ArchitectureModel {
             path2: "build",
             path3: "Architecture.props"
         ));
-        var friends = new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.OrdinalIgnoreCase);
         var kinds = new Dictionary<string, bool>(comparer: StringComparer.OrdinalIgnoreCase);
         var layers = new List<string>();
         var profiles = new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -178,13 +171,6 @@ public sealed class ArchitectureModel {
             name: "PuckArchitectureProfile"
         )) {
             profiles[item.Attribute(name: "Include")!.Value] = Split(value: item.Attribute(name: "Closure")?.Value);
-        }
-
-        foreach (var item in Items(
-            ledger: ledger,
-            name: "PuckArchitectureFriends"
-        )) {
-            friends[item.Attribute(name: "Include")!.Value] = Split(value: item.Attribute(name: "Friends")?.Value);
         }
 
         // The scope predicate the ledger states in prose, applied: src/ and tests/ only. A quarantined tree
@@ -226,7 +212,6 @@ public sealed class ArchitectureModel {
         }
 
         return new ArchitectureModel(
-            friends: friends,
             kinds: kinds,
             layers: layers,
             profiles: profiles,
@@ -258,83 +243,5 @@ public sealed class ArchitectureModel {
             ? int.MaxValue
             : index
         );
-    }
-    /// <summary>
-    /// The friend set recorded in a compiled assembly, read from the PE's metadata rather than from any
-    /// declaration.
-    /// </summary>
-    /// <remarks>
-    /// Scanning declarations trusts the thing being checked, and it is not even complete here: this
-    /// repository declares friends BOTH as <c>[assembly: InternalsVisibleTo]</c> in
-    /// <c>Properties/AssemblyInfo.cs</c> and as <c>&lt;InternalsVisibleTo&gt;</c> csproj items. Only the
-    /// compiled assembly sees both, because the csproj form is code-generated into the same attribute.
-    /// </remarks>
-    /// <param name="assemblyPath">The compiled assembly to read.</param>
-    /// <returns>The friend assembly names, sorted; empty when the assembly has none.</returns>
-    public static IReadOnlyList<string> ReadFriendsFromAssembly(string assemblyPath) {
-        using var stream = File.OpenRead(path: assemblyPath);
-        using var peReader = new PEReader(peStream: stream);
-
-        var metadata = peReader.GetMetadataReader();
-        var found = new List<string>();
-
-        foreach (var handle in metadata.CustomAttributes) {
-            var attribute = metadata.GetCustomAttribute(handle: handle);
-
-            if (attribute.Constructor.Kind != HandleKind.MemberReference) {
-                continue;
-            }
-
-            var constructor = metadata.GetMemberReference(handle: ((MemberReferenceHandle)attribute.Constructor));
-
-            if (constructor.Parent.Kind != HandleKind.TypeReference) {
-                continue;
-            }
-
-            if (metadata.GetString(handle: metadata.GetTypeReference(handle: ((TypeReferenceHandle)constructor.Parent)).Name) != "InternalsVisibleToAttribute") {
-                continue;
-            }
-
-            var value = attribute.DecodeValue(provider: new StringOnlyAttributeTypeProvider());
-
-            if (
-                (value.FixedArguments.Length != 0) &&
-                (value.FixedArguments[0].Value is string argument)
-            ) {
-                // An IVT grant may carry a public key after a comma; the assembly name is what identifies
-                // the friend.
-                found.Add(item: argument.Split(',')[0].Trim());
-            }
-        }
-
-        found.Sort(comparer: StringComparer.OrdinalIgnoreCase);
-
-        return found;
-    }
-
-    /// <summary>
-    /// Decodes only the <see cref="string"/> arguments an <c>InternalsVisibleTo</c> attribute carries; every
-    /// other shape throws, because encountering one would mean this reader matched the wrong attribute.
-    /// </summary>
-    private sealed class StringOnlyAttributeTypeProvider : ICustomAttributeTypeProvider<string> {
-        public string GetPrimitiveType(PrimitiveTypeCode typeCode) =>
-            ((typeCode == PrimitiveTypeCode.String)
-                ? "string"
-                : throw new NotSupportedException(message: $"unexpected primitive {typeCode} on an InternalsVisibleTo attribute")
-            );
-        public string GetSZArrayType(string elementType) =>
-            throw new NotSupportedException(message: "InternalsVisibleTo carries no array argument");
-        public string GetSystemType() =>
-            throw new NotSupportedException(message: "InternalsVisibleTo carries no System.Type argument");
-        public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) =>
-            throw new NotSupportedException(message: "InternalsVisibleTo names no defined type");
-        public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) =>
-            throw new NotSupportedException(message: "InternalsVisibleTo names no referenced type");
-        public string GetTypeFromSerializedName(string name) =>
-            throw new NotSupportedException(message: "InternalsVisibleTo names no serialized type");
-        public PrimitiveTypeCode GetUnderlyingEnumType(string type) =>
-            throw new NotSupportedException(message: "InternalsVisibleTo carries no enum argument");
-        public bool IsSystemType(string type) =>
-            false;
     }
 }

@@ -25,7 +25,7 @@ namespace Puck.Input.Devices;
 /// at-rest IMU are hardware-proven on this receiver, while the IMU axis mapping is nominal (gravity anchors
 /// pitch/roll regardless — only gyro-only yaw depends on the exact mapping).
 /// </remarks>
-internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGamepadStreamReset, IDisposable {
+public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGamepadStreamReset, IDisposable {
     // Nominal (uncalibrated) IMU scales. Accel: ±2 g over int16 (16384 LSB/g). Gyro: 2000 deg/s full scale over
     // int16 (so 2000/32768 deg/s per LSB). The fusion's gravity term anchors pitch/roll regardless of the exact
     // axis mapping; only gyro-only yaw depends on the gyro scale being roughly right.

@@ -14,7 +14,7 @@ namespace Puck.Maths;
 /// kernel per width and inlines every member; the specialized kernel compiles to the instructions a hand-written
 /// per-width body would.
 /// </remarks>
-internal interface IByteVectorLanes<TBytes> where TBytes : struct {
+public interface IByteVectorLanes<TBytes> where TBytes : struct {
     /// <summary>Gets the number of bytes in one vector.</summary>
     static abstract int ByteCount { get; }
     /// <summary>Gets the vector with every bit set.</summary>
@@ -110,7 +110,7 @@ internal interface IByteVectorLanes<TBytes> where TBytes : struct {
 /// <typeparam name="TShorts">The sixteen-bit signed vector at this width.</typeparam>
 /// <typeparam name="TInts">The thirty-two-bit signed vector at this width.</typeparam>
 /// <remarks>Widening changes the element type, and the vector types expose no generic-math operator interface, so the widths supply both.</remarks>
-internal interface ISignedByteWideningLanes<TSignedBytes, TShorts, TInts>
+public interface ISignedByteWideningLanes<TSignedBytes, TShorts, TInts>
     where TSignedBytes : struct
     where TShorts : struct
     where TInts : struct {
@@ -146,7 +146,7 @@ internal interface ISignedByteWideningLanes<TSignedBytes, TShorts, TInts>
     static abstract (TInts Lower, TInts Upper) Widen(TShorts value);
 }
 /// <summary>The 128-bit vector width.</summary>
-internal readonly struct VectorLanes128 : IByteVectorLanes<Vector128<byte>>, ISignedByteWideningLanes<Vector128<sbyte>, Vector128<short>, Vector128<int>> {
+public readonly struct VectorLanes128 : IByteVectorLanes<Vector128<byte>>, ISignedByteWideningLanes<Vector128<sbyte>, Vector128<short>, Vector128<int>> {
     /// <inheritdoc cref="IByteVectorLanes{TBytes}.ByteCount"/>
     public static int ByteCount => 16;
     /// <inheritdoc/>
@@ -276,7 +276,7 @@ internal readonly struct VectorLanes128 : IByteVectorLanes<Vector128<byte>>, ISi
     public static Vector128<byte> Xor(Vector128<byte> left, Vector128<byte> right) => left ^ right;
 }
 /// <summary>The 256-bit vector width.</summary>
-internal readonly struct VectorLanes256 : IByteVectorLanes<Vector256<byte>>, ISignedByteWideningLanes<Vector256<sbyte>, Vector256<short>, Vector256<int>> {
+public readonly struct VectorLanes256 : IByteVectorLanes<Vector256<byte>>, ISignedByteWideningLanes<Vector256<sbyte>, Vector256<short>, Vector256<int>> {
     /// <inheritdoc cref="IByteVectorLanes{TBytes}.ByteCount"/>
     public static int ByteCount => 32;
     /// <inheritdoc/>
@@ -415,7 +415,7 @@ internal readonly struct VectorLanes256 : IByteVectorLanes<Vector256<byte>>, ISi
     public static Vector256<byte> Xor(Vector256<byte> left, Vector256<byte> right) => left ^ right;
 }
 /// <summary>The 512-bit vector width.</summary>
-internal readonly struct VectorLanes512 : IByteVectorLanes<Vector512<byte>>, ISignedByteWideningLanes<Vector512<sbyte>, Vector512<short>, Vector512<int>> {
+public readonly struct VectorLanes512 : IByteVectorLanes<Vector512<byte>>, ISignedByteWideningLanes<Vector512<sbyte>, Vector512<short>, Vector512<int>> {
     /// <inheritdoc cref="IByteVectorLanes{TBytes}.ByteCount"/>
     public static int ByteCount => 64;
     /// <inheritdoc/>

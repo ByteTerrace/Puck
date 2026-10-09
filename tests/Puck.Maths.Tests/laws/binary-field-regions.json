@@ -65,6 +65,10 @@
       {
         "Type": "Puck.Maths.BinaryField`1[[System.Byte, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
         "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionScalar"
       }
     ],
     "Legs": [
@@ -89,7 +93,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "ENVELOPE, stated rather than assumed: this claim does not select which region rung serves the call — BinaryField<T>'s public region members dispatch to whichever accelerated rung this machine's hardware supports, exactly as any consumer would reach them — so a VALUE defect at this narrow degree is caught regardless of which rung is live on the machine the suite runs on, but a rung that answers correctly only while the accelerated path is reachable through the public surface, and silently degrades under a runtime feature-suppression knob, is not caught HERE. That second class of defect needs per-rung instrumentation, and it is not homeless in this suite. Puck.Maths/Properties/AssemblyInfo.cs's InternalsVisibleTo names Puck.Maths.Tests beside Puck.Post, so BinaryFieldKernels and BinaryFieldRegionTier — both still internal to Puck.Maths — are reachable here, and binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung and binary-field.region-lengths-vs-scalar-rung invoke every named rung this host supports DIRECTLY, bypassing dispatch exactly as this claim does not. What has no home here is a process relaunch under instruction-set-suppression environment knobs, which would drive one host through every fallback rung regardless of its own hardware; this suite has no relaunch primitive, so a rung this host's hardware genuinely lacks stays untested rather than forced.",
+        "Subject": "ENVELOPE, stated rather than assumed: this claim does not select which region rung serves the call — BinaryField<T>'s public region members dispatch to whichever accelerated rung this machine's hardware supports, exactly as any consumer would reach them — so a VALUE defect at this narrow degree is caught regardless of which rung is live on the machine the suite runs on, but a rung that answers correctly only while the accelerated path is reachable through the public surface, and silently degrades under a runtime feature-suppression knob, is not caught HERE. That second class of defect needs per-rung instrumentation, and it is not homeless in this suite. BinaryFieldKernels and BinaryFieldRegionTier are public, and binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung and binary-field.region-lengths-vs-scalar-rung invoke every named rung this host supports DIRECTLY, bypassing dispatch exactly as this claim does not. What has no home here is a process relaunch under instruction-set-suppression environment knobs, which would drive one host through every fallback rung regardless of its own hardware; this suite has no relaunch primitive, so a rung this host's hardware genuinely lacks stays untested rather than forced.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -109,7 +113,192 @@
   {
     "Id": "binary-field.region-tiers-vs-scalar-rung",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "IsRegionTierSupported"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionAffine"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionSplit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionScalar"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine512"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split512"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine256"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split256"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine128"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split128"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ShuffleWithinLanes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ShuffleWithinLanes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ShuffleWithinLanes"
+      }
+    ],
     "Legs": [
       {
         "Kind": "SharedSubstrate",
@@ -143,7 +332,176 @@
   {
     "Id": "binary-field.wide-region-tiers-vs-scalar-rung",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "IsRegionTierSupported"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionWideAffine"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionScalar"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine512"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine256"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine128"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "SwapUInt16Bytes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "SwapUInt16Bytes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "SwapUInt16Bytes"
+      }
+    ],
     "Legs": [
       {
         "Kind": "SharedSubstrate",
@@ -177,7 +535,232 @@
   {
     "Id": "binary-field.region-lengths-vs-scalar-rung",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "IsRegionTierSupported"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionAffine"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionSplit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionWideAffine"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldKernels",
+        "Name": "MultiplyAccumulateRegionScalar"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine512"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split512"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine256"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split256"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Affine128"
+      },
+      {
+        "Type": "Puck.Maths.BinaryFieldRegionTier",
+        "Name": "Split128"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ShuffleWithinLanes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "SwapUInt16Bytes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ShuffleWithinLanes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "SwapUInt16Bytes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "AllBitsSet"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "And"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Broadcast"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "GaloisFieldAffineTransform"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Store"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Xor"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Replicate"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ShiftRightLogicalUInt16ByNibble"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ShuffleWithinLanes"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "AndNot"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Or"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "SwapUInt16Bytes"
+      }
+    ],
     "Legs": [
       {
         "Kind": "SharedSubstrate",

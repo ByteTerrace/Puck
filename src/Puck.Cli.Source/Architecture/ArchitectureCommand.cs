@@ -9,8 +9,7 @@ namespace Puck.Cli.Architecture;
 // inside every project's build against the RESOLVED reference set — what the compiler is actually handed —
 // and refuses the build. This verb reads the same policy ledger and every project's own declaration, and
 // answers the questions a build failure cannot: what does the whole graph look like at once, which projects
-// hold a backend and by what permission, does each compiled assembly's friend set match what was declared,
-// and what about this analysis is configuration-dependent.
+// hold a backend and by what permission, and what about this analysis is configuration-dependent.
 //
 // Exit 0 when everything checks, 1 when a check fails, 2 on a usage error or a missing repository root.
 public static class ArchitectureCommand {
@@ -366,87 +365,6 @@ public static class ArchitectureCommand {
 
         _ = output.AppendLine();
     }
-    private static void ReportFriends(string configuration, List<string> failures, ArchitectureModel model, StringBuilder output) {
-        _ = output.AppendLine(value: "## Internals-visible-to, declared vs. compiled").AppendLine();
-
-        var unread = new List<string>();
-
-        foreach (var project in model.Projects.Values.OrderBy(
-            keySelector: p => p.Name,
-            comparer: StringComparer.Ordinal
-        )) {
-            var assembly = Directory.EnumerateFiles(
-                path: Path.GetDirectoryName(path: project.File)!,
-                searchPattern: $"{project.Name}.dll",
-                searchOption: SearchOption.AllDirectories
-            )
-                .FirstOrDefault(predicate: p => p.Contains(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}{configuration}{Path.DirectorySeparatorChar}"
-            ));
-            var declared = (model.Friends.TryGetValue(
-                key: project.Name,
-                value: out var listed
-            )
-                ? listed
-                : []
-            );
-
-            if (assembly is null) {
-                // An unread assembly is NOT a pass. Reporting it as one would make "no findings" mean
-                // "nothing was built", which is the failure this whole surface exists to avoid.
-                if (declared.Count != 0) {
-                    unread.Add(item: project.Name);
-                }
-
-                continue;
-            }
-
-            var actual = ArchitectureModel.ReadFriendsFromAssembly(assemblyPath: assembly);
-
-            if (actual.SequenceEqual(
-                second: declared.OrderBy(
-                    keySelector: f => f,
-                    comparer: StringComparer.OrdinalIgnoreCase
-                ),
-                comparer: StringComparer.OrdinalIgnoreCase
-            )) {
-                if (actual.Count != 0) {
-                    _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(
-                        separator: ", ",
-                        values: actual
-                    )}");
-                }
-
-                continue;
-            }
-
-            failures.Add(item: $"{project.Name} friend set differs — declared [{string.Join(
-                separator: ", ",
-                values: declared
-            )}], compiled [{string.Join(
-                separator: ", ",
-                values: actual
-            )}].");
-            _ = output.AppendLine(value: $"  {project.Name,-30} MISMATCH: compiled [{string.Join(
-                separator: ", ",
-                values: actual
-            )}]");
-        }
-
-        if (unread.Count != 0) {
-            _ = output.AppendLine(value: $"  NOT CHECKED (no {configuration} assembly on disk): {string.Join(
-                separator: ", ",
-                values: unread
-            )}");
-            failures.Add(item: $"friend sets unverified for {string.Join(
-                separator: ", ",
-                values: unread
-            )} — build the {configuration} configuration first; an unread assembly is not a passing one.");
-        }
-
-        _ = output.AppendLine();
-    }
     private static void ReportLayerGraph(List<string> failures, ArchitectureModel model, StringBuilder output) {
         _ = output.AppendLine(value: "## Layer graph").AppendLine();
 
@@ -517,7 +435,7 @@ public static class ArchitectureCommand {
 
         _ = output.AppendLine();
     }
-    private static int Run(bool check, string configuration, bool map) {
+    private static int Run(bool check, bool map) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -560,12 +478,6 @@ public static class ArchitectureCommand {
             model: model,
             output: output
         );
-        ReportFriends(
-            configuration: configuration,
-            failures: failures,
-            model: model,
-            output: output
-        );
         ReportConfigurationSensitivity(
             model: model,
             output: output
@@ -597,10 +509,6 @@ public static class ArchitectureCommand {
     }
 
     public static Command Create() {
-        var configurationOption = new Option<string>(name: "--configuration") {
-            DefaultValueFactory = static _ => "Release",
-            Description = "Which build configuration's assemblies to read for the friend-set comparison.",
-        };
         var mapOption = new Option<bool>(name: "--map") {
             Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
         };
@@ -617,11 +525,10 @@ public static class ArchitectureCommand {
             checked-in block no longer matches the declarations.
             """,
             name: "architecture"
-        ) { configurationOption, mapOption, checkOption };
+        ) { mapOption, checkOption };
 
         command.SetAction(action: parseResult => Run(
             check: parseResult.GetValue(option: checkOption),
-            configuration: parseResult.GetRequiredValue(option: configurationOption),
             map: parseResult.GetValue(option: mapOption)
         ));
 

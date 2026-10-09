@@ -18,6 +18,34 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "SinCosTurns"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosInvTwoPiQ96"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTableQ60"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinPolyC1Q60"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinPolyC2Q60"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "CosPolyC1Q60"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "CosPolyC2Q60"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTwoPiQ60"
       }
     ],
     "Legs": [
@@ -51,6 +79,22 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "SinCosTurns"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosCore"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosHalfAngle"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosQ32"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosRaw"
       }
     ],
     "Legs": [
@@ -127,6 +171,22 @@
       {
         "Type": "Puck.Maths.FixedCosineTransformPlan",
         "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.FixedFourierTransformPlan",
+        "Name": "ForwardTwiddles"
+      },
+      {
+        "Type": "Puck.Maths.FixedFourierTransformPlan",
+        "Name": "InverseTwiddles"
+      },
+      {
+        "Type": "Puck.Maths.FixedCosineTransformPlan",
+        "Name": "ForwardTwiddles"
+      },
+      {
+        "Type": "Puck.Maths.FixedCosineTransformPlan",
+        "Name": "InverseTwiddles"
       }
     ],
     "Legs": [

@@ -15,12 +15,11 @@ namespace Puck.Maths.Tests;
 /// swept (<see cref="NarrowDegreeInverseSurface"/>, <see cref="NarrowDegreeRegionsSurface"/>). The second is the one
 /// the stage's own per-rung instrumentation existed for: <see cref="BinaryField{T}"/>'s public region members
 /// dispatch to whichever accelerated rung this machine's hardware ranks widest, so a rung that is merely SUPPORTED but
-/// not the widest available is never reached through the public surface at all. That gap could not be closed until
-/// <c>BinaryFieldKernels</c> and <c>BinaryFieldRegionTier</c> — both <see langword="internal"/> to Puck.Maths — opened
-/// to this project (<c>src/Puck.Maths/Properties/AssemblyInfo.cs</c>'s <c>InternalsVisibleTo</c>); with that in place,
-/// <see cref="RegionTiersVsScalarRungSurface"/>, <see cref="WideRegionTiersVsScalarRungSurface"/> and
-/// <see cref="RegionLengthsVsScalarRungSurface"/> invoke every named rung directly, bypassing dispatch, exactly as the
-/// byte and wide region-tier walks below do. What is NOT covered is the
+/// not the widest available is never reached through that dispatch at all. <see cref="BinaryFieldKernels"/> and
+/// <see cref="BinaryFieldRegionTier"/> are public, so <see cref="RegionTiersVsScalarRungSurface"/>,
+/// <see cref="WideRegionTiersVsScalarRungSurface"/> and <see cref="RegionLengthsVsScalarRungSurface"/> invoke every
+/// named rung directly, bypassing dispatch, exactly as the byte and wide region-tier walks below do, and the coverage
+/// manifest credits each rung, its lane operations and its tier label to them. What is NOT covered is the
 /// process relaunch under instruction-set-suppression environment knobs, which forced one host through every
 /// fallback regardless of its own hardware; this suite has no relaunch primitive, so a rung this host's hardware does
 /// not support is skipped rather than forced — see each new law's ENVELOPE legs. <see cref="LawRegistry"/> invokes
@@ -542,10 +541,9 @@ internal static class BinaryFieldRegionClaims {
     /// <summary>Proves every byte-wide region rung <see cref="BinaryFieldKernels"/> ships — the 128-, 256- and
     /// 512-bit Galois-field affine transform and the 128-, 256- and 512-bit nibble-split table shuffle — against the
     /// element-at-a-time scalar rung, over the WHOLE 256-by-256 scalar-by-element byte cross product at three
-    /// degree-8 moduli and both accumulate modes. 
-    /// <c>CheckByteRegionTiers</c>: every rung is invoked BY NAME here, bypassing <see cref="BinaryField{T}"/>'s own
-    /// widest-first dispatch, which this suite could not do before <c>BinaryFieldKernels</c> and
-    /// <see cref="BinaryFieldRegionTier"/> opened to <c>Puck.Maths.Tests</c>. A rung
+    /// degree-8 moduli and both accumulate modes.
+    /// <c>CheckByteRegionTiers</c>: every rung is invoked BY NAME here through the public
+    /// <see cref="BinaryFieldKernels"/> rungs, bypassing <see cref="BinaryField{T}"/>'s own widest-first dispatch. A rung
     /// <see cref="BinaryFieldKernels.IsRegionTierSupported"/> reports unsupported on the host running the suite is
     /// SKIPPED, never forced.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when every rung this host supports agrees with the

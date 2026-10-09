@@ -150,15 +150,15 @@ settles a question, decide by that principle and say why.
    the hooks under `.claude/hooks/`) and `.claude/launch.json` are versioned;
    `.claude/settings.local.json` stays personal and untracked.
 
-## `InternalsVisibleTo` is not endorsed
+## `InternalsVisibleTo` is forbidden
 
-If another project needs a member, make the member public. Reaching for
-`InternalsVisibleTo` signals wrong accessibility; a test project is the one
-arguable exception. Search for both forms, the `Properties/AssemblyInfo.cs`
-attribute and the csproj `<InternalsVisibleTo>` item. A grant hands a whole
-assembly's internals to a friend, invisibly at the call site; widen the member
+No assembly grants another its internals, test assemblies included. If another
+project or a test needs a member, make the member public. A grant hands a whole
+assembly's internals to a friend, invisibly at every call site; widen the member
 instead. If a member looks wrong to make public, that is evidence about the
-design: say so.
+design: say so. The build refuses both forms, the `[assembly:
+InternalsVisibleTo]` attribute and the csproj `<InternalsVisibleTo>` item, with
+IVT001 (`Puck.Analyzers`).
 
 ## `experimental/` is a reference tree
 

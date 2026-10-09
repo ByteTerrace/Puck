@@ -63,10 +63,11 @@ public sealed class FixedCosineTransformPlan {
         );
     }
 
-    internal ReadOnlySpan<FixedComplex> ForwardTwiddles => m_forwardTwiddles;
-    internal FixedFourierTransformPlan FourierPlan { get; }
-    internal ReadOnlySpan<FixedComplex> InverseTwiddles => m_inverseTwiddles;
+    public ReadOnlySpan<FixedComplex> ForwardTwiddles => m_forwardTwiddles;
 
+    internal FixedFourierTransformPlan FourierPlan { get; }
+
+    public ReadOnlySpan<FixedComplex> InverseTwiddles => m_inverseTwiddles;
     /// <summary>Gets the transform length this plan was built for.</summary>
     public int Length => FourierPlan.Length;
 }

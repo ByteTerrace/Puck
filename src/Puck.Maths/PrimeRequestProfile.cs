@@ -1,7 +1,7 @@
 namespace Puck.Maths;
 
 /// <summary>The route a profiled ulong prime request took.</summary>
-internal enum PrimeRequestRoute {
+public enum PrimeRequestRoute {
     /// <summary>A prime count with no selection.</summary>
     CountOnly,
     /// <summary>An nth-prime index at or beyond the number of ulong primes, answered with zero.</summary>
@@ -14,7 +14,7 @@ internal enum PrimeRequestRoute {
     CountedSelection,
 }
 /// <summary>The route one exact ulong prime-count dispatch took.</summary>
-internal enum PrimeCountRoute {
+public enum PrimeCountRoute {
     /// <summary>A bound within uint, counted by the narrow kernel.</summary>
     Narrow32,
     /// <summary>A published power-of-two checkpoint itself.</summary>
@@ -31,7 +31,7 @@ internal enum PrimeCountRoute {
 /// kernels, individual sieve marks, base-prime generation and survivor decision internals are not counted.
 /// Profile entry points call the production implementation and collect work at request, prime-group and
 /// segment boundaries. Ordinary entry points allocate no profiler or profile records.</remarks>
-internal sealed class PrimeRequestProfile {
+public sealed class PrimeRequestProfile {
     /// <summary>Gets the production request's result.</summary>
     public ulong Result { get; }
     /// <summary>Gets the request's route.</summary>
@@ -68,7 +68,7 @@ internal sealed class PrimeRequestProfile {
 /// <remarks>Fields unused by the selected route are zero. A frontier is an inclusive integer upper bound;
 /// bitmap bytes count logical lengths processed, not allocations or memory traffic. Factor coordinates count
 /// entries inspected before filtering, and cached quotient divisions count the explicit x/p cache population.</remarks>
-internal sealed class PrimeCountWork {
+public sealed class PrimeCountWork {
     /// <summary>Gets the inclusive bound submitted to the exact counter.</summary>
     public ulong Bound { get; }
     /// <summary>Gets the dispatch's route.</summary>
@@ -136,9 +136,12 @@ internal sealed class PrimeCountWork {
         CheckpointWindowedSegments = work.CheckpointBitmap.WindowedSegments;
     }
 }
+
 internal sealed class PrimeRequestWorkBuilder {
     internal PrimeRequestRoute Route { get; set; } = PrimeRequestRoute.CountOnly;
-    internal List<PrimeCountWorkBuilder> Counts { get; } = [];
+
+    public List<PrimeCountWorkBuilder> Counts { get; } = [];
+
     internal PrimeBitmapWork SelectionBitmap { get; } = new();
 
     internal ulong DirectPrimalityRequests { get; set; }
@@ -151,7 +154,8 @@ internal sealed class PrimeRequestWorkBuilder {
         return work;
     }
 }
-internal sealed class PrimeCountWorkBuilder(ulong bound) {
+
+public sealed class PrimeCountWorkBuilder(ulong bound) {
     internal ulong Bound { get; } = bound;
 
     internal ulong CachedQuotientDivisions { get; set; }
@@ -173,6 +177,7 @@ internal sealed class PrimeCountWorkBuilder(ulong bound) {
     internal PrimeBitmapWork SemiprimeReverseBitmap { get; } = new();
     internal PrimeBitmapWork CheckpointBitmap { get; } = new();
 }
+
 internal sealed class PrimeBitmapWork {
     internal ulong Bytes { get; private set; }
     internal ulong Segments { get; private set; }
@@ -191,7 +196,7 @@ public static partial class PrimeExtensions {
     /// <param name="cancellationToken">Cancels the request with the same contract as ordinary nth-prime selection.</param>
     /// <returns>The result and architecture-independent work counters; see <see cref="PrimeRequestProfile"/> for exclusions.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
-    internal static PrimeRequestProfile ProfileNthPrime(ulong value, CancellationToken cancellationToken = default) {
+    public static PrimeRequestProfile ProfileNthPrime(ulong value, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         PrimeRequestWorkBuilder work = new();
         var result = NthPrime64(cancellationToken: cancellationToken, profile: work, value: value);
@@ -203,7 +208,7 @@ public static partial class PrimeExtensions {
     /// <param name="cancellationToken">Cancels the request with the same contract as ordinary prime counting.</param>
     /// <returns>The result and architecture-independent work counters; see <see cref="PrimeRequestProfile"/> for exclusions.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
-    internal static PrimeRequestProfile ProfilePrimeCountingFunction(ulong value, CancellationToken cancellationToken = default) {
+    public static PrimeRequestProfile ProfilePrimeCountingFunction(ulong value, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         PrimeRequestWorkBuilder work = new();
         var result = CountPrimeBound64(cancellationToken: cancellationToken, profile: work, value: value, workspace: null);

@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Maths;
 
 /// <summary>Selects complete sieving or a bounded sieve followed by exact primality decisions.</summary>
-internal enum PrimeSieveMode {
+public enum PrimeSieveMode {
     /// <summary>Chooses complete, windowed or bounded presieving from interval width and upper-base workspace.</summary>
     Automatic,
     /// <summary>Generates every required base prime and carries useful upper-prime cursors in segment buckets.</summary>
@@ -13,11 +13,10 @@ internal enum PrimeSieveMode {
     /// <summary>Completely sieves each segment by streaming every upper base prime through it once, carrying no per-prime state.</summary>
     Windowed,
 }
-
 public static partial class PrimeExploration {
     /// <summary>The bitmap bytes of a segment, and of a small-prime marking chunk inside a larger one: one 32-KiB
     /// level-one data cache.</summary>
-    internal const int CacheSegmentBytes = 32768;
+    public const int CacheSegmentBytes = 32768;
 
     // 65521 is the largest entry of the shared base-prime table; the next prime starts the upper bases.
     private const uint FirstUpperPrime = 65537;
@@ -50,7 +49,7 @@ public static partial class PrimeExploration {
     /// not accuracy conditions; every policy returns the same primes.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is undefined.</exception>
-    internal static PrimeSieveMode ResolveMode(ulong low, ulong high, PrimeSieveMode mode = PrimeSieveMode.Automatic) {
+    public static PrimeSieveMode ResolveMode(ulong low, ulong high, PrimeSieveMode mode = PrimeSieveMode.Automatic) {
         if (((uint)mode) > ((uint)PrimeSieveMode.Windowed)) { throw new ArgumentOutOfRangeException(paramName: nameof(mode)); }
         if (mode != PrimeSieveMode.Automatic) { return mode; }
         if ((high < low) || (high < ProvenPresieveLimit)) { return PrimeSieveMode.Eratosthenes; }
@@ -60,6 +59,7 @@ public static partial class PrimeExploration {
         if ((high - low) < (requiredWidth - 1UL)) { return PrimeSieveMode.Presieve; }
         return ((AutomaticWorkspaceBytes(root: ((uint)root)) <= AutomaticWorkspaceBudget) ? PrimeSieveMode.Eratosthenes : PrimeSieveMode.Windowed);
     }
+
     // Integer-equivalent work of one upper-base pass through root >= 2, made once by each carried sieve call and
     // once by each windowed segment. Regenerating the bases sieves root integers; each base start, a division
     // and a residue search, is charged one complete wheel byte. The charge is a cost heuristic used only to
@@ -106,7 +106,7 @@ public static partial class PrimeExploration {
     /// <c>min(request, 32768)</c> and the request and rounded down to a multiple of that minimum. This is bitmap
     /// storage, not total sieve workspace.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The size is outside <c>[1, Array.MaxLength]</c>, or the mode is undefined.</exception>
-    internal static int ResolveSegmentBytes(ulong low, ulong high, int segmentBytes, PrimeSieveMode mode) {
+    public static int ResolveSegmentBytes(ulong low, ulong high, int segmentBytes, PrimeSieveMode mode) {
         ArgumentOutOfRangeException.ThrowIfLessThan(segmentBytes, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(segmentBytes, Array.MaxLength);
         // Enumeration resolves its policy after reporting 2, 3 and 5, from a lower bound of at least seven.
