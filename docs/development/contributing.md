@@ -538,7 +538,8 @@ The supported GPU floor covers RTX 2060, RTX 4070, the RDNA3 Steam Machine,
 and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
-DXC compiles the same HLSL sources to SPIR-V and DXIL during the build. `dxc`
+DXC compiles the same HLSL sources to SPIR-V and, on Windows, DXIL during the
+build ([freshness](../reference/shaders.md#freshness)). `dxc`
 must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
 describes. The build compiles through the runtime's `ShaderCompiler` into the

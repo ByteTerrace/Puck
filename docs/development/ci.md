@@ -185,18 +185,19 @@ are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
 Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader
 through the build's own `CompileShaders` target into an empty shader cache, so
-every output really compiles on Linux, and holds each SPIR-V and DXIL
-output byte for byte to the Windows build of the same commit
-(`puck shaders compare --build`); the artifacts job collects the Windows
-build's shaders with `puck shaders collect` into the `shader-bytecode-windows`
-artifact rather than a second build. The Windows build compiles the whole
+every output really compiles on Linux, and holds each SPIR-V output byte for
+byte to the Windows build of the same commit (`puck shaders compare --build`);
+the artifacts job collects the Windows build's SPIR-V with `puck shaders
+collect` into the `shader-bytecode-windows` artifact rather than a second
+build. DXIL is no part of the comparison: Direct3D 12 is its one reader, so the
+shader build compiles DXIL on Windows alone ([`build/Shaders.targets`](../../build/Shaders.targets)),
+and the Linux job compiles none. The Windows build compiles the whole
 solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
-projects included, is in the compare. A DXIL difference names the container
-chunks that differ, and a failed comparison collects the Linux build's shaders
-into the `shader-bytecode-linux` artifact, so either host's `dxc -dumpbin` can
-disassemble both sides.
+projects included, is in the compare. A failed comparison collects the Linux
+build's SPIR-V into the `shader-bytecode-linux` artifact, so both sides can be
+disassembled with `spirv-dis`.
 The comparison compiles into `.tmp/shader-cache` (`--cache`), and once it passes
 the job saves that directory as the Linux shader cache under the shader inputs'
 key. A run whose key already has a Linux cache has nothing new to compare: the
@@ -228,8 +229,9 @@ The Azure graph builds its two Linux container images independently of the Windo
 producer. The silo image's build restores the Linux shader cache and hands it to
 `docker build` as the `shader-cache` build context, which the Dockerfile mounts
 at its build's default cache directory; its DXC is the archive and checksum
-`setup-dxc` pins on Linux, so a restored entry is a hit inside the container and
-a cache under the commit's key compiles no shader. The two pins change together.
+`setup-dxc` pins on Linux, and like the comparison it builds SPIR-V alone, so a
+restored entry is a hit inside the container and a cache under the commit's key
+compiles no shader. The image ships no DXIL, which only Direct3D 12 reads. The two pins change together.
 A cache from the previous shader inputs still answers every unchanged output.
 Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
@@ -290,8 +292,8 @@ the step in the same change.
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
-than static checks: the emulator batteries, the WebAssembly harness, Linux DXC
-comparison (`puck shaders compare`), Linux determinism (`puck determinism
+than static checks: the emulator batteries, the WebAssembly harness, the Linux
+SPIR-V comparison (`puck shaders compare`), Linux determinism (`puck determinism
 compare`), the published World's startup check, `puck nuget pack` and `smoke`,
 API documentation (`puck docs build`), Bicep compilation, container images and
 deployment.

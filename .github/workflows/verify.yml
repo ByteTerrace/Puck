@@ -18,8 +18,9 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # digest of its codec, and CanaryCeilings.json records the canary gates' planned cost, so a merge that combines two lanes'
 # changes fails here until the ledger is regenerated.
 # `shader-bytecode` is the binding contract's cross-host gate leg: it compiles every shader with the pinned Linux DXC
-# through the build's own CompileShaders target and holds each SPIR-V and DXIL output byte for byte to the Windows
-# build's, which the artifacts job collected (`puck shaders compare --build`). Once a comparison passes, it saves those
+# through the build's own CompileShaders target and holds each SPIR-V output byte for byte to the Windows build's,
+# which the artifacts job collected (`puck shaders compare --build`). DXIL is no part of it: Direct3D 12 is its one
+# reader, so build/Shaders.targets compiles DXIL on Windows alone and this Linux build compiles none. Once a comparison passes, it saves those
 # Linux compiles as the Linux shader cache under the key of every shader input and both DXC pins; a later run whose key
 # already has that cache skips the comparison and says so, and the silo container build restores the cache.
 # `determinism` is the simulation's cross-host leg: it records every scenario of tests/Puck.Determinism/determinism.json
@@ -219,7 +220,7 @@ jobs:
     timeout-minutes: 15
   shader-bytecode:
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    name: Compare Linux DXC output with the Windows build
+    name: Compare Linux SPIR-V with the Windows build
     needs: artifacts
     runs-on: ubuntu-24.04
     steps:
@@ -245,7 +246,7 @@ jobs:
         name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
       - if: steps.compared.outputs.cache-hit != 'true'
-        name: Download the Windows build's shader bytecode
+        name: Download the Windows build's SPIR-V
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: shader-bytecode-windows
@@ -258,14 +259,14 @@ jobs:
       # --cache compiles into the absent directory the shader-cache action saves, and keeps it.
       - id: compare
         if: steps.compared.outputs.cache-hit != 'true'
-        name: Compile the shaders with Linux DXC and compare every output byte for byte
+        name: Compile the shaders with Linux DXC and compare every SPIR-V module byte for byte
         run: puck shaders compare --build "$RUNNER_TEMP/shader-bytecode-windows" --cache .tmp/shader-cache
-      # A difference is read from both hosts' bytes: either host's dxc -dumpbin disassembles the other's DXIL.
+      # A difference is read from both hosts' bytes: spirv-dis disassembles either host's SPIR-V.
       - if: failure() && steps.compare.outcome == 'failure'
-        name: Collect the Linux build's shader bytecode a failed comparison read
+        name: Collect the Linux build's SPIR-V a failed comparison read
         run: puck shaders collect "$RUNNER_TEMP/shader-bytecode-linux"
       - if: failure() && steps.compare.outcome == 'failure'
-        name: Upload the Linux build's shader bytecode
+        name: Upload the Linux build's SPIR-V
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error

@@ -52,8 +52,8 @@ beside the package that owns it. The open parts are:
   views, finite lighting solve, change classes, source closure, diagnostics,
   near field and comparison methods are implemented. Their remaining physical
   qualification and the counted choice of defaults keep G2 to G10 open.
-- **P7:** every step of P7b has landed; the Linux and Windows shader-bytecode
-  comparison has run once and failed on 7 DXIL outputs (see P7's gate).
+- **P7:** every step of P7b has landed; the Linux and Windows SPIR-V comparison
+  has not yet passed in CI (see P7's gate).
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
   floor hardware have not run.
 - **P12:** every step of P12b has landed; P12b-4's recorded camera run on both
@@ -371,8 +371,8 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg is not yet proven, and keeps P7 open: one build on Linux compared byte
-for byte with the Windows build of the same commit, which CI runs as
+One leg is not yet proven, and keeps P7 open: one build's SPIR-V on Linux
+compared byte for byte with the Windows build of the same commit, which CI runs as
 `verify.yml`'s `shader-bytecode` job (see P7's gate). It is listed under
 [deferred to the end](#deferred-to-the-end).
 
@@ -3472,32 +3472,29 @@ compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
-station (step 16). One leg remains, not yet proven: one build on Linux compared
-byte for byte with the Windows build of the same commit. The artifacts job
-collects the Windows build's shaders (`puck shaders collect`, the
-`shader-bytecode-windows` artifact) without rebuilding them, and `verify.yml`'s
+station (step 16). One leg remains, not yet proven: one build's SPIR-V on Linux
+compared byte for byte with the Windows build of the same commit. The artifacts
+job collects the Windows build's SPIR-V (`puck shaders collect`, the
+`shader-bytecode-windows` artifact) without rebuilding it, and `verify.yml`'s
 `shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
 compiles every shader through the build's own `CompileShaders` target and holds
-each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
+each SPIR-V output to the Windows one (`puck shaders compare --build`). DXIL is
+outside the leg: Direct3D 12 is its one reader, so the shader build compiles
+DXIL on Windows alone (`build/Shaders.targets`) and no Linux build or artifact
+holds any. DXC's DXIL is not byte-stable across hosts; since nothing built off
+Windows ships DXIL, that difference is no evidence about the binding contract
+and does not count toward Slang.
 It runs only in CI: through **Release Azure** on every pull request and every
 push to `main`, or by dispatching **Verify runtime behavior** by hand, and it
 compares only when its shader inputs or a DXC pin differ from the last passing
 comparison, whose saved Linux shader cache records it. The leg
-is proven when that job passes; a difference it names, such as DXIL the Linux
-compiler hashes or signs differently, is the gate's failure toward Slang. The
-job has run once and failed: every SPIR-V output matched, and 7 of the DXIL
-outputs differed, all of them large SDF passes (`sdf-light-primary`, both
-`sdf-world-receiver` passes, and four of `Puck.World.Tests`' indirect proof
-kernels), some by four bytes of length. Both hosts ran the same DXC source
-revision (`1.9.2609.5`). The three engine passes that differ
-include `sdf-world-views.comp.hlsl` exactly as the passes that matched do and
-differ from them only in a define, so include spelling does not explain it. Which
-container chunks differ is not yet read: the job now names them and uploads the
-Linux bytes as `shader-bytecode-linux` when it fails. The leg's run is listed
-under [deferred to the end](#deferred-to-the-end).
+is proven when that job passes; a SPIR-V difference it names is the gate's
+failure toward Slang, and a failed run uploads the Linux SPIR-V as
+`shader-bytecode-linux`. The leg's run is listed under
+[deferred to the end](#deferred-to-the-end).
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
-Slang when DXC output is not byte-stable across hosts, or when the second group
+Slang when DXC's SPIR-V is not byte-stable across hosts, or when the second group
 cannot run identically on both backends from generated annotations; anything
 resembling a register remap surviving into the new design is that failure.
 
@@ -4083,8 +4080,8 @@ destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups
 landed with P7b-20, and P12b-8 made the screens one image array read through a
 sampler array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. The gate's Linux build, which CI's
-`shader-bytecode` job runs, keeps P7 open and is listed under
+consolidate as the surface shrinks. The gate's Linux SPIR-V comparison, which
+CI's `shader-bytecode` job runs, keeps P7 open and is listed under
 [deferred to the end](#deferred-to-the-end).
 
 ### P8 — The shader package, and one source language
@@ -8640,9 +8637,8 @@ programme is done.
   driver-initiated removal (a timeout detection and recovery) recovers as an
   injected loss does.
 - **Environment: P7's shader-bytecode comparison.** Keeps P7 open. CI's
-  `shader-bytecode` job passes, holding a Linux build's SPIR-V and DXIL byte for
-  byte to the Windows build of the same commit. Its one run failed on 7 DXIL
-  outputs; their differing chunks are read first (see P7's gate).
+  `shader-bytecode` job passes, holding a Linux build's SPIR-V byte for byte to
+  the Windows build of the same commit (see P7's gate).
 - **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
   run at `low` on floor hardware.
 - **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14

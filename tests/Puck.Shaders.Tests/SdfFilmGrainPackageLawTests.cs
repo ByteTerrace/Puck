@@ -100,7 +100,7 @@ public sealed class SdfFilmGrainPackageLawTests {
         var stages = package.Stages!;
 
         foreach (var stem in ((string[])[stages.Vertex, stages.Fragment])) {
-            foreach (var extension in ((string[])[".spv", ".dxil"])) {
+            foreach (var extension in (OperatingSystem.IsWindows() ? [".spv", ".dxil"] : new[] { ".spv" })) {
                 var path = Path.Combine(path1: AppContext.BaseDirectory, path2: stages.Directory, path3: (stem + extension));
 
                 Assert.True(condition: File.Exists(path: path), userMessage: path);

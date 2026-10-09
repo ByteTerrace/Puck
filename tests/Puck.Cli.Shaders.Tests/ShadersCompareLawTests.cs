@@ -1,18 +1,15 @@
-using System.Buffers.Binary;
-using System.Text;
 using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Shaders.Tests;
 
 /// <summary>
-/// Laws for <c>puck shaders compare</c>: two trees holding the same compiled shaders match; a differing byte fails by
-/// name with the first byte that differs, and a DXIL difference also names the container chunks that differ; a file one
-/// tree lacks fails by name; copies under <c>bin</c> and
-/// <c>obj</c> are not compared; a tree with no bytecode is refused rather than matched; <c>puck shaders collect</c>
-/// copies a checkout's bytecode, and nothing under <c>bin</c> or <c>artifacts</c>, into a tree that matches it; and on
-/// the real tree the projects whose build compiles shaders with DXC are those owning a tracked stage source outside
-/// <c>experimental/</c>.
+/// Laws for <c>puck shaders compare</c>: it covers exactly the SPIR-V modules, so a DXIL file, differing, missing or
+/// alone, is no part of it; two trees holding the same SPIR-V match; a differing byte fails by name with the first byte
+/// that differs; a module one tree lacks fails by name; copies under <c>bin</c> and <c>obj</c> are not compared; a tree
+/// with no SPIR-V is refused rather than matched; <c>puck shaders collect</c> copies a checkout's SPIR-V, and no DXIL
+/// and nothing under <c>bin</c> or <c>artifacts</c>, into a tree that matches it; and on the real tree the projects
+/// whose build compiles shaders with DXC are those owning a tracked stage source outside <c>experimental/</c>.
 /// </summary>
 public sealed class ShadersCompareLawTests {
     // Two trees, each written from its own files, compared by the verb.
@@ -41,27 +38,41 @@ public sealed class ShadersCompareLawTests {
         keySelector: static file => file.Path
     );
 
+    // Only a Windows build compiles DXIL (build/Shaders.targets), so the cross-host comparison holds SPIR-V alone: a
+    // DXIL file that differs, that one tree lacks, or that is the only file of a stage, decides nothing and is not
+    // counted.
     [Fact]
-    public void TreesHoldingTheSameBytecodeMatch() {
+    public void TheComparisonCoversExactlyTheSpirvModules() {
         var (exitCode, output, error) = Compare(
-            actual: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.frag.dxil", [4, 5])),
-            expected: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.frag.dxil", [4, 5]))
+            actual: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.frag.dxil", [4, 6]), ("src/A/Assets/Shaders/linux.comp.dxil", [7])),
+            expected: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.frag.dxil", [4, 5]), ("src/A/Assets/Shaders/place.comp.dxil", [9]))
         );
 
         Assert.Equal(actual: exitCode, expected: 0);
-        Assert.Contains(actualString: output, expectedSubstring: "all 2 compiled shaders match byte for byte");
+        Assert.Contains(actualString: output, expectedSubstring: "all 1 SPIR-V modules match byte for byte");
+        Assert.Empty(collection: error.Trim());
+    }
+    [Fact]
+    public void TreesHoldingTheSameSpirvMatch() {
+        var (exitCode, output, error) = Compare(
+            actual: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.vert.spv", [4, 5])),
+            expected: Tree(("src/A/Assets/Shaders/blit.frag.spv", [1, 2, 3]), ("src/A/Assets/Shaders/blit.vert.spv", [4, 5]))
+        );
+
+        Assert.Equal(actual: exitCode, expected: 0);
+        Assert.Contains(actualString: output, expectedSubstring: "all 2 SPIR-V modules match byte for byte");
         Assert.Empty(collection: error.Trim());
     }
     [Fact]
     public void ADifferingByteFailsByNameAtTheFirstByteThatDiffers() {
         var (exitCode, _, error) = Compare(
-            actual: Tree(("src/A/Assets/Shaders/place.comp.dxil", [9, 9, 7, 9]), ("src/A/Assets/Shaders/place.comp.spv", [1])),
-            expected: Tree(("src/A/Assets/Shaders/place.comp.dxil", [9, 9, 9, 9]), ("src/A/Assets/Shaders/place.comp.spv", [1]))
+            actual: Tree(("src/A/Assets/Shaders/place.comp.spv", [9, 9, 7, 9]), ("src/A/Assets/Shaders/blit.frag.spv", [1])),
+            expected: Tree(("src/A/Assets/Shaders/place.comp.spv", [9, 9, 9, 9]), ("src/A/Assets/Shaders/blit.frag.spv", [1]))
         );
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: error, expectedSubstring: "src/A/Assets/Shaders/place.comp.dxil differs from byte 2 (4 bytes expected, 4 actual)");
-        Assert.DoesNotContain(actualString: error, expectedSubstring: "place.comp.spv");
+        Assert.Contains(actualString: error, expectedSubstring: "src/A/Assets/Shaders/place.comp.spv differs from byte 2 (4 bytes expected, 4 actual)");
+        Assert.DoesNotContain(actualString: error, expectedSubstring: "blit.frag.spv");
 
         var (shorter, _, truncated) = Compare(
             actual: Tree(("src/A/x.spv", [1, 2])),
@@ -71,81 +82,37 @@ public sealed class ShadersCompareLawTests {
         Assert.Equal(actual: shorter, expected: 1);
         Assert.Contains(actualString: truncated, expectedSubstring: "src/A/x.spv differs from byte 2 (3 bytes expected, 2 actual)");
     }
-
-    // A DXBC container holding each chunk in order, under an all-zero digest but for its first byte.
-    private static byte[] Container(byte digest, params (string Code, byte[] Payload)[] chunks) {
-        var table = (32 + (chunks.Length * 4));
-        var bytes = new byte[(table + chunks.Sum(selector: static chunk => (8 + chunk.Payload.Length)))];
-        var offset = table;
-
-        "DXBC"u8.CopyTo(destination: bytes);
-        bytes[4] = digest;
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: 24), value: ((uint)bytes.Length));
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: 28), value: ((uint)chunks.Length));
-        for (var index = 0; (index < chunks.Length); index++) {
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: (32 + (index * 4))), value: ((uint)offset));
-            Encoding.ASCII.GetBytes(s: chunks[index].Code).CopyTo(array: bytes, index: offset);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: (offset + 4)), value: ((uint)chunks[index].Payload.Length));
-            chunks[index].Payload.CopyTo(array: bytes, index: (offset + 8));
-            offset += (8 + chunks[index].Payload.Length);
-        }
-
-        return bytes;
-    }
-
-    // A DXIL difference names the container chunks that differ, the program, its reflection or its pipeline state,
-    // since the container digest at byte 4 differs whenever anything does; a difference in the header alone says so.
     [Fact]
-    public void ADxilDifferenceNamesTheContainerChunksThatDiffer() {
-        var expected = Container(1, ("DXIL", [1, 2, 3, 4]), ("STAT", [5, 6, 7, 8]), ("HASH", [0, 0, 0, 0]));
-
+    public void AModuleOneTreeLacksFailsByName() {
         var (exitCode, _, error) = Compare(
-            actual: Tree(("src/A/k.comp.dxil", Container(2, ("DXIL", [1, 2, 3, 5, 0, 0, 0, 0]), ("STAT", [5, 6, 7, 8]), ("HASH", [0, 0, 0, 1])))),
-            expected: Tree(("src/A/k.comp.dxil", expected))
-        );
-
-        Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: error, expectedSubstring: "src/A/k.comp.dxil differs from byte 4 (80 bytes expected, 84 actual); DXBC chunks that differ: DXIL (4 expected, 8 actual), HASH (4 expected, 4 actual).");
-
-        var (headerOnly, _, header) = Compare(
-            actual: Tree(("src/A/k.comp.dxil", Container(2, ("DXIL", [1, 2, 3, 4]), ("STAT", [5, 6, 7, 8]), ("HASH", [0, 0, 0, 0])))),
-            expected: Tree(("src/A/k.comp.dxil", expected))
-        );
-
-        Assert.Equal(actual: headerOnly, expected: 1);
-        Assert.Contains(actualString: header, expectedSubstring: "differs from byte 4 (80 bytes expected, 80 actual); every container chunk matches, so only the header differs.");
-    }
-    [Fact]
-    public void AFileOneTreeLacksFailsByName() {
-        var (exitCode, _, error) = Compare(
-            actual: Tree(("src/A/b.spv", [1]), ("src/A/c.dxil", [2])),
+            actual: Tree(("src/A/b.spv", [1]), ("src/A/c.spv", [2])),
             expected: Tree(("src/A/a.spv", [1]), ("src/A/b.spv", [1]))
         );
 
         Assert.Equal(actual: exitCode, expected: 1);
         Assert.Contains(actualString: error, expectedSubstring: "src/A/a.spv is in the expected tree only");
-        Assert.Contains(actualString: error, expectedSubstring: "src/A/c.dxil is in the actual tree only");
+        Assert.Contains(actualString: error, expectedSubstring: "src/A/c.spv is in the actual tree only");
     }
     [Fact]
     public void BuildOutputCopiesAreNotCompared() {
         var (exitCode, output, _) = Compare(
-            actual: Tree(("src/A/k.spv", [1]), ("src/A/bin/Release/net10.0/k.spv", [7]), ("src/A/obj/k.dxil", [8])),
+            actual: Tree(("src/A/k.spv", [1]), ("src/A/bin/Release/net10.0/k.spv", [7]), ("src/A/obj/k.spv", [8])),
             expected: Tree(("src/A/k.spv", [1]))
         );
 
         Assert.Equal(actual: exitCode, expected: 0);
-        Assert.Contains(actualString: output, expectedSubstring: "all 1 compiled shaders match");
+        Assert.Contains(actualString: output, expectedSubstring: "all 1 SPIR-V modules match");
     }
     [Fact]
-    public void ATreeWithNoBytecodeIsRefused() {
+    public void ATreeWithNoSpirvIsRefused() {
         var (exitCode, _, error) = Compare(
             actual: Tree(("src/A/k.spv", [1])),
-            expected: Tree(("src/A/readme.txt", [1]))
+            expected: Tree(("src/A/readme.txt", [1]), ("src/A/k.dxil", [1]))
         );
 
         Assert.Equal(actual: exitCode, expected: 2);
         Assert.Contains(actualString: error, expectedSubstring: "the expected tree");
-        Assert.Contains(actualString: error, expectedSubstring: "holds no .spv or .dxil file");
+        Assert.Contains(actualString: error, expectedSubstring: "holds no .spv file");
     }
     [Fact]
     public void ACollectedTreeMatchesTheCheckoutItCameFrom() {
@@ -154,7 +121,7 @@ public sealed class ShadersCompareLawTests {
         var checkout = Path.Combine(path1: root.RootPath, path2: "checkout");
         var collected = Path.Combine(path1: root.RootPath, path2: "collected");
 
-        foreach (var (path, bytes) in ((ReadOnlySpan<(string, byte[])>)[("src/A/Assets/Shaders/k.comp.spv", [1, 2]), ("tests/B/p.frag.dxil", [3]), ("src/A/bin/Release/k.comp.spv", [9]), ("artifacts/world/k.comp.spv", [9]), ("src/A/k.hlsl", [0])])) {
+        foreach (var (path, bytes) in ((ReadOnlySpan<(string, byte[])>)[("src/A/Assets/Shaders/k.comp.spv", [1, 2]), ("tests/B/p.frag.spv", [3]), ("tests/B/p.frag.dxil", [4]), ("src/A/bin/Release/k.comp.spv", [9]), ("artifacts/world/k.comp.spv", [9]), ("src/A/k.hlsl", [0])])) {
             var full = Path.Combine(path1: checkout, path2: path);
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
@@ -165,8 +132,10 @@ public sealed class ShadersCompareLawTests {
 
         Assert.Equal(actual: exitCode, expected: 0);
         Assert.Equal(
-            actual: CompareCommand.Bytecode(root: collected).Keys,
-            expected: ["src/A/Assets/Shaders/k.comp.spv", "tests/B/p.frag.dxil"]
+            actual: Directory.EnumerateFiles(path: collected, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+                .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: collected).Replace(newChar: '/', oldChar: '\\'))
+                .Order(comparer: StringComparer.Ordinal),
+            expected: ["src/A/Assets/Shaders/k.comp.spv", "tests/B/p.frag.spv"]
         );
         Assert.Equal(expected: 0, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Run(actualRoot: checkout, expectedRoot: collected)).ExitCode);
         Assert.Equal(expected: 2, actual: ConsoleCapture.RunSplit(run: () => CompareCommand.Collect(destination: collected, root: Path.Combine(path1: checkout, path2: "missing"))).ExitCode);

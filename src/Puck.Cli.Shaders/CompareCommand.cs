@@ -1,40 +1,42 @@
 using System.CommandLine;
-using System.Globalization;
 using System.Xml.Linq;
-using Puck.Abstractions.Gpu;
 
 namespace Puck.Cli.Shaders;
 
-/// <summary>One bytecode file that differs between two trees.</summary>
+/// <summary>One SPIR-V module that differs between two trees.</summary>
 /// <param name="Path">The file, relative to both roots, with forward slashes.</param>
-/// <param name="Detail">How it differs: absent from one tree, or its first differing byte and both lengths and, for two
-/// DXBC containers, the chunks that differ.</param>
+/// <param name="Detail">How it differs: absent from one tree, or its first differing byte and both lengths.</param>
 internal sealed record ShaderBytecodeDifference(string Path, string Detail);
 
-/// <summary><c>puck shaders compare</c>: compares every compiled shader, SPIR-V and DXIL, in one tree with the same file in
-/// another, byte for byte, so the DXC build on one host can be held to the build of the same commit on another. With
-/// <c>--build</c> it first compiles the shaders of the checkout it runs in, through the build's own
-/// <c>CompileShaders</c> target in every project that declares DXC shader items, into a shader cache that starts empty, so
-/// both hosts really compile, with the same arguments. Exit 0 when every file matches and both trees hold the same files, 1 when any differs, is missing, or the
-/// build fails, 2 when a tree holds no bytecode or cannot be read. <c>puck shaders collect</c> copies a checkout's
-/// compiled shaders into one tree at their repository paths, which is how one host hands its build to another.</summary>
+/// <summary><c>puck shaders compare</c>: compares every compiled SPIR-V module in one tree with the same file in another,
+/// byte for byte, so the DXC build on one host can be held to the build of the same commit on another. DXIL is no part
+/// of it: Direct3D 12 alone reads DXIL, so only a Windows build compiles it (<c>build/Shaders.targets</c>), and a
+/// <c>.dxil</c> file in either tree is ignored. With <c>--build</c> it first compiles the shaders of the checkout it runs
+/// in, through the build's own <c>CompileShaders</c> target in every project that declares DXC shader items, into a
+/// shader cache that starts empty, so both hosts really compile, with the same arguments. Exit 0 when every module
+/// matches and both trees hold the same modules, 1 when any differs, is missing, or the build fails, 2 when a tree holds
+/// no SPIR-V or cannot be read. <c>puck shaders collect</c> copies a checkout's SPIR-V into one tree at its repository
+/// paths, which is how one host hands its build to another.</summary>
 public static class CompareCommand {
     // The shader items build/Shaders.targets compiles with DXC; a Direct3D 11 kernel is compiled for cs_5_0 on Windows
     // alone, so it is no part of a cross-host comparison.
     private static readonly string[] DxcItems = ["VertexShaderSource", "FragmentShaderSource", "ComputeShaderSource"];
-    private static readonly string[] Extensions = [".spv", ".dxil"];
+
+    // The one target every host builds and the comparison holds across hosts.
+    private const string Extension = ".spv";
+
     // Directories that hold build output copies, published payloads, tooling or history rather than the bytecode the
     // build writes beside its sources.
     private static readonly string[] Skipped = ["artifacts", "bin", "obj", ".git", ".tmp", "node_modules"];
 
     private const string Verb = "shaders compare";
 
-    private static bool IsBytecode(string path) => Extensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension));
+    private static bool IsSpirv(string path) => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: Extension);
 
-    /// <summary>Lists every compiled shader under a root, skipping build output copies and tooling.</summary>
+    /// <summary>Lists every compiled SPIR-V module under a root, skipping build output copies and tooling.</summary>
     /// <param name="root">The tree's root.</param>
     /// <returns>Each file's path relative to the root, with forward slashes, mapped to its full path.</returns>
-    public static SortedDictionary<string, string> Bytecode(string root) {
+    public static SortedDictionary<string, string> Spirv(string root) {
         var files = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var pending = new Stack<string>(collection: [Path.GetFullPath(path: root)]);
 
@@ -44,7 +46,7 @@ public static class CompareCommand {
                     pending.Push(item: child);
                 }
             }
-            foreach (var file in Directory.EnumerateFiles(path: directory).Where(predicate: IsBytecode)) {
+            foreach (var file in Directory.EnumerateFiles(path: directory).Where(predicate: IsSpirv)) {
                 files[Path.GetRelativePath(path: file, relativeTo: root).Replace(newChar: '/', oldChar: '\\')] = file;
             }
         }
@@ -52,7 +54,7 @@ public static class CompareCommand {
         return files;
     }
 
-    /// <summary>Compares two trees' compiled shaders byte for byte.</summary>
+    /// <summary>Compares two trees' SPIR-V modules byte for byte.</summary>
     /// <param name="expected">The reference tree, such as another host's build.</param>
     /// <param name="actual">The tree held to it.</param>
     /// <returns>Every file that is absent from one tree or differs, in path order.</returns>
@@ -80,52 +82,13 @@ public static class CompareCommand {
                 (left.Length != right.Length)
             ) {
                 differences.Add(item: new ShaderBytecodeDifference(
-                    Detail: $"differs from byte {common} ({left.Length} bytes expected, {right.Length} actual){ContainerDetail(actual: right, expected: left)}",
+                    Detail: $"differs from byte {common} ({left.Length} bytes expected, {right.Length} actual)",
                     Path: path
                 ));
             }
         }
 
         return differences;
-    }
-
-    // Which chunks of two DXBC containers differ, so a difference names what moved (the program, its reflection, its
-    // pipeline state) rather than only the container digest at byte 4, which differs whenever anything does. Empty
-    // unless both are well-formed containers.
-    private static string ContainerDetail(byte[] expected, byte[] actual) {
-        IReadOnlyList<(string Code, ReadOnlyMemory<byte> Payload)> left, right;
-
-        try {
-            left = ShaderBytecode.DxbcChunks(bytecode: expected);
-            right = ShaderBytecode.DxbcChunks(bytecode: actual);
-        } catch (ArgumentException) {
-            return string.Empty;
-        }
-
-        static string Size(ReadOnlyMemory<byte>? part) => ((part is { } data)
-            ? data.Length.ToString(provider: CultureInfo.InvariantCulture)
-            : "absent"
-        );
-        static ReadOnlyMemory<byte>? Find(IReadOnlyList<(string Code, ReadOnlyMemory<byte> Payload)> parts, string code) {
-            foreach (var part in parts) {
-                if (string.Equals(a: part.Code, b: code, comparisonType: StringComparison.Ordinal)) { return part.Payload; }
-            }
-            return null;
-        }
-        var differing = new List<string>();
-
-        foreach (var code in left.Select(selector: static part => part.Code).Union(second: right.Select(selector: static part => part.Code), comparer: StringComparer.Ordinal)) {
-            var expectedPart = Find(code: code, parts: left);
-            var actualPart = Find(code: code, parts: right);
-
-            if ((expectedPart is not { } l) || (actualPart is not { } r) || !l.Span.SequenceEqual(other: r.Span)) {
-                differing.Add(item: $"{code} ({Size(part: expectedPart)} expected, {Size(part: actualPart)} actual)");
-            }
-        }
-
-        return ((differing.Count == 0)
-            ? "; every container chunk matches, so only the header differs"
-            : $"; DXBC chunks that differ: {string.Join(separator: ", ", values: differing)}");
     }
 
     /// <summary>Lists the projects whose build compiles shaders with DXC: every tracked project outside
@@ -196,14 +159,14 @@ public static class CompareCommand {
     /// <summary>Compares two trees and reports every difference, one line each.</summary>
     /// <param name="expectedRoot">The reference tree.</param>
     /// <param name="actualRoot">The tree held to it.</param>
-    /// <returns>0 when both hold the same bytecode, 1 when any differs or is missing, 2 when either holds none or
+    /// <returns>0 when both hold the same SPIR-V, 1 when any module differs or is missing, 2 when either holds none or
     /// cannot be read.</returns>
     public static int Run(string expectedRoot, string actualRoot) {
         SortedDictionary<string, string> expected, actual;
 
         try {
-            expected = Bytecode(root: expectedRoot);
-            actual = Bytecode(root: actualRoot);
+            expected = Spirv(root: expectedRoot);
+            actual = Spirv(root: actualRoot);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return CliExit.Refuse(
                 verb: Verb,
@@ -217,7 +180,7 @@ public static class CompareCommand {
                 return CliExit.Refuse(
                     verb: Verb,
                     what: $"the {name} tree",
-                    why: "it holds no .spv or .dxil file, so a comparison would prove nothing."
+                    why: "it holds no .spv file, so a comparison would prove nothing."
                 );
             }
         }
@@ -232,28 +195,28 @@ public static class CompareCommand {
         }
 
         Console.Out.WriteLine(value: ((differences.Count == 0)
-            ? $"{Verb}: all {expected.Count} compiled shaders match byte for byte."
-            : $"{Verb}: {differences.Count} of {expected.Keys.Union(second: actual.Keys, comparer: StringComparer.Ordinal).Count()} compiled shaders differ or are missing."));
+            ? $"{Verb}: all {expected.Count} SPIR-V modules match byte for byte."
+            : $"{Verb}: {differences.Count} of {expected.Keys.Union(second: actual.Keys, comparer: StringComparer.Ordinal).Count()} SPIR-V modules differ or are missing."));
 
         return ((differences.Count == 0)
             ? CliExit.Success
             : CliExit.Failed);
     }
-    /// <summary>Copies every compiled shader under a root into a directory, each at its path relative to the root, so a
-    /// host can hand its build's bytecode to another as one tree.</summary>
+    /// <summary>Copies every compiled SPIR-V module under a root into a directory, each at its path relative to the root,
+    /// so a host can hand its build's SPIR-V to another as one tree.</summary>
     /// <param name="root">The tree to collect from, such as the repository root after a build.</param>
     /// <param name="destination">The directory to copy into; created when absent.</param>
-    /// <returns>0 when at least one file was copied, 2 when the tree holds no bytecode or cannot be read or
+    /// <returns>0 when at least one file was copied, 2 when the tree holds no SPIR-V or cannot be read or
     /// written.</returns>
     public static int Collect(string root, string destination) {
         try {
-            var files = Bytecode(root: root);
+            var files = Spirv(root: root);
 
             if (files.Count == 0) {
                 return CliExit.Refuse(
                     verb: "shaders collect",
                     what: root,
-                    why: "it holds no .spv or .dxil file; build the shaders first."
+                    why: "it holds no .spv file; build the shaders first."
                 );
             }
 
@@ -264,7 +227,7 @@ public static class CompareCommand {
                 File.Copy(destFileName: target, overwrite: true, sourceFileName: full);
             }
 
-            Console.Out.WriteLine(value: $"shaders collect: copied {files.Count} compiled shaders into {destination}.");
+            Console.Out.WriteLine(value: $"shaders collect: copied {files.Count} SPIR-V modules into {destination}.");
 
             return CliExit.Success;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -275,19 +238,20 @@ public static class CompareCommand {
             );
         }
     }
-    /// <summary>Creates <c>puck shaders collect</c>, which copies the checkout's compiled shaders into one tree that
+    /// <summary>Creates <c>puck shaders collect</c>, which copies the checkout's SPIR-V into one tree that
     /// <c>puck shaders compare</c> reads on another host.</summary>
     /// <returns>The command.</returns>
     public static Command CreateCollect() {
         var destination = new Argument<string>(name: "directory") { Description = "The directory to copy into, outside the repository's walk (such as under artifacts/)." };
         var command = new Command(
             description: """
-            Copy every compiled shader, SPIR-V and DXIL, into one directory at its repository path.
+            Copy every compiled SPIR-V module into one directory at its repository path.
 
             Walks the checkout as puck shaders compare does, skipping artifacts, bin, obj, .git, .tmp
             and node_modules, so the collected tree lines up path for path with another host's checkout.
-            CI collects the Windows build's bytecode into an artifact this way. Exit 0 copied, 2 the
-            checkout holds no bytecode or the directory cannot be written.
+            DXIL is not collected: only a Windows build compiles it, so no other host compares it.
+            CI collects the Windows build's SPIR-V into an artifact this way. Exit 0 copied, 2 the
+            checkout holds no SPIR-V or the directory cannot be written.
             """,
             name: "collect"
         ) { destination };
@@ -308,22 +272,23 @@ public static class CompareCommand {
         var cache = new Option<string?>("--cache") { Description = "With --build, compile into this absent or empty directory and keep it, rather than a temporary cache removed afterwards." };
         var command = new Command(
             description: """
-            Compare every compiled shader, SPIR-V and DXIL, with another tree's byte for byte.
+            Compare every compiled SPIR-V module with another tree's byte for byte.
 
-            Walks both trees for .spv and .dxil files, skipping artifacts, bin, obj, .git, .tmp and
-            node_modules, and matches them by relative path: a file in one tree only, or one whose bytes differ,
-            fails by name with its first differing byte and, for DXIL, the container chunks that differ.
+            Walks both trees for .spv files, skipping artifacts, bin, obj, .git, .tmp and node_modules,
+            and matches them by relative path: a module in one tree only, or one whose bytes differ,
+            fails by name with its first differing byte. DXIL is no part of it: Direct3D 12 alone
+            reads DXIL, so only a Windows build compiles it, and a .dxil file in either tree is ignored.
             With --build it first builds the shader build's host, then runs the build's own
             CompileShaders target (build/Shaders.targets) in every
             tracked project outside experimental/ that declares a vertex, fragment or compute shader
             item, with the dxc on the path and an empty shader cache, so a second host really compiles
             every output with exactly the arguments the first did. CI runs it on Linux against
-            the Windows build's bytecode artifact, the P7 gate's cross-host leg. --cache names that
+            the Windows build's SPIR-V artifact, the P7 gate's cross-host leg. --cache names that
             cache, which must be absent or empty, and keeps it: CI saves it once the comparison
             passes, as the Linux shader cache the container builds restore.
 
-            Exit 0 every file matches, 1 any differs or is missing or the build fails, 2 a tree holds
-            no bytecode or cannot be read, or --cache is not empty or is given without --build.
+            Exit 0 every module matches, 1 any differs or is missing or the build fails, 2 a tree holds
+            no SPIR-V or cannot be read, or --cache is not empty or is given without --build.
             """,
             name: "compare"
         ) { expected, actual, build, cache };

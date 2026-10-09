@@ -18,7 +18,11 @@ declared stage for its enabled backends through `ShaderCompiler` and its
 per-user cache, and publishes the bytecode beside the source.
 `PuckShaderSpirvEnabled` selects SPIR-V; `PuckShaderDxilEnabled` selects
 vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
-All three default to true. Each output's cache key hashes its stage source's
+All three default to true. DXIL is built on Windows alone, whatever a project
+sets: Direct3D 12 is its one reader, so a build on any other host plans SPIR-V
+only (`_PuckShaderHostBuildsDxil`), and the cross-host comparison
+(`puck shaders compare`) holds SPIR-V alone. Never add a DXIL output, artifact
+or comparison off Windows. Each output's cache key hashes its stage source's
 include closure (paths relative to each other, and contents), its `StepsOf`
 options and the DXC identity, so an edit invalidates only the outputs whose
 closure holds the edited file. A valid matching cache entry can be published
