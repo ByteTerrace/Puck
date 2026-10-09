@@ -660,11 +660,8 @@ public sealed class CommandRegistry {
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
-            description: "Lists the available commands: help — one `name - description` line per registered verb, this registry's own built-ins included, ordinal-ordered by name.",
-            handler: (_, args) => (CommandResult.RequireNoArguments(
-                args: in args,
-                verb: HelpCommandName
-            ) ?? new CommandResult(Output: BuildHelpText())),
+            description: "Lists the available commands: help [--names] [<prefix>] — one `name - description` line per registered verb, this registry's own built-ins included, ordinal-ordered by name. A prefix keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.); --names prints the names alone, one per line.",
+            handler: (_, args) => Help(args: in args),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
@@ -1538,18 +1535,60 @@ public sealed class CommandRegistry {
     /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
     /// never disagree about where a command sits.</summary>
     /// <param name="include">Optional host policy selecting which command metadata may be disclosed.</param>
-    /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null) {
+    /// <param name="prefix">Keeps only the commands whose canonical names equal or start with it, ignoring case, as
+    /// the registry resolves a verb; <see langword="null"/> keeps every command.</param>
+    /// <param name="namesOnly">Lists each command's name alone, without its description.</param>
+    /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
+    /// matches.</returns>
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false) {
         return string.Join(
             separator: '\n',
-            values: m_root.Subcommands.Where(predicate: command => ((include is null) || include(m_byTextCommand[command].Metadata)))
+            values: m_root.Subcommands.Where(predicate: command => (((include is null) || include(m_byTextCommand[command].Metadata)) && ((prefix is null) || command.Name.StartsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: prefix
+            ))))
                 .OrderBy(
                 comparer: StringComparer.Ordinal,
                 keySelector: command => command.Name
             )
-                .Select(selector: command => $"{command.Name} - {command.Description}")
+                .Select(selector: command => (namesOnly
+                    ? command.Name
+                    : $"{command.Name} - {command.Description}"))
         );
     }
+
+    // help [--names] [<prefix>]: a prefix that matches nothing is refused by name, so a mistyped one never answers an
+    // empty success.
+    private CommandResult Help(in WireArgs args) {
+        string? prefix = null;
+        var namesOnly = false;
+
+        for (var index = 0; (index < args.Count); index++) {
+            if (!namesOnly && args.Is(
+                index: index,
+                value: "--names"
+            )) {
+                namesOnly = true;
+            } else if (prefix is null) {
+                prefix = args[index].ToString();
+            } else {
+                return CommandResult.Usage(
+                    form: "help [--names] [<prefix>]",
+                    verb: HelpCommandName
+                );
+            }
+        }
+
+        var text = BuildHelpText(
+            namesOnly: namesOnly,
+            prefix: prefix
+        );
+
+        return ((text.Length == 0)
+            ? CommandResult.Error(output: $"[{HelpCommandName}: no command is named '{prefix}' or starts with it]")
+            : new CommandResult(Output: text));
+    }
+
     /// <summary>Gets the canonical name for an interned command id.</summary>
     /// <param name="id">The interned id, in <c>[0, <see cref="CommandCount"/>)</c>.</param>
     /// <returns>The command's canonical name.</returns>

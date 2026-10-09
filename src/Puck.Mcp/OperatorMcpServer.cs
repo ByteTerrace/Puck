@@ -12,14 +12,14 @@ namespace Puck.Mcp;
 
 /// <summary>Official-SDK stdio adapter for an explicitly trusted local Operator. World owns its own lifetime.</summary>
 public static class OperatorMcpServer {
-    internal const string StatusMeanings = "status is completed when the command returned output, submitted when it returned none (accepted, which does not certify authoritative application), refused when the command or adapter reported an error, and unknown when the attachment closed or the deadline passed after dispatch; inspect state before retrying an unknown call. Mutation commands that report an authority settlement wait for its applied or refused verdict in output. clearTranscript is true when the command asked the console to clear its transcript.";
+    internal const string StatusMeanings = "status is completed when the command returned output, submitted when it returned none (accepted, which does not certify authoritative application), refused when the command or adapter reported an error, and unknown when the attachment closed or the deadline passed after dispatch; inspect state before retrying an unknown call. Mutation commands that report an authority settlement wait for its applied or refused verdict in output. clearTranscript is true when the command asked the console to clear its transcript. truncated is true when the output was longer than the 1048576-character transport limit: output is then its head, ending in a marker naming the full length, under the command's own status; narrow the command to read the rest.";
 
     private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"One console line, exactly as typed at the Puck console."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the result. When it passes, the attachment closes and the outcome is reported as unknown."}},"required":["command"],"additionalProperties":false}""");
     private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."}},"additionalProperties":false}""");
 
     /// <summary>The output schema every console-backed tool's structured result satisfies: <c>puck_exec</c>,
     /// <c>puck_capture_frame</c>, and <c>puck_state_vector_write</c>, locally and over HTTP.</summary>
-    internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}""");
+    internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"},"truncated":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript","truncated"],"additionalProperties":false}""");
 
     internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1) {
         if (
@@ -126,7 +126,9 @@ public static class OperatorMcpServer {
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default
             );
-            var result = await operation.WaitAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
+            // An in-process session's long output is cut to the transport limit as the control server cuts it, its
+            // status kept.
+            var result = (await operation.WaitAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false))?.Bounded();
 
             if (
                 (result is null) ||
@@ -140,7 +142,8 @@ public static class OperatorMcpServer {
                 result.Output,
                 result.IsError,
                 result.ClearTranscript,
-                result.Png
+                result.Png,
+                result.Truncated
             );
         } catch (Exception error) when (((error is TimeoutException) || ((error is OperationCanceledException) && !token.IsCancellationRequested))) {
             client.Dispose();
@@ -167,24 +170,26 @@ public static class OperatorMcpServer {
         requestId: null,
         status: (unknown
         ? "unknown"
-        : "refused")
+        : "refused"),
+        truncated: false
     );
     internal static Tool ExecTool() => new() {
         Name = "puck_exec",
-        Description = ("Execute one Puck console line as the explicitly trusted Operator, with the full console registry, ordinary validation and the Operator's authority. The line must be one nonblank, non-comment line; batches are refused. Run help to discover console verbs. " + StatusMeanings),
+        Description = ("Execute one Puck console line as the explicitly trusted Operator, with the full console registry, ordinary validation and the Operator's authority. The line must be one nonblank, non-comment line; batches are refused. help --names lists every console verb by name, help <prefix> describes the verbs whose names start with the prefix (help world.state), and help alone describes them all. " + StatusMeanings),
         InputSchema = ExecInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
     };
 
-    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png) {
+    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png, bool truncated) {
         var metadata = JsonSerializer.SerializeToElement(
             new OperatorMcpResultMetadata(
                 ClearTranscript: clearTranscript,
                 IsError: isError,
                 Output: output,
                 RequestId: requestId,
-                Status: status
+                Status: status,
+                Truncated: truncated
             ),
             OperatorMcpJson.Default.OperatorMcpResultMetadata
         );

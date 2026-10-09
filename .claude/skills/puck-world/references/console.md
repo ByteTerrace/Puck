@@ -76,8 +76,9 @@ stops at the two factories MISSES the wrapper's registration sites.
   its own.
 
 `Bindability` is required (`Unspecified` throws at construction). The
-description IS the help text — `help` prints `name - description` for every
-registered command, which is why descriptions here are long. Both factories take
+description IS the help text — `help [--names] [<prefix>]` prints `name - description` for every
+registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
+when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take
 an `audience`: `CommandAudience.Operator` makes the registry refuse the verb for
 every principal but the console, before the handler runs, on every dispatch path
 (`CommandAudienceLawTests`). The evaluation diagnostics — `world.rule.trace`,

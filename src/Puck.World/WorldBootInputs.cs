@@ -34,6 +34,10 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the subject a <c>--authentication-config-file</c> connection signs as, which the boot server
     /// takes as its authority identity, or <see langword="null"/> to keep the document's own.</summary>
     public string? ConnectionSubject { get; init; }
+    /// <summary>Gets whether the boot starts the local Operator control endpoint (<c>--control</c>) as the host starts,
+    /// as a first console line <c>world.control start</c> would; <see langword="false"/> leaves it closed until a
+    /// console line starts it.</summary>
+    public bool Control { get; init; }
     /// <summary>Gets whether the backend enables its validation layers when it creates the device
     /// (<c>--debug-layers</c>).</summary>
     public bool DebugLayers { get; init; }
