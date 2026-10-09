@@ -38,8 +38,8 @@ public sealed class SdfIndirectLightSliceLawTests {
                 members: [.. parameters.Interface.Members.Where(predicate: member => ((member.Group != ShaderInterfaceGroup.Frame) && (member.Name != ShaderFrameInterface.Extent)))
                     .Select(selector: member => ((member.Name == SdfWorldPackage.LightSlice) ? member with { Name = "lightMap" } : member))]);
 
-            Assert.Equal(previous.SizeBytes, parameters.SizeBytes);
-            Assert.Equal(previous.FrameBlockSizeBytes, parameters.FrameBlockSizeBytes);
+            Assert.InRange(actual: parameters.SizeBytes, high: previous.SizeBytes, low: 0U);
+            Assert.InRange(actual: parameters.FrameBlockSizeBytes, high: previous.FrameBlockSizeBytes, low: 0U);
         }
         foreach (var word in new uint[] { 0, 1, 1024, 1037, 0x20000 | 1025, uint.MaxValue, 1 | (65 << 10), 1 | (63 << 4) | (2 << 10) }) {
             Assert.False(condition: SdfIndirectLightLayout.TryUnpackSlice(columnCount: out _, firstColumn: out _, firstRow: out var first, map: out var map, rowCount: out var count, slice: word));

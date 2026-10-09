@@ -59,6 +59,14 @@ public static partial class SdfWorldPackage {
     public const string IndirectTraceCount = "indirectTraceCount";
     /// <summary>Zero places probes; one partitions their cells.</summary>
     public const string IndirectPhase = "indirectPhase";
+    /// <summary>The first item of the pass's admitted chunk, counted from its kind's first scheduled entry. Each
+    /// workgroup runs the item this value plus its group index names.</summary>
+    public const string IndirectItemFirst = "indirectItemFirst";
+    /// <summary>The chunk's first admitted unit within its first item: a probe, cell or ray of a transport item, or a
+    /// ray of a shaded probe.</summary>
+    public const string IndirectUnitFirst = "indirectUnitFirst";
+    /// <summary>The chunk's admitted units, counted across item boundaries; units outside the range do not run.</summary>
+    public const string IndirectUnitCount = "indirectUnitCount";
     /// <summary>The probes in the current finite shade batch.</summary>
     public const string IndirectShadeCount = "indirectShadeCount";
     /// <summary>The completed generation the feedback sweep reads.</summary>
@@ -132,6 +140,9 @@ public static partial class SdfWorldPackage {
         Value(name: IndirectClassifyCount, type: ShaderValueType.Uint),
         Value(name: IndirectTraceCount, type: ShaderValueType.Uint),
         Value(name: IndirectPhase, type: ShaderValueType.Uint),
+        Value(name: IndirectItemFirst, type: ShaderValueType.Uint),
+        Value(name: IndirectUnitFirst, type: ShaderValueType.Uint),
+        Value(name: IndirectUnitCount, type: ShaderValueType.Uint),
         Value(name: IndirectShadeCount, type: ShaderValueType.Uint),
         Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
         Value(name: IndirectWriteGeneration, type: ShaderValueType.Uint),

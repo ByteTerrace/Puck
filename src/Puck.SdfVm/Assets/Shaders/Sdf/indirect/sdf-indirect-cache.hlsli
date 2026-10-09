@@ -27,6 +27,18 @@ void sdfIndirectStore(uint word, uint value) {
 }
 #endif
 #ifdef SDF_INDIRECT_PASS
+// SdfIndirectChunk: the dispatch runs one workgroup per item from indirectItemFirst, and only the units of the
+// admitted range, counted across item boundaries from indirectUnitFirst of the first item, execute.
+bool sdfIndirectChunkUnit(uint group, uint unit, uint unitsPerItem) {
+    uint flat = group * unitsPerItem + unit;
+    return flat >= passGroup.indirectUnitFirst && flat - passGroup.indirectUnitFirst < passGroup.indirectUnitCount;
+}
+// Whether any unit of this workgroup's item lies in the admitted range; uniform across the group.
+bool sdfIndirectChunkTouches(uint group, uint unitsPerItem) {
+    uint first = group * unitsPerItem;
+    return passGroup.indirectUnitCount != 0u && first < passGroup.indirectUnitFirst + passGroup.indirectUnitCount
+        && first + unitsPerItem > passGroup.indirectUnitFirst;
+}
 bool sdfIndirectProbeUpdate(uint row, out uint4 update, out int3 lattice) {
     update = 0u;
     lattice = 0;

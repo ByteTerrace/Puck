@@ -13,17 +13,9 @@ public sealed partial class SdfWorldResidency {
 
     internal bool AdmitIndirect(string part, SdfIndirectCache cache) {
         if (part == SdfWorldPackage.IndirectShade) {
-            if (cache.ShadeBatch is not { } shade) { return true; }
-            var source = cache.Lighting!.Frame;
-            var cost = (SdfIndirectCost.EstimateCost((((long)shade.Probes.Count) * SdfIndirectCost.ShadeQueries(cache.Layout, source)), source.Program.InstructionCount)
-                + (shade.Probes.Count * SdfIndirectCost.ShadeCacheCost(layout: cache.Layout)));
-
-            return IndirectFrameBudget.TryAdmit(chunk: shade, cost: cost);
+            return ((cache.ShadeChunk is not { } shade) || IndirectFrameBudget.TryAdmit(chunk: shade, cost: cache.ShadeChunkCost));
         }
-        var queries = (((((long)cache.PlaceCount) * SdfIndirectCost.PlaceQueries)
-            + (((long)cache.ClassifyCount) * SdfIndirectCost.ClassifyQueries)) + (((long)cache.TraceCount) * SdfIndirectCost.TraceQueries));
-
-        return IndirectFrameBudget.TryAdmit(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: SdfIndirectCost.EstimateCost(queries, cache.InstructionCount));
+        return IndirectFrameBudget.TryAdmit(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: cache.TransportStepCost);
     }
     internal bool AdmitLightView() => IndirectFrameBudget.TryAdmit(chunk: IndirectLightViews,
         cost: SdfIndirectCost.EstimateCost(IndirectLightViews.EstimatedQueries, Frame!.Program.InstructionCount));

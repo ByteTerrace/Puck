@@ -97,11 +97,19 @@ Shade also prices bounded continuation-cache traversal. Keep the
 instruction count from the actual submitted field, including pinned shade sources.
 Diagnostic `--debug-layers` logging precedes recording and names each estimate.
 `SdfIndirectFrameBudget` shares one cache-submission allowance plus one auxiliary
-allowance across the residency's produced frame. Reserve complete transport and
-light rectangles once across their passes, shade by its retained batch, and
+allowance across the residency's produced frame. Reserve a transport step and
+light rectangles once across their passes, shade by its batch's current chunk, and
 receiver proofs once across views. Skipped chunks remain pending; only
 `SdfWorldResidency.BeginFrame` renews admission. Diagnostics distinguish the
 produced `frame` from `cache-frame`, which can stand while shade advances.
+Never refuse or over-admit a heavy item: `SdfIndirectCost.Admit` splits it into
+unit-range `SdfIndirectChunk`s (probe, cell, ray or shaded ray) carried by the pass
+block's `indirectItemFirst`, `indirectUnitFirst` and `indirectUnitCount`; inactive
+lanes still join group barriers and count nothing. A plan commits with its last
+chunk, its brick table withholds unfinished placements and partitions, and a split
+probe reduces from the cache's shade scratch only in its last chunk. Only a single
+query or indivisible unit over the cap refuses (`SdfIndirectCost.RefusalOf`), and
+the residency then renders that program at an effective tier of Off.
 Disabled Direct or exactly zero light gain
 performs no visibility query and consumes no fallback allowance. A hit with exactly
 zero material reflectance also omits visibility; keep its other sources unchanged.
