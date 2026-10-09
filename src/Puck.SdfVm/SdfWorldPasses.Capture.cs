@@ -48,7 +48,7 @@ public sealed partial class SdfWorldPasses {
         // A converging capture's fenced receivers must belong to the sample the next render takes. Completion of the
         // preceding sample says nothing about a new sample's certificates, which its first render proves afresh.
         if ((entry.Convergence is { IsActive: true } convergence) && ((entry.ReceiverSubmittedSurface is not { } submitted) ||
-            (submitted.Sample.Jitter != entry.Temporal.ConvergingJitter(counted: convergence.Samples)))) {
+            !ReferenceEquals(objA: submitted.Converging, objB: convergence) || (submitted.ConvergedSample != convergence.Samples))) {
             return FrameRender.Waiting(reason: $"the instance '{instance}' awaits the receiver certificates of its converging sample {convergence.Samples}");
         }
         return ((view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } cache) && ReceiversComplete(cache: cache, entry: entry) &&

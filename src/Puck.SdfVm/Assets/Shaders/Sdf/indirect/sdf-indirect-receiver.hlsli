@@ -94,7 +94,7 @@ void sdfIndirectReceiveUncertified(uint record) {
             if (deferredWords != 0u) { InterlockedAdd(indirectDeferredRW[0], 1u, ignored); }
         }
     }
-    sdfIndirectStoreReceiverCertificate(record, 0u, 0u, 0.0, 0.0, !sdfIndirectReceiverDeferred);
+    sdfIndirectStoreReceiverCertificate(record, 0u, 0u, sdfIndirectReceiveProc.surfacePoint, 0.0, !sdfIndirectReceiverDeferred);
 }
 
 uint sdfIndirectReceiveStep() {
@@ -132,14 +132,18 @@ uint sdfIndirectReceiveStep() {
         float3 retainedLaunch;
         float retainedClearance;
         if (sdfIndirectReceiverCertificate(record, retainedLevel, retainedMask, retainedLaunch, retainedClearance)) {
-            if (retainedMask != 0u && sdfIndirectIrradianceSupported(retainedLaunch, retainedLevel, retainedMask,
-                passGroup.indirectReadGeneration, passGroup.indirectReadPublication)) {
-                sdfIndirectReceiverLevel = retainedLevel;
-                sdfIndirectReceiverMask = retainedMask;
-                sdfIndirectReceiverLaunch = retainedLaunch;
-                sdfIndirectReceiverStatus = 3u;
+            if (sdfIndirectCertificateJoins(sdfIndirectReceiveProc.surfacePoint, retainedLaunch, retainedClearance,
+                sdfIndirectReceiveProc.receiver.threshold)) {
+                if (retainedMask != 0u && sdfIndirectIrradianceSupported(retainedLaunch, retainedLevel, retainedMask,
+                    passGroup.indirectReadGeneration, passGroup.indirectReadPublication)) {
+                    sdfIndirectReceiverLevel = retainedLevel;
+                    sdfIndirectReceiverMask = retainedMask;
+                    sdfIndirectReceiverLaunch = retainedLaunch;
+                    sdfIndirectReceiverStatus = 3u;
+                }
+                return SdfIndirectStepReturn;
             }
-            return SdfIndirectStepReturn;
+            sdfIndirectWithdrawReceiverCertificate(record);
         }
         sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.surfacePoint;
         sdfIndirectReceiveProc.approachClearance = 0.0;

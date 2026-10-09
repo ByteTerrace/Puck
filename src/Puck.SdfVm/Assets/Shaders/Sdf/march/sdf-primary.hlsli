@@ -574,8 +574,8 @@ void sdfPrimaryStage(SdfPixel p) {
     coverage.blendWeight = materialBlendWeight;
     coverage.blendOther = materialBlendOther;
     sdfStoreVisibility(record, visibility);
-    // Repeating the same submitted surface does not discard bounded receiver work merely because cadence is off.
-    // New geometry, camera samples or visibility storage still clear the completed certificate before shading.
+    // A pixel's completed certificate outlives a new camera sample or geometry: the receiver pass keeps it only while its
+    // certified launch still joins the pixel's new surface point. New visibility storage clears it before shading.
     if (passGroup.preserveIndirectReceivers == 0u) { sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u); }
     sdfStoreVisibilityCoverage(record, coverage);
 

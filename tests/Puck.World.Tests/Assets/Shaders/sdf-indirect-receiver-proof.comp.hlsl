@@ -38,4 +38,20 @@ void CSMain() {
     receiverResults[uint2(index, 0u)] = float4(valid ? 1.0 : 0.0, (float)level, (float)mask, (float)receiverWrites);
     receiverResults[uint2(index, 1u)] = float4(launched, clearance);
     receiverResults[uint2(index, 2u)] = float4((float)receiverRecords[15u], 0.0, 0.0, 0.0);
+    // A retained certificate joins a moved surface point only within its launch ball widened by the acceptance threshold.
+    float3 x = float3(1.0, 0.0, 0.0);
+    receiverResults[uint2(index, 3u)] = float4(
+        sdfIndirectCertificateJoins(launched + x * (clearance + 0.005), launched, clearance, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * (clearance + 0.02), launched, clearance, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * 0.005, launched, 0.0, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * 0.02, launched, 0.0, 0.01) ? 1.0 : 0.0);
+    // Withdrawing a certificate leaves it invalid in every scope.
+    sdfIndirectWithdrawReceiverCertificate(0u);
+    DeviceMemoryBarrier();
+    uint withdrawnLevel, withdrawnMask;
+    float3 withdrawnLaunch;
+    float withdrawnClearance;
+    passGroup.indirectAllocation = uint2(9u, 7u);
+    passGroup.indirectCertificateRevision = 13u;
+    receiverResults[uint2(index, 4u)] = float4(sdfIndirectReceiverCertificate(0u, withdrawnLevel, withdrawnMask, withdrawnLaunch, withdrawnClearance) ? 1.0 : 0.0, 0.0, 0.0, 0.0);
 }

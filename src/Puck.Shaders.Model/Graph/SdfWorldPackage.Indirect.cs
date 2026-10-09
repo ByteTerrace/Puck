@@ -45,7 +45,7 @@ public static partial class SdfWorldPackage {
     public const string IndirectAllocation = "indirectAllocation";
     /// <summary>The exact transport and slot revision qualifying a receiver certificate.</summary>
     public const string IndirectCertificateRevision = "indirectCertificateRevision";
-    /// <summary>Whether Primary rewrites the same submitted surface inputs in the same visibility allocation.</summary>
+    /// <summary>Whether Primary rewrites the same visibility storage: recorder, buffer, binding and extent.</summary>
     public const string PreserveIndirectReceivers = "preserveIndirectReceivers";
     /// <summary>The visibility version after the receiver publishes only its receiver-certificate fields.</summary>
     public const string IndirectVisibility = "indirectVisibility";

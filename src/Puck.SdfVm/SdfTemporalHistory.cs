@@ -68,13 +68,6 @@ public sealed class SdfTemporalHistory {
     /// <summary>Gets the current offset in render pixels, positive Y down; the first sample is the pixel center.</summary>
     public Vector2 Jitter => JitterAt(epoch: m_epoch, frames: Frames);
 
-    /// <summary>Returns the ray offset this epoch's next render takes once a converging capture has counted
-    /// <paramref name="counted"/> samples (<c>RenderGraphConvergence.Samples</c>): the sample its capture serves when
-    /// the count reaches the request.</summary>
-    /// <param name="counted">The samples counted so far.</param>
-    /// <returns>The offset in render pixels.</returns>
-    public Vector2 ConvergingJitter(int counted) =>
-        JitterAt(epoch: m_epoch, frames: (m_rebase ? 0U : ((uint)Math.Max(val1: 0, val2: (counted - m_countBase)))));
     /// <summary>Returns a centered Halton (2, 3) sample, with the first position replaced by the pixel center.</summary>
     /// <param name="index">The accumulated sample index, wrapped to the period.</param>
     /// <returns>The render-pixel ray offset.</returns>
