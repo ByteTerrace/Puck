@@ -35,6 +35,8 @@
         <PackageReference Include="xunit.v3" Version="[4.*, )" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TemporaryDirectory.cs" Link="Properties/TemporaryDirectory.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TestLiveness.cs" Link="Properties/TestLiveness.cs" />
+        <!-- A suite started through its per-checkout apphost refuses to run (see RunCommand above). -->
+        <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/SharedTestHost.cs" Link="Properties/SharedTestHost.cs" />
         <!-- Every class carrying the Gpu trait runs in one serial collection, after the parallel ones, so a plain run of
              a suite never puts two device laws, or a device law and the CPU laws, on the machine at once. -->
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/GpuDeviceCollection.cs" Link="Properties/GpuDeviceCollection.cs" />
