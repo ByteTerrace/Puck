@@ -44,7 +44,7 @@ public sealed class CheckpointAssetAnchorLawTests {
             userMessage: reason
         );
 
-        var machines = Fixtures.MachineHostFactory(template.Screens, [], null, null);
+        var machines = Fixtures.MachineHostFactory(template.Screens, [], null);
         var profiles = new WorldOwnedWorlds(
             directory: catalog,
             machineId: Guid.NewGuid(),

@@ -41,7 +41,7 @@ internal static class WorldBenchmarks {
 
         var definition = loaded!;
 
-        using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition, documentPath: path);
+        using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition);
 
         var server = bench.Server;
         var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
@@ -124,8 +124,7 @@ internal static class WorldBenchmarks {
 
         using var bench = WorldBenchServer.Boot(
             catalog: catalog,
-            definition: definition!,
-            documentPath: path
+            definition: definition!
         );
 
         constructionTimer.Stop();

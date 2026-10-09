@@ -699,9 +699,6 @@ public sealed partial class WorldDocument {
             }
 
             SwapSolids(solids: rebuildSolids);
-            if (request.Kind != WorldRebuildKind.Reset) {
-                Host.Machines.SetDocumentPath(documentPath: (request.Origin as WorldRebuildOrigin.File)?.Path);
-            }
             // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
             // a draw fill repaints only where the loaded document names a different pass than the one on the field.
             var rebuiltFrom = m_definition;

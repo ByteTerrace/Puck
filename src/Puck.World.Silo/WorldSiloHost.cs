@@ -72,6 +72,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly Dictionary<string, RowBookkeeping> m_rows = new(comparer: StringComparer.Ordinal);
 
     private readonly ObjectStorageTarget m_storageTarget;
+    // The directory every hosted document's relative paths resolve beside (WorldSiloDefinition.DocumentDirectory), or null.
+    private readonly string? m_documentDirectory;
     private readonly IWorldAuthorityStore m_store;
     private readonly WorldReleaseGroupStore? m_releaseGroupStore;
     private readonly WorldSiloReleaseManagement? m_releaseManagement;
@@ -130,7 +132,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         m_blobStore = blobStore;
         m_routing = routing;
         m_storageTarget = storageTarget;
+        m_documentDirectory = ((definition.DocumentDirectory is { } documentDirectory)
+            ? Path.GetFullPath(path: documentDirectory)
+            : null
+        );
         m_store = new WorldAuthorityBlobStore(
+            documentDirectory: m_documentDirectory,
             machines: m_machineCatalog,
             store: blobStore,
             target: m_storageTarget,
@@ -547,10 +554,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         });
     }
     // Runtime creation and replay use the same selected catalog and policy as document admission.
-    private IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath, WorldOutputHub? narrationHub) => new WorldMachineHost(
+    private IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, WorldOutputHub? narrationHub) => new WorldMachineHost(
         catalog: m_machineCatalog,
         contentAdmissionPolicy: m_contentAdmissionPolicy,
-        documentPath: documentPath,
         narrationHub: narrationHub,
         screens: screens
     );
@@ -1237,6 +1243,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 store: m_blobStore,
                 target: m_storageTarget,
                 timeProvider: m_clock,
+                documentDirectory: m_documentDirectory,
                 world: identity.World
             );
 
@@ -1309,6 +1316,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     (server, population) = WorldServer.FromCheckpoint(
                         adjacencies: adjacencies,
                         checkpoint: cp,
+                        documentDirectory: m_documentDirectory,
                         instanceIdentity: identity.World.Value,
                         machines: machines,
                         profiles: profiles

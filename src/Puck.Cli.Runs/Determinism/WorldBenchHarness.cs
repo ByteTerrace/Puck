@@ -20,13 +20,12 @@ public sealed class WorldBenchServer : IDisposable {
 
     public WorldServer Server { get; }
 
-    public static WorldBenchServer Boot(WorldDefinition definition, WorldMachineCatalog? catalog = null, string? documentPath = null) {
+    public static WorldBenchServer Boot(WorldDefinition definition, WorldMachineCatalog? catalog = null) {
         var population = new WorldPopulation(definition: definition);
         var machines = ((catalog is not null)
             ? new WorldMachineHost(
                 screens: definition.Screens,
-                catalog: catalog,
-                documentPath: documentPath
+                catalog: catalog
             )
             : new WorldMachineHost(
                 screens: definition.Screens,

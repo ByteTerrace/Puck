@@ -127,7 +127,7 @@ public sealed partial class WorldHistory {
     private readonly WorldServer m_server;
     private readonly WorldReplayTape m_tape;
     private readonly IReadOnlyList<IMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldStateRoot m_stateRoot;
 
     private readonly WorldHistoryChunkStore m_chunks = new();
@@ -152,7 +152,7 @@ public sealed partial class WorldHistory {
     /// <param name="machineHostFactory">Builds the machine host a shadow re-simulation runs over.</param>
     /// <param name="stateRoot">The host's state root; a shadow's owned-world catalog lives under it while it runs.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldHistory(WorldServer server, WorldReplayTape tape, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, WorldStateRoot stateRoot) {
+    public WorldHistory(WorldServer server, WorldReplayTape tape, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, WorldStateRoot stateRoot) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: tape);
         ArgumentNullException.ThrowIfNull(argument: engines);

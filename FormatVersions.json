@@ -451,7 +451,7 @@
                 "P:Puck.Assets.Documents.DocumentVector3.Z",
                 "P:Puck.SignedDistance.SdfAtmosphere.Default"
             ],
-            "shape": "9981bc2456f6cf1c",
+            "shape": "dbb60db181964920",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -620,7 +620,7 @@
                 "M:Puck.World.WorldSchema.ToCanonicalText(System.Text.Json.Nodes.JsonNode)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "bbe8b73b90e28a0a",
+            "shape": "41687631a6fc8dae",
             "source": "src/Puck.Launcher/Release/OfficialManifest.cs",
             "token": "puck.official.manifest.v1"
         },
@@ -816,7 +816,7 @@
                 "M:Puck.World.WorldSchema.ToTypeScript(System.Text.Json.Nodes.JsonObject)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "5a70bc4497b4e852",
+            "shape": "baa206880cda7a4e",
             "source": "src/Puck.Cli.Runs/Qualification/ReleaseProfile.cs",
             "token": "puck.release.profile.v1"
         },
@@ -887,7 +887,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "3c0a8ed800fd6797",
+            "shape": "e1bedf2d0c875a26",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -1264,7 +1264,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "5d8b2f1e492e6ddb",
+            "shape": "4d5e22a33e1b73e7",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1284,7 +1284,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "d3b5617194004e83",
+            "shape": "dd7d7d4faaf7d4b6",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1598,7 +1598,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "b6fa793f8769e9ba",
+            "shape": "adc9c97b16eb9b77",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1777,7 +1777,7 @@
                 "P:Puck.World.WorldJsonContext.WorldPrototypeContent",
                 "P:Puck.World.WorldStateSection.World"
             ],
-            "shape": "ce7f392f0690479b",
+            "shape": "d3bae94447157d60",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -1793,7 +1793,7 @@
                 "M:Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(System.String,Puck.World.WorldDefinition@,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.Cli.Determinism.DeterminismRecorder.Vector(Puck.World.Server.WorldServer)",
                 "M:Puck.Cli.Determinism.DeterminismScenarioRecord.Changes(System.String)",
-                "M:Puck.Cli.Determinism.WorldBenchServer.Boot(Puck.World.WorldDefinition,Puck.World.Machines.WorldMachineCatalog,System.String)",
+                "M:Puck.Cli.Determinism.WorldBenchServer.Boot(Puck.World.WorldDefinition,Puck.World.Machines.WorldMachineCatalog)",
                 "M:Puck.Cli.Determinism.WorldBenchServer.Dispose",
                 "M:Puck.Commands.CommandResult.Error(System.String)",
                 "M:Puck.Commands.Principal.Describe",
@@ -1906,7 +1906,7 @@
                 "P:Puck.World.Server.WorldServer.Definition",
                 "P:Puck.World.Server.WorldServer.NextInputTick"
             ],
-            "shape": "7ddefb23e08a367d",
+            "shape": "ade3cd5ff8c0003b",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
             "token": "PUCKWRL1"
         },
@@ -1954,7 +1954,7 @@
                 "M:Puck.Storage.ConfinedFile.ReadAllBytes(System.String,System.Int32)",
                 "M:Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(IServiceCollection)",
                 "M:Puck.Storage.DirectoryObjectStorageTarget.#ctor(System.String,System.Int32,System.Int32)",
-                "M:Puck.World.Server.WorldAuthorityBlobStore.#ctor(Puck.Storage.IObjectBlobStore,Puck.Storage.ObjectStorageTarget,Puck.Abstractions.Machines.IMachineValidationCatalog,System.TimeProvider)",
+                "M:Puck.World.Server.WorldAuthorityBlobStore.#ctor(Puck.Storage.IObjectBlobStore,Puck.Storage.ObjectStorageTarget,Puck.Abstractions.Machines.IMachineValidationCatalog,System.TimeProvider,System.String)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(Puck.World.Server.WorldAuthorityCheckpoint)",
                 "M:Puck.World.Server.WorldReleaseGroupStore.#ctor(Puck.Storage.IObjectBlobStore,Puck.Storage.ObjectStorageTarget,System.Guid)",
                 "M:Puck.World.Server.WorldReleaseGroupStore.CreateAsync(System.String,System.String,System.Threading.CancellationToken)",
@@ -1972,7 +1972,7 @@
                 "M:Puck.World.WorldSiloDefinitionSerialization.TryLoadFile(System.String,Puck.World.WorldSiloDefinition@,System.String@,System.Collections.Generic.IReadOnlyCollection{System.String})",
                 "P:Puck.World.WorldInstance.CompletedTicks"
             ],
-            "shape": "a180ab440798911c",
+            "shape": "de0ebfa8f6c5665a",
             "source": "src/Puck.Cli.Release/Automation/WorldReleaseExerciseCommand.cs",
             "token": "puck.world.qualification-exercise.v1"
         },
@@ -2017,7 +2017,7 @@
                 "M:Puck.World.WorldDocumentPaths.DirectoryOf(System.String)",
                 "M:Puck.World.WorldSiloDefinitionSerialization.TryLoadFile(System.String,Puck.World.WorldSiloDefinition@,System.String@,System.Collections.Generic.IReadOnlyCollection{System.String})"
             ],
-            "shape": "85a227357dd3dd27",
+            "shape": "c5b1476ba003e0e9",
             "source": "src/Puck.World.Server/WorldReleaseManifest.cs",
             "token": "puck.world.release.restore.v1"
         },
@@ -2051,7 +2051,7 @@
                 "M:Puck.Storage.ConfinedFile.ReadAllBytes(System.String,System.Int32)",
                 "M:Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(IServiceCollection)",
                 "M:Puck.Storage.DirectoryObjectStorageTarget.#ctor(System.String,System.Int32,System.Int32)",
-                "M:Puck.World.Server.WorldAuthorityBlobStore.#ctor(Puck.Storage.IObjectBlobStore,Puck.Storage.ObjectStorageTarget,Puck.Abstractions.Machines.IMachineValidationCatalog,System.TimeProvider)",
+                "M:Puck.World.Server.WorldAuthorityBlobStore.#ctor(Puck.Storage.IObjectBlobStore,Puck.Storage.ObjectStorageTarget,Puck.Abstractions.Machines.IMachineValidationCatalog,System.TimeProvider,System.String)",
                 "M:Puck.World.Server.WorldReleaseManifest.TryValidate(Puck.World.Server.WorldReleaseManifest,System.String@)",
                 "M:Puck.World.Server.WorldReleaseQualificationResult.Failed(System.String)",
                 "M:Puck.World.Server.WorldReleaseQualificationResult.Qualified(Puck.World.Server.WorldReleaseQualificationReceipt)",
@@ -2060,7 +2060,7 @@
                 "M:Puck.World.WorldSiloDefinitionSerialization.TryLoadFile(System.String,Puck.World.WorldSiloDefinition@,System.String@,System.Collections.Generic.IReadOnlyCollection{System.String})",
                 "P:Puck.World.Server.WorldReleaseManifest.Identity"
             ],
-            "shape": "0b8d64866be5af19",
+            "shape": "46149fd93916cc30",
             "source": "src/Puck.Cli.Release/Automation/WorldReleaseQualificationRunner.cs",
             "token": "puck.world.qualification.v1"
         },
@@ -2173,7 +2173,7 @@
                 "M:Puck.World.WorldSiloDefinitionValidator.TryValidateFederationKey(SafeName,Puck.World.WorldSiloFederation,System.String@)",
                 "P:Puck.World.WorldJsonContext.WorldSiloDefinition"
             ],
-            "shape": "fa8db65c3b7805c0",
+            "shape": "05e6f0de227f8d89",
             "source": "src/Puck.World.Schema/WorldSiloDefinition.cs",
             "token": "puck.silo.configuration.v1"
         }

@@ -90,7 +90,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // Puck.World.Machines or the engines it hosts, so it cannot construct that project's
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     // The transport-neutral local resolver ResolveAndEnqueueCoalescedTransfers consumes to turn a
     // destinations row plus a traveling cohort into a scoped generation/instance name — see
     // WorldSessionResolver. TryStop notifies it so a reaped/stopped instance's cache entry does not
@@ -1093,12 +1093,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_documentShared[name] = documentShared;
 
-        // The document's own path: a cabinet's content is authored relative to the document that declares it, so a
-        // neighbour started here reads its cartridges from beside its document, as the booted world does.
+        // A cabinet's content is authored relative to the document that declares it, and the file load gave the
+        // definition that document's directory, so a neighbour started here reads its cartridges from beside its
+        // document, as the booted world does.
         var machines = m_machineHostFactory(
             [],
             [],
-            resolvedPath,
             m_narration
         );
         WorldInstance started;
@@ -1298,7 +1298,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// publishes its claim without the route gate, and is not reported. A route observed on the wrapper inside the
     /// callback reaches no seat until the claim stands. Null in every production composition; a verification harness
     /// passes it to place an observed route before, during or after the claim.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentNullException.ThrowIfNull(argument: stateRoot);

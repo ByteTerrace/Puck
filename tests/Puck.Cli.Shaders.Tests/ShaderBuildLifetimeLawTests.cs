@@ -5,8 +5,9 @@ using Xunit;
 namespace Puck.Cli.Shaders.Tests;
 
 /// <summary>The shader build task keeps each request file until its own generator exits, stops admission and joins
-/// its compiler children on cancellation, ends the generator on an initial core refusal, and never makes an
-/// uncancellable second request of the build engine.</summary>
+/// its compiler children on cancellation, ends the generator on an initial core refusal, never makes an
+/// uncancellable second request of the build engine, and fails with an error, never a bare false, when its generator
+/// exits nonzero without reporting one.</summary>
 public sealed class ShaderBuildLifetimeLawTests : ShaderBuildTargetsLaws {
     [Fact]
     public async Task ConcurrentTasksKeepTheirRequestFilesUntilTheirOwnGeneratorExits() {
@@ -141,6 +142,24 @@ public sealed class ShaderBuildLifetimeLawTests : ShaderBuildTargetsLaws {
         Assert.Equal(expected: 0, actual: budget.Held);
         Assert.Equal(expected: 3, actual: fixture.Compiles());
     }
+    // A generator that cannot run (its assembly absent, as in a workspace that built no project reference) exits
+    // nonzero with nothing in MSBuild's error format; the task still fails by name, never with a bare false.
+    [Fact]
+    public void AGeneratorThatFailsWithoutAnErrorLineFailsTheTaskWithAnError() {
+        using var fixture = new ShaderBuildFixture();
+
+        fixture.ParallelProject(mode: "normal");
+        var engine = DispatchProxy.Create<IBuildEngine9, ShaderCoreEngine>();
+        var budget = ((ShaderCoreEngine)engine);
+        var compiler = fixture.CreateBuildTask(engine: engine);
+        var missing = fixture.PathOf(path: "absent/Puck.Shaders.Generator.dll");
+
+        compiler.GetType().GetProperty(name: "Tool")!.SetValue(obj: compiler, value: missing);
+
+        Assert.False(condition: compiler.Execute());
+        Assert.Contains(collection: budget.Errors, filter: error => (error.Contains(comparisonType: StringComparison.Ordinal, value: "exited with code") && error.Contains(comparisonType: StringComparison.Ordinal, value: missing)));
+        Assert.Equal(expected: 0, actual: fixture.Compiles());
+    }
 }
 /// <summary>A build engine stand-in that grants and counts cores and keeps every logged message.</summary>
 public class ShaderCoreEngine : DispatchProxy {
@@ -150,6 +169,7 @@ public class ShaderCoreEngine : DispatchProxy {
 
     public Func<int, int> Grant { get; set; } = static count => count;
     public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = new();
+    public System.Collections.Concurrent.ConcurrentQueue<string> Errors { get; } = new();
 
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) {
         switch (targetMethod!.Name) {
@@ -164,6 +184,9 @@ public class ShaderCoreEngine : DispatchProxy {
                 Assert.True(condition: (held >= 0), userMessage: "The task released cores it did not hold.");
                 return null;
             case "LogErrorEvent":
+                Errors.Enqueue(item: (((BuildEventArgs)args![0]!).Message ?? ""));
+                Messages.Enqueue(item: (((BuildEventArgs)args![0]!).Message ?? ""));
+                return null;
             case "LogMessageEvent":
             case "LogWarningEvent":
                 Messages.Enqueue(item: (((BuildEventArgs)args![0]!).Message ?? ""));

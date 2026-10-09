@@ -284,15 +284,11 @@ public sealed class HistoryBoundaryLawTests {
         using var harness = new WorldHistoryHarness(
             definition: Fixtures.BuildDocument() with { DocumentDirectory = original.RootPath }, seats: 0, on: false
         );
-        string? machineDirectory = null;
         var history = new WorldHistory(
             server: harness.Fixture.Server,
             tape: harness.Tape,
             engines: TestMachines.Catalog().Engines.Values,
-            machineHostFactory: (screens, engines, path, output) => {
-                machineDirectory = ((path is null) ? null : WorldDocumentPaths.DirectoryOf(documentPath: path));
-                return Fixtures.MachineHostFactory(screens, engines, path, output);
-            },
+            machineHostFactory: Fixtures.MachineHostFactory,
             stateRoot: new WorldStateRoot(path: original.RootPath)
         );
 
@@ -306,7 +302,8 @@ public sealed class HistoryBoundaryLawTests {
         harness.StepWithoutInput();
         using var shadow = history.OpenShadow(documentPath: other, keyframeTick: first);
 
-        Assert.Equal(expected: WorldDocumentPaths.DirectoryOf(documentPath: Path.Combine(path1: original.RootPath, path2: "world.json")), actual: machineDirectory);
+        // The shadow's machines resolve their content beside the directory its definition carries: the keyframe's.
+        Assert.Equal(expected: original.RootPath, actual: shadow.Server.Definition.DocumentDirectory);
     }
     [Fact]
     public void AHistoryDefersAKeyframeWhoseMusicPlanIsNotCaptured() {

@@ -120,9 +120,8 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None,
             machineCatalog: catalog,
-            machineHostFactory: (screens, _, documentPath, narrationHub) => new WorldMachineHost(
+            machineHostFactory: (screens, _, narrationHub) => new WorldMachineHost(
                 catalog: catalog,
-                documentPath: documentPath,
                 narrationHub: narrationHub,
                 screens: screens
             ),

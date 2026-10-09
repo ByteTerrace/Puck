@@ -35,7 +35,7 @@ namespace Puck.World.Server {
         /// <summary>The shape fingerprint of <c>WorldReleaseGroupStore.Schema</c>, declared in <c>src/Puck.World.Server/WorldReleaseGroup.cs</c>.</summary>
         public const string WorldReleaseGroupStoreSchema = "daa0af6333799cd6";
         /// <summary>The shape fingerprint of <c>WorldReleaseManifest.CurrentCoordinatorContract</c>, declared in <c>src/Puck.World.Server/WorldReleaseManifest.cs</c>.</summary>
-        public const string WorldReleaseManifestCurrentCoordinatorContract = "85a227357dd3dd27";
+        public const string WorldReleaseManifestCurrentCoordinatorContract = "c5b1476ba003e0e9";
         /// <summary>The shape fingerprint of <c>WorldReleaseManifest.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldReleaseManifest.cs</c>.</summary>
         public const string WorldReleaseManifestCurrentSchema = "47fcefad5dce811e";
         /// <summary>The shape fingerprint of <c>WorldReleaseRewindBoundary.Contract</c>, declared in <c>src/Puck.World.Server/WorldReleaseRewindBoundary.cs</c>.</summary>

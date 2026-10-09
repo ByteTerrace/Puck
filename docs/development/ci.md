@@ -654,7 +654,10 @@ one place that names every interface: the world document it publishes sets
 `AzureCommand.DeploymentListenAddress`, so the probe and forwarded QUIC reach
 the worker. The container smoke test, `puck azure test-world-container`, writes
 the same address inside its container and publishes the ports on the runner's
-loopback only. A local World or silo listens on loopback, and the `NET001` analyzer
+loopback only. Both silo documents name the image's `/app/worlds` as their
+`documentDirectory` (`AzureCommand.ImageWorldsDirectory`), so a hosted
+world's relative machine content resolves inside the image, and the smoke test
+publishes only the composed `*.world.json` documents it copies out of it. A local World or silo listens on loopback, and the `NET001` analyzer
 refuses an any-address bind anywhere else. Host-image qualification
 must exercise public QUIC with the expected world key, checkpoint recovery,
 drain/readiness withdrawal, and reboot recovery before changing the pinned image.

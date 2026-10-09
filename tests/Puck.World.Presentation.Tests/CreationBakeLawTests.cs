@@ -608,9 +608,36 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: keys.Count, actual: decoded.Count);
         Assert.True(
             condition: (product.ToString() == PinnedProduct),
-            userMessage: $"the pack of this world's bakes at fingerprint {DerivationFingerprint.Bake} is {product}, pinned as {PinnedProduct}; re-record the product pin after regenerating the fingerprint."
+            userMessage: $"the pack of this world's bakes at fingerprint {DerivationFingerprint.Bake} is {product}, pinned as {PinnedProduct}; re-record the product pin after regenerating the fingerprint.\n{Anatomy(pack: pack)}"
         );
     }
+
+    // What a pack holds, part by part, so a pin that differs between two hosts names the part that moved: the header,
+    // each entry's key and outcome, and each bake's mesh, textures and impostor.
+    private static string Anatomy(byte[] pack) {
+        static string Digest(ReadOnlySpan<byte> bytes) => AssetContentHash.Compute(content: bytes.ToArray()).ToString();
+        static byte[] Floats(IEnumerable<float> values) => [.. values.SelectMany(selector: static value => BitConverter.GetBytes(value: value))];
+        var anatomy = new StringBuilder().Append(value: $"pack {pack.Length} bytes, shape {FormatShapesOf()}, host {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}, Vector512 {System.Runtime.Intrinsics.Vector512.IsHardwareAccelerated}, Avx512F {System.Runtime.Intrinsics.X86.Avx512F.IsSupported}, Fma {System.Runtime.Intrinsics.X86.Fma.IsSupported}, Gfni {System.Runtime.Intrinsics.X86.Gfni.IsSupported}\n");
+
+        foreach (var request in WorldBakeStore.RequestsOf(definition: Definition(), quality: WorldBakeChunk.Quality)) {
+            var outcome = WorldBakeStore.Bake(request: request, work: out var work);
+
+            anatomy.Append(value: $"{request.PrototypeId} key {request.Key.Pin.Hex[..16]} outcome {Digest(bytes: outcome)} ({outcome.Length} bytes, {work.FieldEvaluations} evaluations)\n");
+            CreationBakeCodec.Decode(bake: out var bake, content: outcome, refusal: out var refusal);
+            if (bake is null) {
+                anatomy.Append(value: $"  refusal: {refusal}\n");
+                continue;
+            }
+            anatomy.Append(value: $"  mesh {bake.Mesh.Vertices.Length} vertices: positions {Digest(bytes: Floats(values: bake.Mesh.Vertices.SelectMany(selector: static vertex => ((float[])[vertex.Position.X, vertex.Position.Y, vertex.Position.Z]))))}, normals {Digest(bytes: Floats(values: bake.Mesh.Vertices.SelectMany(selector: static vertex => ((float[])[vertex.Normal.X, vertex.Normal.Y, vertex.Normal.Z]))))}, uvs {Digest(bytes: Floats(values: bake.Mesh.Vertices.SelectMany(selector: static vertex => ((float[])[vertex.Uv.X, vertex.Uv.Y]))))}, indices {Digest(bytes: [.. bake.Mesh.Indices.SelectMany(selector: static index => BitConverter.GetBytes(value: index))])}, cell {BitConverter.SingleToUInt32Bits(value: bake.Mesh.CellSize):X8}\n");
+            foreach (var texture in bake.Textures.Concat(second: [bake.Impostor.Albedo, bake.Impostor.Normal, bake.Impostor.Depth, bake.Impostor.Material, bake.Impostor.Emission])) {
+                anatomy.Append(value: $"  {texture.Usage} {texture.Format} {texture.Width}x{texture.Height}: {string.Join(separator: " ", values: texture.Levels.Select(selector: static level => Digest(bytes: level)))}\n");
+            }
+        }
+
+        return anatomy.ToString();
+    }
+    private static string FormatShapesOf() => (typeof(WorldBakePack).Assembly.GetType(name: "Puck.World.FormatShapes")?.GetField(name: "WorldBakePackFormatVersion")?.GetValue(obj: null)?.ToString() ?? "unknown");
+
     [Fact]
     public void APackIsOneCanonicalFileAndRefusesWhatItCannotAccountFor() {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];

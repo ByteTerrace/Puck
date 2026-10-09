@@ -265,8 +265,7 @@ public static class DeterminismRecorder {
 
         using var host = WorldBenchServer.Boot(
             catalog: catalog,
-            definition: definition,
-            documentPath: scenario.World
+            definition: definition
         );
         var server = host.Server;
 

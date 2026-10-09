@@ -126,6 +126,12 @@ public sealed class PuckShaderBuild : Task, ICancelableTask {
         }
         m_process.WaitForExit();
 
+        // A generator that fails without a line in MSBuild's error format (a host that cannot start the tool, a crash)
+        // still fails the build by name: a task never returns false without an error.
+        if ((m_process.ExitCode != 0) && !Log.HasLoggedErrors && !m_cancelled) {
+            Log.LogError(message: ("The shader build (" + Mode + ") exited with code " + m_process.ExitCode + " without reporting an error; its output is logged above. Tool: " + Tool));
+        }
+
         return ((m_process.ExitCode == 0) && !Log.HasLoggedErrors && !m_cancelled);
     }
     private void Grant(int count) {

@@ -26,16 +26,16 @@ namespace Puck.World {
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>
         public const string WorldCounterpartAttestationSchemaVersion = "a53b237e2074c2f6";
         /// <summary>The shape fingerprint of <c>WorldCountersCeilings.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersCeilings.cs</c>.</summary>
-        public const string WorldCountersCeilingsSchemaVersion = "5d8b2f1e492e6ddb";
+        public const string WorldCountersCeilingsSchemaVersion = "4d5e22a33e1b73e7";
         /// <summary>The shape fingerprint of <c>WorldCountersReport.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersReport.cs</c>.</summary>
-        public const string WorldCountersReportSchemaVersion = "d3b5617194004e83";
+        public const string WorldCountersReportSchemaVersion = "dd7d7d4faaf7d4b6";
         /// <summary>The shape fingerprint of <c>WorldDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldDefinition.cs</c>.</summary>
-        public const string WorldDefinitionSchemaVersion = "b6fa793f8769e9ba";
+        public const string WorldDefinitionSchemaVersion = "adc9c97b16eb9b77";
         /// <summary>The shape fingerprint of <c>WorldProjectionDocument.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldProjection.cs</c>.</summary>
-        public const string WorldProjectionDocumentSchemaVersion = "ce7f392f0690479b";
+        public const string WorldProjectionDocumentSchemaVersion = "d3bae94447157d60";
         /// <summary>The shape fingerprint of <c>WorldScheduleSection.ManifestSchemaId</c>, declared in <c>src/Puck.World.Schema/WorldSchedule.cs</c>.</summary>
         public const string WorldScheduleSectionManifestSchemaId = "71c50cc4cc1e463f";
         /// <summary>The shape fingerprint of <c>WorldSiloDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldSiloDefinition.cs</c>.</summary>
-        public const string WorldSiloDefinitionSchemaVersion = "fa8db65c3b7805c0";
+        public const string WorldSiloDefinitionSchemaVersion = "05e6f0de227f8d89";
     }
 }

@@ -27,7 +27,8 @@ internal static partial class Fixtures {
     /// <param name="engines">The screen-machine engines a declared <c>screens</c> row resolves against, or
     /// <see langword="null"/> for none when no <paramref name="machineCatalog"/> is supplied.</param>
     /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
-    /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
+    /// <param name="documentPath">The source document whose directory the definition's relative paths (machine content
+    /// among them) resolve beside, or null for the definition's own directory.</param>
     /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
     /// <param name="catalogNarration">The hub the fixture's owned-world catalog narrates through, or <see langword="null"/> for none.</param>
     /// <param name="consoleNarration">Whether the server narrates to the console, or attaches no narration sink at all.</param>
@@ -40,14 +41,19 @@ internal static partial class Fixtures {
             : WorldDefinitionSerialization.Serialize(definition: definition)
         );
 
-        // The round trip keeps the directory the document's relative paths resolve beside.
-        definition = WorldDefinitionSerialization.Deserialize(documentDirectory: definition?.DocumentDirectory, utf8Json: bytes);
+        // The round trip keeps the directory the document's relative paths resolve beside: the named document's, else
+        // the definition's own.
+        definition = WorldDefinitionSerialization.Deserialize(
+            documentDirectory: ((documentPath is { } named)
+                ? WorldDocumentPaths.DirectoryOf(documentPath: named)
+                : definition?.DocumentDirectory),
+            utf8Json: bytes
+        );
 
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestMachines.Catalog())),
-            documentPath: (documentPath ?? Path.Combine(RepositoryPaths.RequireRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
+            catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestMachines.Catalog()))
         );
         // The state directory is a PATH under the fixture's own scratch directory: WorldOwnedWorlds creates and
         // enumerates it itself, and WorldFixture.Dispose resolves the scratch directory. A host that may still hold a
@@ -215,8 +221,8 @@ internal static partial class Fixtures {
     /// <summary>The <c>machineHostFactory</c> every <see cref="WorldReplayTape"/>/<see cref="WorldReplaySnapshot"/>/
     /// <see cref="WorldInstanceHost"/> construction here wires — the real <see cref="WorldMachineHost"/>
     /// (<c>Puck.World.Addons.Machines</c>), the same type <see cref="FreshServer"/> constructs directly.</summary>
-    public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
-        static (screens, engines, documentPath, narrationHub) => {
+    public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
+        static (screens, engines, narrationHub) => {
             var selected = engines.ToArray();
             var providers = TestMachines.Catalog().ContentProviders.Values
                 .Where(predicate: provider => selected.Any(predicate: engine => (engine.Id == provider.EngineId)));
@@ -225,7 +231,6 @@ internal static partial class Fixtures {
                 screens: screens,
                 engines: selected,
                 compilers: providers,
-                documentPath: documentPath,
                 narrationHub: narrationHub
             );
         };

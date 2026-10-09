@@ -42,7 +42,7 @@ public sealed class WorldReplayInspector {
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
     private readonly IWorldDocumentSource? m_documents;
     private readonly IReadOnlyList<IMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldOwnedWorlds m_profiles;
 
     /// <summary>Initializes the inspector over the same things a re-drive needs — the profile catalog seats
@@ -57,7 +57,7 @@ public sealed class WorldReplayInspector {
     /// <param name="documents">The source a recorded <c>world.load</c>/<c>world.reload</c> re-reads its origin through
     /// (handed to <see cref="WorldReplaySnapshot.Drive"/>); <see langword="null"/> reads JSON files directly.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
+    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
